@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useProjectStalledAlert } from '@/hooks/useProjectStalledAlert';
 import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { useProjectContext } from '@/context/project/ProjectContext';
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
+  useProjectStalledAlert();
   
   const projectContext = useProjectContext();
   const { projects, loading } = projectContext;

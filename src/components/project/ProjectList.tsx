@@ -17,6 +17,7 @@ import {
   DollarSign,
   Eye,
   GitBranch,
+  Archive,
 } from 'lucide-react';
 
 import { Project } from '@/types/project';
@@ -48,6 +49,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showArchived, setShowArchived] = useState(false);
   
   // Format date safely - handles invalid dates
   const formatDate = (dateString: string): string => {
@@ -72,9 +74,12 @@ const ProjectList: React.FC<ProjectListProps> = ({
       
     const matchesType = typeFilter === 'all' || project.projectType === typeFilter;
     const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
+    const matchesArchive = showArchived ? true : !project.archived;
     
-    return matchesSearch && matchesType && matchesStatus;
+    return matchesSearch && matchesType && matchesStatus && matchesArchive;
   });
+
+  const archivedCount = projects.filter(p => p.archived).length;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -221,6 +226,19 @@ const ProjectList: React.FC<ProjectListProps> = ({
               <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
+
+          {archivedCount > 0 && (
+            <Button
+              variant={showArchived ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setShowArchived(v => !v)}
+              className="whitespace-nowrap"
+              data-testid="button-toggle-archived"
+            >
+              <Archive className="h-4 w-4 mr-1.5" />
+              {showArchived ? 'Hide Archived' : `Archived (${archivedCount})`}
+            </Button>
+          )}
         </div>
       </div>
       
@@ -247,8 +265,13 @@ const ProjectList: React.FC<ProjectListProps> = ({
                       {getTypeBadge(project.projectType)}
                     </div>
                   </div>
-                  <div className="flex-shrink-0 translate-y-0.5">
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0 translate-y-0.5">
                     {getStatusBadge(project.status)}
+                    {project.archived && (
+                      <Badge variant="outline" className="flex items-center gap-0.5 text-xs text-muted-foreground border-dashed">
+                        <Archive className="h-2.5 w-2.5" /> Archived
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </CardHeader>
@@ -359,8 +382,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
           </div>
           <h3 className="text-lg font-medium">No projects found</h3>
           <p className="text-muted-foreground mt-2">
-            {search || typeFilter !== 'all' || statusFilter !== 'all' 
-              ? "Try adjusting your search filters" 
+            {search || typeFilter !== 'all' || statusFilter !== 'all' || (!showArchived && archivedCount > 0)
+              ? "Try adjusting your search filters"
               : "Create a new project to get started"}
           </p>
           <Button className="mt-4" onClick={() => navigate("/projects/create")}>

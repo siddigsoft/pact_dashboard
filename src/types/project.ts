@@ -89,6 +89,7 @@ export interface Project {
   activities: ProjectActivity[];
   relatedMMPs?: string[];
   relatedSiteVisits?: string[];
+  archived?: boolean;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

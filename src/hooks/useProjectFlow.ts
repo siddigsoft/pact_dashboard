@@ -75,6 +75,7 @@ async function sendStageNotifications(
   nextStageLabel: string,
   teamMembers: string[],
   advancedByName: string,
+  advancedById: string,
 ) {
   if (!teamMembers.length) return;
 
@@ -87,6 +88,29 @@ async function sendStageNotifications(
 
   if (!profiles?.length) return;
 
+  const recipientIds = profiles.map((p: any) => p.id);
+
+  // Fire email + enhanced in-app notification via edge function
+  supabase.functions.invoke('dispatch-notification', {
+    body: {
+      event_type: 'project_stage_advanced',
+      entity_type: 'project',
+      entity_id: projectId,
+      priority: 'normal',
+      recipient_ids: recipientIds,
+      title_en: `Project Stage Advanced: ${projectName}`,
+      title_ar: `تقدم مرحلة المشروع: ${projectName}`,
+      message_en: `${advancedByName} advanced "${projectName}" to stage: ${nextStageLabel}`,
+      message_ar: `قام ${advancedByName} بتقديم "${projectName}" إلى المرحلة: ${nextStageLabel}`,
+      triggered_by: advancedById,
+      triggered_by_name: advancedByName,
+      workflow_stage: nextStageLabel,
+      action_url: `/projects/${projectId}`,
+      send_email: true,
+    },
+  }).catch(() => {});
+
+  // Also insert in-app notifications directly (fast path, no email wait)
   const notifications = profiles.map((p: any) => ({
     recipient_id: p.id,
     user_id: p.id,
@@ -203,12 +227,14 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
         ...(project.team?.teamComposition?.map(m => m.name) ?? []),
       ].filter((n): n is string => !!n && n !== currentUser.fullName);
 
+      const uniqueTeamNames = [...new Set(teamNames)];
       sendStageNotifications(
         project.id,
         project.name,
         nextStage.label,
-        [...new Set(teamNames)],
+        uniqueTeamNames,
         currentUser.fullName ?? 'A team member',
+        currentUser.id,
       ).catch(() => {});
     },
     onSuccess: () => {

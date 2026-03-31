@@ -27,7 +27,16 @@ import {
   FileSpreadsheet,
   MessageCircle,
   Paperclip,
+  Archive,
+  ArchiveRestore,
+  Download,
+  Activity,
+  AlertTriangle,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
@@ -225,9 +234,162 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
   const { currentUser } = useUser();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const isAdminUser = isSuperAdmin() || hasAnyRole(['admin', 'fom']);
+  const isProjectManagerUser =
+    !!currentUser?.fullName && project.team?.projectManager === currentUser.fullName;
+  const canArchive = isAdminUser || isProjectManagerUser;
   const projectBudget = getProjectBudget(project.id);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  // Stalled detection: find days since last stage advance
+  const stalledDays = (() => {
+    if (!flow.stageHistory.length) return null;
+    const lastAdvanced = flow.stageHistory[flow.stageHistory.length - 1]?.advancedAt;
+    if (!lastAdvanced) return null;
+    try {
+      const d = parseISO(lastAdvanced);
+      return isValid(d) ? differenceInDays(new Date(), d) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const isStalled = stalledDays !== null && stalledDays >= 14 && project.status === 'active';
+
+  // Archive / unarchive handler
+  const handleArchiveToggle = useCallback(async () => {
+    setIsArchiving(true);
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ archived: !project.archived })
+        .eq('id', project.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      toast({
+        title: project.archived ? 'Project unarchived' : 'Project archived',
+        description: project.archived
+          ? `"${project.name}" has been restored.`
+          : `"${project.name}" has been archived.`,
+      });
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update archive status.', variant: 'destructive' });
+    } finally {
+      setIsArchiving(false);
+    }
+  }, [project.id, project.archived, project.name, queryClient, toast]);
+
+  // PDF export
+  const handleExportPdf = useCallback(() => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const PAGE_W = 210;
+    let y = 15;
+
+    // Header
+    doc.setFillColor(15, 32, 65);
+    doc.rect(0, 0, PAGE_W, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PACT Command Center', 14, 11);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Project Report', 14, 19);
+    doc.text(`Exported: ${format(new Date(), 'PPP')}`, PAGE_W - 14, 19, { align: 'right' });
+    y = 36;
+
+    // Project title
+    doc.setTextColor(15, 32, 65);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(project.name, 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Code: ${project.projectCode}  |  Type: ${project.projectType}  |  Status: ${project.status}`, 14, y);
+    y += 10;
+
+    // Details table
+    const details: string[][] = [
+      ['Project Manager', project.team?.projectManager || '—'],
+      ['Start Date', project.startDate ? format(parseISO(project.startDate), 'PPP') : '—'],
+      ['End Date', project.endDate ? format(parseISO(project.endDate), 'PPP') : '—'],
+      ['Location', [project.location?.region, project.location?.state].filter(Boolean).join(', ') || '—'],
+    ];
+    if (project.budget) {
+      const b = project.budget as any;
+      const total = b.totalBudgetCents != null ? b.totalBudgetCents / 100 : b.total;
+      details.push(['Budget', `${b.currency || 'SDG'} ${Number(total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`]);
+    }
+    autoTable(doc, {
+      startY: y,
+      head: [['Field', 'Value']],
+      body: details,
+      theme: 'striped',
+      headStyles: { fillColor: [29, 52, 97], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 3 },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // Flow stages
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 32, 65);
+    doc.text('Flow Stage Progress', 14, y);
+    y += 4;
+    const stageRows = flow.activeStages.map((s, idx) => {
+      const status = flow.getStageStatus(s.id);
+      const histEntry = flow.stageHistory.find(h => h.stageId === s.id);
+      return [
+        `${idx + 1}. ${s.label}`,
+        status.charAt(0).toUpperCase() + status.slice(1),
+        histEntry ? format(parseISO(histEntry.advancedAt), 'PP') : '—',
+        histEntry?.notes || '—',
+      ];
+    });
+    autoTable(doc, {
+      startY: y,
+      head: [['Stage', 'Status', 'Completed', 'Notes']],
+      body: stageRows,
+      theme: 'striped',
+      headStyles: { fillColor: [29, 52, 97], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      columnStyles: { 0: { cellWidth: 65 }, 1: { cellWidth: 22 }, 2: { cellWidth: 30 } },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // Activities
+    if (project.activities.length) {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 32, 65);
+      doc.text('Activities', 14, y);
+      y += 4;
+      const actRows = project.activities.map(a => [
+        a.name,
+        a.status || '—',
+        a.startDate ? format(parseISO(a.startDate), 'PP') : '—',
+        a.endDate ? format(parseISO(a.endDate), 'PP') : '—',
+        a.assignedTo || '—',
+      ]);
+      autoTable(doc, {
+        startY: y,
+        head: [['Activity', 'Status', 'Start', 'End', 'Assigned To']],
+        body: actRows,
+        theme: 'striped',
+        headStyles: { fillColor: [29, 52, 97], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        margin: { left: 14, right: 14 },
+      });
+    }
+
+    doc.save(`project-${project.projectCode}-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  }, [project, flow]);
 
   // Active statuses for workload calculation (non-terminal statuses)
   const ACTIVE_SITE_VISIT_STATUSES = ['pending', 'scheduled', 'in_progress', 'assigned', 'dispatched', 'verification_pending'];
@@ -368,6 +530,24 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         Back to Projects
       </Button>
 
+      {/* Archived Banner */}
+      {project.archived && (
+        <div className="flex items-center gap-2 rounded-md bg-muted border border-border px-4 py-2.5 text-sm text-muted-foreground">
+          <Archive className="h-4 w-4 flex-shrink-0" />
+          <span>This project is <strong>archived</strong> and read-only. Unarchive to make changes.</span>
+        </div>
+      )}
+
+      {/* Stalled Banner */}
+      {isStalled && (
+        <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          <span>
+            <strong>Stalled:</strong> No stage advancement in {stalledDays} days. Review the flow and take action.
+          </span>
+        </div>
+      )}
+
       {/* Hero Summary Card */}
       <Card className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-200 dark:border-blue-800">
         <CardContent className="p-4">
@@ -447,12 +627,74 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Health Score */}
+                {(() => {
+                  const acts = getCompletedActivities();
+                  const actPct = acts.total > 0 ? acts.completed / acts.total : 0;
+                  const stagePct = flow.activeStages.length > 0
+                    ? flow.currentStageIndex / flow.activeStages.length
+                    : 0;
+                  const health = Math.round((actPct * 0.5 + stagePct * 0.5) * 100);
+                  const color = isStalled ? 'text-amber-600 dark:text-amber-400'
+                    : health >= 70 ? 'text-green-600 dark:text-green-400'
+                    : health >= 40 ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-orange-600 dark:text-orange-400';
+                  const bg = isStalled ? 'bg-amber-500/20'
+                    : health >= 70 ? 'bg-green-500/20'
+                    : health >= 40 ? 'bg-blue-500/20'
+                    : 'bg-orange-500/20';
+                  return (
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className={`w-8 h-8 rounded-md flex items-center justify-center ${bg}`}>
+                        <Activity className={`h-4 w-4 ${color}`} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Health</p>
+                        <p className={`font-semibold ${color}`}>
+                          {isStalled ? 'Stalled' : `${health}%`}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
             {/* Right: Actions */}
             <div className="flex flex-wrap gap-2">
-              {onEdit && (
+              {/* PDF Export */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
+                data-testid="button-export-pdf"
+              >
+                <Download className="h-4 w-4 mr-1.5" />
+                Export PDF
+              </Button>
+
+              {/* Archive / Unarchive */}
+              {canArchive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleArchiveToggle}
+                  disabled={isArchiving}
+                  data-testid="button-archive-project"
+                >
+                  {isArchiving ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : project.archived ? (
+                    <ArchiveRestore className="h-4 w-4 mr-1.5" />
+                  ) : (
+                    <Archive className="h-4 w-4 mr-1.5" />
+                  )}
+                  {project.archived ? 'Unarchive' : 'Archive'}
+                </Button>
+              )}
+
+              {onEdit && !project.archived && (
                 <Button variant="outline" size="sm" onClick={onEdit}>
                   <Edit className="h-4 w-4 mr-1.5" /> Edit
                 </Button>

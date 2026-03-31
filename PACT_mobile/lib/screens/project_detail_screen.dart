@@ -69,51 +69,88 @@ class _ProjectDetailScreenState
           final currentStageIdx =
               stages.indexWhere((s) => s.id == currentStageId);
           final validIdx = currentStageIdx < 0 ? 0 : currentStageIdx;
-
-          // Determine if the user can advance
           final canAdvance = _canAdvance(project, userProfile) &&
               validIdx < stages.length - 1;
 
-          return RefreshIndicator(
-            onRefresh: () async =>
-                ref.invalidate(projectDetailProvider(widget.projectId)),
-            child: ListView(
-              padding: const EdgeInsets.all(0),
+          return DefaultTabController(
+            length: 3,
+            child: Column(
               children: [
                 _ProjectHeader(project: project),
                 const SizedBox(height: 4),
-                // Horizontal scrollable Flow Strip
                 _FlowStrip(
                   stages: stages,
                   currentStageIdx: validIdx,
                   flowLog: project.flowLog,
                 ),
-                const SizedBox(height: 8),
-                // Stage details
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Column(
-                    children: List.generate(stages.length, (i) {
-                      return _StageCard(
-                        stage: stages[i],
-                        index: i,
-                        isCurrent: i == validIdx,
-                        isCompleted: i < validIdx,
-                        flowLog: project.flowLog,
-                        canAdvance: canAdvance && i == validIdx,
-                        isOnline: isOnline,
-                        onAdvance: () => _showAdvanceSheet(
-                          context,
-                          project: project,
-                          stages: stages,
-                          currentIdx: validIdx,
-                          userProfile: userProfile,
-                        ),
-                      );
-                    }),
+                Container(
+                  color: Colors.white,
+                  child: TabBar(
+                    labelColor: AppColors.primaryDark,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: AppColors.primaryDark,
+                    labelStyle: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600),
+                    tabs: const [
+                      Tab(
+                        icon: Icon(Icons.account_tree_outlined, size: 16),
+                        text: 'Flow',
+                        iconMargin: EdgeInsets.only(bottom: 2),
+                      ),
+                      Tab(
+                        icon: Icon(Icons.chat_bubble_outline, size: 16),
+                        text: 'Comments',
+                        iconMargin: EdgeInsets.only(bottom: 2),
+                      ),
+                      Tab(
+                        icon: Icon(Icons.folder_outlined, size: 16),
+                        text: 'Documents',
+                        iconMargin: EdgeInsets.only(bottom: 2),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      // Flow Tab
+                      RefreshIndicator(
+                        onRefresh: () async => ref.invalidate(
+                            projectDetailProvider(widget.projectId)),
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 32),
+                          children: List.generate(stages.length, (i) {
+                            return _StageCard(
+                              stage: stages[i],
+                              index: i,
+                              isCurrent: i == validIdx,
+                              isCompleted: i < validIdx,
+                              flowLog: project.flowLog,
+                              canAdvance: canAdvance && i == validIdx,
+                              isOnline: isOnline,
+                              onAdvance: () => _showAdvanceSheet(
+                                context,
+                                project: project,
+                                stages: stages,
+                                currentIdx: validIdx,
+                                userProfile: userProfile,
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                      // Comments Tab
+                      _CommentsTab(
+                        projectId: widget.projectId,
+                        currentUserId:
+                            userProfile?.id ?? '',
+                        currentUserName: userProfile?.fullName,
+                      ),
+                      // Documents Tab
+                      _DocumentsTab(projectId: widget.projectId),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
@@ -845,5 +882,431 @@ class _AdvanceStageSheetState extends ConsumerState<_AdvanceStageSheet> {
         ),
       );
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Comments Tab
+// ─────────────────────────────────────────────────────────────
+
+class _CommentsTab extends StatefulWidget {
+  final String projectId;
+  final String currentUserId;
+  final String? currentUserName;
+  const _CommentsTab({
+    required this.projectId,
+    required this.currentUserId,
+    this.currentUserName,
+  });
+
+  @override
+  State<_CommentsTab> createState() => _CommentsTabState();
+}
+
+class _CommentsTabState extends State<_CommentsTab> {
+  final _supabase = Supabase.instance.client;
+  final _controller = TextEditingController();
+  List<Map<String, dynamic>> _comments = [];
+  bool _loading = true;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchComments();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchComments() async {
+    try {
+      final data = await _supabase
+          .from('project_comments')
+          .select('id, content, created_at, author_id, profiles(full_name)')
+          .eq('project_id', widget.projectId)
+          .order('created_at', ascending: true);
+      if (!mounted) return;
+      setState(() {
+        _comments = List<Map<String, dynamic>>.from(data ?? []);
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || widget.currentUserId.isEmpty) return;
+    setState(() => _submitting = true);
+    try {
+      await _supabase.from('project_comments').insert({
+        'project_id': widget.projectId,
+        'author_id': widget.currentUserId,
+        'content': text,
+        if (widget.currentUserName != null)
+          'author_name': widget.currentUserName,
+      });
+      _controller.clear();
+      await _fetchComments();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to post comment: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  String _relDate(String iso) {
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
+      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _initials(String? name) {
+    if (name == null || name.isEmpty) return '?';
+    final parts = name.trim().split(' ');
+    return parts.take(2).map((p) => p[0].toUpperCase()).join();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Comment input
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  maxLines: 3,
+                  minLines: 1,
+                  decoration: InputDecoration(
+                    hintText: 'Write a comment…',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 40,
+                child: ElevatedButton(
+                  onPressed: _submitting ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryDark,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.send, size: 18),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        // Comment list
+        Expanded(
+          child: _loading
+              ? const ShimmerBody(
+                  layout: ShimmerLayout.list, listItems: 4)
+              : _comments.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.chat_bubble_outline,
+                              size: 40, color: Colors.grey),
+                          SizedBox(height: 8),
+                          Text('No comments yet',
+                              style: TextStyle(color: Colors.grey)),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _fetchComments,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+                        itemCount: _comments.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final c = _comments[i];
+                          final profiles = c['profiles'];
+                          final authorName = (profiles != null
+                                  ? profiles['full_name']
+                                  : null) as String? ??
+                              'Unknown';
+                          final isMe = c['author_id'] == widget.currentUserId;
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: isMe
+                                    ? AppColors.primaryDark.withOpacity(0.15)
+                                    : Colors.grey.shade200,
+                                child: Text(
+                                  _initials(authorName),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isMe
+                                        ? AppColors.primaryDark
+                                        : Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: isMe
+                                        ? AppColors.primaryDark.withOpacity(0.06)
+                                        : Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                        color: isMe
+                                            ? AppColors.primaryDark
+                                                .withOpacity(0.15)
+                                            : Colors.grey.shade200),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            authorName,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                              color: isMe
+                                                  ? AppColors.primaryDark
+                                                  : Colors.black87,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Text(
+                                            _relDate(c['created_at'] as String),
+                                            style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        c['content'] as String,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Documents Tab
+// ─────────────────────────────────────────────────────────────
+
+class _DocumentsTab extends StatefulWidget {
+  final String projectId;
+  const _DocumentsTab({required this.projectId});
+
+  @override
+  State<_DocumentsTab> createState() => _DocumentsTabState();
+}
+
+class _DocumentsTabState extends State<_DocumentsTab> {
+  final _supabase = Supabase.instance.client;
+  List<Map<String, dynamic>> _documents = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDocuments();
+  }
+
+  Future<void> _fetchDocuments() async {
+    setState(() => _loading = true);
+    try {
+      final data = await _supabase
+          .from('project_documents')
+          .select(
+              'id, label, file_name, public_url, file_size, mime_type, created_at, profiles(full_name)')
+          .eq('project_id', widget.projectId)
+          .order('created_at', ascending: false);
+      if (!mounted) return;
+      setState(() {
+        _documents = List<Map<String, dynamic>>.from(data ?? []);
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  String _fileSize(dynamic bytes) {
+    if (bytes == null) return '';
+    final b = (bytes as num).toInt();
+    if (b < 1024) return '$b B';
+    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)} KB';
+    return '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  String _relDate(String iso) {
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inDays == 0) return 'today';
+      if (diff.inDays == 1) return 'yesterday';
+      return '${diff.inDays} days ago';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  IconData _fileIcon(String? mime) {
+    if (mime == null) return Icons.insert_drive_file_outlined;
+    if (mime.startsWith('image/')) return Icons.image_outlined;
+    if (mime == 'application/pdf') return Icons.picture_as_pdf_outlined;
+    if (mime.contains('spreadsheet') || mime.contains('excel')) {
+      return Icons.table_chart_outlined;
+    }
+    if (mime.contains('word') || mime.contains('document')) {
+      return Icons.description_outlined;
+    }
+    return Icons.insert_drive_file_outlined;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const ShimmerBody(layout: ShimmerLayout.list, listItems: 5);
+    }
+    if (_documents.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_outlined, size: 40, color: Colors.grey),
+            SizedBox(height: 8),
+            Text('No documents attached',
+                style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _fetchDocuments,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+        itemCount: _documents.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 6),
+        itemBuilder: (_, i) {
+          final d = _documents[i];
+          final profiles = d['profiles'];
+          final uploaderName = (profiles != null
+                  ? profiles['full_name']
+                  : null) as String? ??
+              'Unknown';
+          final mime = d['mime_type'] as String?;
+          final url = d['public_url'] as String? ?? '';
+          return Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side:
+                    BorderSide(color: Colors.grey.shade200)),
+            child: ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryDark.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(_fileIcon(mime),
+                    color: AppColors.primaryDark, size: 22),
+              ),
+              title: Text(
+                d['label'] as String? ?? d['file_name'] as String? ?? 'File',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '${_fileSize(d['file_size'])}  ·  $uploaderName  ·  ${_relDate(d['created_at'] as String)}',
+                style:
+                    const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              trailing: url.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.open_in_new,
+                          size: 20, color: Colors.grey),
+                      onPressed: () {
+                        // Launch URL via platform
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Opening: $url')),
+                        );
+                      },
+                    )
+                  : null,
+            ),
+          );
+        },
+      ),
+    );
   }
 }
