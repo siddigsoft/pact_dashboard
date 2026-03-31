@@ -983,7 +983,8 @@ export default function StaffDirectory() {
   const { toast } = useToast();
   const { currentUser } = useUser();
   const { isUserOnline, isConnected, onlineUserIds } = useGlobalPresence();
-  const canAccessDepts = ["admin", "super_admin", "superadmin", "superAdmin"].includes(currentUser?.role ?? "");
+  const _roleNorm = (currentUser?.role ?? "").toLowerCase().replace(/[_\s]/g, "");
+  const canAccessDepts = _roleNorm === "admin" || _roleNorm === "superadmin";
   const [profiles, setProfiles]          = useState<StaffProfile[]>([]);
   const [dbHubs, setDbHubs]              = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]            = useState(true);
