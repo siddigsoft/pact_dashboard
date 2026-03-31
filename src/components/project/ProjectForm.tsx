@@ -78,6 +78,8 @@ const createFormSchema = (isEditing: boolean) => z.object({
   selectedState: z.string().optional(),
   state: z.string().optional(),
   locality: z.string().optional(),
+  clientType: z.enum(['internal', 'customer']),
+  clientName: z.string().optional(),
 }).refine(
   (data) => data.endDate > data.startDate,
   {
@@ -187,6 +189,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         : '',
       state: initialData?.location?.state || '',
       locality: initialData?.location?.locality || '',
+      clientType: (initialData?.clientType as 'internal' | 'customer') || 'internal',
+      clientName: initialData?.clientName || '',
     },
   });
 
@@ -232,6 +236,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         activities: initialData?.activities || [],
         relatedMMPs,
         relatedSiteVisits,
+        clientType: values.clientType,
+        clientName: values.clientType === 'customer' ? (values.clientName || undefined) : undefined,
         createdAt: initialData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -395,6 +401,44 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="clientType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Project Category</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="internal">Internal</SelectItem>
+                        <SelectItem value="customer">Customer / Donor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {form.watch('clientType') === 'customer' && (
+                <FormField
+                  control={form.control}
+                  name="clientName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Customer / Donor Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. USAID, UNICEF, World Bank…" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <FormField
                 control={form.control}

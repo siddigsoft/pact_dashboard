@@ -90,6 +90,8 @@ export interface Project {
   relatedMMPs?: string[];
   relatedSiteVisits?: string[];
   archived?: boolean;
+  clientType?: 'internal' | 'customer';
+  clientName?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

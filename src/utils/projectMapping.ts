@@ -14,6 +14,8 @@ export function mapProjectToDbProject(project: Project): Record<string, any> {
     description: project.description,
     project_type: project.projectType,
     status: project.status,
+    client_type: project.clientType ?? 'internal',
+    client_name: project.clientName ?? null,
     ...formattedDates,
     budget: project.budget ? {
       ...project.budget,

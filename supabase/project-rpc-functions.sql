@@ -1,7 +1,7 @@
 -- Project RPC functions (bypass PostgREST schema cache for new columns)
 -- Run these in Supabase SQL editor if functions are ever lost
 
--- 1. Read all projects (includes new columns: current_flow_stage, archived, etc.)
+-- 1. Read all projects (includes new columns: current_flow_stage, archived, client_type, etc.)
 CREATE OR REPLACE FUNCTION public.get_all_projects()
 RETURNS json LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT COALESCE(json_agg(p), '[]'::json) FROM (
@@ -9,6 +9,7 @@ RETURNS json LANGUAGE sql SECURITY DEFINER STABLE AS $$
       start_date, end_date, budget, location, team,
       current_flow_stage, custom_flow_stages,
       related_mmps, related_site_visits, archived,
+      client_type, client_name,
       created_at, updated_at
     FROM projects ORDER BY created_at DESC
   ) p;
@@ -58,6 +59,7 @@ RETURNS json LANGUAGE sql SECURITY DEFINER STABLE AS $$
     SELECT id, name, project_code, project_type, status,
       start_date, end_date, budget, location, team,
       current_flow_stage, custom_flow_stages, archived,
+      client_type, client_name,
       created_at, updated_at
     FROM projects ORDER BY created_at DESC
   ) p;

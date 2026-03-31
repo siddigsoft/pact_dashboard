@@ -78,6 +78,8 @@ interface ProjectRow {
   end_date: string | null;
   current_flow_stage: string | null;
   team: { projectManager?: string } | null;
+  client_type: string | null;
+  client_name: string | null;
 }
 
 interface FlowLogRow {
@@ -90,6 +92,7 @@ interface QueryFilters {
   pmFilter: string;
   startFrom: string;
   startTo: string;
+  clientType: string;
 }
 
 interface AnalyticsData {
@@ -108,6 +111,9 @@ async function fetchAnalyticsData(filters: QueryFilters): Promise<AnalyticsData>
   let projects = (allProjects ?? []) as ProjectRow[];
   if (filters.projectId !== 'all') {
     projects = projects.filter(p => p.id === filters.projectId);
+  }
+  if (filters.clientType !== 'all') {
+    projects = projects.filter(p => (p.client_type ?? 'internal') === filters.clientType);
   }
   if (filters.pmFilter !== 'all') {
     projects = projects.filter(p => (p.team as any)?.projectManager === filters.pmFilter);
@@ -166,6 +172,7 @@ export default function ProjectAnalytics() {
   const navigate = useNavigate();
 
   const [projectIdFilter, setProjectIdFilter] = useState('all');
+  const [clientTypeFilter, setClientTypeFilter] = useState('all');
   const [pmFilter, setPmFilter] = useState('all');
   const [startFrom, setStartFrom] = useState('');
   const [startTo, setStartTo] = useState('');
@@ -184,8 +191,8 @@ export default function ProjectAnalytics() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['project_analytics', projectIdFilter, pmFilter, startFrom, startTo],
-    queryFn: () => fetchAnalyticsData({ projectId: projectIdFilter, pmFilter, startFrom, startTo }),
+    queryKey: ['project_analytics', projectIdFilter, clientTypeFilter, pmFilter, startFrom, startTo],
+    queryFn: () => fetchAnalyticsData({ projectId: projectIdFilter, clientType: clientTypeFilter, pmFilter, startFrom, startTo }),
     staleTime: 60_000,
   });
 
@@ -367,7 +374,7 @@ export default function ProjectAnalytics() {
     );
   }
 
-  const hasFilters = projectIdFilter !== 'all' || pmFilter !== 'all' || !!startFrom || !!startTo;
+  const hasFilters = projectIdFilter !== 'all' || clientTypeFilter !== 'all' || pmFilter !== 'all' || !!startFrom || !!startTo;
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
@@ -422,6 +429,20 @@ export default function ProjectAnalytics() {
             </div>
 
             <div className="space-y-1">
+              <Label className="text-xs">Category</Label>
+              <Select value={clientTypeFilter} onValueChange={setClientTypeFilter}>
+                <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-client-type-filter">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  <SelectItem value="internal">Internal</SelectItem>
+                  <SelectItem value="customer">Customer / Donor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
               <Label className="text-xs">Project Manager</Label>
               <Select value={pmFilter} onValueChange={setPmFilter}>
                 <SelectTrigger className="h-8 w-[180px] text-xs" data-testid="select-pm-filter">
@@ -463,7 +484,7 @@ export default function ProjectAnalytics() {
                 variant="ghost"
                 size="sm"
                 className="h-8 text-xs"
-                onClick={() => { setTypeFilter('all'); setPmFilter('all'); setStartFrom(''); setStartTo(''); }}
+                onClick={() => { setProjectIdFilter('all'); setClientTypeFilter('all'); setPmFilter('all'); setStartFrom(''); setStartTo(''); }}
                 data-testid="button-clear-filters"
               >
                 Clear filters

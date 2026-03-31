@@ -28,6 +28,8 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
     relatedMMPs: dbProject.related_mmps ?? [],
     relatedSiteVisits: dbProject.related_site_visits ?? [],
     archived: dbProject.archived ?? false,
+    clientType: (dbProject.client_type ?? 'internal') as 'internal' | 'customer',
+    clientName: dbProject.client_name ?? undefined,
     budget: dbProject.budget,
     location: dbProject.location,
     team: dbProject.team,
