@@ -572,9 +572,12 @@ export type Database = {
       }
       projects: {
         Row: {
+          archived: boolean | null
           budget: Json | null
           created_at: string | null
           created_by: string | null
+          current_flow_stage: string | null
+          custom_flow_stages: Json | null
           description: string | null
           end_date: string
           id: string
@@ -582,15 +585,20 @@ export type Database = {
           name: string
           project_code: string
           project_type: Database["public"]["Enums"]["project_type"]
+          related_mmps: string[] | null
+          related_site_visits: string[] | null
           start_date: string
           status: Database["public"]["Enums"]["project_status"]
           team: Json | null
           updated_at: string | null
         }
         Insert: {
+          archived?: boolean | null
           budget?: Json | null
           created_at?: string | null
           created_by?: string | null
+          current_flow_stage?: string | null
+          custom_flow_stages?: Json | null
           description?: string | null
           end_date: string
           id?: string
@@ -598,15 +606,20 @@ export type Database = {
           name: string
           project_code: string
           project_type: Database["public"]["Enums"]["project_type"]
+          related_mmps?: string[] | null
+          related_site_visits?: string[] | null
           start_date: string
           status?: Database["public"]["Enums"]["project_status"]
           team?: Json | null
           updated_at?: string | null
         }
         Update: {
+          archived?: boolean | null
           budget?: Json | null
           created_at?: string | null
           created_by?: string | null
+          current_flow_stage?: string | null
+          custom_flow_stages?: Json | null
           description?: string | null
           end_date?: string
           id?: string
@@ -614,6 +627,8 @@ export type Database = {
           name?: string
           project_code?: string
           project_type?: Database["public"]["Enums"]["project_type"]
+          related_mmps?: string[] | null
+          related_site_visits?: string[] | null
           start_date?: string
           status?: Database["public"]["Enums"]["project_status"]
           team?: Json | null
