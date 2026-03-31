@@ -17,7 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie,
 } from 'recharts';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import {
@@ -1657,7 +1657,9 @@ export default function MyTasks() {
   const { data: delegatedTasks = [] } = useCreatedByMeTasks(isAdmin ? userId : undefined);
   const updateProjectTaskStatus = useUpdateProjectTaskStatus();
 
-  // Materialise daily recurring tasks on first mount
+  const qc = useQueryClient();
+
+  // Materialise daily recurring tasks on first mount; invalidate task list on success
   useEffect(() => {
     if (!userId) return;
     materialiseDailyTasks({
@@ -1666,6 +1668,9 @@ export default function MyTasks() {
       userDepartmentId: currentUser?.departmentId ?? null,
       userEmail: currentUser?.email ?? null,
       userName: currentUser?.fullName ?? null,
+    }).then(() => {
+      // Ensure newly created recurring tasks appear immediately in the list
+      qc.invalidateQueries({ queryKey: ['personal_tasks'] });
     }).catch(() => {/* non-critical */});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
