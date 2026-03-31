@@ -209,24 +209,28 @@ const KEY = ['personal_tasks'];
 
 // ── Credit wallet on task completion ─────────────────────────────────────────
 // Server-side trusted reward credit via Edge Function.
-// The credit-task-reward function validates the caller's JWT,
-// reads reward amount from DB (never trusts caller input),
-// enforces idempotency, and sends notifications.
-async function creditWalletForTask(opts: {
+// Returns true if credit was successfully posted (or already credited),
+// false if it failed. Callers should use the return value for UI feedback.
+export async function creditWalletForTask(opts: {
   taskId: string;
   userId: string;
   userEmail: string | null | undefined;
   taskPriority: PersonalTaskPriority;
-}) {
+}): Promise<boolean> {
   try {
-    const { error } = await supabase.functions.invoke('credit-task-reward', {
+    const { data, error } = await supabase.functions.invoke('credit-task-reward', {
       body: { taskId: opts.taskId },
     });
     if (error) {
       console.error('[creditWalletForTask] edge function error:', error.message ?? error);
+      return false;
     }
+    const resp = data as { ok?: boolean; skipped?: string } | null;
+    // ok: true means credited or already_credited/no_reward — treat as success
+    return resp?.ok === true;
   } catch (err: unknown) {
     console.error('[creditWalletForTask] invoke failed:', err instanceof Error ? err.message : err);
+    return false;
   }
 }
 
@@ -411,7 +415,7 @@ export function usePersonalTasks(userId: string | undefined) {
       _userId?: string;
       _userEmail?: string | null;
       _taskPriority?: PersonalTaskPriority;
-    }) => {
+    }): Promise<{ creditOk: boolean }> => {
       const { id, _prevStatus, _userId, _userEmail, _taskPriority, ...updates } = opts;
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (updates.title !== undefined)       patch.title = updates.title;
@@ -448,12 +452,15 @@ export function usePersonalTasks(userId: string | undefined) {
         await sendTaskNotification({ userId: _userId, taskId: id, title: effectiveTitle, priority, event: 'completed' });
 
         // Credit wallet server-side (reads reward from DB row, idempotent)
-        await creditWalletForTask({
+        const creditOk = await creditWalletForTask({
           taskId: id,
           userId: _userId,
           userEmail: _userEmail,
           taskPriority: priority,
         });
+        if (!creditOk) {
+          console.warn('[updateTask] creditWalletForTask returned false for task', id);
+        }
 
         // Check if this was a subtask and if all siblings are now done
         const { data: taskData } = await supabase
@@ -486,7 +493,11 @@ export function usePersonalTasks(userId: string | undefined) {
             }
           }
         }
+
+        return { creditOk };
       }
+
+      return { creditOk: false };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });

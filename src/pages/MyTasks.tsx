@@ -1748,8 +1748,8 @@ export default function MyTasks() {
 
   const handleStatusChange = async (id: string, status: PersonalTaskStatus, prevStatus: PersonalTaskStatus) => {
     try {
-      const task = personalTasks.find(t => t.id === id);
-      await updateTask(
+      const task = personalTasks.find(t => t.id === id) ?? allPersonalTasks.find(t => t.id === id);
+      const result = await updateTask(
         id,
         { status, title: task?.title, priority: task?.priority },
         prevStatus,
@@ -1760,18 +1760,25 @@ export default function MyTasks() {
         },
       );
       if (status === 'done') {
-        if (task?.completionRewardAmount) {
-          // Fetch updated wallet balance to show in confirmation
+        const hasReward = !!(task?.completionRewardAmount && task.completionRewardAmount > 0);
+        if (hasReward && result?.creditOk) {
+          // Credit confirmed — fetch updated wallet balance
           const { data: wallet } = await supabase
             .from('wallets')
             .select('total_earned, currency')
             .eq('user_id', currentUser?.id)
             .maybeSingle();
-          const currency = (wallet?.currency as string) ?? task.completionRewardCurrency ?? 'USD';
+          const currency = (wallet?.currency as string) ?? task?.completionRewardCurrency ?? 'USD';
           const balance = wallet ? `${currency} ${Number(wallet.total_earned).toFixed(2)}` : null;
           toast({
             title: '✓ Task completed! Reward credited.',
             description: balance ? `Wallet balance: ${balance}` : undefined,
+          });
+        } else if (hasReward && !result?.creditOk) {
+          toast({
+            title: '✓ Task completed.',
+            description: 'Reward credit could not be processed — please contact admin.',
+            variant: 'destructive',
           });
         } else {
           toast({ title: '✓ Task completed!' });
