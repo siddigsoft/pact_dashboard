@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -17,7 +17,7 @@ import {
 import {
   Building2, Plus, Pencil, Trash2, ChevronRight, ChevronDown,
   Users, Search, UserCheck, AlertTriangle, Loader2, GitBranch,
-  ArrowLeft, Mail,
+  ArrowLeft, Network,
 } from "lucide-react";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 
@@ -43,6 +43,8 @@ interface Profile {
   email: string | null;
   role: string | null;
   department_id: string | null;
+  reports_to: string | null;
+  classification_level?: string | null;
 }
 
 const DEPT_COLORS = [
@@ -77,7 +79,7 @@ function flattenTree(tree: Department[]): Department[] {
   return result;
 }
 
-/* ─── Notification helper ────────────────────────── */
+/* ─── Notification + email helper ───────────────── */
 async function sendDeptNotification(opts: {
   recipientId: string;
   recipientEmail: string | null;
@@ -101,7 +103,6 @@ async function sendDeptNotification(opts: {
     priority: "medium",
     action_url: "/departments",
   });
-
   if (opts.recipientEmail) {
     await supabase.functions.invoke("send-email", {
       body: {
@@ -127,12 +128,7 @@ async function sendDeptNotification(opts: {
 
 /* ─── Department Form Dialog ─────────────────────── */
 function DeptFormDialog({
-  open,
-  onClose,
-  existing,
-  allDepts,
-  profiles,
-  onSaved,
+  open, onClose, existing, allDepts, profiles, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
@@ -172,27 +168,22 @@ function DeptFormDialog({
         color,
         updated_at: new Date().toISOString(),
       };
-
       let entityId = existing?.id ?? "";
 
       if (existing) {
         const prevManagerId = existing.manager_user_id;
         const { error } = await supabase.from("departments").update(payload).eq("id", existing.id);
         if (error) throw error;
-
-        // Notify new manager if changed
         if (managerId !== "none" && managerId !== prevManagerId) {
           const mgr = profiles.find(p => p.id === managerId);
           if (mgr) {
             await sendDeptNotification({
-              recipientId: managerId,
-              recipientEmail: mgr.email,
+              recipientId: managerId, recipientEmail: mgr.email,
               titleEn: `You are now managing: ${name}`,
               titleAr: `أنت الآن مدير قسم: ${name}`,
               messageEn: `You have been assigned as the department manager of "${name}". You can view your department and team members in the Departments page.`,
-              messageAr: `تم تعيينك مديراً لقسم "${name}". يمكنك عرض قسمك وأعضاء الفريق في صفحة الأقسام.`,
-              entityId: existing.id,
-              triggeredBy: currentUser?.id ?? "",
+              messageAr: `تم تعيينك مديراً لقسم "${name}".`,
+              entityId: existing.id, triggeredBy: currentUser?.id ?? "",
             });
           }
         }
@@ -200,25 +191,20 @@ function DeptFormDialog({
         const { data, error } = await supabase.from("departments").insert(payload).select().single();
         if (error) throw error;
         entityId = data.id;
-
-        // Notify new manager
         if (managerId !== "none") {
           const mgr = profiles.find(p => p.id === managerId);
           if (mgr) {
             await sendDeptNotification({
-              recipientId: managerId,
-              recipientEmail: mgr.email,
+              recipientId: managerId, recipientEmail: mgr.email,
               titleEn: `You have been assigned to manage: ${name}`,
               titleAr: `تم تعيينك لإدارة قسم: ${name}`,
               messageEn: `A new department "${name}" has been created and you have been assigned as its manager.`,
               messageAr: `تم إنشاء قسم جديد "${name}" وتعيينك مديراً له.`,
-              entityId,
-              triggeredBy: currentUser?.id ?? "",
+              entityId, triggeredBy: currentUser?.id ?? "",
             });
           }
         }
       }
-
       toast({ title: existing ? "Department updated" : "Department created" });
       onSaved();
       onClose();
@@ -240,80 +226,50 @@ function DeptFormDialog({
             {existing ? "Edit Department" : "New Department"}
           </DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Name *</label>
-            <Input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Finance"
-              data-testid="input-dept-name"
-            />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Finance" data-testid="input-dept-name" />
           </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Description</label>
-            <Input
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Optional description"
-              data-testid="input-dept-description"
-            />
+            <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional description" data-testid="input-dept-description" />
           </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Parent Department</label>
             <Select value={parentId} onValueChange={setParentId}>
-              <SelectTrigger data-testid="select-dept-parent">
-                <SelectValue placeholder="None (top-level)" />
-              </SelectTrigger>
+              <SelectTrigger data-testid="select-dept-parent"><SelectValue placeholder="None (top-level)" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None (top-level)</SelectItem>
-                {availableParents.map(d => (
-                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                ))}
+                {availableParents.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Department Manager</label>
             <Select value={managerId} onValueChange={setManagerId}>
-              <SelectTrigger data-testid="select-dept-manager">
-                <SelectValue placeholder="Unassigned" />
-              </SelectTrigger>
+              <SelectTrigger data-testid="select-dept-manager"><SelectValue placeholder="Unassigned" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Unassigned</SelectItem>
-                {profiles.map(p => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.full_name || p.email || p.id}
-                  </SelectItem>
-                ))}
+                {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name || p.email || p.id}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Color</label>
             <div className="flex gap-2 flex-wrap">
               {DEPT_COLORS.map(c => (
-                <button
-                  key={c}
-                  onClick={() => setColor(c)}
+                <button key={c} onClick={() => setColor(c)}
                   className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${color === c ? "border-foreground scale-110" : "border-transparent"}`}
-                  style={{ background: c }}
-                  data-testid={`color-swatch-${c}`}
-                />
+                  style={{ background: c }} data-testid={`color-swatch-${c}`} />
               ))}
             </div>
           </div>
         </div>
-
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving} data-testid="button-save-dept">
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {existing ? "Save Changes" : "Create Department"}
           </Button>
         </DialogFooter>
@@ -324,11 +280,7 @@ function DeptFormDialog({
 
 /* ─── Move Employee Dialog ───────────────────────── */
 function MoveEmployeeDialog({
-  open,
-  onClose,
-  employee,
-  departments,
-  onMoved,
+  open, onClose, employee, departments, onMoved,
 }: {
   open: boolean;
   onClose: () => void;
@@ -350,8 +302,7 @@ function MoveEmployeeDialog({
     setSaving(true);
     try {
       const newDeptId = targetDeptId === "none" ? null : targetDeptId;
-      const { error } = await supabase
-        .from("profiles")
+      const { error } = await supabase.from("profiles")
         .update({ department_id: newDeptId, updated_at: new Date().toISOString() })
         .eq("id", employee.id);
       if (error) throw error;
@@ -362,12 +313,8 @@ function MoveEmployeeDialog({
         recipientEmail: employee.email,
         titleEn: dept ? `You have been moved to: ${dept.name}` : "You have been removed from your department",
         titleAr: dept ? `تم نقلك إلى قسم: ${dept.name}` : "تمت إزالتك من قسمك",
-        messageEn: dept
-          ? `Your department assignment has been updated to "${dept.name}".`
-          : "You have been unassigned from your current department.",
-        messageAr: dept
-          ? `تم تحديث قسمك إلى "${dept.name}".`
-          : "تمت إزالتك من قسمك الحالي.",
+        messageEn: dept ? `Your department assignment has been updated to "${dept.name}".` : "You have been unassigned from your current department.",
+        messageAr: dept ? `تم تحديث قسمك إلى "${dept.name}".` : "تمت إزالتك من قسمك الحالي.",
         entityId: newDeptId ?? "none",
         triggeredBy: currentUser?.id ?? "",
       });
@@ -385,29 +332,21 @@ function MoveEmployeeDialog({
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Move Employee</DialogTitle>
-        </DialogHeader>
+        <DialogHeader><DialogTitle>Move Employee</DialogTitle></DialogHeader>
         <div className="py-2 space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Moving <strong>{employee?.full_name || "employee"}</strong> to:
-          </p>
+          <p className="text-sm text-muted-foreground">Moving <strong>{employee?.full_name || "employee"}</strong> to:</p>
           <Select value={targetDeptId} onValueChange={setTargetDeptId}>
-            <SelectTrigger data-testid="select-move-dept">
-              <SelectValue placeholder="Select department" />
-            </SelectTrigger>
+            <SelectTrigger data-testid="select-move-dept"><SelectValue placeholder="Select department" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">No Department</SelectItem>
-              {departments.map(d => (
-                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-              ))}
+              {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={handleMove} disabled={saving} data-testid="button-confirm-move">
-            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Move
           </Button>
         </DialogFooter>
@@ -416,21 +355,123 @@ function MoveEmployeeDialog({
   );
 }
 
+/* ─── Org Chart Node ─────────────────────────────── */
+function OrgNode({
+  profile, allProfiles, depth,
+  navigate,
+}: {
+  profile: Profile;
+  allProfiles: Profile[];
+  depth: number;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const directReports = allProfiles.filter(p => p.reports_to === profile.id);
+
+  return (
+    <div className={`${depth > 0 ? "ml-6 border-l-2 border-border/40 pl-4" : ""} mt-2`}>
+      <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg hover:bg-muted/40 group">
+        {directReports.length > 0 ? (
+          <button onClick={() => setExpanded(e => !e)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+        ) : (
+          <span className="w-3.5 h-3.5 shrink-0" />
+        )}
+        <div
+          className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0F2041] to-[#2563EB] flex items-center justify-center text-white text-[10px] font-bold shrink-0 cursor-pointer"
+          onClick={() => navigate(`/users/${profile.id}`)}
+        >
+          {(profile.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p
+            className="text-xs font-semibold truncate cursor-pointer hover:text-primary"
+            onClick={() => navigate(`/users/${profile.id}`)}
+            data-testid={`orgnode-name-${profile.id}`}
+          >
+            {profile.full_name || profile.email || "Unknown"}
+          </p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-muted-foreground capitalize">{profile.role?.replace(/_/g, " ") || "—"}</span>
+            {profile.classification_level && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">
+                {profile.classification_level}
+              </Badge>
+            )}
+            {directReports.length > 0 && (
+              <span className="text-[10px] text-primary font-medium">{directReports.length} report{directReports.length > 1 ? "s" : ""}</span>
+            )}
+          </div>
+        </div>
+      </div>
+      {expanded && directReports.length > 0 && (
+        <div>
+          {directReports.map(r => (
+            <OrgNode key={r.id} profile={r} allProfiles={allProfiles} depth={depth + 1} navigate={navigate} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Org Chart Tab ──────────────────────────────── */
+function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departments: Department[] }) {
+  const navigate = useNavigate();
+  const [deptFilter, setDeptFilter] = useState<string>("all");
+
+  const filteredProfiles = deptFilter === "all" ? profiles : profiles.filter(p => p.department_id === deptFilter);
+  // Find roots: people who have no manager (reports_to is null) within the filtered set
+  const filteredIds = new Set(filteredProfiles.map(p => p.id));
+  const roots = filteredProfiles.filter(p => !p.reports_to || !filteredIds.has(p.reports_to));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 text-sm font-medium">
+          <Network className="h-4 w-4 text-primary" />
+          Reporting Chain Org Chart
+        </div>
+        <Select value={deptFilter} onValueChange={setDeptFilter}>
+          <SelectTrigger className="w-48 h-9" data-testid="select-orgchart-dept">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Departments</SelectItem>
+            {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground ml-auto">
+          {filteredProfiles.length} people · {roots.length} top-level
+        </p>
+      </div>
+
+      {roots.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground text-sm">
+          No reporting relationships configured yet. Set "Reports To" in each employee's profile to build the chart.
+        </div>
+      ) : (
+        <div className="bg-muted/10 rounded-xl border p-4">
+          {roots.map(r => (
+            <OrgNode key={r.id} profile={r} allProfiles={filteredProfiles} depth={0} navigate={navigate} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Department Card (tree node) ────────────────── */
 function DeptCard({
-  dept,
-  allProfiles,
-  allDepts,
-  depth,
-  onEdit,
-  onDelete,
-  onMoveEmployee,
-  navigate,
+  dept, allProfiles, allDepts, depth, isAdmin,
+  onEdit, onDelete, onMoveEmployee, navigate,
 }: {
   dept: Department;
   allProfiles: Profile[];
   allDepts: Department[];
   depth: number;
+  isAdmin: boolean;
   onEdit: (d: Department) => void;
   onDelete: (d: Department) => void;
   onMoveEmployee: (p: Profile) => void;
@@ -447,25 +488,17 @@ function DeptCard({
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              {/* Color dot */}
-              <div
-                className="w-3 h-3 rounded-full mt-1.5 shrink-0"
-                style={{ background: dept.color ?? "#1D3461" }}
-              />
+              <div className="w-3 h-3 rounded-full mt-1.5 shrink-0" style={{ background: dept.color ?? "#1D3461" }} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-base truncate">{dept.name}</h3>
-                  {depth === 0 && (
-                    <Badge variant="outline" className="text-[10px] shrink-0">Top Level</Badge>
-                  )}
+                  {depth === 0 && <Badge variant="outline" className="text-[10px] shrink-0">Top Level</Badge>}
                   <Badge className="text-[10px] shrink-0 bg-primary/10 text-primary border-primary/20">
                     <Users className="h-2.5 w-2.5 mr-1" />
                     {members.length} {members.length === 1 ? "member" : "members"}
                   </Badge>
                 </div>
-                {dept.description && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{dept.description}</p>
-                )}
+                {dept.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{dept.description}</p>}
                 {dept.manager && (
                   <div className="flex items-center gap-1 mt-1.5">
                     <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
@@ -479,44 +512,24 @@ function DeptCard({
 
             <div className="flex items-center gap-1 shrink-0">
               {hasChildren && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setExpanded(e => !e)}
-                  data-testid={`button-expand-dept-${dept.id}`}
-                >
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setExpanded(e => !e)} data-testid={`button-expand-dept-${dept.id}`}>
                   {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setShowMembers(m => !m)}
-                title="Show members"
-                data-testid={`button-members-dept-${dept.id}`}
-              >
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowMembers(m => !m)} title="Show members" data-testid={`button-members-dept-${dept.id}`}>
                 <Users className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => onEdit(dept)}
-                data-testid={`button-edit-dept-${dept.id}`}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-destructive hover:text-destructive"
-                onClick={() => onDelete(dept)}
-                data-testid={`button-delete-dept-${dept.id}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {/* Admin-only actions */}
+              {isAdmin && (
+                <>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(dept)} data-testid={`button-edit-dept-${dept.id}`}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(dept)} data-testid={`button-delete-dept-${dept.id}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
@@ -534,30 +547,24 @@ function DeptCard({
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-medium truncate">{m.full_name || m.email || "Unknown"}</p>
-                        <p className="text-[10px] text-muted-foreground capitalize">{m.role || "—"}</p>
+                        <div className="flex items-center gap-1">
+                          <p className="text-[10px] text-muted-foreground capitalize">{m.role || "—"}</p>
+                          {m.classification_level && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">{m.classification_level}</Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => navigate(`/users/${m.id}`)}
-                        title="View profile"
-                        data-testid={`button-view-user-${m.id}`}
-                      >
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/users/${m.id}`)} title="View profile" data-testid={`button-view-user-${m.id}`}>
                         <ChevronRight className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => onMoveEmployee(m)}
-                        title="Move to another department"
-                        data-testid={`button-move-user-${m.id}`}
-                      >
-                        <GitBranch className="h-3.5 w-3.5" />
-                      </Button>
+                      {/* Move is admin-only */}
+                      {isAdmin && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onMoveEmployee(m)} title="Move to another department" data-testid={`button-move-user-${m.id}`}>
+                          <GitBranch className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -571,17 +578,8 @@ function DeptCard({
       {hasChildren && expanded && (
         <div>
           {dept.children!.map(child => (
-            <DeptCard
-              key={child.id}
-              dept={child}
-              allProfiles={allProfiles}
-              allDepts={allDepts}
-              depth={depth + 1}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onMoveEmployee={onMoveEmployee}
-              navigate={navigate}
-            />
+            <DeptCard key={child.id} dept={child} allProfiles={allProfiles} allDepts={allDepts} depth={depth + 1}
+              isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} onMoveEmployee={onMoveEmployee} navigate={navigate} />
           ))}
         </div>
       )}
@@ -617,23 +615,25 @@ export default function Departments() {
           .order("name"),
         supabase
           .from("profiles")
-          .select("id, full_name, email, role, department_id")
+          .select("id, full_name, email, role, department_id, reports_to")
           .order("full_name"),
       ]);
 
-      // Count members per department
+      // Also try to fetch classification levels
+      const { data: classData } = await supabase
+        .from("user_classifications")
+        .select("user_id, classification_level")
+        .is("effective_until", null);
+      const classMap: Record<string, string> = {};
+      (classData || []).forEach((c: any) => { classMap[c.user_id] = c.classification_level; });
+
       const memberCount: Record<string, number> = {};
       (profs || []).forEach(p => {
         if (p.department_id) memberCount[p.department_id] = (memberCount[p.department_id] || 0) + 1;
       });
 
-      const enriched: Department[] = (depts || []).map(d => ({
-        ...d,
-        member_count: memberCount[d.id] || 0,
-      }));
-
-      setDepartments(enriched);
-      setProfiles((profs || []) as Profile[]);
+      setDepartments(((depts || []).map(d => ({ ...d, member_count: memberCount[d.id] || 0 }))) as Department[]);
+      setProfiles(((profs || []).map((p: any) => ({ ...p, classification_level: classMap[p.id] || null }))) as Profile[]);
     } catch (err: any) {
       toast({ title: "Error loading departments", description: err.message, variant: "destructive" });
     } finally {
@@ -647,16 +647,8 @@ export default function Departments() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      // Unassign members
-      await supabase
-        .from("profiles")
-        .update({ department_id: null })
-        .eq("department_id", deleteTarget.id);
-      // Reassign children to parent
-      await supabase
-        .from("departments")
-        .update({ parent_department_id: deleteTarget.parent_department_id })
-        .eq("parent_department_id", deleteTarget.id);
+      await supabase.from("profiles").update({ department_id: null }).eq("department_id", deleteTarget.id);
+      await supabase.from("departments").update({ parent_department_id: deleteTarget.parent_department_id }).eq("parent_department_id", deleteTarget.id);
       const { error } = await supabase.from("departments").delete().eq("id", deleteTarget.id);
       if (error) throw error;
       toast({ title: "Department deleted" });
@@ -671,10 +663,7 @@ export default function Departments() {
 
   const tree = buildTree(departments);
   const flat = flattenTree(tree);
-  const filtered = search
-    ? flat.filter(d => d.name.toLowerCase().includes(search.toLowerCase()))
-    : tree;
-
+  const filteredFlat = search ? flat.filter(d => d.name.toLowerCase().includes(search.toLowerCase())) : null;
   const unassignedCount = profiles.filter(p => !p.department_id).length;
 
   return (
@@ -689,9 +678,7 @@ export default function Departments() {
             <Building2 className="h-6 w-6 text-primary shrink-0" />
             Departments
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Manage your organisation's departments and employee assignments
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage your organisation's departments and employee assignments</p>
         </div>
         {isAdmin && (
           <Button onClick={() => { setEditTarget(null); setFormOpen(true); }} data-testid="button-new-dept">
@@ -703,7 +690,7 @@ export default function Departments() {
 
       <PageInfoBanner
         title="Departments & Org Structure"
-        description="Create departments, assign managers and employees, and move staff between teams. Department managers receive email and in-app notifications when appointed."
+        description="Create departments, assign managers and employees, and move staff between teams. Department managers receive email and in-app notifications when appointed. Use the Org Chart tab to view reporting chains."
         icon={<Building2 className="h-5 w-5" />}
       />
 
@@ -717,9 +704,7 @@ export default function Departments() {
         ].map(s => (
           <Card key={s.label} className="shadow-sm">
             <CardContent className="p-4 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <s.icon className="h-4 w-4 text-primary" />
-              </div>
+              <div className="p-2 rounded-lg bg-primary/10"><s.icon className="h-4 w-4 text-primary" /></div>
               <div>
                 <p className="text-xs text-muted-foreground">{s.label}</p>
                 <p className="text-xl font-bold">{s.value}</p>
@@ -729,135 +714,123 @@ export default function Departments() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search departments…"
-          className="pl-9"
-          data-testid="input-search-depts"
-        />
-      </div>
+      {/* Tabs: Departments tree + Org Chart */}
+      <Tabs defaultValue="departments" className="w-full">
+        <TabsList className="h-auto p-1 bg-muted/40 rounded-xl mb-4">
+          <TabsTrigger value="departments" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-departments">
+            <Building2 className="h-4 w-4" /> Departments
+          </TabsTrigger>
+          <TabsTrigger value="orgchart" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-orgchart">
+            <Network className="h-4 w-4" /> Org Chart
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Tree / List */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground text-sm">Loading departments…</p>
-        </div>
-      ) : departments.length === 0 ? (
-        <Card className="shadow-sm border-dashed">
-          <CardContent className="p-12 text-center">
-            <div className="p-4 rounded-full bg-muted/50 inline-block mb-4">
-              <Building2 className="h-10 w-10 text-muted-foreground" />
+        {/* ── Departments Tree ── */}
+        <TabsContent value="departments">
+          <div className="space-y-4">
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search departments…" className="pl-9" data-testid="input-search-depts" />
             </div>
-            <h3 className="font-semibold text-lg mb-2">No Departments Yet</h3>
-            <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-4">
-              Create your first department to start organising your team.
-            </p>
-            {isAdmin && (
-              <Button onClick={() => { setEditTarget(null); setFormOpen(true); }} data-testid="button-create-first-dept">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Department
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : search ? (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">{flat.filter(d => d.name.toLowerCase().includes(search.toLowerCase())).length} results</p>
-          {flat
-            .filter(d => d.name.toLowerCase().includes(search.toLowerCase()))
-            .map(d => (
-              <DeptCard
-                key={d.id}
-                dept={d}
-                allProfiles={profiles}
-                allDepts={departments}
-                depth={0}
-                onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
-                onDelete={setDeleteTarget}
-                onMoveEmployee={setMoveTarget}
-                navigate={navigate}
-              />
-            ))}
-        </div>
-      ) : (
-        <div>
-          {tree.map(d => (
-            <DeptCard
-              key={d.id}
-              dept={d}
-              allProfiles={profiles}
-              allDepts={departments}
-              depth={0}
-              onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
-              onDelete={setDeleteTarget}
-              onMoveEmployee={setMoveTarget}
-              navigate={navigate}
-            />
-          ))}
-        </div>
-      )}
 
-      {/* Unassigned staff section */}
-      {unassignedCount > 0 && !search && (
-        <Card className="shadow-sm border-amber-200 dark:border-amber-800/40">
-          <CardHeader className="p-4 border-b bg-amber-50/50 dark:bg-amber-900/10">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="h-4 w-4" />
-              Unassigned Staff ({unassignedCount})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="space-y-2">
-              {profiles.filter(p => !p.department_id).slice(0, 10).map(p => (
-                <div key={p.id} className="flex items-center justify-between gap-2 py-1 px-2 rounded-lg hover:bg-muted/40">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                      {(p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium truncate">{p.full_name || p.email || "Unknown"}</p>
-                      <p className="text-[10px] text-muted-foreground capitalize">{p.role || "—"}</p>
-                    </div>
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-muted-foreground text-sm">Loading departments…</p>
+              </div>
+            ) : departments.length === 0 ? (
+              <Card className="shadow-sm border-dashed">
+                <CardContent className="p-12 text-center">
+                  <div className="p-4 rounded-full bg-muted/50 inline-block mb-4">
+                    <Building2 className="h-10 w-10 text-muted-foreground" />
                   </div>
+                  <h3 className="font-semibold text-lg mb-2">No Departments Yet</h3>
+                  <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-4">Create your first department to start organising your team.</p>
                   {isAdmin && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs shrink-0"
-                      onClick={() => setMoveTarget(p)}
-                      data-testid={`button-assign-dept-${p.id}`}
-                    >
-                      Assign
+                    <Button onClick={() => { setEditTarget(null); setFormOpen(true); }} data-testid="button-create-first-dept">
+                      <Plus className="h-4 w-4 mr-2" />Create Department
                     </Button>
                   )}
-                </div>
-              ))}
-              {unassignedCount > 10 && (
-                <p className="text-xs text-muted-foreground text-center pt-1">
-                  …and {unassignedCount - 10} more. Use search in Staff Directory to find them.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                </CardContent>
+              </Card>
+            ) : filteredFlat ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">{filteredFlat.length} results</p>
+                {filteredFlat.map(d => (
+                  <DeptCard key={d.id} dept={d} allProfiles={profiles} allDepts={departments} depth={0}
+                    isAdmin={isAdmin}
+                    onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
+                    onDelete={setDeleteTarget} onMoveEmployee={setMoveTarget} navigate={navigate} />
+                ))}
+              </div>
+            ) : (
+              <div>
+                {tree.map(d => (
+                  <DeptCard key={d.id} dept={d} allProfiles={profiles} allDepts={departments} depth={0}
+                    isAdmin={isAdmin}
+                    onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
+                    onDelete={setDeleteTarget} onMoveEmployee={setMoveTarget} navigate={navigate} />
+                ))}
+              </div>
+            )}
+
+            {/* Unassigned staff */}
+            {unassignedCount > 0 && !search && (
+              <Card className="shadow-sm border-amber-200 dark:border-amber-800/40">
+                <CardHeader className="p-4 border-b bg-amber-50/50 dark:bg-amber-900/10">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4" /> Unassigned Staff ({unassignedCount})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="space-y-2">
+                    {profiles.filter(p => !p.department_id).slice(0, 10).map(p => (
+                      <div key={p.id} className="flex items-center justify-between gap-2 py-1 px-2 rounded-lg hover:bg-muted/40">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                            {(p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{p.full_name || p.email || "Unknown"}</p>
+                            <p className="text-[10px] text-muted-foreground capitalize">{p.role || "—"}</p>
+                          </div>
+                        </div>
+                        {isAdmin && (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0" onClick={() => setMoveTarget(p)} data-testid={`button-assign-dept-${p.id}`}>
+                            Assign
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                    {unassignedCount > 10 && (
+                      <p className="text-xs text-muted-foreground text-center pt-1">…and {unassignedCount - 10} more.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── Org Chart ── */}
+        <TabsContent value="orgchart">
+          <OrgChartTab profiles={profiles} departments={departments} />
+        </TabsContent>
+      </Tabs>
 
       {/* Dialogs */}
-      <DeptFormDialog
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        existing={editTarget}
-        allDepts={departments}
-        profiles={profiles}
-        onSaved={load}
-      />
+      {isAdmin && (
+        <DeptFormDialog
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          existing={editTarget}
+          allDepts={departments}
+          profiles={profiles}
+          onSaved={load}
+        />
+      )}
 
-      {moveTarget && (
+      {isAdmin && moveTarget && (
         <MoveEmployeeDialog
           open={!!moveTarget}
           onClose={() => setMoveTarget(null)}
@@ -867,34 +840,33 @@ export default function Departments() {
         />
       )}
 
-      {/* Delete confirmation */}
-      <Dialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              Delete Department
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-3">
-            <p className="text-sm">
-              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
-            </p>
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400">
-              <p>• All members will be unassigned</p>
-              <p>• Sub-departments will be moved up one level</p>
-              <p>• This action cannot be undone</p>
+      {/* Delete confirmation — admin only */}
+      {isAdmin && (
+        <Dialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" /> Delete Department
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-2 space-y-3">
+              <p className="text-sm">Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?</p>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-700 dark:text-amber-400">
+                <p>• All members will be unassigned</p>
+                <p>• Sub-departments will be moved up one level</p>
+                <p>• This action cannot be undone</p>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting} data-testid="button-confirm-delete-dept">
-              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={deleting} data-testid="button-confirm-delete-dept">
+                {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
