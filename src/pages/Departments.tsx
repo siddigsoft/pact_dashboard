@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/context/user/UserContext";
+import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import {
 import {
   Building2, Plus, Pencil, Trash2, ChevronRight, ChevronDown,
   Users, Search, UserCheck, AlertTriangle, Loader2, GitBranch,
-  ArrowLeft, Network,
+  ArrowLeft, Network, Shield,
 } from "lucide-react";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 
@@ -208,8 +209,9 @@ function DeptFormDialog({
       toast({ title: existing ? "Department updated" : "Department created" });
       onSaved();
       onClose();
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unexpected error";
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -322,8 +324,9 @@ function MoveEmployeeDialog({
       toast({ title: "Employee moved successfully" });
       onMoved();
       onClose();
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unexpected error";
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -586,13 +589,17 @@ function DeptCard({
 /* ─── Main Page ──────────────────────────────────── */
 export default function Departments() {
   const { currentUser } = useUser();
+  const { isSuperAdmin } = useSuperAdmin();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   // super_admin (all variants) can create/edit/delete departments AND move employees
-  const canManage = ["super_admin", "superadmin", "superAdmin"].includes(currentUser?.role ?? "");
+  const canManage = isSuperAdmin || ["super_admin", "superadmin", "superAdmin"].includes(currentUser?.role ?? "");
   // admin (and super_admin) can move employees between departments
   const canMoveEmployees = canManage || currentUser?.role === "admin";
+
+  // Only admin+ may access this page; non-admins see an access-denied screen
+  const canAccess = canMoveEmployees;
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -623,7 +630,7 @@ export default function Departments() {
         .select("user_id, classification_level")
         .is("effective_until", null);
       const classMap: Record<string, string> = {};
-      (classData || []).forEach((c: any) => { classMap[c.user_id] = c.classification_level; });
+      (classData || []).forEach((c) => { if (c.user_id && c.classification_level) classMap[c.user_id] = c.classification_level; });
 
       const memberCount: Record<string, number> = {};
       (profs || []).forEach(p => {
@@ -631,9 +638,10 @@ export default function Departments() {
       });
 
       setDepartments(((depts || []).map(d => ({ ...d, member_count: memberCount[d.id] || 0 }))) as Department[]);
-      setProfiles(((profs || []).map((p: any) => ({ ...p, classification_level: classMap[p.id] || null }))) as Profile[]);
-    } catch (err: any) {
-      toast({ title: "Error loading departments", description: err.message, variant: "destructive" });
+      setProfiles((profs || []).map(p => ({ ...p, classification_level: classMap[p.id] || null })) as Profile[]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unexpected error";
+      toast({ title: "Error loading departments", description: message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -652,8 +660,9 @@ export default function Departments() {
       toast({ title: "Department deleted" });
       setDeleteTarget(null);
       await load();
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unexpected error";
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setDeleting(false);
     }
@@ -663,6 +672,19 @@ export default function Departments() {
   const flat = flattenTree(tree);
   const filteredFlat = search ? flat.filter(d => d.name.toLowerCase().includes(search.toLowerCase())) : null;
   const unassignedCount = profiles.filter(p => !p.department_id).length;
+
+  if (!canAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Shield className="h-16 w-16 text-muted-foreground" />
+        <h2 className="text-xl font-semibold">Access Denied</h2>
+        <p className="text-muted-foreground">Only administrators can access the Departments page.</p>
+        <Button onClick={() => navigate("/dashboard")} data-testid="button-go-to-dashboard">
+          Go to Dashboard
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-full p-4 sm:p-6 gap-6">
