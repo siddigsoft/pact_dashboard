@@ -10,8 +10,12 @@ jwt_expiry = 120
 
 # Note: reclaim-digest schedule (0 8 * * 1) is configured via Supabase Dashboard → Edge Functions
 
+# Pre-existing: monitoring-flag-no-response is invoked by pg_cron scheduler
+# and does not receive a JWT — verify_jwt must remain false for cron compat.
 [functions.monitoring-flag-no-response]
 verify_jwt = false
 
+# Added by Task #9: contract-expiry-check is invoked by pg_cron scheduler.
+# Auth is enforced via CRON_SECRET shared-secret header (see edge function).
 [functions.contract-expiry-check]
 verify_jwt = false
