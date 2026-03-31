@@ -578,14 +578,14 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin }: Ed
 
   return (
     <Dialog open={!!task} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-xl w-full">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <CheckSquare className="h-4 w-4 text-[#1D3461]" />
             Edit Personal Task
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 py-2">
+        <div className="space-y-3 py-2 max-h-[70vh] overflow-y-auto pr-1">
           <div className="space-y-1">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Title *</Label>
             <Input value={title} onChange={e => setTitle(e.target.value)} className="h-9" />
@@ -779,7 +779,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-xl w-full">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Plus className="h-4 w-4 text-[#1D3461]" />
@@ -787,7 +787,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
+        <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto pr-1">
           {/* Title */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Task title <span className="text-red-500">*</span></Label>
@@ -943,7 +943,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
                   </div>
                 )}
                 {!selectedUser && (
-                  <div className="rounded-lg border border-border bg-background max-h-36 overflow-y-auto">
+                  <div className="rounded-lg border border-border bg-background max-h-60 overflow-y-auto">
                     {loadingUsers ? (
                       <div className="p-3 text-sm text-muted-foreground text-center">Loading…</div>
                     ) : filteredUsers.length === 0 ? (
