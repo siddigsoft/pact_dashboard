@@ -949,28 +949,51 @@ function DeptCard({
   const members = allProfiles.filter(p => p.department_id === dept.id);
   const hasChildren = (dept.children?.length ?? 0) > 0;
 
+  const accentColor = dept.color ?? "#1D3461";
+
   return (
-    <div className={`${depth > 0 ? "ml-6 border-l-2 border-border/40 pl-4" : ""}`}>
-      <Card className="mb-3 shadow-sm hover:shadow-md transition-shadow">
-        <CardContent className="p-4">
+    <div className={`${depth > 0 ? "ml-6 border-l-2 pl-4" : ""}`} style={depth > 0 ? { borderColor: accentColor + "40" } : undefined}>
+      <div
+        className="mb-3 rounded-xl border shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+        style={{ borderColor: accentColor + "30" }}
+      >
+        {/* Color accent top bar */}
+        <div className="h-1 w-full" style={{ background: accentColor }} />
+
+        <div className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              <div className="w-3 h-3 rounded-full mt-1.5 shrink-0" style={{ background: dept.color ?? "#1D3461" }} />
+              {/* Color swatch */}
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: accentColor + "18" }}>
+                <Building2 className="h-4 w-4" style={{ color: accentColor }} />
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold text-base truncate">{dept.name}</h3>
-                  {depth === 0 && <Badge variant="outline" className="text-[10px] shrink-0">Top Level</Badge>}
-                  <Badge className="text-[10px] shrink-0 bg-primary/10 text-primary border-primary/20">
-                    <Users className="h-2.5 w-2.5 mr-1" />
+                  <h3 className="font-bold text-base truncate">{dept.name}</h3>
+                  {depth === 0 && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: accentColor + "15", color: accentColor }}>
+                      Top Level
+                    </span>
+                  )}
+                  <span
+                    className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: accentColor + "15", color: accentColor }}
+                  >
+                    <Users className="h-2.5 w-2.5" />
                     {members.length} {members.length === 1 ? "member" : "members"}
-                  </Badge>
+                  </span>
+                  {hasChildren && (
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      {dept.children!.length} sub-dept{dept.children!.length > 1 ? "s" : ""}
+                    </span>
+                  )}
                 </div>
-                {dept.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{dept.description}</p>}
+                {dept.description && <p className="text-xs text-muted-foreground mt-1 truncate">{dept.description}</p>}
                 {dept.manager && (
                   <div className="flex items-center gap-1 mt-1.5">
-                    <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                    <UserCheck className="h-3.5 w-3.5" style={{ color: accentColor }} />
                     <span className="text-xs text-muted-foreground">
-                      Manager: <span className="font-medium text-foreground">{dept.manager.full_name || dept.manager.email || "—"}</span>
+                      Manager: <span className="font-semibold text-foreground">{dept.manager.full_name || dept.manager.email || "—"}</span>
                     </span>
                   </div>
                 )}
@@ -979,55 +1002,77 @@ function DeptCard({
 
             <div className="flex items-center gap-1 shrink-0">
               {hasChildren && (
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setExpanded(e => !e)} data-testid={`button-expand-dept-${dept.id}`}>
-                  {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </Button>
+                <button
+                  className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-muted/60"
+                  onClick={() => setExpanded(e => !e)}
+                  data-testid={`button-expand-dept-${dept.id}`}
+                >
+                  {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                </button>
               )}
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowMembers(m => !m)} title="Show members" data-testid={`button-members-dept-${dept.id}`}>
-                <Users className="h-4 w-4" />
-              </Button>
+              <button
+                className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-muted/60"
+                onClick={() => setShowMembers(m => !m)}
+                title="Show members"
+                data-testid={`button-members-dept-${dept.id}`}
+              >
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </button>
               {canManage && (
                 <>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(dept)} data-testid={`button-edit-dept-${dept.id}`}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(dept)} data-testid={`button-delete-dept-${dept.id}`}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <button
+                    className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-muted/60"
+                    onClick={() => onEdit(dept)}
+                    data-testid={`button-edit-dept-${dept.id}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                  <button
+                    className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors hover:bg-red-50 text-destructive"
+                    onClick={() => onDelete(dept)}
+                    data-testid={`button-delete-dept-${dept.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </>
               )}
             </div>
           </div>
 
           {showMembers && (
-            <div className="mt-3 pt-3 border-t space-y-2">
+            <div className="mt-3 pt-3 border-t space-y-1.5" style={{ borderColor: accentColor + "20" }}>
               {members.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-2">No members assigned</p>
               ) : (
                 members.map(m => (
-                  <div key={m.id} className="flex items-center justify-between gap-2 py-1 px-2 rounded-lg hover:bg-muted/40">
+                  <div key={m.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/40">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0F2041] to-[#2563EB] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                        style={{ background: accentColor }}
+                      >
                         {(m.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-medium truncate">{m.full_name || m.email || "Unknown"}</p>
                         <div className="flex items-center gap-1">
-                          <p className="text-[10px] text-muted-foreground capitalize">{m.role || "—"}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{m.role?.replace(/_/g, " ") || "—"}</p>
                           {m.classification_level && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">{m.classification_level}</Badge>
+                            <span className="text-[9px] px-1.5 py-0 rounded-full border" style={{ color: accentColor, borderColor: accentColor + "40" }}>
+                              {m.classification_level}
+                            </span>
                           )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/users/${m.id}`)} title="View profile" data-testid={`button-view-user-${m.id}`}>
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </Button>
+                      <button className="h-6 w-6 rounded-md flex items-center justify-center hover:bg-muted/60" onClick={() => navigate(`/users/${m.id}`)} data-testid={`button-view-user-${m.id}`}>
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
                       {canMoveEmployees && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onMoveEmployee(m)} title="Move to another department" data-testid={`button-move-user-${m.id}`}>
-                          <GitBranch className="h-3.5 w-3.5" />
-                        </Button>
+                        <button className="h-6 w-6 rounded-md flex items-center justify-center hover:bg-muted/60" onClick={() => onMoveEmployee(m)} data-testid={`button-move-user-${m.id}`}>
+                          <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1035,8 +1080,8 @@ function DeptCard({
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {hasChildren && expanded && (
         <div>
@@ -1166,25 +1211,23 @@ export default function Departments() {
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "#fff", transform: "translate(30%, -40%)" }} />
         <div className="absolute bottom-0 left-16 w-40 h-40 rounded-full opacity-5" style={{ background: "#fff", transform: "translateY(50%)" }} />
 
-        <div className="relative flex items-start justify-between gap-4 flex-wrap">
+        <div className="relative flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-white/70 hover:text-white hover:bg-white/10" onClick={() => navigate(-1)} data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />
             </Button>
+            <div className="p-2 rounded-xl bg-white/10">
+              <Building2 className="h-5 w-5 text-white" />
+            </div>
             <div>
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-white/10">
-                  <Building2 className="h-5 w-5 text-white" />
-                </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Departments</h1>
-              </div>
-              <p className="text-sm text-blue-200 mt-1 ml-11">Organisation structure, teams & reporting</p>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Departments</h1>
+              <p className="text-xs text-blue-200 mt-0.5">Organisation structure, teams & reporting</p>
             </div>
           </div>
           {canManage && (
             <Button
               onClick={() => { setEditTarget(null); setFormOpen(true); }}
-              className="bg-white text-[#1D3461] hover:bg-blue-50 font-semibold shadow-lg"
+              className="bg-white/10 border border-white/30 text-white hover:bg-white/20 font-semibold"
               data-testid="button-new-dept"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -1194,16 +1237,16 @@ export default function Departments() {
         </div>
 
         {/* Quick stat pills in header */}
-        <div className="relative flex flex-wrap gap-3 mt-6 ml-11">
+        <div className="relative flex flex-wrap gap-3 mt-5">
           {[
-            { label: "Departments", value: departments.length, color: "bg-white/15" },
-            { label: "Total Staff", value: profiles.length, color: "bg-white/15" },
-            { label: "Unassigned", value: unassignedCount, color: unassignedCount > 0 ? "bg-amber-400/25" : "bg-white/15" },
-            { label: "Sub-depts", value: departments.filter(d => d.parent_department_id).length, color: "bg-white/15" },
+            { label: "Departments", value: departments.length, cls: "bg-white/10 border border-white/20" },
+            { label: "Total Staff", value: profiles.length, cls: "bg-white/10 border border-white/20" },
+            { label: "Unassigned", value: unassignedCount, cls: unassignedCount > 0 ? "bg-amber-500/30 border border-amber-300/40" : "bg-white/10 border border-white/20" },
+            { label: "Sub-depts", value: departments.filter(d => d.parent_department_id).length, cls: "bg-white/10 border border-white/20" },
           ].map(s => (
-            <div key={s.label} className={`${s.color} rounded-xl px-4 py-2 text-white`}>
+            <div key={s.label} className={`${s.cls} rounded-xl px-4 py-2 text-white`}>
               <p className="text-xl font-extrabold leading-none">{s.value}</p>
-              <p className="text-[10px] text-blue-200 mt-0.5">{s.label}</p>
+              <p className="text-[10px] text-blue-200/80 mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
@@ -1211,14 +1254,14 @@ export default function Departments() {
 
       <div className="p-4 sm:p-6 flex flex-col gap-6">
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="h-auto p-1 bg-muted/40 rounded-xl mb-4 flex-wrap">
-          <TabsTrigger value="overview" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-overview">
+        <TabsList className="h-auto p-1 bg-[#0F2041]/8 border border-[#1D3461]/20 rounded-xl mb-4 flex-wrap">
+          <TabsTrigger value="overview" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm font-medium data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm" data-testid="tab-overview">
             <BarChart3 className="h-4 w-4" /> Overview
           </TabsTrigger>
-          <TabsTrigger value="departments" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-departments">
+          <TabsTrigger value="departments" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm font-medium data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm" data-testid="tab-departments">
             <Building2 className="h-4 w-4" /> Departments
           </TabsTrigger>
-          <TabsTrigger value="orgchart" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-orgchart">
+          <TabsTrigger value="orgchart" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm font-medium data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm" data-testid="tab-orgchart">
             <Network className="h-4 w-4" /> Org Chart
           </TabsTrigger>
         </TabsList>
