@@ -32,6 +32,7 @@ import {
   Download,
   Activity,
   AlertTriangle,
+  CheckSquare,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -45,6 +46,7 @@ import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import ProjectCommentsPanel from './ProjectCommentsPanel';
 import ProjectDocumentsPanel from './ProjectDocumentsPanel';
+import { ProjectFieldTasksPanel } from './ProjectFieldTasksPanel';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -763,7 +765,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-6 w-full md:w-[700px]">
+        <TabsList className="grid grid-cols-7 w-full md:w-[820px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
@@ -771,6 +773,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <TabsTrigger value="budget">Budget</TabsTrigger>
           <TabsTrigger value="flow" data-testid="tab-flow">
             <GitBranch className="h-3.5 w-3.5 mr-1" />Flow
+          </TabsTrigger>
+          <TabsTrigger value="field_tasks" data-testid="tab-field-tasks">
+            <CheckSquare className="h-3.5 w-3.5 mr-1" />Tasks
           </TabsTrigger>
         </TabsList>
         
@@ -1154,6 +1159,17 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             projectEnd={project.endDate}
             allDefaultStages={flow.flowDef}
             customFlowStages={(project.customFlowStages ?? []) as any}
+          />
+        </TabsContent>
+        <TabsContent value="field_tasks" className="mt-4">
+          <ProjectFieldTasksPanel
+            projectId={project.id}
+            projectName={project.name}
+            currentUserId={currentUser?.id}
+            currentUserName={currentUser?.fullName ?? 'A manager'}
+            canEdit={!project.archived && canArchive}
+            allStages={flow.flowDef}
+            customEntries={(project.customFlowStages ?? []) as any}
           />
         </TabsContent>
       </Tabs>
