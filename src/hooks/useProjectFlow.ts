@@ -213,11 +213,13 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       });
       if (logError) throw new Error(logError.message);
 
-      // Update project record
+      // Update project record via RPC (bypasses PostgREST schema cache)
       const { error: updateError } = await supabase
-        .from('projects')
-        .update({ current_flow_stage: nextStage.id })
-        .eq('id', project.id);
+        .rpc('update_project_flow_stage', {
+          p_id: project.id,
+          p_stage: nextStage.id,
+          p_custom_stages: project.customFlowStages ?? null,
+        });
       if (updateError) throw new Error(updateError.message);
 
       // Send notifications to all team members (fire and forget)
@@ -248,9 +250,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     mutationFn: async (customStages: CustomStageEntry[]) => {
       if (!canEditFlow) throw new Error('Permission denied');
       const { error } = await supabase
-        .from('projects')
-        .update({ custom_flow_stages: customStages })
-        .eq('id', project.id);
+        .rpc('update_project_custom_stages', { p_id: project.id, p_custom_stages: customStages });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {

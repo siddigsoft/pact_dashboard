@@ -14,7 +14,6 @@ export function mapProjectToDbProject(project: Project): Record<string, any> {
     description: project.description,
     project_type: project.projectType,
     status: project.status,
-    current_flow_stage: project.currentFlowStage,
     ...formattedDates,
     budget: project.budget ? {
       ...project.budget,

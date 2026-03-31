@@ -30,12 +30,9 @@ export function useProjectStalledAlert() {
 async function checkStalledProjects(userId: string) {
   const todayKey = startOfDay(new Date()).toISOString();
 
-  // Fetch active, non-archived projects with their most recent flow log entry
+  // Use RPC to bypass PostgREST schema cache for new columns
   const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name, current_flow_stage')
-    .in('status', ['active', 'draft'])
-    .eq('archived', false);
+    .rpc('get_active_projects_for_stall_check');
 
   if (!projects?.length) return;
 

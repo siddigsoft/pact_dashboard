@@ -98,26 +98,26 @@ interface AnalyticsData {
 }
 
 async function fetchAnalyticsData(filters: QueryFilters): Promise<AnalyticsData> {
-  let q = supabase
-    .from('projects')
-    .select('id, name, project_code, project_type, status, start_date, end_date, current_flow_stage, team');
+  // Use RPC to bypass PostgREST schema cache for new columns (current_flow_stage etc.)
+  const { data: allProjects, error: projError } = await supabase
+    .rpc('get_projects_for_analytics');
 
+  if (projError) throw new Error(projError.message);
+
+  // Apply filters client-side
+  let projects = (allProjects ?? []) as ProjectRow[];
   if (filters.projectType !== 'all') {
-    q = q.eq('project_type', filters.projectType);
+    projects = projects.filter(p => p.project_type === filters.projectType);
   }
   if (filters.pmFilter !== 'all') {
-    q = q.eq('team->>projectManager', filters.pmFilter);
+    projects = projects.filter(p => (p.team as any)?.projectManager === filters.pmFilter);
   }
-  if (filters.startFrom || filters.startTo) {
-    q = q.not('start_date', 'is', null);
-    if (filters.startFrom) q = q.gte('start_date', filters.startFrom);
-    if (filters.startTo) q = q.lte('start_date', filters.startTo);
+  if (filters.startFrom) {
+    projects = projects.filter(p => p.start_date && p.start_date >= filters.startFrom!);
   }
-
-  const projRes = await q;
-  if (projRes.error) throw new Error(projRes.error.message);
-
-  const projects = (projRes.data ?? []) as ProjectRow[];
+  if (filters.startTo) {
+    projects = projects.filter(p => p.start_date && p.start_date <= filters.startTo!);
+  }
   const relevantIds = projects.map(p => p.id);
 
   let latestAdvancedAt: Record<string, string> = {};

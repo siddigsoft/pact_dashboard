@@ -81,10 +81,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       const firstStage = getFirstStageId(project.projectType);
-      const dbProject = {
-        ...mapProjectToDbProject(project),
-        current_flow_stage: project.currentFlowStage ?? firstStage,
-      } as Record<string, unknown>;
+      const dbProject = mapProjectToDbProject(project) as Record<string, unknown>;
       const { data, error } = await supabase
         .from('projects')
         .insert(dbProject)
@@ -98,8 +95,20 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!data) {
         throw new Error('No data returned from insert');
       }
+
+      // Set the initial flow stage via RPC (bypasses PostgREST schema cache)
+      const initialStage = project.currentFlowStage ?? firstStage;
+      await supabase.rpc('update_project_flow_stage', {
+        p_id: data.id,
+        p_stage: initialStage,
+        p_custom_stages: null,
+      });
       
-      const createdProject = { ...mapDbProjectToProject(data), activities: [] } as Project;
+      const createdProject = {
+        ...mapDbProjectToProject(data),
+        currentFlowStage: initialStage,
+        activities: [],
+      } as Project;
       
       await invalidateProjects();
       

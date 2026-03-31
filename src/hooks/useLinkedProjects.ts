@@ -15,12 +15,10 @@ async function fetchLinkedProjects(
   entityId: string,
   type: 'mmp' | 'site_visit',
 ): Promise<LinkedProject[]> {
-  const column = type === 'mmp' ? 'related_mmps' : 'related_site_visits';
+  const fn = type === 'mmp' ? 'get_projects_linked_to_mmp' : 'get_projects_linked_to_site_visit';
 
   const { data, error } = await supabase
-    .from('projects')
-    .select('id, name, project_code, project_type, current_flow_stage')
-    .contains(column, [entityId]);
+    .rpc(fn, { entity_id: entityId });
 
   if (error) throw new Error(error.message);
 

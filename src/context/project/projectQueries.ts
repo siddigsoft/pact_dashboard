@@ -38,30 +38,9 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
 }
 
 async function fetchProjects(): Promise<Project[]> {
-  // Fetch projects first (flat — avoids PostgREST nested-select schema-cache issues)
+  // Use RPC function to bypass PostgREST schema cache for new columns
   const { data: projectsData, error: projectsError } = await supabase
-    .from('projects')
-    .select(`
-      id,
-      name,
-      project_code,
-      description,
-      project_type,
-      status,
-      start_date,
-      end_date,
-      current_flow_stage,
-      custom_flow_stages,
-      related_mmps,
-      related_site_visits,
-      archived,
-      budget,
-      location,
-      team,
-      created_at,
-      updated_at
-    `)
-    .order('created_at', { ascending: false });
+    .rpc('get_all_projects');
 
   if (projectsError) throw new Error(projectsError.message);
   if (!projectsData || projectsData.length === 0) return [];

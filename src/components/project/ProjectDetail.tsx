@@ -263,9 +263,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     setIsArchiving(true);
     try {
       const { error } = await supabase
-        .from('projects')
-        .update({ archived: !project.archived })
-        .eq('id', project.id);
+        .rpc('set_project_archived', { p_id: project.id, p_archived: !project.archived });
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       toast({
