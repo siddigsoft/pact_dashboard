@@ -151,7 +151,7 @@ function useDebounce<T>(value: T, delay = 300): T {
   return debounced;
 }
 
-interface SearchDropdownProps<T> {
+interface LinkSearchProps<T> {
   placeholder: string;
   selectedIds: string[];
   onToggle: (id: string) => void;
@@ -164,7 +164,7 @@ interface SearchDropdownProps<T> {
   testPrefix: string;
 }
 
-function SearchDropdown<T>({
+function LinkSearch<T>({
   placeholder,
   selectedIds,
   onToggle,
@@ -175,7 +175,7 @@ function SearchDropdown<T>({
   renderItem,
   getId,
   testPrefix,
-}: SearchDropdownProps<T>) {
+}: LinkSearchProps<T>) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -238,6 +238,10 @@ function SearchDropdown<T>({
     </div>
   );
 }
+
+// Typed aliases to avoid inline generic JSX syntax which breaks browser extensions
+const MmpSearchDropdown = LinkSearch as (props: LinkSearchProps<MmpResult>) => JSX.Element;
+const SvSearchDropdown = LinkSearch as (props: LinkSearchProps<SiteVisitResult>) => JSX.Element;
 
 interface Props {
   relatedMMPs: string[];
@@ -381,7 +385,7 @@ export function LinkedEntitiesSection({
               </div>
             )}
 
-            <SearchDropdown<MmpResult>
+            <MmpSearchDropdown
               placeholder="Search by name or code…"
               selectedIds={relatedMMPs}
               onToggle={toggleMmp}
@@ -437,7 +441,7 @@ export function LinkedEntitiesSection({
               </div>
             )}
 
-            <SearchDropdown<SiteVisitResult>
+            <SvSearchDropdown
               placeholder="Search by site name or site code…"
               selectedIds={relatedSiteVisits}
               onToggle={toggleSv}
