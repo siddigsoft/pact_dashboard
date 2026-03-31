@@ -71,17 +71,26 @@ CREATE POLICY "departments_all_super_admin"
   );
 
 -- 4. Schedule daily contract-expiry check at 08:00 UTC via pg_cron
--- REQUIREMENT: Set `app.settings.supabase_url` via `ALTER DATABASE postgres SET app.settings.supabase_url = 'https://<project>.supabase.co';`
---   before running this migration in each target environment.
---   If the setting is absent the cron job is NOT scheduled and a NOTICE is raised.
+-- REQUIREMENTS before applying in each target environment:
+--   ALTER DATABASE postgres SET app.settings.supabase_url  = 'https://<project>.supabase.co';
+--   ALTER DATABASE postgres SET app.settings.cron_secret   = '<your-CRON_SECRET-value>';
+-- The CRON_SECRET must match the CRON_SECRET edge-function secret set in the Supabase Dashboard.
+-- If either setting is absent the cron job is NOT scheduled and a NOTICE is raised.
 DO $$
 DECLARE
   v_project_url TEXT;
+  v_cron_secret TEXT;
 BEGIN
   v_project_url := current_setting('app.settings.supabase_url', true);
+  v_cron_secret := current_setting('app.settings.cron_secret', true);
 
   IF v_project_url IS NULL OR v_project_url = '' THEN
-    RAISE NOTICE 'app.settings.supabase_url is not set — skipping contract-expiry-daily cron schedule. Set it and re-run this block to activate.';
+    RAISE NOTICE 'app.settings.supabase_url is not set — skipping contract-expiry-daily cron schedule.';
+    RETURN;
+  END IF;
+
+  IF v_cron_secret IS NULL OR v_cron_secret = '' THEN
+    RAISE NOTICE 'app.settings.cron_secret is not set — skipping contract-expiry-daily cron schedule.';
     RETURN;
   END IF;
 
@@ -95,10 +104,14 @@ BEGIN
     format(
       $$SELECT net.http_post(
           url     := '%s/functions/v1/contract-expiry-check',
-          headers := '{"Content-Type": "application/json"}'::jsonb,
+          headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'x-cron-secret', %L
+          ),
           body    := '{}'::jsonb
       ) AS request_id$$,
-      v_project_url
+      v_project_url,
+      v_cron_secret
     )
   );
 END;

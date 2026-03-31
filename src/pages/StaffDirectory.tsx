@@ -1103,11 +1103,11 @@ export default function StaffDirectory() {
         .order('name');
       if (hubsData?.length) setDbHubs(hubsData);
 
-      const { data: deptsData } = await (supabase as any)
+      const { data: deptsData } = await supabase
         .from('departments')
         .select('id, name');
       const deptMap: Record<string, string> = {};
-      (deptsData || []).forEach((d: any) => { deptMap[d.id] = d.name; });
+      (deptsData || []).forEach((d) => { deptMap[d.id] = d.name; });
 
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')

@@ -2,7 +2,11 @@
  * contract-expiry-check
  *
  * Scheduled Edge Function — runs daily via pg_cron at 08:00 UTC.
- * Also callable manually via HTTP POST for testing.
+ * Also callable manually via HTTP POST for testing (requires CRON_SECRET).
+ *
+ * Authorization: callers must supply the shared secret in one of:
+ *   - Authorization header: `Bearer <CRON_SECRET>`
+ *   - x-cron-secret header: `<CRON_SECRET>`
  *
  * For each profile whose contract_end_date falls within the next 30 days,
  * this function:
@@ -11,15 +15,13 @@
  *   3. If the employee has a manager (reports_to), inserts a notification for
  *      the manager and emails them too
  *
- * Deduplication: a notification row is inserted with a unique entity_id of
- * "<profile_id>:<YYYY-MM-DD>" so duplicate runs on the same day are harmless
- * (the insert will fail silently if the row already exists, assuming a unique
- * constraint on entity_id + recipient_id + event_type — otherwise the function
- * checks existing notifications before inserting).
+ * Deduplication: notification entity_id is "<profile_id>:<YYYY-MM-DD>" so
+ * duplicate runs on the same day are harmless.
  *
  * Environment variables (auto-injected by Supabase):
  *   SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
+ *   CRON_SECRET  — shared secret for callers (set via Supabase Dashboard > Secrets)
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -27,15 +29,42 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 }
 
 const APP_URL = Deno.env.get('APP_URL') ?? 'https://app.pactorg.com'
 const WARN_DAYS = 30
 
+function isAuthorized(req: Request): boolean {
+  const cronSecret = Deno.env.get('CRON_SECRET')
+  // If CRON_SECRET is not configured, only allow requests from Supabase internal network
+  // by checking for the supabase service key header (defensive fallback).
+  if (!cronSecret) {
+    // Without a secret configured, reject all external calls.
+    return false
+  }
+
+  // Accept via x-cron-secret header (preferred for cron jobs)
+  const cronHeader = req.headers.get('x-cron-secret')
+  if (cronHeader === cronSecret) return true
+
+  // Accept via Bearer token in Authorization header (for manual testing)
+  const authHeader = req.headers.get('authorization') ?? ''
+  if (authHeader === `Bearer ${cronSecret}`) return true
+
+  return false
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  if (!isAuthorized(req)) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
   }
 
   const supabase = createClient(
@@ -49,7 +78,6 @@ serve(async (req) => {
     const cutoff = new Date(today)
     cutoff.setDate(cutoff.getDate() + WARN_DAYS)
 
-    // Fetch all profiles with a contract end date within the warning window
     const { data: expiringProfiles, error: fetchError } = await supabase
       .from('profiles')
       .select('id, full_name, email, contract_end_date, reports_to')
@@ -66,30 +94,31 @@ serve(async (req) => {
       )
     }
 
-    // Build a manager lookup for employee notification
     const managerIds = [...new Set(
       expiringProfiles
         .map(p => p.reports_to)
         .filter((id): id is string => !!id),
     )]
-    let managerMap: Record<string, { full_name: string | null; email: string | null }> = {}
+
+    type ManagerInfo = { full_name: string | null; email: string | null }
+    const managerMap: Record<string, ManagerInfo> = {}
+
     if (managerIds.length > 0) {
       const { data: managers } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .in('id', managerIds)
-      ;(managers || []).forEach((m: any) => { managerMap[m.id] = m })
+      ;(managers ?? []).forEach((m) => { managerMap[m.id] = { full_name: m.full_name, email: m.email } })
     }
 
     const todayStr = today.toISOString().slice(0, 10)
     let processed = 0
 
     for (const profile of expiringProfiles) {
-      const contractEnd = new Date(profile.contract_end_date)
+      const contractEnd = new Date(profile.contract_end_date!)
       const daysLeft = Math.ceil((contractEnd.getTime() - today.getTime()) / 86_400_000)
       const dedupeKey = `${profile.id}:${todayStr}`
 
-      // Check if we already sent a notification today for this profile
       const { data: existing } = await supabase
         .from('notifications')
         .select('id')
@@ -98,13 +127,12 @@ serve(async (req) => {
         .eq('recipient_id', profile.id)
         .maybeSingle()
 
-      if (existing) continue // already sent today
+      if (existing) continue
 
       const employeeName = profile.full_name || profile.email || 'Employee'
       const urgency = daysLeft <= 7 ? 'high' : 'medium'
       const expiryDate = contractEnd.toISOString().slice(0, 10)
 
-      // ── Notify employee ──────────────────────────────────────────────────────
       await supabase.from('notifications').insert({
         event_type: 'contract_expiry',
         entity_type: 'profile',
@@ -147,7 +175,6 @@ serve(async (req) => {
         })
       }
 
-      // ── Notify manager ───────────────────────────────────────────────────────
       if (profile.reports_to && managerMap[profile.reports_to]) {
         const mgr = managerMap[profile.reports_to]
         const mgrDedupeKey = `${profile.id}:${todayStr}:mgr`
@@ -212,10 +239,11 @@ serve(async (req) => {
       JSON.stringify({ message: 'Contract expiry check complete', processed }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('[contract-expiry-check] Error:', err)
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   }
