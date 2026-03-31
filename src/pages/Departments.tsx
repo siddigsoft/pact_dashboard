@@ -91,7 +91,7 @@ async function sendDeptNotification(opts: {
   entityId: string;
   triggeredBy: string;
 }) {
-  await supabase.from("notifications").insert({
+  const { error: notifError } = await supabase.from("notifications").insert({
     event_type: "department_update",
     entity_type: "department",
     entity_id: opts.entityId,
@@ -104,8 +104,11 @@ async function sendDeptNotification(opts: {
     priority: "medium",
     action_url: "/departments",
   });
+  if (notifError) {
+    console.error("[sendDeptNotification] notification insert failed:", notifError.message);
+  }
   if (opts.recipientEmail) {
-    await supabase.functions.invoke("send-email", {
+    const { error: emailError } = await supabase.functions.invoke("send-email", {
       body: {
         to: opts.recipientEmail,
         subject: opts.titleEn,
@@ -124,6 +127,9 @@ async function sendDeptNotification(opts: {
           </div>`,
       },
     });
+    if (emailError) {
+      console.error("[sendDeptNotification] email send failed:", emailError.message);
+    }
   }
 }
 

@@ -226,7 +226,7 @@ const UserDetail: React.FC = () => {
       if (newDeptId !== prevDepartmentId) {
         const newDept = departments.find(d => d.id === newDeptId);
         const deptNameEn = newDept ? newDept.name : null;
-        await supabase.from("notifications").insert({
+        const { error: notifErr } = await supabase.from("notifications").insert({
           event_type: "department_update",
           entity_type: "profile",
           entity_id: user.id,
@@ -239,14 +239,16 @@ const UserDetail: React.FC = () => {
           priority: "medium",
           action_url: `/users/${user.id}`,
         });
+        if (notifErr) console.error("[UserDetail] dept notification insert failed:", notifErr.message);
         if (user.email) {
-          await supabase.functions.invoke("send-email", {
+          const { error: emailErr } = await supabase.functions.invoke("send-email", {
             body: {
               to: user.email,
               subject: deptNameEn ? `Department Update — You have been moved to: ${deptNameEn}` : "Department Update",
               html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px"><div style="background:#0F2041;padding:20px;border-radius:8px 8px 0 0"><h1 style="color:#fff;margin:0;font-size:18px">PACT Command Center</h1></div><div style="background:#f9fafb;padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px"><h2 style="color:#1D3461">Department Update</h2><p>Dear ${user.name},</p><p>${deptNameEn ? `Your department assignment has been updated to "<strong>${deptNameEn}</strong>".` : "You have been unassigned from your current department."}</p><a href="https://app.pactorg.com/users/${user.id}" style="display:inline-block;background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:12px">View Profile</a></div></div>`,
             },
           });
+          if (emailErr) console.error("[UserDetail] dept email send failed:", emailErr.message);
         }
       }
 

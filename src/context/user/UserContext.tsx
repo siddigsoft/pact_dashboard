@@ -204,7 +204,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             roles: allUserRoles[profile.id] || [],
             stateId: profile.state_id || existingUser.stateId,
             hubId: profile.hub_id || existingUser.hubId,
-            secondaryHubId: profile.secondary_hub_id || existingUser.secondaryHubId,
+            secondaryHubId: profile.secondary_hub_id || (profile.location as Record<string, string> | null)?.secondary_hub_id || existingUser.secondaryHubId,
             localityId: profile.locality_id || existingUser.localityId,
             avatar: profile.avatar_url || existingUser.avatar,
             username: profile.username || existingUser.username,
