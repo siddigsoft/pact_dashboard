@@ -50,7 +50,8 @@
     Siren,
     AlertTriangle,
     Package,
-    HeartPulse
+    HeartPulse,
+    CheckSquare
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -131,7 +132,8 @@
     Map,
     ScrollText,
     Mail,
-    Banknote
+    Banknote,
+    CheckSquare
   };
 
   interface FavoriteItem {
@@ -266,6 +268,9 @@
     const overviewItems: MenuGroup['items'] = [];
     if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || perms.dashboard)) {
       overviewItems.push({ id: 'dashboard', title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
+    }
+    if (!isHidden('/my-tasks')) {
+      overviewItems.push({ id: 'my-tasks', title: "My Tasks", url: "/my-tasks", icon: CheckSquare, priority: 1.5, isPinned: isPinned('/my-tasks') });
     }
     if (!isHidden('/signatures') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isFinancialAdmin || isAuditor)) {
       overviewItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 2, isPinned: isPinned('/signatures') });
