@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, Component } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -49,6 +50,29 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getProjectFlow } from '@/config/projectFlows';
 import { normaliseProjectType } from '@/types/project';
+
+class ChartErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? (
+        <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">
+          Chart unavailable
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const STALL_THRESHOLD_DAYS = 14;
 
@@ -190,10 +214,11 @@ export default function ProjectAnalytics() {
     staleTime: 120_000,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['project_analytics', projectIdFilter, clientTypeFilter, pmFilter, startFrom, startTo],
     queryFn: () => fetchAnalyticsData({ projectId: projectIdFilter, clientType: clientTypeFilter, pmFilter, startFrom, startTo }),
     staleTime: 60_000,
+    retry: 1,
   });
 
   const projects = data?.projects ?? [];
@@ -370,6 +395,31 @@ export default function ProjectAnalytics() {
           <div className="h-72 bg-muted animate-pulse rounded-lg" />
           <div className="h-72 bg-muted animate-pulse rounded-lg" />
         </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background p-3 md:p-4">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="w-9 h-9 rounded-md bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0">
+            <BarChart3 className="h-4.5 w-4.5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold">Project Analytics</h1>
+          </div>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+            <p className="font-medium text-sm mb-1">Failed to load analytics data</p>
+            <p className="text-xs text-muted-foreground mb-4">Please check your connection and try again.</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -559,34 +609,37 @@ export default function ProjectAnalytics() {
             {stageDistribution.length === 0 ? (
               <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={stageDistribution} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10 }}
-                    angle={-40}
-                    textAnchor="end"
-                    interval={0}
-                  />
-                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ fontSize: 12 }} />
-                  <Legend
-                    iconSize={10}
-                    wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                    formatter={(v) => STATUS_LABELS[v as string] ?? v}
-                  />
-                  {Object.entries(STATUS_COLORS).map(([status, color]) => (
-                    <Bar
-                      key={status}
-                      dataKey={status}
-                      stackId="a"
-                      fill={color}
-                      radius={status === 'cancelled' ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+              <ChartErrorBoundary>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={stageDistribution} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 10 }}
+                      angle={-40}
+                      textAnchor="end"
+                      interval={0}
                     />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ fontSize: 12 }} />
+                    <Legend
+                      iconSize={10}
+                      wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                      formatter={(v) => STATUS_LABELS[v as string] ?? v}
+                    />
+                    {Object.entries(STATUS_COLORS).map(([status, color]) => (
+                      <Bar
+                        key={status}
+                        dataKey={status}
+                        stackId="a"
+                        fill={color}
+                        isAnimationActive={false}
+                        radius={status === 'cancelled' ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartErrorBoundary>
             )}
           </CardContent>
         </Card>
@@ -601,36 +654,38 @@ export default function ProjectAnalytics() {
             {completionByType.length === 0 ? (
               <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10 }}
-                    angle={-40}
-                    textAnchor="end"
-                    interval={0}
-                  />
-                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{ fontSize: 12 }}
-                    formatter={(v: number, name: string, props: { payload?: { rate?: number } }) => {
-                      if (name === 'reachedFinal') {
-                        const rate = props.payload?.rate ?? 0;
-                        return [`${v} (${rate}%)`, 'Completed / Final Stage'];
-                      }
-                      return [v, 'Total'];
-                    }}
-                  />
-                  <Legend
-                    iconSize={10}
-                    wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                    formatter={(v) => v === 'reachedFinal' ? 'Completed / Final Stage' : 'Total'}
-                  />
-                  <Bar dataKey="total" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="reachedFinal" fill="#1D3461" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <ChartErrorBoundary>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 10 }}
+                      angle={-40}
+                      textAnchor="end"
+                      interval={0}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{ fontSize: 12 }}
+                      formatter={(v, name, entry) => {
+                        if (name === 'reachedFinal') {
+                          const rate = (entry?.payload as { rate?: number })?.rate ?? 0;
+                          return [`${v} (${rate}%)`, 'Completed / Final Stage'];
+                        }
+                        return [v, 'Total'];
+                      }}
+                    />
+                    <Legend
+                      iconSize={10}
+                      wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                      formatter={(v) => v === 'reachedFinal' ? 'Completed / Final Stage' : 'Total'}
+                    />
+                    <Bar dataKey="total" fill="#cbd5e1" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                    <Bar dataKey="reachedFinal" fill="#1D3461" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartErrorBoundary>
             )}
           </CardContent>
         </Card>
