@@ -582,6 +582,7 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
       _MoreItem(Icons.assignment, 'Monitoring Plan', () => widget.onNavigate(const MonitoringPlanScreen())),
       _MoreItem(Icons.lock_clock, 'Cycle Close', () => widget.onNavigate(const MmpCycleCloseScreen())),
       _MoreItem(Icons.track_changes, 'Tracker Plan', () => widget.onNavigate(const TrackerPreparationPlanScreen())),
+      _MoreItem(Icons.folder_special, 'Projects', () => widget.onNavigate(const ProjectsScreen())),
     ];
 
     final financeItems = <_MoreItem>[
@@ -592,7 +593,6 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
         _MoreItem(Icons.receipt_long, 'Retainers', () => widget.onNavigate(const RetainerManagementScreen())),
         _MoreItem(Icons.currency_exchange, 'Exchange Rates', () => widget.onNavigate(const ExchangeRatesScreen())),
         _MoreItem(Icons.account_balance, 'Budget', () => widget.onNavigate(const BudgetScreen())),
-        _MoreItem(Icons.folder_special, 'Projects', () => widget.onNavigate(const ProjectsScreen())),
         _MoreItem(Icons.draw, 'Signatures', () => widget.onNavigate(const DigitalSignaturesScreen())),
         _MoreItem(Icons.document_scanner, 'Scanner', () => widget.onNavigate(const TransactionScannerScreen())),
       ],

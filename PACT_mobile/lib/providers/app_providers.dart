@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/project_model.dart';
+import '../repositories/project_repository.dart';
 
 class UserProfile {
   final String id;
@@ -112,3 +114,31 @@ final isOnlineProvider = Provider<bool>((ref) {
     orElse: () => true,
   );
 });
+
+// ============================================================
+// Project Providers
+// ============================================================
+
+final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
+  return ProjectRepository(Supabase.instance.client);
+});
+
+/// Paginated project list for the current user.
+/// Params: (page, isAdmin)
+final projectsProvider = FutureProvider.family<List<ProjectModel>, (int, bool)>(
+  (ref, params) async {
+    final (page, isAdmin) = params;
+    final supabase = Supabase.instance.client;
+    final userId = supabase.auth.currentUser?.id ?? '';
+    final repo = ref.watch(projectRepositoryProvider);
+    return repo.fetchProjects(userId: userId, isAdmin: isAdmin, page: page);
+  },
+);
+
+/// Single project detail with flow log.
+final projectDetailProvider = FutureProvider.family<ProjectModel?, String>(
+  (ref, projectId) async {
+    final repo = ref.watch(projectRepositoryProvider);
+    return repo.fetchProjectDetail(projectId);
+  },
+);
