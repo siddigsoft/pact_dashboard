@@ -204,7 +204,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             roles: allUserRoles[profile.id] || [],
             stateId: profile.state_id || existingUser.stateId,
             hubId: profile.hub_id || existingUser.hubId,
-            secondaryHubId: profile.secondary_hub_id || (profile.location as any)?.secondary_hub_id || existingUser.secondaryHubId,
+            secondaryHubId: profile.secondary_hub_id || existingUser.secondaryHubId,
             localityId: profile.locality_id || existingUser.localityId,
             avatar: profile.avatar_url || existingUser.avatar,
             username: profile.username || existingUser.username,
@@ -221,11 +221,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
               totalCompletedTasks: 0,
               onTimeCompletion: 0,
             },
-            departmentId: (profile as any).department_id ?? null,
-            employmentType: (profile as any).employment_type ?? null,
-            contractStartDate: (profile as any).contract_start_date ?? null,
-            contractEndDate: (profile as any).contract_end_date ?? null,
-            reportsTo: (profile as any).reports_to ?? null,
+            departmentId: profile.department_id ?? null,
+            employmentType: profile.employment_type ?? null,
+            contractStartDate: profile.contract_start_date ?? null,
+            contractEndDate: profile.contract_end_date ?? null,
+            reportsTo: profile.reports_to ?? null,
           } as User;
         });
         

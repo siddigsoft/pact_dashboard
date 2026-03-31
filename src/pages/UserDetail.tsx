@@ -244,68 +244,9 @@ const UserDetail: React.FC = () => {
         }
       }
 
-      // Check contract expiry warning
-      if (empContractEnd) {
-        const daysLeft = Math.ceil((new Date(empContractEnd).getTime() - Date.now()) / 86400000);
-        if (daysLeft <= 30 && daysLeft >= 0) {
-          const expiryMsgEn = `Your contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} (${empContractEnd}).`;
-          const expiryMsgAr = `عقدك ينتهي خلال ${daysLeft} يوم (${empContractEnd}).`;
-          const priority = daysLeft <= 7 ? "high" : "medium";
-
-          // Notify employee
-          await supabase.from("notifications").insert({
-            event_type: "contract_expiry",
-            entity_type: "profile",
-            entity_id: user.id,
-            recipient_id: user.id,
-            triggered_by: currentUser?.id,
-            title_en: "Contract Expiry Notice",
-            title_ar: "إشعار انتهاء العقد",
-            message_en: expiryMsgEn,
-            message_ar: expiryMsgAr,
-            priority,
-            action_url: `/users/${user.id}`,
-          });
-
-          // Email employee
-          if (user.email) {
-            await supabase.functions.invoke("send-email", {
-              body: {
-                to: user.email,
-                subject: `Contract Expiry Notice — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining`,
-                html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px"><h2 style="color:#0F2041">Contract Expiry Notice</h2><p>Dear ${user.name},</p><p>${expiryMsgEn}</p><p>Please contact HR to discuss contract renewal.</p><a href="https://app.pactorg.com/users/${user.id}" style="background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:12px">View Profile</a></div>`,
-              },
-            });
-          }
-
-          // Notify manager if set
-          if (empReportsTo) {
-            const mgr = allUsers.find(u => u.id === empReportsTo);
-            await supabase.from("notifications").insert({
-              event_type: "contract_expiry",
-              entity_type: "profile",
-              entity_id: user.id,
-              recipient_id: empReportsTo,
-              triggered_by: currentUser?.id,
-              title_en: `Contract Expiry: ${user.name}`,
-              title_ar: `انتهاء عقد: ${user.name}`,
-              message_en: `${user.name}'s contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`,
-              message_ar: `عقد ${user.name} ينتهي خلال ${daysLeft} يوم.`,
-              priority,
-              action_url: `/users/${user.id}`,
-            });
-            if (mgr?.email) {
-              await supabase.functions.invoke("send-email", {
-                body: {
-                  to: mgr.email,
-                  subject: `Team Member Contract Expiry — ${user.name}`,
-                  html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px"><h2 style="color:#0F2041">Contract Expiry Notice</h2><p>This is to inform you that ${user.name}'s contract expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} (${empContractEnd}).</p><a href="https://app.pactorg.com/users/${user.id}" style="background:#1D3461;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:12px">View Employee Profile</a></div>`,
-                },
-              });
-            }
-          }
-        }
-      }
+      // Contract expiry reminders are sent automatically by the
+      // contract-expiry-check scheduled edge function (daily at 08:00 UTC).
+      // No per-save notification is triggered here to avoid duplicates.
 
       toast({ title: "Employment record updated" });
     } catch (err: any) {

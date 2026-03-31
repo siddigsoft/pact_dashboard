@@ -284,6 +284,57 @@ export type Database = {
         }
         Relationships: []
       }
+      departments: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          parent_department_id: string | null
+          manager_user_id: string | null
+          hub_id: string | null
+          color: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          parent_department_id?: string | null
+          manager_user_id?: string | null
+          hub_id?: string | null
+          color?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          parent_department_id?: string | null
+          manager_user_id?: string | null
+          hub_id?: string | null
+          color?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "departments_manager_user_id_fkey"
+            columns: ["manager_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "departments_parent_department_id_fkey"
+            columns: ["parent_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       operational_cost_submissions: {
         Row: {
           id: string
@@ -442,6 +493,12 @@ export type Database = {
           updated_at: string
           username: string | null
           availability: string | null
+          secondary_hub_id: string | null
+          department_id: string | null
+          employment_type: string | null
+          contract_start_date: string | null
+          contract_end_date: string | null
+          reports_to: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -461,6 +518,12 @@ export type Database = {
           updated_at?: string
           username?: string | null
           availability?: string | null
+          secondary_hub_id?: string | null
+          department_id?: string | null
+          employment_type?: string | null
+          contract_start_date?: string | null
+          contract_end_date?: string | null
+          reports_to?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -480,6 +543,12 @@ export type Database = {
           updated_at?: string
           username?: string | null
           availability?: string | null
+          secondary_hub_id?: string | null
+          department_id?: string | null
+          employment_type?: string | null
+          contract_start_date?: string | null
+          contract_end_date?: string | null
+          reports_to?: string | null
         }
         Relationships: [
           {
