@@ -47,6 +47,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import ProjectCommentsPanel from './ProjectCommentsPanel';
 import ProjectDocumentsPanel from './ProjectDocumentsPanel';
 import { ProjectFieldTasksPanel } from './ProjectFieldTasksPanel';
+import { OutlookCalendarPanel } from './OutlookCalendarPanel';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -766,7 +767,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto pb-1 -mx-1 px-1">
-        <TabsList className="grid grid-cols-9 w-[900px] sm:w-[970px] md:w-[1040px]">
+        <TabsList className="grid grid-cols-10 w-[1000px] sm:w-[1080px] md:w-[1160px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
@@ -783,6 +784,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </TabsTrigger>
           <TabsTrigger value="documents" data-testid="tab-documents">
             <Paperclip className="h-3.5 w-3.5 mr-1" />Documents
+          </TabsTrigger>
+          <TabsTrigger value="calendar" data-testid="tab-calendar">
+            <Calendar className="h-3.5 w-3.5 mr-1" />Calendar
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1196,6 +1200,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             currentUserId={currentUser?.id ?? ''}
             isAdmin={canArchive}
           />
+        </TabsContent>
+
+        <TabsContent value="calendar" className="mt-4">
+          <OutlookCalendarPanel projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>

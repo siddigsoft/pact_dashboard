@@ -13,6 +13,8 @@ export interface StageAssignee {
   role: string;
   avatarUrl: string | null;
   assignedAt: string;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
 }
 
 export interface StageChecklistItem {
@@ -47,7 +49,7 @@ export function useAllStageAssignees(projectId: string) {
     queryFn: async (): Promise<AllStageAssignee[]> => {
       const { data, error } = await supabase
         .from('project_stage_assignees')
-        .select('id, user_id, stage_id, assigned_at, profiles:user_id(full_name, role, avatar_url)')
+        .select('id, user_id, stage_id, assigned_at, acknowledged_at, acknowledged_by, profiles:user_id(full_name, role, avatar_url)')
         .eq('project_id', projectId)
         .order('assigned_at');
       if (error) throw error;
@@ -59,6 +61,8 @@ export function useAllStageAssignees(projectId: string) {
         role: r.profiles?.role ?? '',
         avatarUrl: r.profiles?.avatar_url ?? null,
         assignedAt: r.assigned_at,
+        acknowledgedAt: r.acknowledged_at ?? null,
+        acknowledgedBy: r.acknowledged_by ?? null,
       }));
     },
     staleTime: 30_000,
@@ -77,7 +81,7 @@ export function useStageAssignees(projectId: string, stageId: string) {
     queryFn: async (): Promise<StageAssignee[]> => {
       const { data, error } = await supabase
         .from('project_stage_assignees')
-        .select('id, user_id, assigned_at, profiles:user_id(full_name, role, avatar_url)')
+        .select('id, user_id, assigned_at, acknowledged_at, acknowledged_by, profiles:user_id(full_name, role, avatar_url)')
         .eq('project_id', projectId)
         .eq('stage_id', stageId)
         .order('assigned_at');
@@ -89,6 +93,8 @@ export function useStageAssignees(projectId: string, stageId: string) {
         role: r.profiles?.role ?? '',
         avatarUrl: r.profiles?.avatar_url ?? null,
         assignedAt: r.assigned_at,
+        acknowledgedAt: r.acknowledged_at ?? null,
+        acknowledgedBy: r.acknowledged_by ?? null,
       }));
     },
     staleTime: 30_000,
@@ -116,13 +122,30 @@ export function useStageAssignees(projectId: string, stageId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
 
+  const acknowledgeMutation = useMutation({
+    mutationFn: async ({ assigneeId, userId }: { assigneeId: string; userId: string }) => {
+      const { error } = await supabase
+        .from('project_stage_assignees')
+        .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: userId })
+        .eq('id', assigneeId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: ['all_stage_assignees', projectId] });
+    },
+  });
+
   return {
     assignees: query.data ?? [],
     isLoading: query.isLoading,
     addAssignee: (userId: string) => addMutation.mutateAsync(userId),
     removeAssignee: (id: string) => removeMutation.mutateAsync(id),
+    acknowledgeAssignment: (assigneeId: string, userId: string) =>
+      acknowledgeMutation.mutateAsync({ assigneeId, userId }),
     isAdding: addMutation.isPending,
     isRemoving: removeMutation.isPending,
+    isAcknowledging: acknowledgeMutation.isPending,
   };
 }
 

@@ -139,11 +139,11 @@ const STATUS_CFG = {
     label: 'In Progress',
   },
   skipped: {
-    border: 'border-l-slate-300',
-    bg: 'bg-slate-50/40 dark:bg-slate-800/10',
-    ring: 'border-dashed border-slate-200 dark:border-slate-700',
-    icon: 'bg-slate-100 text-slate-400 border-slate-300 dark:bg-slate-800',
-    badge: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+    border: 'border-l-amber-400',
+    bg: 'bg-amber-50/40 dark:bg-amber-900/10',
+    ring: 'border-dashed border-amber-200 dark:border-amber-800',
+    icon: 'bg-amber-100 text-amber-500 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400',
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
     label: 'Skipped',
   },
   upcoming: {

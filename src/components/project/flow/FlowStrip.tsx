@@ -74,9 +74,9 @@ export function FlowStrip({
               className={cn(
                 'rounded-full flex items-center justify-center border-2 transition-all',
                 compact ? 'h-6 w-6' : 'h-8 w-8',
-                isCompleted && 'border-emerald-500 bg-emerald-500 text-white cursor-pointer hover:scale-110',
-                isCurrent && 'border-[#1D3461] bg-[#1D3461] text-white ring-2 ring-[#1D3461]/30 animate-pulse',
-                status === 'skipped' && 'border-muted-foreground/30 bg-muted text-muted-foreground/50',
+                isCompleted && 'border-emerald-500 bg-emerald-500 text-white cursor-pointer hover:scale-110 shadow-sm shadow-emerald-300 dark:shadow-emerald-900',
+                isCurrent && 'border-[#1D3461] bg-[#1D3461] text-white ring-2 ring-blue-400/40 animate-pulse',
+                status === 'skipped' && 'border-amber-400 bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
                 status === 'upcoming' && 'border-border bg-background text-muted-foreground',
               )}
             >
@@ -94,7 +94,7 @@ export function FlowStrip({
                 <div
                   className={cn(
                     'h-px w-6 flex-shrink-0 transition-colors',
-                    isCompleted || isCurrent ? 'bg-emerald-500' : 'bg-border',
+                    isCompleted ? 'bg-emerald-500' : isCurrent ? 'bg-[#1D3461]' : 'bg-border',
                   )}
                 />
               )}
@@ -146,9 +146,9 @@ export function FlowStrip({
                   <span
                     className={cn(
                       'text-[10px] leading-tight text-center max-w-[60px] line-clamp-2',
-                      isCurrent && 'text-[#1D3461] font-semibold',
-                      isCompleted && 'text-emerald-600 font-medium',
-                      status === 'skipped' && 'text-muted-foreground/50 line-through',
+                      isCurrent && 'text-[#1D3461] font-semibold dark:text-blue-300',
+                      isCompleted && 'text-emerald-600 font-medium dark:text-emerald-400',
+                      status === 'skipped' && 'text-amber-600 line-through dark:text-amber-400',
                       status === 'upcoming' && 'text-muted-foreground',
                     )}
                   >
