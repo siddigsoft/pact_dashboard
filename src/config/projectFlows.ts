@@ -25,7 +25,7 @@ const TPM_FLOW: FlowStage[] = [
     id: 'site_selection',
     label: 'Site Selection',
     description: 'Identify and verify sites to be monitored based on project coverage plan and partner data.',
-    linkedModule: '/sites',
+    linkedModule: '/hub-operations',
     keyOutputs: ['Site registry', 'Coverage plan', 'Geographical mapping'],
   },
   {
