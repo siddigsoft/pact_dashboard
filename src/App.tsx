@@ -153,6 +153,30 @@ const PageLoader = () => (
   </div>
 );
 
+// Per-page error boundary so a single page crash doesn't take down the whole app
+const PageCrashFallback = () => (
+  <div className="min-h-[60vh] flex items-center justify-center p-8">
+    <div className="bg-card border rounded-lg p-6 text-center max-w-md w-full shadow-sm">
+      <h2 className="text-lg font-semibold text-destructive mb-2">Page failed to load</h2>
+      <p className="text-muted-foreground text-sm mb-4">
+        Something went wrong on this page. Try refreshing, or navigate to another section.
+      </p>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors text-sm"
+      >
+        Refresh Page
+      </button>
+    </div>
+  </div>
+);
+
+const PageWrapper = ({ children }: { children: React.ReactNode }) => (
+  <ErrorBoundary fallback={<PageCrashFallback />}>
+    {children}
+  </ErrorBoundary>
+);
+
 // Notification display component
 const AppNotifications = () => {
   const { notifications, remove } = useNotifications();
@@ -273,12 +297,12 @@ const AppRoutes = () => {
         <Route path="/financial-operations" element={<FinancialOperations />} />
         <Route path="/data-visibility" element={<DataVisibility />} />
         <Route path="/chat" element={<Chat />} />
-        <Route path="/my-tasks" element={<MyTasksPage />} />
-        <Route path="/projects" element={<Projects />} />
-        <Route path="/projects/analytics" element={<ProjectAnalytics />} />
-        <Route path="/projects/create" element={<CreateProject />} />
-        <Route path="/projects/:id" element={<ProjectDetail />} />
-        <Route path="/projects/:id/edit" element={<EditProject />} />
+        <Route path="/my-tasks" element={<PageWrapper><MyTasksPage /></PageWrapper>} />
+        <Route path="/projects" element={<PageWrapper><Projects /></PageWrapper>} />
+        <Route path="/projects/analytics" element={<PageWrapper><ProjectAnalytics /></PageWrapper>} />
+        <Route path="/projects/create" element={<PageWrapper><CreateProject /></PageWrapper>} />
+        <Route path="/projects/:id" element={<PageWrapper><ProjectDetail /></PageWrapper>} />
+        <Route path="/projects/:id/edit" element={<PageWrapper><EditProject /></PageWrapper>} />
         <Route path="/projects/:id/activities/create" element={<CreateProjectActivity />} />
         <Route path="/projects/:id/activities/:activityId" element={<ProjectActivityDetail />} />
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />

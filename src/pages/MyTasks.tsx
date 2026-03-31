@@ -1140,8 +1140,9 @@ export default function MyTasks() {
   // Stats (computed before search filter so counts stay accurate)
   const stats = useMemo(() => {
     const allActive = [...personalTasks, ...projectTasks];
-    const dueToday = allActive.filter(t => t.dueDate && isToday(parseISO(t.dueDate)) && t.status !== 'done' && t.status !== 'cancelled').length;
-    const dueWeek = allActive.filter(t => t.dueDate && isThisWeek(parseISO(t.dueDate), { weekStartsOn: 0 }) && t.status !== 'done' && t.status !== 'cancelled').length;
+    const safeDate = (s: string | null | undefined) => { if (!s) return null; try { const d = parseISO(s); return isValid(d) ? d : null; } catch { return null; } };
+    const dueToday = allActive.filter(t => { const d = safeDate(t.dueDate); return d && isToday(d) && t.status !== 'done' && t.status !== 'cancelled'; }).length;
+    const dueWeek = allActive.filter(t => { const d = safeDate(t.dueDate); return d && isThisWeek(d, { weekStartsOn: 0 }) && t.status !== 'done' && t.status !== 'cancelled'; }).length;
     const overdue = allActive.filter(t => isOverdue(t.dueDate, t.status)).length;
     const done = personalTasks.filter(t => t.status === 'done').length
       + projectTasks.filter((t: any) => t.status === 'done').length;
