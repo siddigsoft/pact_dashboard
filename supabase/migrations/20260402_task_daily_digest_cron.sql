@@ -12,8 +12,8 @@ WHERE EXISTS (
 );
 
 -- Schedule: every day at 07:00 UTC
--- The edge function URL is resolved at runtime from SUPABASE_URL env var.
--- CRON_SECRET header validates that the caller is the trusted cron system.
+-- task-daily-digest expects: Authorization: Bearer <CRON_SECRET>
+-- (matching the check in supabase/functions/task-daily-digest/index.ts)
 SELECT cron.schedule(
   'task-daily-digest',
   '0 7 * * *',
@@ -22,16 +22,14 @@ SELECT cron.schedule(
       url := current_setting('app.supabase_url') || '/functions/v1/task-daily-digest',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'x-cron-secret', current_setting('app.cron_secret', true)
+        'Authorization', 'Bearer ' || current_setting('app.cron_secret', true)
       ),
       body := '{}'::jsonb
     );
   $$
 );
 
-COMMENT ON SCHEMA cron IS
-  'pg_cron scheduled jobs. task-daily-digest runs daily at 07:00 UTC.
-   app.supabase_url and app.cron_secret must be set as DB GUCs:
-     ALTER DATABASE postgres SET "app.supabase_url" = ''https://abznugnirnlrqnnfkein.supabase.co'';
-     ALTER DATABASE postgres SET "app.cron_secret" = ''<CRON_SECRET_VALUE>'';
-   Alternatively, schedule via Supabase Dashboard → Edge Functions → Schedules.';
+-- Setup instructions for DB GUCs (run once, not part of migration):
+--   ALTER DATABASE postgres SET "app.supabase_url" = 'https://abznugnirnlrqnnfkein.supabase.co';
+--   ALTER DATABASE postgres SET "app.cron_secret" = '<CRON_SECRET_VALUE>';
+-- Alternatively, schedule via Supabase Dashboard → Edge Functions → Schedules.
