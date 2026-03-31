@@ -124,20 +124,13 @@ class _ProjectDetailScreenState
 
   bool _canAdvance(ProjectModel project, UserProfile? userProfile) {
     if (userProfile == null) return false;
+    // Only admin, super_admin, or fom can advance
     if (userProfile.isAdmin || userProfile.isFom) return true;
-    // Check if user is project manager by id
+    // Or the designated project manager (matched by stored profileId)
     final teamData = project.team;
     if (teamData == null) return false;
     final pmId = teamData['projectManagerId'] as String?;
-    if (pmId != null && pmId == userProfile.id) return true;
-    // Check team composition
-    final members = teamData['teamComposition'];
-    if (members is List) {
-      for (final m in members) {
-        if (m is Map && m['userId'] == userProfile.id) return true;
-      }
-    }
-    return false;
+    return pmId != null && pmId == userProfile.id;
   }
 
   void _showAdvanceSheet(

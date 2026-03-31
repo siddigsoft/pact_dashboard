@@ -7,7 +7,7 @@ import '../widgets/shimmer_loading.dart';
 import '../providers/app_providers.dart';
 import '../models/project_model.dart';
 import '../config/project_flows.dart';
-import 'project_detail_screen.dart';
+import '../config/routes.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Projects List Screen
@@ -303,11 +303,9 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   }
 
   void _openDetail(ProjectModel project) {
-    Navigator.push(
+    Navigator.pushNamed(
       context,
-      MaterialPageRoute(
-        builder: (_) => ProjectDetailScreen(projectId: project.id),
-      ),
+      RouteNames.projectDetailPath(project.id),
     );
   }
 }
