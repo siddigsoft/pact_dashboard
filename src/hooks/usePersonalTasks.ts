@@ -8,6 +8,8 @@ export type PersonalTaskStatus = 'todo' | 'inprogress' | 'done' | 'cancelled';
 export interface PersonalTask {
   id: string;
   userId: string;
+  assignedTo: string | null;
+  assignedToName: string | null;
   title: string;
   description: string | null;
   priority: PersonalTaskPriority;
@@ -29,12 +31,16 @@ export interface CreatePersonalTask {
   category?: string | null;
   tags?: string[] | null;
   notes?: string | null;
+  assignedTo?: string | null;
+  assignedToName?: string | null;
 }
 
 function mapRow(r: any): PersonalTask {
   return {
     id: r.id,
     userId: r.user_id,
+    assignedTo: r.assigned_to ?? null,
+    assignedToName: r.assigned_to_name ?? null,
     title: r.title,
     description: r.description ?? null,
     priority: r.priority as PersonalTaskPriority,
@@ -119,7 +125,7 @@ export function usePersonalTasks(userId: string | undefined) {
       const { data, error } = await supabase
         .from('personal_tasks')
         .select('*')
-        .eq('user_id', userId)
+        .or(`assigned_to.eq.${userId},and(user_id.eq.${userId},assigned_to.is.null)`)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data ?? []).map(mapRow);
@@ -130,10 +136,14 @@ export function usePersonalTasks(userId: string | undefined) {
 
   const createMutation = useMutation({
     mutationFn: async (task: CreatePersonalTask & { userId: string }) => {
+      const assignedTo = task.assignedTo ?? task.userId;
+      const assignedToName = task.assignedToName ?? null;
       const { data, error } = await supabase
         .from('personal_tasks')
         .insert({
           user_id: task.userId,
+          assigned_to: assignedTo,
+          assigned_to_name: assignedToName,
           title: task.title,
           description: task.description ?? null,
           priority: task.priority ?? 'medium',
@@ -147,16 +157,24 @@ export function usePersonalTasks(userId: string | undefined) {
         .single();
       if (error) throw error;
 
-      // Fire notification if due today or overdue
+      const p = (task.priority ?? 'medium') as PersonalTaskPriority;
+
+      // If assigned to someone else, send them an "assigned" notification
+      if (assignedTo !== task.userId && data?.id) {
+        try {
+          await sendTaskNotification({ userId: assignedTo, taskId: data.id, title: task.title, priority: p, event: 'assigned' });
+        } catch { /* non-critical */ }
+      }
+
+      // Fire notification to creator if due today or overdue
       if (task.dueDate && data?.id) {
         try {
           const d = parseISO(task.dueDate);
           if (isValid(d)) {
-            const p = (task.priority ?? 'medium') as PersonalTaskPriority;
             if (isToday(d)) {
-              await sendTaskNotification({ userId: task.userId, taskId: data.id, title: task.title, priority: p, event: 'created_due_today' });
+              await sendTaskNotification({ userId: assignedTo, taskId: data.id, title: task.title, priority: p, event: 'created_due_today' });
             } else if (isBefore(startOfDay(d), startOfDay(new Date()))) {
-              await sendTaskNotification({ userId: task.userId, taskId: data.id, title: task.title, priority: p, event: 'created_overdue' });
+              await sendTaskNotification({ userId: assignedTo, taskId: data.id, title: task.title, priority: p, event: 'created_overdue' });
             }
           }
         } catch { /* non-critical */ }
@@ -273,5 +291,27 @@ export function useAssignedProjectTasks(userId: string | undefined) {
     },
     enabled: !!userId,
     staleTime: 60_000,
+  });
+}
+
+export function useCreatedByMeTasks(userId: string | undefined) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ['created_by_me_tasks', userId],
+    queryFn: async (): Promise<PersonalTask[]> => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('personal_tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .neq('assigned_to', userId)
+        .not('assigned_to', 'is', null)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map(mapRow);
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+    meta: { qc },
   });
 }

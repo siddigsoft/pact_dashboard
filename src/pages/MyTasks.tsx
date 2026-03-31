@@ -49,7 +49,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import {
-  usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus,
+  usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type CreatePersonalTask,
 } from '@/hooks/usePersonalTasks';
 
@@ -498,6 +498,259 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
           <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSaving} className="bg-[#1D3461] hover:bg-[#0F2041] text-white">
             {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
             Save Changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── New Task Dialog ──────────────────────────────────────────────────────────
+
+interface NewTaskDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (task: CreatePersonalTask) => Promise<void>;
+  isCreating: boolean;
+  isAdmin: boolean;
+  currentUserId: string;
+  currentUserName: string;
+}
+
+function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUserId, currentUserName }: NewTaskDialogProps) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<PersonalTaskPriority>('medium');
+  const [dueDate, setDueDate] = useState('');
+  const [notes, setNotes] = useState('');
+  const [assignMode, setAssignMode] = useState<'self' | 'other'>('self');
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null);
+  const [userSearch, setUserSearch] = useState('');
+
+  const { data: users = [], isLoading: loadingUsers } = useQuery({
+    queryKey: ['profiles-for-task-assign'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role, status').order('full_name');
+      return (data ?? []) as { id: string; full_name: string; role: string; status: string }[];
+    },
+    enabled: isAdmin && open,
+    staleTime: 5 * 60_000,
+  });
+
+  const filteredUsers = users.filter(u =>
+    u.id !== currentUserId && (!userSearch || (u.full_name ?? '').toLowerCase().includes(userSearch.toLowerCase()))
+  );
+
+  const reset = () => {
+    setTitle(''); setDescription(''); setPriority('medium');
+    setDueDate(''); setNotes(''); setAssignMode('self');
+    setSelectedUser(null); setUserSearch('');
+  };
+
+  const handleClose = () => { reset(); onClose(); };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+    const assignTo = assignMode === 'other' && selectedUser ? selectedUser : null;
+    await onCreate({
+      title: title.trim(),
+      description: description.trim() || null,
+      priority,
+      dueDate: dueDate || null,
+      notes: notes.trim() || null,
+      assignedTo: assignTo?.id ?? null,
+      assignedToName: assignTo?.name ?? null,
+    });
+    reset();
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Plus className="h-4 w-4 text-[#1D3461]" />
+            New Task
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Title */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Task title <span className="text-red-500">*</span></Label>
+            <Input
+              placeholder="What needs to be done?"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSubmit(); }}
+              autoFocus
+              data-testid="input-new-task-title"
+            />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Description</Label>
+            <Textarea
+              placeholder="Add more details…"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className="resize-none text-sm min-h-[72px]"
+              data-testid="input-new-task-description"
+            />
+          </div>
+
+          {/* Priority + Due date row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Priority</Label>
+              <Select value={priority} onValueChange={v => setPriority(v as PersonalTaskPriority)}>
+                <SelectTrigger className="h-9 text-sm" data-testid="select-new-task-priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(['low', 'medium', 'high', 'critical'] as PersonalTaskPriority[]).map(p => (
+                    <SelectItem key={p} value={p} className="text-sm">{PRIORITY_CFG[p].label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Due date</Label>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                className="h-9 text-sm"
+                data-testid="input-new-task-due-date"
+              />
+            </div>
+          </div>
+
+          {/* Assign to */}
+          <div className="space-y-2">
+            <Label className="text-xs font-medium flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5 text-muted-foreground" />
+              Assign to
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setAssignMode('self'); setSelectedUser(null); }}
+                data-testid="button-assign-myself"
+                className={cn(
+                  'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all',
+                  assignMode === 'self'
+                    ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40'
+                )}
+              >
+                <User className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">Myself</span>
+              </button>
+              <button
+                onClick={() => isAdmin && setAssignMode('other')}
+                data-testid="button-assign-other"
+                disabled={!isAdmin}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all',
+                  assignMode === 'other'
+                    ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40',
+                  !isAdmin && 'opacity-40 cursor-not-allowed'
+                )}
+              >
+                <Users className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">Someone else</span>
+              </button>
+            </div>
+
+            {/* Myself preview */}
+            {assignMode === 'self' && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border border-border/50 text-sm text-muted-foreground">
+                <div className="h-6 w-6 rounded-full bg-[#1D3461] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  {currentUserName.charAt(0).toUpperCase()}
+                </div>
+                <span className="truncate">{currentUserName}</span>
+                <span className="ml-auto text-xs opacity-60">(you)</span>
+              </div>
+            )}
+
+            {/* Someone else: user search */}
+            {assignMode === 'other' && isAdmin && (
+              <div className="space-y-2">
+                <Input
+                  placeholder="Search team member…"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  className="h-8 text-sm"
+                  data-testid="input-user-search"
+                />
+                {selectedUser && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-sm">
+                    <div className="h-6 w-6 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      {selectedUser.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-emerald-800 dark:text-emerald-200 font-medium truncate">{selectedUser.name}</span>
+                    <button onClick={() => setSelectedUser(null)} className="ml-auto text-emerald-600 hover:text-emerald-800">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+                {!selectedUser && (
+                  <div className="rounded-lg border border-border bg-background max-h-36 overflow-y-auto">
+                    {loadingUsers ? (
+                      <div className="p-3 text-sm text-muted-foreground text-center">Loading…</div>
+                    ) : filteredUsers.length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground text-center">No team members found</div>
+                    ) : (
+                      filteredUsers.map(u => (
+                        <button
+                          key={u.id}
+                          onClick={() => { setSelectedUser({ id: u.id, name: u.full_name ?? 'Unknown' }); setUserSearch(''); }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                          data-testid={`option-user-${u.id}`}
+                        >
+                          <div className="h-6 w-6 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-xs font-bold flex-shrink-0">
+                            {(u.full_name ?? '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{u.full_name ?? 'Unknown'}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{u.role}</p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Notes</Label>
+            <Textarea
+              placeholder="Any additional notes…"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              className="resize-none text-sm min-h-[56px]"
+              data-testid="input-new-task-notes"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 border-t pt-3">
+          <Button variant="outline" size="sm" onClick={handleClose}>Cancel</Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={!title.trim() || isCreating || (assignMode === 'other' && !selectedUser)}
+            className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
+            data-testid="button-create-task-submit"
+          >
+            {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+            {assignMode === 'other' && selectedUser ? `Assign to ${selectedUser.name.split(' ')[0]}` : 'Create Task'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1120,11 +1373,13 @@ export default function MyTasks() {
 
   const { tasks: personalTasks, isLoading: loadingPersonal, createTask, updateTask, deleteTask, isCreating, isUpdating } = usePersonalTasks(userId);
   const { data: projectTasks = [], isLoading: loadingProject, refetch: refetchProject } = useAssignedProjectTasks(userId);
+  const { data: delegatedTasks = [] } = useCreatedByMeTasks(isAdmin ? userId : undefined);
   const updateProjectTaskStatus = useUpdateProjectTaskStatus();
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
+  const [showNewTask, setShowNewTask] = useState(false);
   const [personalView, setPersonalView] = useState<'list' | 'board'>('list');
   const [showInsights, setShowInsightsRaw] = useState<boolean>(() => {
     try { return localStorage.getItem('pact_mytasks_insights') !== 'false'; } catch { return true; }
@@ -1172,6 +1427,17 @@ export default function MyTasks() {
       toast({ title: 'Task added' });
     } catch {
       toast({ title: 'Failed to add task', variant: 'destructive' });
+    }
+  };
+
+  const handleNewTaskCreate = async (task: CreatePersonalTask) => {
+    try {
+      await createTask({ ...task, category: task.assignedTo ? 'delegated' : 'personal' });
+      const assignedName = task.assignedToName;
+      toast({ title: assignedName ? `Task assigned to ${assignedName}` : 'Task created' });
+    } catch {
+      toast({ title: 'Failed to create task', variant: 'destructive' });
+      throw new Error('Failed to create task');
     }
   };
 
@@ -1234,15 +1500,26 @@ export default function MyTasks() {
           </div>
           <p className="text-sm text-muted-foreground ml-10">{today} · {currentUser?.fullName}</p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground"
-          onClick={() => refetchProject()}
-          data-testid="button-refresh-tasks"
-        >
-          <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            className="bg-[#1D3461] hover:bg-[#0F2041] text-white gap-1.5"
+            onClick={() => setShowNewTask(true)}
+            data-testid="button-new-task"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Task
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => refetchProject()}
+            data-testid="button-refresh-tasks"
+          >
+            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* ── Stat cards ── */}
@@ -1507,6 +1784,44 @@ export default function MyTasks() {
         </div>
       )}
 
+      {/* ── Delegated by me (admin only) ── */}
+      {isAdmin && delegatedTasks.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-[#1D3461]" />
+            <h3 className="text-sm font-semibold text-foreground">Delegated by Me</h3>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{delegatedTasks.length}</Badge>
+          </div>
+          <div className="space-y-2">
+            {delegatedTasks.map(task => (
+              <div key={task.id} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background p-3 hover:bg-muted/30 transition-colors">
+                <div className={cn('mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0', task.status === 'done' ? 'bg-emerald-500 border-emerald-500' : 'border-[#1D3461]/40')} />
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <p className={cn('text-sm font-medium leading-tight', task.status === 'done' && 'line-through text-muted-foreground')}>{task.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <User className="h-3 w-3" />
+                      {task.assignedToName ?? 'Unknown'}
+                    </span>
+                    {task.dueDate && (
+                      <span className="text-xs text-muted-foreground">
+                        · Due {task.dueDate}
+                      </span>
+                    )}
+                    <Badge className={cn('text-[10px] px-1.5 py-0', PRIORITY_CFG[task.priority ?? 'medium']?.color ?? 'bg-amber-100 text-amber-700')}>
+                      {PRIORITY_CFG[task.priority ?? 'medium']?.label ?? 'Medium'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize">
+                      {task.status}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Re-show insights ── */}
       {!showInsights && (
         <div className="flex justify-center">
@@ -1526,6 +1841,17 @@ export default function MyTasks() {
         onClose={() => setEditingTask(null)}
         onSave={handleEditSave}
         isSaving={isUpdating}
+      />
+
+      {/* ── New Task dialog ── */}
+      <NewTaskDialog
+        open={showNewTask}
+        onClose={() => setShowNewTask(false)}
+        onCreate={handleNewTaskCreate}
+        isCreating={isCreating}
+        isAdmin={isAdmin}
+        currentUserId={userId ?? ''}
+        currentUserName={currentUser?.fullName ?? 'Me'}
       />
     </div>
   );
