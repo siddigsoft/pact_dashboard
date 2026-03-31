@@ -77,6 +77,17 @@ class ProjectModel {
     return (t['projectManager'] as String?) ?? 'Unassigned';
   }
 
+  /// Safely normalizes a raw map (may be Map<dynamic,dynamic> from Hive) into
+  /// Map<String, dynamic>. Returns null if [raw] is null or not a Map.
+  static Map<String, dynamic>? _normalizeMap(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((k, v) => MapEntry(k.toString(), v));
+    }
+    return null;
+  }
+
   factory ProjectModel.fromMap(Map<String, dynamic> m, {List<ProjectFlowLog>? log}) =>
       ProjectModel(
         id: m['id'] as String,
@@ -88,7 +99,7 @@ class ProjectModel {
         startDate: m['start_date'] as String?,
         endDate: m['end_date'] as String?,
         currentFlowStage: m['current_flow_stage'] as String?,
-        team: m['team'] as Map<String, dynamic>?,
+        team: _normalizeMap(m['team']),
         flowLog: log ?? const [],
       );
 }
