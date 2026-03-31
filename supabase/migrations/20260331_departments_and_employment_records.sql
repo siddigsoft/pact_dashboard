@@ -71,19 +71,19 @@ CREATE POLICY "departments_all_super_admin"
   );
 
 -- 4. Schedule daily contract-expiry check at 08:00 UTC via pg_cron
--- NOTE: The URL below targets the PACT production Supabase project.
---   If this migration is run against a different project, update the URL
---   to match that project's URL before applying.
--- The edge function uses SERVICE_ROLE key injected by Supabase at runtime.
+-- REQUIREMENT: Set `app.settings.supabase_url` via `ALTER DATABASE postgres SET app.settings.supabase_url = 'https://<project>.supabase.co';`
+--   before running this migration in each target environment.
+--   If the setting is absent the cron job is NOT scheduled and a NOTICE is raised.
 DO $$
 DECLARE
   v_project_url TEXT;
 BEGIN
-  -- Prefer dynamic config if set (allows environment override)
-  v_project_url := coalesce(
-    current_setting('app.settings.supabase_url', true),
-    'https://abznugnirnlrqnnfkein.supabase.co'
-  );
+  v_project_url := current_setting('app.settings.supabase_url', true);
+
+  IF v_project_url IS NULL OR v_project_url = '' THEN
+    RAISE NOTICE 'app.settings.supabase_url is not set — skipping contract-expiry-daily cron schedule. Set it and re-run this block to activate.';
+    RETURN;
+  END IF;
 
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'contract-expiry-daily') THEN
     PERFORM cron.unschedule('contract-expiry-daily');

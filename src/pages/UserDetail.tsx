@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -66,6 +66,9 @@ const UserDetail: React.FC = () => {
   const [empContractEnd, setEmpContractEnd] = useState<string>("");
   const [empReportsTo, setEmpReportsTo] = useState<string>("");
   const [empSaving, setEmpSaving] = useState(false);
+  // Tracks the last successfully saved department to avoid stale-closure issues
+  // on consecutive saves within the same session.
+  const savedDepartmentIdRef = useRef<string | null>(null);
   const [allUsers, setAllUsers] = useState<{ id: string; full_name: string | null; email: string | null }[]>([]);
 
   // Classification management
@@ -187,14 +190,16 @@ const UserDetail: React.FC = () => {
     loadEmploymentData();
   }, []);
 
-  // Populate employment fields when user loads
+  // Populate employment fields when user loads; initialise the saved-dept ref
   useEffect(() => {
     if (user) {
-      setEmpDepartmentId(user.departmentId ?? "");
+      const deptId = user.departmentId ?? "";
+      setEmpDepartmentId(deptId);
       setEmpType(user.employmentType ?? "full-time");
       setEmpContractStart(user.contractStartDate ?? "");
       setEmpContractEnd(user.contractEndDate ?? "");
       setEmpReportsTo(user.reportsTo ?? "");
+      savedDepartmentIdRef.current = deptId || null;
     }
   }, [user?.id]);
 
@@ -202,8 +207,9 @@ const UserDetail: React.FC = () => {
     if (!user) return;
     setEmpSaving(true);
     try {
-      // Snapshot old department before saving
-      const prevDepartmentId = user.departmentId ?? null;
+      // Use the ref (last successfully saved value) rather than the stale user object
+      // so that consecutive saves in the same session compare against the right value.
+      const prevDepartmentId = savedDepartmentIdRef.current;
 
       const { error } = await supabase.from("profiles").update({
         department_id: empDepartmentId || null,
@@ -248,9 +254,13 @@ const UserDetail: React.FC = () => {
       // contract-expiry-check scheduled edge function (daily at 08:00 UTC).
       // No per-save notification is triggered here to avoid duplicates.
 
+      // Update the ref so subsequent saves in this session use the new value
+      savedDepartmentIdRef.current = empDepartmentId || null;
+
       toast({ title: "Employment record updated" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setEmpSaving(false);
     }
