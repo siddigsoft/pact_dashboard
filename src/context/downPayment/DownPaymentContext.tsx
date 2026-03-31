@@ -97,13 +97,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const requests = requestsQuery.data ?? [];
   const loading = requestsQuery.isLoading;
 
-  // Show toast on fetch error
+  // Log fetch errors; avoid surfacing invalidation/refetch noise to users.
   useEffect(() => {
     if (requestsQuery.isError && requestsQuery.error) {
       const err = requestsQuery.error as Error;
       const isPermissionError = err?.message?.includes('permission') || err?.message?.includes('RLS') || err?.message?.includes('policy');
       if (!isPermissionError) {
-        toastRef.current({ title: 'Error', description: err?.message || 'Failed to load down-payment requests', variant: 'destructive' });
+        console.error('[DownPaymentContext] Failed to load down-payment requests:', err);
       }
     }
   }, [requestsQuery.isError, requestsQuery.error]);

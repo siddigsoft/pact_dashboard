@@ -51,12 +51,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (projectsQuery.isError && projectsQuery.error) {
-      setError(projectsQuery.error instanceof Error ? projectsQuery.error.message : 'Failed to fetch projects');
-      toast({ title: 'Error', description: 'Failed to fetch projects. Please try again.', variant: 'destructive' });
+      const queryError = projectsQuery.error instanceof Error ? projectsQuery.error.message : 'Failed to fetch projects';
+      setError(queryError);
+      console.error('[ProjectContext] Failed to fetch projects:', projectsQuery.error);
     } else if (projectsQuery.data !== undefined && !projectsQuery.isError) {
       setError(null);
     }
-  }, [projectsQuery.isError, projectsQuery.error, projectsQuery.data, toast]);
+  }, [projectsQuery.isError, projectsQuery.error, projectsQuery.data]);
 
   const fetchProjects = useCallback(async () => {
     await invalidateProjects();

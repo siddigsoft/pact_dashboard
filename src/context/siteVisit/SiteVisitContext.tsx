@@ -49,13 +49,9 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     if (siteVisitsQuery.isError && siteVisitsQuery.error) {
-      toast({
-        title: "Error loading site visits",
-        description: "Please try again.",
-        variant: "destructive",
-      });
+      console.error('[SiteVisitContext] Failed to load site visits:', siteVisitsQuery.error);
     }
-  }, [siteVisitsQuery.isError, siteVisitsQuery.error, toast]);
+  }, [siteVisitsQuery.isError, siteVisitsQuery.error]);
 
   useEffect(() => {
     const channel = supabase
