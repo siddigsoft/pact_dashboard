@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Project, ProjectActivity, SubActivity } from '@/types/project';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -7,6 +7,8 @@ import { validateProject } from '@/utils/projectValidation';
 import { useRealtimeTables } from '@/hooks/useRealtimeResource';
 import { useProjectsQuery, useInvalidateProjectsQueries, mapDbProjectToProject, mapProjectToDbProject } from './projectQueries';
 import { getFirstStageId } from '@/config/projectFlows';
+import { useUser } from '@/context/user/UserContext';
+import { normalizeRole } from '@/utils/roleMapping';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -46,9 +48,42 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const invalidateRef = useRef(invalidateProjects);
   invalidateRef.current = invalidateProjects;
 
+  const { currentUser, roles: userRoles } = useUser();
+
   const projectsQuery = useProjectsQuery(true);
-  const projects = projectsQuery.data ?? [];
+  const allProjects = projectsQuery.data ?? [];
   const loading = projectsQuery.isLoading;
+
+  /** Admins and super admins see every project; everyone else only sees projects they are part of. */
+  const projects = useMemo(() => {
+    if (!currentUser) return allProjects;
+
+    // Collect all role strings for this user
+    const allRoleStrings: string[] = [
+      currentUser.role ?? '',
+      ...(Array.isArray((currentUser as any).roles) ? (currentUser as any).roles : []),
+      ...(Array.isArray(userRoles) ? userRoles : []),
+    ].filter(Boolean);
+
+    const normalised = allRoleStrings.map(r => normalizeRole(r)).filter(Boolean);
+    const canSeeAll =
+      normalised.includes('superAdmin') ||
+      normalised.includes('admin') ||
+      allRoleStrings.some(r =>
+        ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'].includes(r)
+      );
+
+    if (canSeeAll) return allProjects;
+
+    const uid = currentUser.id;
+    return allProjects.filter((p: any) =>
+      p?.team?.projectManager === uid ||
+      p?.team?.projectManagerId === uid ||
+      (Array.isArray(p?.team?.members) && p.team.members.includes(uid)) ||
+      (Array.isArray(p?.team?.teamComposition) &&
+        p.team.teamComposition.some((m: any) => m?.userId === uid))
+    );
+  }, [allProjects, currentUser, userRoles]);
 
   useEffect(() => {
     if (projectsQuery.isError && projectsQuery.error) {
