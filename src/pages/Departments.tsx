@@ -357,8 +357,7 @@ function MoveEmployeeDialog({
 
 /* ─── Org Chart Node ─────────────────────────────── */
 function OrgNode({
-  profile, allProfiles, depth,
-  navigate,
+  profile, allProfiles, depth, navigate,
 }: {
   profile: Profile;
   allProfiles: Profile[];
@@ -422,7 +421,6 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
   const [deptFilter, setDeptFilter] = useState<string>("all");
 
   const filteredProfiles = deptFilter === "all" ? profiles : profiles.filter(p => p.department_id === deptFilter);
-  // Find roots: people who have no manager (reports_to is null) within the filtered set
   const filteredIds = new Set(filteredProfiles.map(p => p.id));
   const roots = filteredProfiles.filter(p => !p.reports_to || !filteredIds.has(p.reports_to));
 
@@ -462,16 +460,16 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
   );
 }
 
-/* ─── Department Card (tree node) ────────────────── */
+/* ─── Department Card ────────────────────────────── */
 function DeptCard({
-  dept, allProfiles, allDepts, depth, isAdmin,
+  dept, allProfiles, allDepts, depth, canManage,
   onEdit, onDelete, onMoveEmployee, navigate,
 }: {
   dept: Department;
   allProfiles: Profile[];
   allDepts: Department[];
   depth: number;
-  isAdmin: boolean;
+  canManage: boolean;
   onEdit: (d: Department) => void;
   onDelete: (d: Department) => void;
   onMoveEmployee: (p: Profile) => void;
@@ -519,8 +517,7 @@ function DeptCard({
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowMembers(m => !m)} title="Show members" data-testid={`button-members-dept-${dept.id}`}>
                 <Users className="h-4 w-4" />
               </Button>
-              {/* Admin-only actions */}
-              {isAdmin && (
+              {canManage && (
                 <>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(dept)} data-testid={`button-edit-dept-${dept.id}`}>
                     <Pencil className="h-4 w-4" />
@@ -533,7 +530,6 @@ function DeptCard({
             </div>
           </div>
 
-          {/* Members panel */}
           {showMembers && (
             <div className="mt-3 pt-3 border-t space-y-2">
               {members.length === 0 ? (
@@ -559,8 +555,7 @@ function DeptCard({
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/users/${m.id}`)} title="View profile" data-testid={`button-view-user-${m.id}`}>
                         <ChevronRight className="h-3.5 w-3.5" />
                       </Button>
-                      {/* Move is admin-only */}
-                      {isAdmin && (
+                      {canManage && (
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onMoveEmployee(m)} title="Move to another department" data-testid={`button-move-user-${m.id}`}>
                           <GitBranch className="h-3.5 w-3.5" />
                         </Button>
@@ -574,12 +569,12 @@ function DeptCard({
         </CardContent>
       </Card>
 
-      {/* Sub-departments */}
       {hasChildren && expanded && (
         <div>
           {dept.children!.map(child => (
             <DeptCard key={child.id} dept={child} allProfiles={allProfiles} allDepts={allDepts} depth={depth + 1}
-              isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} onMoveEmployee={onMoveEmployee} navigate={navigate} />
+              canManage={canManage}
+              onEdit={onEdit} onDelete={onDelete} onMoveEmployee={onMoveEmployee} navigate={navigate} />
           ))}
         </div>
       )}
@@ -592,8 +587,9 @@ export default function Departments() {
   const { currentUser } = useUser();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const isSuperAdmin = currentUser?.role === "super_admin" || currentUser?.role === "superadmin";
-  const isAdmin = isSuperAdmin || currentUser?.role === "admin";
+
+  // super_admin only can create/edit/delete/move employees
+  const canManage = currentUser?.role === "super_admin" || currentUser?.role === "superadmin";
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -619,7 +615,6 @@ export default function Departments() {
           .order("full_name"),
       ]);
 
-      // Also try to fetch classification levels
       const { data: classData } = await supabase
         .from("user_classifications")
         .select("user_id, classification_level")
@@ -668,7 +663,6 @@ export default function Departments() {
 
   return (
     <div className="flex flex-col min-h-full p-4 sm:p-6 gap-6">
-      {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => navigate(-1)} data-testid="button-back">
           <ArrowLeft className="h-5 w-5" />
@@ -680,7 +674,7 @@ export default function Departments() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">Manage your organisation's departments and employee assignments</p>
         </div>
-        {isAdmin && (
+        {canManage && (
           <Button onClick={() => { setEditTarget(null); setFormOpen(true); }} data-testid="button-new-dept">
             <Plus className="h-4 w-4 mr-2" />
             New Department
@@ -694,7 +688,6 @@ export default function Departments() {
         icon={<Building2 className="h-5 w-5" />}
       />
 
-      {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Total Departments", value: departments.length, icon: Building2 },
@@ -714,7 +707,6 @@ export default function Departments() {
         ))}
       </div>
 
-      {/* Tabs: Departments tree + Org Chart */}
       <Tabs defaultValue="departments" className="w-full">
         <TabsList className="h-auto p-1 bg-muted/40 rounded-xl mb-4">
           <TabsTrigger value="departments" className="flex items-center gap-1.5 py-2 px-4 rounded-lg text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm" data-testid="tab-departments">
@@ -725,7 +717,6 @@ export default function Departments() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ── Departments Tree ── */}
         <TabsContent value="departments">
           <div className="space-y-4">
             <div className="relative max-w-sm">
@@ -746,7 +737,7 @@ export default function Departments() {
                   </div>
                   <h3 className="font-semibold text-lg mb-2">No Departments Yet</h3>
                   <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-4">Create your first department to start organising your team.</p>
-                  {isAdmin && (
+                  {canManage && (
                     <Button onClick={() => { setEditTarget(null); setFormOpen(true); }} data-testid="button-create-first-dept">
                       <Plus className="h-4 w-4 mr-2" />Create Department
                     </Button>
@@ -758,7 +749,7 @@ export default function Departments() {
                 <p className="text-xs text-muted-foreground">{filteredFlat.length} results</p>
                 {filteredFlat.map(d => (
                   <DeptCard key={d.id} dept={d} allProfiles={profiles} allDepts={departments} depth={0}
-                    isAdmin={isAdmin}
+                    canManage={canManage}
                     onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
                     onDelete={setDeleteTarget} onMoveEmployee={setMoveTarget} navigate={navigate} />
                 ))}
@@ -767,14 +758,13 @@ export default function Departments() {
               <div>
                 {tree.map(d => (
                   <DeptCard key={d.id} dept={d} allProfiles={profiles} allDepts={departments} depth={0}
-                    isAdmin={isAdmin}
+                    canManage={canManage}
                     onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
                     onDelete={setDeleteTarget} onMoveEmployee={setMoveTarget} navigate={navigate} />
                 ))}
               </div>
             )}
 
-            {/* Unassigned staff */}
             {unassignedCount > 0 && !search && (
               <Card className="shadow-sm border-amber-200 dark:border-amber-800/40">
                 <CardHeader className="p-4 border-b bg-amber-50/50 dark:bg-amber-900/10">
@@ -795,7 +785,7 @@ export default function Departments() {
                             <p className="text-[10px] text-muted-foreground capitalize">{p.role || "—"}</p>
                           </div>
                         </div>
-                        {isAdmin && (
+                        {canManage && (
                           <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0" onClick={() => setMoveTarget(p)} data-testid={`button-assign-dept-${p.id}`}>
                             Assign
                           </Button>
@@ -812,14 +802,13 @@ export default function Departments() {
           </div>
         </TabsContent>
 
-        {/* ── Org Chart ── */}
         <TabsContent value="orgchart">
           <OrgChartTab profiles={profiles} departments={departments} />
         </TabsContent>
       </Tabs>
 
-      {/* Dialogs */}
-      {isAdmin && (
+      {/* Dialogs: only render if user can manage */}
+      {canManage && (
         <DeptFormDialog
           open={formOpen}
           onClose={() => setFormOpen(false)}
@@ -830,7 +819,7 @@ export default function Departments() {
         />
       )}
 
-      {isAdmin && moveTarget && (
+      {canManage && moveTarget && (
         <MoveEmployeeDialog
           open={!!moveTarget}
           onClose={() => setMoveTarget(null)}
@@ -840,8 +829,7 @@ export default function Departments() {
         />
       )}
 
-      {/* Delete confirmation — admin only */}
-      {isAdmin && (
+      {canManage && (
         <Dialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null); }}>
           <DialogContent className="max-w-sm">
             <DialogHeader>

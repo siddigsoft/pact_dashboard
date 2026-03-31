@@ -190,11 +190,11 @@ const UserDetail: React.FC = () => {
   // Populate employment fields when user loads
   useEffect(() => {
     if (user) {
-      setEmpDepartmentId((user as any).department_id ?? "");
-      setEmpType((user as any).employment_type ?? "full-time");
-      setEmpContractStart((user as any).contract_start_date ?? "");
-      setEmpContractEnd((user as any).contract_end_date ?? "");
-      setEmpReportsTo((user as any).reports_to ?? "");
+      setEmpDepartmentId(user.departmentId ?? "");
+      setEmpType(user.employmentType ?? "full-time");
+      setEmpContractStart(user.contractStartDate ?? "");
+      setEmpContractEnd(user.contractEndDate ?? "");
+      setEmpReportsTo(user.reportsTo ?? "");
     }
   }, [user?.id]);
 
@@ -203,7 +203,7 @@ const UserDetail: React.FC = () => {
     setEmpSaving(true);
     try {
       // Snapshot old department before saving
-      const prevDepartmentId = (user as any).department_id ?? null;
+      const prevDepartmentId = user.departmentId ?? null;
 
       const { error } = await supabase.from("profiles").update({
         department_id: empDepartmentId || null,

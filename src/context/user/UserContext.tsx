@@ -138,7 +138,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at');
+        .select('id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to');
       
       if (profilesError) {
         console.error("Error fetching profiles:", profilesError);
@@ -204,7 +204,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             roles: allUserRoles[profile.id] || [],
             stateId: profile.state_id || existingUser.stateId,
             hubId: profile.hub_id || existingUser.hubId,
-            secondaryHubId: profile.secondary_hub_id || profile.location?.secondary_hub_id || existingUser.secondaryHubId,
+            secondaryHubId: profile.secondary_hub_id || (profile.location as any)?.secondary_hub_id || existingUser.secondaryHubId,
             localityId: profile.locality_id || existingUser.localityId,
             avatar: profile.avatar_url || existingUser.avatar,
             username: profile.username || existingUser.username,
@@ -221,6 +221,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
               totalCompletedTasks: 0,
               onTimeCompletion: 0,
             },
+            departmentId: (profile as any).department_id ?? null,
+            employmentType: (profile as any).employment_type ?? null,
+            contractStartDate: (profile as any).contract_start_date ?? null,
+            contractEndDate: (profile as any).contract_end_date ?? null,
+            reportsTo: (profile as any).reports_to ?? null,
           } as User;
         });
         
@@ -385,7 +390,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const PROFILE_COLUMNS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at';
+      const PROFILE_COLUMNS = 'id, full_name, username, email, role, status, availability, avatar_url, phone, employee_id, state_id, hub_id, secondary_hub_id, locality_id, location, created_at, department_id, employment_type, contract_start_date, contract_end_date, reports_to';
 
       let { data: profileData } = await supabase
         .from('profiles')
@@ -518,7 +523,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           retainerCurrency: classificationData.retainer_currency || 'SDG',
           effectiveFrom: classificationData.effective_from,
           effectiveUntil: classificationData.effective_until,
-        } : undefined
+        } : undefined,
+        departmentId: (userProfile as any).department_id ?? null,
+        employmentType: (userProfile as any).employment_type ?? null,
+        contractStartDate: (userProfile as any).contract_start_date ?? null,
+        contractEndDate: (userProfile as any).contract_end_date ?? null,
+        reportsTo: (userProfile as any).reports_to ?? null,
       };
 
       setCurrentUser(supabaseUser);

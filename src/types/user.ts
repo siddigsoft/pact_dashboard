@@ -122,6 +122,15 @@ export interface User {
     accountNumber: string;
     branch: string;
   };
+
+  /**
+   * Employment & department fields (from profiles table)
+   */
+  departmentId?: string | null;
+  employmentType?: string | null;
+  contractStartDate?: string | null;
+  contractEndDate?: string | null;
+  reportsTo?: string | null;
 }
 
 export interface UserLogin {
