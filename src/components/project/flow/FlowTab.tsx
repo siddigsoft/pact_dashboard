@@ -1014,7 +1014,15 @@ export function FlowTab({
                     {stage.linkedModule && (
                       <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate(stage.linkedModule!)} data-testid={`button-goto-module-${stage.id}`}>
                         <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                        Go to {stage.linkedModule.replace('/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        Go to {({
+                          '/mmp-management': 'MMP Management',
+                          '/hub-operations': 'Hub Operations',
+                          '/site-visits': 'Site Visits',
+                          '/reports': 'Reports',
+                          '/projects': 'Projects',
+                          '/finance': 'Finance',
+                          '/wallet': 'Wallet',
+                        } as Record<string, string>)[stage.linkedModule] ?? stage.linkedModule.replace(/^\//, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                       </Button>
                     )}
 
