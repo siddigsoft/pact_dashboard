@@ -20,6 +20,7 @@ export interface NavBadgeCounts {
   pendingVerification: number;
   pendingWallet: number;
   pendingReclaimCount: number;
+  myTasksOverdue: number;
 }
 
 const emptyCounts = (): NavBadgeCounts => ({
@@ -37,6 +38,7 @@ const emptyCounts = (): NavBadgeCounts => ({
   pendingVerification: 0,
   pendingWallet: 0,
   pendingReclaimCount: 0,
+  myTasksOverdue: 0,
 });
 
 interface UseNavBadgeCountsParams {
@@ -127,7 +129,24 @@ export function useNavBadgeCounts({
           pendingVerification: num('pendingVerification'),
           pendingWallet: num('pendingWallet'),
           pendingReclaimCount: num('pendingReclaimCount'),
+          myTasksOverdue: 0,
         };
+        // My Tasks overdue: personal + project tasks — runs client-side for all users
+        const today = new Date().toISOString().split('T')[0];
+        const [{ count: personalOverdue }, { count: projectOverdue }] = await Promise.all([
+          supabase
+            .from('personal_tasks')
+            .select('id', { count: 'exact', head: true })
+            .not('status', 'in', '("done","cancelled")')
+            .lt('due_date', today),
+          supabase
+            .from('project_field_tasks')
+            .select('id', { count: 'exact', head: true })
+            .eq('assigned_to', currentUserId)
+            .not('status', 'in', '("done","cancelled")')
+            .lt('due_date', today),
+        ]);
+        fromRpc.myTasksOverdue = (personalOverdue ?? 0) + (projectOverdue ?? 0);
         if (gen === genRef.current) {
           setCounts(fromRpc);
         }
@@ -262,6 +281,23 @@ export function useNavBadgeCounts({
             .eq('status', 'supervisor_approved')
         );
       }
+
+      // My Tasks overdue count — always runs for every user
+      const todayStr = new Date().toISOString().split('T')[0];
+      const [{ count: personalOv }, { count: projectOv }] = await Promise.all([
+        supabase
+          .from('personal_tasks')
+          .select('id', { count: 'exact', head: true })
+          .not('status', 'in', '("done","cancelled")')
+          .lt('due_date', todayStr),
+        supabase
+          .from('project_field_tasks')
+          .select('id', { count: 'exact', head: true })
+          .eq('assigned_to', currentUserId)
+          .not('status', 'in', '("done","cancelled")')
+          .lt('due_date', todayStr),
+      ]);
+      next.myTasksOverdue = (personalOv ?? 0) + (projectOv ?? 0);
 
       if (gen === genRef.current) {
         setCounts(next);

@@ -594,6 +594,7 @@
     const openIncidentCount = counts.openIncidents;
     const pendingVerificationCount = counts.pendingVerification;
     const pendingWalletCount = counts.pendingWallet;
+    const myTasksOverdueCount = counts.myTasksOverdue;
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
@@ -885,6 +886,11 @@
                             {item.id === 'my-wallet' && pendingWalletCount > 0 && (
                               <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-green-600 text-white text-[9px] font-bold leading-none" data-testid="badge-wallet-pending-count">
                                 {pendingWalletCount > 99 ? '99+' : pendingWalletCount}
+                              </span>
+                            )}
+                            {item.id === 'my-tasks' && myTasksOverdueCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-my-tasks-overdue-count">
+                                {myTasksOverdueCount > 99 ? '99+' : myTasksOverdueCount}
                               </span>
                             )}
                           </Link>

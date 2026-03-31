@@ -38,7 +38,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
 import { EditProjectBudgetDialog } from '@/components/budget/EditProjectBudgetDialog';
@@ -231,7 +231,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   deleting,
 }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [editBudgetOpen, setEditBudgetOpen] = useState(false);
   const flow = useProjectFlow(project);
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
