@@ -766,7 +766,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto pb-1 -mx-1 px-1">
-        <TabsList className="grid grid-cols-7 w-[700px] sm:w-[760px] md:w-[820px]">
+        <TabsList className="grid grid-cols-9 w-[900px] sm:w-[970px] md:w-[1040px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
@@ -777,6 +777,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </TabsTrigger>
           <TabsTrigger value="field_tasks" data-testid="tab-field-tasks">
             <CheckSquare className="h-3.5 w-3.5 mr-1" />Tasks
+          </TabsTrigger>
+          <TabsTrigger value="comments" data-testid="tab-comments">
+            <MessageCircle className="h-3.5 w-3.5 mr-1" />Comments
+          </TabsTrigger>
+          <TabsTrigger value="documents" data-testid="tab-documents">
+            <Paperclip className="h-3.5 w-3.5 mr-1" />Documents
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1172,6 +1178,23 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             canEdit={!project.archived && canArchive}
             allStages={flow.flowDef}
             customEntries={(project.customFlowStages ?? []) as any}
+          />
+        </TabsContent>
+
+        <TabsContent value="comments" className="mt-4">
+          <ProjectCommentsPanel
+            projectId={project.id}
+            currentUserId={currentUser?.id ?? ''}
+            currentUserName={currentUser?.fullName}
+            isAdmin={canArchive}
+          />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <ProjectDocumentsPanel
+            projectId={project.id}
+            currentUserId={currentUser?.id ?? ''}
+            isAdmin={canArchive}
           />
         </TabsContent>
       </Tabs>

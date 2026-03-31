@@ -1,11 +1,16 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, X, MapPin, Calendar, User, Flag, Trash2,
   CheckCircle2, Clock, AlertTriangle, Circle, Loader2, Edit2,
   ChevronDown, Search, CheckSquare, Link2, DollarSign, Timer,
   LayoutList, Columns, CalendarDays, BarChart2, ArrowRight,
   TrendingUp, TrendingDown, Minus, ExternalLink,
+  FileDown, GanttChartSquare, MessageCircle, Send, CheckCheck,
+  Square,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useFieldTaskComments } from '@/hooks/useFieldTaskComments';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -57,7 +62,7 @@ const STATUS_CFG: Record<FieldTaskStatus, { label: string; color: string; border
 const STATUS_ORDER: FieldTaskStatus[] = ['todo', 'inprogress', 'done', 'cancelled'];
 const PRIORITY_ORDER: FieldTaskPriority[] = ['critical', 'high', 'medium', 'low'];
 
-type ViewMode = 'list' | 'board' | 'timeline';
+type ViewMode = 'list' | 'board' | 'timeline' | 'gantt';
 
 // ── Hooks ──────────────────────────────────────────────────────────────────
 
@@ -612,7 +617,7 @@ interface TaskDetailProps {
   onStatusChange: (s: FieldTaskStatus) => void;
 }
 
-function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange }: TaskDetailProps) {
+function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName }: TaskDetailProps & { currentUserId?: string; currentUserName?: string }) {
   if (!task) return null;
   const overdue = isOverdue(task.dueDate, task.status);
   const sCfg = STATUS_CFG[task.status];
@@ -629,6 +634,16 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
     ? Math.min(100, (task.actualHours / task.estimatedHours) * 100) : null;
   const costUsedPct = task.estimatedCost && task.actualCost
     ? Math.min(100, (task.actualCost / task.estimatedCost) * 100) : null;
+
+  const { comments, loading: commentsLoading, submitting: commentSubmitting, addComment, deleteComment } =
+    useFieldTaskComments(task.id);
+  const [commentText, setCommentText] = useState('');
+
+  const handleCommentSubmit = async () => {
+    if (!commentText.trim() || !currentUserId) return;
+    const ok = await addComment(commentText, currentUserId, currentUserName ?? 'Unknown');
+    if (ok) setCommentText('');
+  };
 
   return (
     <Dialog open={!!task} onOpenChange={onClose}>
@@ -655,7 +670,7 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden mt-2">
-          <TabsList className="grid grid-cols-4 w-full flex-shrink-0">
+          <TabsList className="grid grid-cols-5 w-full flex-shrink-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="timesheet">
               Timesheet
@@ -666,8 +681,13 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
               {(task.estimatedCost || task.actualCost) && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-500" />}
             </TabsTrigger>
             <TabsTrigger value="dependencies">
-              Dependencies
+              Deps
               {(depTasks.length > 0 || blockingTasks.length > 0) && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-amber-500" />}
+            </TabsTrigger>
+            <TabsTrigger value="comments">
+              <MessageCircle className="h-3 w-3 mr-1" />
+              {comments.length > 0 && <span className="text-[10px]">{comments.length}</span>}
+              {comments.length === 0 && 'Chat'}
             </TabsTrigger>
           </TabsList>
 
@@ -845,6 +865,68 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                 <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
                   No cost data. Edit the task to add budget or actual spend.
                 </p>
+              )}
+            </TabsContent>
+
+            {/* ── COMMENTS ── */}
+            <TabsContent value="comments" className="flex flex-col gap-3 mt-0 h-full">
+              {commentsLoading ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                  <MessageCircle className="h-7 w-7 opacity-30" />
+                  <p className="text-sm">No comments yet. Start the conversation.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {comments.map(c => (
+                    <div key={c.id} className="flex gap-2.5 group">
+                      <div className="h-7 w-7 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">
+                        {c.author_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold">{c.author_name}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(c.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground mt-0.5 whitespace-pre-wrap">{c.body}</p>
+                      </div>
+                      {(currentUserId === c.author_id || canEdit) && (
+                        <button
+                          type="button"
+                          onClick={() => deleteComment(c.id)}
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-600 transition-all flex-shrink-0 mt-0.5"
+                          title="Delete comment"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {currentUserId && (
+                <div className="flex gap-2 pt-2 border-t mt-auto">
+                  <Textarea
+                    placeholder="Write a comment… (Ctrl+Enter to send)"
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleCommentSubmit(); } }}
+                    className="text-xs resize-none min-h-[60px] flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!commentText.trim() || commentSubmitting}
+                    onClick={handleCommentSubmit}
+                    className="bg-[#1D3461] hover:bg-[#0F2041] text-white self-end h-8 px-3"
+                  >
+                    {commentSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
               )}
             </TabsContent>
 
@@ -1059,7 +1141,7 @@ function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusC
 
 // ── Views ──────────────────────────────────────────────────────────────────
 
-function ListView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange }: {
+function ListView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange, bulkMode = false, selectedIds, onToggleSelect }: {
   tasks: FieldTask[];
   allTasks: FieldTask[];
   canEdit: boolean;
@@ -1067,6 +1149,9 @@ function ListView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatus
   onEdit: (t: FieldTask) => void;
   onDelete: (t: FieldTask) => void;
   onStatusChange: (t: FieldTask, s: FieldTaskStatus) => void;
+  bulkMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }) {
   if (tasks.length === 0) return (
     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
@@ -1077,9 +1162,25 @@ function ListView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatus
   return (
     <div className="space-y-2">
       {tasks.map(t => (
-        <TaskCard key={t.id} task={t} allTasks={allTasks} canEdit={canEdit}
-          onOpen={() => onOpen(t)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)}
-          onStatusChange={s => onStatusChange(t, s)} />
+        <div key={t.id} className={cn('flex items-start gap-2', bulkMode && 'cursor-pointer')}>
+          {bulkMode && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onToggleSelect?.(t.id); }}
+              className="mt-2.5 flex-shrink-0 text-muted-foreground hover:text-[#1D3461] transition-colors"
+            >
+              {selectedIds?.has(t.id)
+                ? <CheckSquare className="h-4 w-4 text-[#1D3461]" />
+                : <Square className="h-4 w-4" />
+              }
+            </button>
+          )}
+          <div className={cn('flex-1 min-w-0', bulkMode && selectedIds?.has(t.id) && 'ring-2 ring-[#1D3461]/30 rounded-lg')}>
+            <TaskCard task={t} allTasks={allTasks} canEdit={canEdit && !bulkMode}
+              onOpen={() => onOpen(t)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)}
+              onStatusChange={s => onStatusChange(t, s)} />
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -1094,26 +1195,63 @@ function BoardView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatu
   onDelete: (t: FieldTask) => void;
   onStatusChange: (t: FieldTask, s: FieldTaskStatus) => void;
 }) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<FieldTaskStatus | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragEnd = () => { setDraggingId(null); setOverCol(null); };
+  const handleDragOver = (e: React.DragEvent, status: FieldTaskStatus) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setOverCol(status);
+  };
+  const handleDrop = (e: React.DragEvent, status: FieldTaskStatus) => {
+    e.preventDefault();
+    if (!draggingId) return;
+    const task = tasks.find(t => t.id === draggingId);
+    if (task && task.status !== status) onStatusChange(task, status);
+    setDraggingId(null);
+    setOverCol(null);
+  };
+
   return (
     <div className="flex gap-3 overflow-x-auto pb-2 min-h-[300px]">
       {STATUS_ORDER.map(status => {
         const col = tasks.filter(t => t.status === status);
         const cfg = STATUS_CFG[status];
+        const isOver = overCol === status;
         return (
-          <div key={status} className="flex-shrink-0 w-64 flex flex-col gap-2">
+          <div
+            key={status}
+            className={cn('flex-shrink-0 w-64 flex flex-col gap-2 rounded-xl transition-all', isOver && 'ring-2 ring-[#1D3461]/40 bg-[#1D3461]/5')}
+            onDragOver={e => handleDragOver(e, status)}
+            onDragLeave={() => setOverCol(null)}
+            onDrop={e => handleDrop(e, status)}
+          >
             <div className={cn('rounded-lg px-3 py-2 flex items-center justify-between', cfg.colBg, 'border border-border/50')}>
               <span className="text-xs font-semibold">{cfg.label}</span>
               <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{col.length}</Badge>
             </div>
             <div className="space-y-2 flex-1">
               {col.map(t => (
-                <TaskCard key={t.id} task={t} allTasks={allTasks} canEdit={canEdit}
-                  onOpen={() => onOpen(t)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)}
-                  onStatusChange={s => onStatusChange(t, s)} />
+                <div
+                  key={t.id}
+                  draggable={canEdit}
+                  onDragStart={e => handleDragStart(e, t.id)}
+                  onDragEnd={handleDragEnd}
+                  className={cn('transition-opacity', draggingId === t.id && 'opacity-40')}
+                >
+                  <TaskCard task={t} allTasks={allTasks} canEdit={canEdit}
+                    onOpen={() => onOpen(t)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)}
+                    onStatusChange={s => onStatusChange(t, s)} />
+                </div>
               ))}
               {col.length === 0 && (
-                <div className="border-2 border-dashed border-border rounded-lg h-20 flex items-center justify-center">
-                  <p className="text-[10px] text-muted-foreground">Empty</p>
+                <div className={cn('border-2 border-dashed rounded-lg h-20 flex items-center justify-center transition-all', isOver ? 'border-[#1D3461] bg-[#1D3461]/10' : 'border-border')}>
+                  <p className="text-[10px] text-muted-foreground">{isOver ? 'Drop here' : 'Empty'}</p>
                 </div>
               )}
             </div>
@@ -1201,6 +1339,140 @@ function TimelineView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onSt
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Gantt View ─────────────────────────────────────────────────────────────
+
+const GANTT_STATUS_COLORS: Record<FieldTaskStatus, string> = {
+  todo:       'bg-slate-400',
+  inprogress: 'bg-[#1D3461]',
+  done:       'bg-emerald-500',
+  cancelled:  'bg-slate-300',
+};
+
+function GanttView({ tasks, onOpen }: {
+  tasks: FieldTask[];
+  onOpen: (t: FieldTask) => void;
+}) {
+  const dated = tasks.filter(t => t.startDate || t.dueDate);
+  const undated = tasks.filter(t => !t.startDate && !t.dueDate);
+
+  if (dated.length === 0 && undated.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+      <GanttChartSquare className="h-8 w-8 opacity-30" />
+      <p className="text-sm">No tasks match your filters</p>
+    </div>
+  );
+  if (dated.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+      <GanttChartSquare className="h-8 w-8 opacity-30" />
+      <p className="text-sm">Add start or due dates to tasks to see the Gantt chart.</p>
+    </div>
+  );
+
+  const allDates = dated.flatMap(t => [t.startDate, t.dueDate].filter(Boolean) as string[]);
+  const minDate = new Date(allDates.reduce((a, b) => a < b ? a : b));
+  const maxDate = new Date(allDates.reduce((a, b) => a > b ? a : b));
+  const totalDays = Math.max(1, Math.ceil((maxDate.getTime() - minDate.getTime()) / 86400000)) + 2;
+
+  const getOffset = (dateStr: string) =>
+    Math.max(0, Math.ceil((new Date(dateStr).getTime() - minDate.getTime()) / 86400000));
+  const getWidth = (start: string, end: string) =>
+    Math.max(1, Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000));
+
+  const sorted = [...dated].sort((a, b) => {
+    const da = a.startDate || a.dueDate || '';
+    const db = b.startDate || b.dueDate || '';
+    return da.localeCompare(db);
+  });
+
+  const monthTicks: { label: string; pct: number }[] = [];
+  const d = new Date(minDate);
+  d.setDate(1);
+  while (d <= maxDate) {
+    const offset = Math.ceil((d.getTime() - minDate.getTime()) / 86400000);
+    monthTicks.push({ label: format(d, 'MMM d'), pct: (offset / totalDays) * 100 });
+    d.setMonth(d.getMonth() + 1);
+  }
+
+  return (
+    <div className="space-y-2 overflow-x-auto">
+      {/* Month header */}
+      <div className="relative h-5 ml-44 mr-2">
+        {monthTicks.map(tick => (
+          <span
+            key={tick.label}
+            className="absolute text-[9px] text-muted-foreground transform -translate-x-1/2"
+            style={{ left: `${tick.pct}%` }}
+          >{tick.label}</span>
+        ))}
+      </div>
+      <div className="relative ml-44 mr-2 h-px bg-border mb-1" />
+
+      {/* Today line */}
+      {(() => {
+        const todayOffset = Math.ceil((Date.now() - minDate.getTime()) / 86400000);
+        const todayPct = (todayOffset / totalDays) * 100;
+        if (todayPct < 0 || todayPct > 100) return null;
+        return (
+          <div
+            className="absolute top-5 bottom-0 w-px bg-red-500/60 z-10 pointer-events-none ml-44"
+            style={{ left: `calc(${todayPct}% + 11rem)` }}
+            title="Today"
+          />
+        );
+      })()}
+
+      {/* Task rows */}
+      <div className="space-y-1.5">
+        {sorted.map(t => {
+          const start = t.startDate || t.dueDate!;
+          const end   = t.dueDate   || t.startDate!;
+          const startOff = getOffset(start);
+          const widthDays = start === end ? 1 : getWidth(start, end);
+          const leftPct  = (startOff / totalDays) * 100;
+          const widthPct = Math.max(0.5, (widthDays / totalDays) * 100);
+          const barColor = GANTT_STATUS_COLORS[t.status];
+          const overdue  = isOverdue(t.dueDate, t.status);
+          return (
+            <div key={t.id} className="flex items-center gap-2 group cursor-pointer" onClick={() => onOpen(t)}>
+              {/* Label */}
+              <div className="w-44 flex-shrink-0 pr-2">
+                <p className={cn('text-xs font-medium truncate leading-tight', t.status === 'done' && 'line-through text-muted-foreground')}>{t.title}</p>
+                <p className="text-[9px] text-muted-foreground">{STATUS_CFG[t.status].label}{overdue ? ' · Overdue' : ''}</p>
+              </div>
+              {/* Bar track */}
+              <div className="flex-1 relative h-6 min-w-[200px]">
+                <div className="absolute inset-y-0 rounded-full" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
+                  <div className={cn('h-full rounded-full opacity-90 group-hover:opacity-100 transition-opacity flex items-center px-2', barColor)}>
+                    {widthPct > 8 && (
+                      <span className="text-[9px] text-white font-medium truncate">
+                        {t.assignedToName || ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 pt-2 border-t mt-3">
+        {STATUS_ORDER.map(s => (
+          <div key={s} className="flex items-center gap-1.5">
+            <div className={cn('h-2.5 w-2.5 rounded-full', GANTT_STATUS_COLORS[s])} />
+            <span className="text-[10px] text-muted-foreground">{STATUS_CFG[s].label}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 ml-auto">
+          <div className="h-2.5 w-px bg-red-500/60" />
+          <span className="text-[10px] text-muted-foreground">Today</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1317,6 +1589,73 @@ export function ProjectFieldTasksPanel({
     }
   };
 
+  // ── Bulk select ──
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
+  const toggleSelect = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const selectAll = () => setSelectedIds(new Set(filtered.map(t => t.id)));
+  const clearSelection = () => { setSelectedIds(new Set()); setBulkMode(false); };
+  const handleBulkStatus = async (status: FieldTaskStatus) => {
+    const targets = tasks.filter(t => selectedIds.has(t.id) && t.status !== status);
+    await Promise.all(targets.map(t => updateTask(t.id, { status }, { currentUserId }).catch(() => null)));
+    toast({ title: `${targets.length} task${targets.length !== 1 ? 's' : ''} updated to "${STATUS_CFG[status].label}"` });
+    clearSelection();
+  };
+
+  // ── CSV/PDF Export ──
+  const exportCSV = () => {
+    const header = ['Title','Status','Priority','Assignee','Start Date','Due Date','State','Locality','Est Hours','Act Hours','Est Cost','Act Cost','Notes'];
+    const rows = filtered.map(t => [
+      t.title, STATUS_CFG[t.status].label, PRIORITY_CFG[t.priority].label,
+      t.assignedToName ?? '', t.startDate ?? '', t.dueDate ?? '',
+      t.stateName ?? '', t.localityName ?? '',
+      t.estimatedHours ?? '', t.actualHours ?? '',
+      t.estimatedCost ?? '', t.actualCost ?? '',
+      (t.notes ?? '').replace(/\n/g, ' '),
+    ]);
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${projectName.replace(/\s+/g, '_')}_field_tasks.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    toast({ title: 'CSV exported' });
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFontSize(14);
+    doc.text(`Field Tasks — ${projectName}`, 14, 14);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`Exported ${new Date().toLocaleDateString()} · ${filtered.length} tasks`, 14, 20);
+    autoTable(doc, {
+      startY: 25,
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [29, 52, 97] },
+      head: [['Title','Status','Priority','Assignee','Start','Due','Location','Est h','Act h','Est $','Act $']],
+      body: filtered.map(t => [
+        t.title,
+        STATUS_CFG[t.status].label,
+        PRIORITY_CFG[t.priority].label,
+        t.assignedToName ?? '',
+        t.startDate ?? '',
+        t.dueDate ?? '',
+        [t.stateName, t.localityName].filter(Boolean).join(' / '),
+        t.estimatedHours != null ? String(t.estimatedHours) : '',
+        t.actualHours    != null ? String(t.actualHours)    : '',
+        t.estimatedCost  != null ? `$${t.estimatedCost}`   : '',
+        t.actualCost     != null ? `$${t.actualCost}`       : '',
+      ]),
+    });
+    doc.save(`${projectName.replace(/\s+/g, '_')}_field_tasks.pdf`);
+    toast({ title: 'PDF exported' });
+  };
+
   const filtersActive = filterStatus !== 'all' || filterPriority !== 'all' || filterAssignee !== 'all' || !!search.trim();
 
   if (isLoading) {
@@ -1337,13 +1676,14 @@ export function ProjectFieldTasksPanel({
             Project-specific field operations — independent of the MMP workflow
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* View switcher */}
           <div className="flex items-center rounded-lg border bg-muted/30 p-0.5 gap-0.5">
             {([
-              ['list',     LayoutList,   'List'],
-              ['board',    Columns,      'Board'],
-              ['timeline', CalendarDays, 'Timeline'],
+              ['list',     LayoutList,       'List'],
+              ['board',    Columns,          'Board'],
+              ['timeline', CalendarDays,     'Timeline'],
+              ['gantt',    GanttChartSquare, 'Gantt'],
             ] as const).map(([mode, Icon, label]) => (
               <button
                 key={mode}
@@ -1362,6 +1702,40 @@ export function ProjectFieldTasksPanel({
               </button>
             ))}
           </div>
+
+          {/* Bulk select toggle */}
+          {canEdit && viewMode === 'list' && (
+            <Button
+              variant={bulkMode ? 'default' : 'outline'}
+              size="sm"
+              className={cn('h-8 text-xs', bulkMode && 'bg-[#1D3461] text-white')}
+              onClick={() => { setBulkMode(v => !v); setSelectedIds(new Set()); }}
+              title="Toggle bulk select"
+            >
+              <CheckCheck className="h-3.5 w-3.5 mr-1" />
+              {bulkMode ? 'Exit Bulk' : 'Bulk'}
+            </Button>
+          )}
+
+          {/* Export dropdown */}
+          {tasks.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs">
+                  <FileDown className="h-3.5 w-3.5 mr-1" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportCSV}>
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportPDF}>
+                  Export as PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           {canEdit && (
             <Button
               size="sm"
@@ -1430,6 +1804,34 @@ export function ProjectFieldTasksPanel({
         </div>
       )}
 
+      {/* ── Bulk action bar ── */}
+      {bulkMode && (
+        <div className="flex items-center gap-2 rounded-lg border bg-[#0F2041]/5 border-[#1D3461]/30 px-3 py-2 flex-wrap">
+          <button type="button" onClick={selectAll} className="text-xs text-[#1D3461] font-medium hover:underline">Select all ({filtered.length})</button>
+          <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+          <div className="flex-1" />
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-xs font-medium text-muted-foreground">Set status:</span>
+              {STATUS_ORDER.map(s => (
+                <Button
+                  key={s}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2"
+                  onClick={() => handleBulkStatus(s)}
+                >
+                  {STATUS_CFG[s].label}
+                </Button>
+              ))}
+            </>
+          )}
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearSelection}>
+            <X className="h-3 w-3 mr-1" /> Cancel
+          </Button>
+        </div>
+      )}
+
       {/* ── Filters ── */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-40">
@@ -1468,7 +1870,9 @@ export function ProjectFieldTasksPanel({
       {/* ── View ── */}
       {viewMode === 'list' && (
         <ListView tasks={filtered} allTasks={tasks} canEdit={canEdit}
-          onOpen={t => setDetailTask(t)} onEdit={t => { setEditTask(t); setDetailTask(null); }}
+          bulkMode={bulkMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
+          onOpen={t => { if (!bulkMode) setDetailTask(t); else toggleSelect(t.id); }}
+          onEdit={t => { setEditTask(t); setDetailTask(null); }}
           onDelete={t => handleDelete(t)} onStatusChange={(t, s) => handleStatusChange(t, s)} />
       )}
       {viewMode === 'board' && (
@@ -1480,6 +1884,9 @@ export function ProjectFieldTasksPanel({
         <TimelineView tasks={filtered} allTasks={tasks} canEdit={canEdit}
           onOpen={t => setDetailTask(t)} onEdit={t => { setEditTask(t); setDetailTask(null); }}
           onDelete={t => handleDelete(t)} onStatusChange={(t, s) => handleStatusChange(t, s)} />
+      )}
+      {viewMode === 'gantt' && (
+        <GanttView tasks={filtered} onOpen={t => setDetailTask(t)} />
       )}
 
       {/* ── Dialogs ── */}
@@ -1508,6 +1915,8 @@ export function ProjectFieldTasksPanel({
         allStages={allStages}
         customEntries={customEntries}
         canEdit={canEdit}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
         onClose={() => setDetailTask(null)}
         onEdit={() => { setEditTask(detailTask); setDetailTask(null); }}
         onDelete={() => detailTask && handleDelete(detailTask)}
