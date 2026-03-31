@@ -35,7 +35,38 @@ export interface StageAttachment {
   createdAt: string;
 }
 
-// ── Assignees ──────────────────────────────────────────────────────────────
+// ── All Assignees (single query for whole project) ─────────────────────────
+
+export interface AllStageAssignee extends StageAssignee {
+  stageId: string;
+}
+
+export function useAllStageAssignees(projectId: string) {
+  return useQuery({
+    queryKey: ['all_stage_assignees', projectId],
+    queryFn: async (): Promise<AllStageAssignee[]> => {
+      const { data, error } = await supabase
+        .from('project_stage_assignees')
+        .select('id, user_id, stage_id, assigned_at, profiles:user_id(full_name, role, avatar_url)')
+        .eq('project_id', projectId)
+        .order('assigned_at');
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        userId: r.user_id,
+        stageId: r.stage_id,
+        fullName: r.profiles?.full_name ?? 'Unknown',
+        role: r.profiles?.role ?? '',
+        avatarUrl: r.profiles?.avatar_url ?? null,
+        assignedAt: r.assigned_at,
+      }));
+    },
+    staleTime: 30_000,
+    enabled: !!projectId,
+  });
+}
+
+// ── Per-stage Assignees ────────────────────────────────────────────────────
 
 export function useStageAssignees(projectId: string, stageId: string) {
   const qc = useQueryClient();

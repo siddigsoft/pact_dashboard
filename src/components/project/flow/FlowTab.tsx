@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '@/context/user/UserContext';
 import {
   CheckCircle2,
   SkipForward,
@@ -36,6 +37,8 @@ import {
   Ban,
   GitMerge,
   Percent,
+  UserPlus,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -67,6 +70,12 @@ import type { FlowStage } from '@/config/projectFlows';
 import { StageAssignees } from './StageAssignees';
 import { StageChecklist } from './StageChecklist';
 import { StageAttachments } from './StageAttachments';
+import { useAllStageAssignees } from '@/hooks/useStageData';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { GanttView } from './GanttView';
 import { exportFlowPDF, exportFlowDocx } from './flowExport';
 
@@ -478,6 +487,7 @@ export function FlowTab({
 }: Props) {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { currentUser } = useUser();
   const {
     activeStages, groups, currentStages, currentStage, currentStageIndex, currentGroupIdx,
     stageHistory, isLastGroup, canAdvance, canEditFlow,
@@ -485,6 +495,27 @@ export function FlowTab({
     completeStage, updateCustomStages, getStageStatus, isStageCompleted,
     getBlockedBy, isStageBlocked,
   } = flow;
+
+  // Load ALL stage assignees for this project in one query
+  const { data: allAssignees = [] } = useAllStageAssignees(projectId);
+
+  // Map: stageId → assignees[]
+  const assigneesByStage = useMemo(() => {
+    const map: Record<string, typeof allAssignees> = {};
+    allAssignees.forEach(a => {
+      if (!map[a.stageId]) map[a.stageId] = [];
+      map[a.stageId].push(a);
+    });
+    return map;
+  }, [allAssignees]);
+
+  // My Tasks: stages where the current user is assigned
+  const myAssignedStages = useMemo(() => {
+    if (!currentUserId) return [];
+    return allDefaultStages.filter(stage =>
+      (assigneesByStage[stage.id] ?? []).some(a => a.userId === currentUserId)
+    );
+  }, [allAssignees, allDefaultStages, currentUserId, assigneesByStage]);
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editOpen, setEditOpen] = useState(false);
@@ -611,6 +642,51 @@ export function FlowTab({
           </CardContent>
         </Card>
       </div>
+
+      {/* ── My Tasks panel ─────────────────────────────────────── */}
+      {myAssignedStages.length > 0 && (
+        <div className="rounded-xl border border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10 px-4 py-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-4 w-4 text-[#1D3461] flex-shrink-0" />
+            <span className="text-sm font-semibold text-[#1D3461] dark:text-blue-200">
+              My Assigned Stages ({myAssignedStages.length})
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {myAssignedStages.map(stage => {
+              const status = getStageStatus(stage.id);
+              const entry = resolvedEntry(stage.id);
+              const label = entry?.customLabel || stage.label;
+              const isBlocked = isStageBlocked(stage.id);
+              return (
+                <button
+                  key={stage.id}
+                  type="button"
+                  onClick={() => {
+                    setExpandedIds(prev => new Set([...prev, stage.id]));
+                    setTimeout(() => {
+                      document.querySelector(`[data-testid="flow-stage-${stage.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                  }}
+                  className={cn(
+                    'flex items-center gap-1.5 text-xs font-medium rounded-full px-3 py-1 border transition-colors',
+                    status === 'completed' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' :
+                    status === 'current' && !isBlocked ? 'bg-[#1D3461] text-white border-[#1D3461]' :
+                    isBlocked ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300' :
+                    'bg-white text-slate-700 border-slate-200 hover:border-[#1D3461]/30 dark:bg-slate-800 dark:text-slate-300',
+                  )}
+                >
+                  {status === 'completed' ? <CheckCircle2 className="h-3 w-3" /> :
+                   isBlocked ? <Ban className="h-3 w-3" /> :
+                   status === 'current' ? <span className="h-2 w-2 rounded-full bg-white animate-pulse" /> :
+                   <Circle className="h-3 w-3 text-muted-foreground/60" />}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Toolbar: progress bar + view toggle + actions ─────── */}
       <div className="space-y-2">
@@ -821,6 +897,40 @@ export function FlowTab({
                       )}
                     </div>
 
+                    {/* Assignee avatar stack — visible without expanding */}
+                    {(() => {
+                      const stageAssignees = assigneesByStage[stage.id] ?? [];
+                      return stageAssignees.length > 0 ? (
+                        <div className="flex items-center flex-shrink-0 -space-x-1.5">
+                          {stageAssignees.slice(0, 3).map((a, ai) => (
+                            <div
+                              key={a.id}
+                              className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[9px] font-bold border-2 border-background flex-shrink-0"
+                              title={a.fullName}
+                              style={{ zIndex: 3 - ai }}
+                            >
+                              {a.fullName.charAt(0)}
+                            </div>
+                          ))}
+                          {stageAssignees.length > 3 && (
+                            <div
+                              className="h-6 w-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-[9px] font-bold border-2 border-background flex-shrink-0"
+                              title={`+${stageAssignees.length - 3} more`}
+                            >
+                              +{stageAssignees.length - 3}
+                            </div>
+                          )}
+                        </div>
+                      ) : canEditFlow && status !== 'skipped' ? (
+                        <div
+                          className="flex-shrink-0 h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center text-muted-foreground/40 hover:border-[#1D3461]/40 hover:text-[#1D3461]/60 transition-colors"
+                          title="No assignees"
+                        >
+                          <UserPlus className="h-3 w-3" />
+                        </div>
+                      ) : null;
+                    })()}
+
                     {hasDetails && (
                       <div className="flex-shrink-0 text-muted-foreground/60">
                         {isExpanded ? <CollapseIcon className="h-4 w-4" /> : <ExpandIcon className="h-4 w-4" />}
@@ -911,7 +1021,15 @@ export function FlowTab({
                     {/* Per-stage data: Assignees, Checklist, Attachments */}
                     <div className="grid gap-3 pt-1">
                       <div className="rounded-lg border bg-muted/20 p-3">
-                        <StageAssignees projectId={projectId} stageId={stage.id} currentUserId={currentUserId} canEdit={canEditFlow} />
+                        <StageAssignees
+                          projectId={projectId}
+                          stageId={stage.id}
+                          stageLabel={displayLabel}
+                          projectName={projectName}
+                          currentUserId={currentUserId}
+                          assignedByName={currentUser?.fullName ?? 'A manager'}
+                          canEdit={canEditFlow}
+                        />
                       </div>
                       <div className="rounded-lg border bg-muted/20 p-3">
                         <StageChecklist projectId={projectId} stageId={stage.id} currentUserId={currentUserId} canEdit={status !== 'upcoming'} />

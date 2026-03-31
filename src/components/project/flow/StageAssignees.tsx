@@ -9,14 +9,17 @@ import {
 } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useStageAssignees } from '@/hooks/useStageData';
 
 interface Props {
   projectId: string;
   stageId: string;
+  stageLabel?: string;
+  projectName?: string;
   currentUserId?: string;
+  assignedByName?: string;
   canEdit: boolean;
 }
 
@@ -38,8 +41,42 @@ function useProfileSearch(query: string) {
   });
 }
 
-export function StageAssignees({ projectId, stageId, currentUserId, canEdit }: Props) {
+async function sendAssignmentNotification(
+  assigneeId: string,
+  assigneeName: string,
+  stageLabel: string,
+  projectName: string,
+  projectId: string,
+  assignedByName: string,
+) {
+  const titleEn = `You've been assigned to a stage`;
+  const titleAr = `تم تعيينك في مرحلة`;
+  const msgEn = `${assignedByName} assigned you to "${stageLabel}" in project "${projectName}"`;
+  const msgAr = `قام ${assignedByName} بتعيينك في "${stageLabel}" في مشروع "${projectName}"`;
+
+  await supabase.from('notifications').insert({
+    recipient_id: assigneeId,
+    user_id: assigneeId,
+    title_en: titleEn,
+    title_ar: titleAr,
+    message_en: msgEn,
+    message_ar: msgAr,
+    priority: 'normal',
+    action_url: `/projects/${projectId}`,
+    entity_id: projectId,
+    entity_type: 'project',
+    event_type: 'project_stage_assigned',
+    status: 'pending',
+    email_sent: false,
+  });
+}
+
+export function StageAssignees({
+  projectId, stageId, stageLabel = 'Stage', projectName = 'Project',
+  currentUserId, assignedByName = 'A manager', canEdit,
+}: Props) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const { assignees, addAssignee, removeAssignee, isAdding, isRemoving } =
     useStageAssignees(projectId, stageId);
 
@@ -47,14 +84,22 @@ export function StageAssignees({ projectId, stageId, currentUserId, canEdit }: P
   const [search, setSearch] = useState('');
   const { data: searchResults = [] } = useProfileSearch(search);
 
-  const handleAdd = async (userId: string) => {
+  const handleAdd = async (userId: string, userName: string) => {
     if (assignees.some(a => a.userId === userId)) {
       toast({ title: 'Already assigned', variant: 'destructive' });
       return;
     }
     try {
       await addAssignee(userId);
-      toast({ title: 'Assignee added' });
+      // Invalidate the all-assignees cache so the card header updates
+      qc.invalidateQueries({ queryKey: ['all_stage_assignees', projectId] });
+      // Notify the assignee (skip if assigning yourself)
+      if (userId !== currentUserId) {
+        sendAssignmentNotification(
+          userId, userName, stageLabel, projectName, projectId, assignedByName,
+        ).catch(() => {});
+      }
+      toast({ title: `${userName} assigned to "${stageLabel}"` });
       setSearch('');
       setOpen(false);
     } catch {
@@ -65,6 +110,7 @@ export function StageAssignees({ projectId, stageId, currentUserId, canEdit }: P
   const handleRemove = async (id: string) => {
     try {
       await removeAssignee(id);
+      qc.invalidateQueries({ queryKey: ['all_stage_assignees', projectId] });
     } catch {
       toast({ title: 'Failed to remove assignee', variant: 'destructive' });
     }
@@ -86,10 +132,13 @@ export function StageAssignees({ projectId, stageId, currentUserId, canEdit }: P
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
-                <UserPlus className="h-3 w-3 mr-1" /> Add
+                <UserPlus className="h-3 w-3 mr-1" /> Assign
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-2" align="end">
+              <p className="text-xs font-semibold text-muted-foreground mb-2 px-1">
+                Assign to "{stageLabel}"
+              </p>
               <Input
                 placeholder="Search staff by name..."
                 value={search}
@@ -101,23 +150,32 @@ export function StageAssignees({ projectId, stageId, currentUserId, canEdit }: P
                 {searchResults.length === 0 && search.length >= 2 && (
                   <p className="text-xs text-muted-foreground px-2 py-1">No results</p>
                 )}
-                {searchResults.map((p: any) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="w-full flex items-center gap-2 text-left px-2 py-1.5 rounded hover:bg-muted text-sm"
-                    onClick={() => handleAdd(p.id)}
-                    disabled={isAdding}
-                  >
-                    <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                      {p.full_name?.charAt(0) ?? '?'}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{p.full_name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate capitalize">{p.role?.replace(/_/g, ' ')}</p>
-                    </div>
-                  </button>
-                ))}
+                {search.length < 2 && (
+                  <p className="text-[10px] text-muted-foreground px-2 py-1">Type at least 2 characters…</p>
+                )}
+                {searchResults.map((p: any) => {
+                  const alreadyAssigned = assignees.some(a => a.userId === p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`w-full flex items-center gap-2 text-left px-2 py-1.5 rounded text-sm ${alreadyAssigned ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted'}`}
+                      onClick={() => !alreadyAssigned && handleAdd(p.id, p.full_name)}
+                      disabled={isAdding || alreadyAssigned}
+                    >
+                      <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                        {p.full_name?.charAt(0) ?? '?'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{p.full_name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate capitalize">{p.role?.replace(/_/g, ' ')}</p>
+                      </div>
+                      {alreadyAssigned && (
+                        <span className="text-[9px] text-emerald-600 font-medium flex-shrink-0">✓ Assigned</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </PopoverContent>
           </Popover>
@@ -125,13 +183,14 @@ export function StageAssignees({ projectId, stageId, currentUserId, canEdit }: P
       </div>
 
       {assignees.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">No assignees yet</p>
+        <p className="text-xs text-muted-foreground italic">No assignees — click Assign to add team members</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {assignees.map(a => (
             <div
               key={a.id}
               className="flex items-center gap-1.5 bg-muted rounded-full pl-1 pr-2 py-0.5"
+              title={`${a.fullName} · ${a.role?.replace(/_/g, ' ')}`}
             >
               <div className="h-5 w-5 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[9px] font-bold">
                 {a.fullName.charAt(0)}
@@ -143,6 +202,7 @@ export function StageAssignees({ projectId, stageId, currentUserId, canEdit }: P
                   onClick={() => handleRemove(a.id)}
                   disabled={isRemoving}
                   className="text-muted-foreground hover:text-destructive ml-0.5"
+                  title="Remove assignee"
                 >
                   <X className="h-3 w-3" />
                 </button>
