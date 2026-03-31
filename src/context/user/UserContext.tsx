@@ -524,11 +524,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           effectiveFrom: classificationData.effective_from,
           effectiveUntil: classificationData.effective_until,
         } : undefined,
-        departmentId: (userProfile as any).department_id ?? null,
-        employmentType: (userProfile as any).employment_type ?? null,
-        contractStartDate: (userProfile as any).contract_start_date ?? null,
-        contractEndDate: (userProfile as any).contract_end_date ?? null,
-        reportsTo: (userProfile as any).reports_to ?? null,
+        departmentId: profileData?.department_id ?? null,
+        employmentType: profileData?.employment_type ?? null,
+        contractStartDate: profileData?.contract_start_date ?? null,
+        contractEndDate: profileData?.contract_end_date ?? null,
+        reportsTo: profileData?.reports_to ?? null,
       };
 
       setCurrentUser(supabaseUser);
