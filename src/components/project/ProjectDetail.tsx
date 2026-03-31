@@ -778,8 +778,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <div className="overflow-x-auto pb-1 -mx-1 px-1">
-        <TabsList className="flex flex-nowrap min-w-max h-auto">
+        <div className="w-full overflow-x-auto">
+        <TabsList className="flex flex-row flex-nowrap h-auto w-max min-w-full justify-start">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
