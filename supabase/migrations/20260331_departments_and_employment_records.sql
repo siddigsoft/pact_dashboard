@@ -102,14 +102,14 @@ BEGIN
     'contract-expiry-daily',
     '0 8 * * *',
     format(
-      $$SELECT net.http_post(
+      $job$SELECT net.http_post(
           url     := '%s/functions/v1/contract-expiry-check',
           headers := jsonb_build_object(
             'Content-Type', 'application/json',
             'x-cron-secret', %L
           ),
           body    := '{}'::jsonb
-      ) AS request_id$$,
+      ) AS request_id$job$,
       v_project_url,
       v_cron_secret
     )
