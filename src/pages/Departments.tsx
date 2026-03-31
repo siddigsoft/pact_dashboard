@@ -589,8 +589,8 @@ export default function Departments() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // super_admin can create/edit/delete departments AND move employees
-  const canManage = currentUser?.role === "super_admin" || currentUser?.role === "superadmin";
+  // super_admin (all variants) can create/edit/delete departments AND move employees
+  const canManage = ["super_admin", "superadmin", "superAdmin"].includes(currentUser?.role ?? "");
   // admin (and super_admin) can move employees between departments
   const canMoveEmployees = canManage || currentUser?.role === "admin";
 

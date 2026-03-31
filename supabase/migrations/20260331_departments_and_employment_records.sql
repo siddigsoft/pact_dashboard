@@ -59,14 +59,14 @@ CREATE POLICY "departments_all_super_admin"
     EXISTS (
       SELECT 1 FROM profiles
       WHERE profiles.id = auth.uid()
-        AND profiles.role IN ('super_admin', 'superadmin')
+        AND LOWER(profiles.role) IN ('super_admin', 'superadmin')
     )
   )
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM profiles
       WHERE profiles.id = auth.uid()
-        AND profiles.role IN ('super_admin', 'superadmin')
+        AND LOWER(profiles.role) IN ('super_admin', 'superadmin')
     )
   );
 
