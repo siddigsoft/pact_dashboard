@@ -1,5 +1,8 @@
 import { useState, useMemo, useRef } from 'react';
-import { format, isToday, isThisWeek, isBefore, parseISO, isValid, startOfDay } from 'date-fns';
+import {
+  format, isToday, isThisWeek, isBefore, parseISO, isValid,
+  startOfDay, addDays, eachDayOfInterval, startOfToday, isAfter,
+} from 'date-fns';
 import {
   CheckSquare, Plus, Trash2, Edit2, MoreHorizontal, Flag,
   Calendar, Clock, AlertTriangle, CheckCircle2, Circle,
@@ -7,11 +10,20 @@ import {
   Filter, X, ListTodo, Inbox, Star, BarChart2, ArrowRight,
   Search, PlayCircle, Sparkles, LayoutGrid, LayoutList,
   Users, Trophy, Zap, TrendingUp, Target, ChevronDown,
-  ChevronUp, Eye, EyeOff, Award,
+  ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
+  GanttChartSquare, Map, HelpCircle, Info,
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell, PieChart, Pie,
+} from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import {
+  Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -493,6 +505,343 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
   );
 }
 
+// ── Planning Hub ─────────────────────────────────────────────────────────────
+
+// Planning tip data — rotating methodology cards
+const PLANNING_TIPS = [
+  {
+    icon: '🐸',
+    title: 'Eat the Frog First',
+    text: 'Tackle your hardest or most important task first thing each day. Once it\'s done, everything else feels easier.',
+    tag: 'Productivity',
+  },
+  {
+    icon: '⏱',
+    title: '2-Minute Rule',
+    text: 'If a task takes less than 2 minutes to complete, do it immediately instead of adding it to your list.',
+    tag: 'GTD',
+  },
+  {
+    icon: '📊',
+    title: 'Eisenhower Matrix',
+    text: 'Sort tasks by Urgency and Importance. Do urgent+important now, schedule important tasks, delegate urgent ones, drop the rest.',
+    tag: 'Prioritisation',
+  },
+  {
+    icon: '📦',
+    title: 'Time Blocking',
+    text: 'Reserve fixed slots in your calendar for focused work on specific tasks. Protect those blocks from meetings and interruptions.',
+    tag: 'Focus',
+  },
+  {
+    icon: '🔁',
+    title: 'Weekly Review',
+    text: 'Set aside 30 minutes every Friday to review what got done, reschedule anything overdue, and plan the following week.',
+    tag: 'Habit',
+  },
+  {
+    icon: '🎯',
+    title: 'MIT — Most Important Tasks',
+    text: 'Every morning, identify your 3 Most Important Tasks. Complete those first before touching anything else.',
+    tag: 'Focus',
+  },
+];
+
+interface PlanningHubProps {
+  allTasks: Array<{ dueDate?: string | null; status: string; priority?: string }>;
+}
+
+function PlanningHub({ allTasks }: PlanningHubProps) {
+  const [open, setOpen] = useState(false);
+  const [tipIdx, setTipIdx] = useState(0);
+
+  // ── Workload chart data (next 7 days + past overdue bucket) ──────────────
+  const workloadData = useMemo(() => {
+    const today = startOfToday();
+    const days = eachDayOfInterval({ start: today, end: addDays(today, 6) });
+
+    const overdueBucket = { label: 'Overdue', count: 0, color: '#ef4444', isOverdue: true };
+    allTasks.forEach(t => {
+      if (!t.dueDate || t.status === 'done' || t.status === 'cancelled') return;
+      try {
+        const d = parseISO(t.dueDate);
+        if (!isValid(d)) return;
+        if (isBefore(startOfDay(d), today)) overdueBucket.count++;
+      } catch { /* skip */ }
+    });
+
+    const dayBuckets = days.map(day => {
+      const label = isToday(day) ? 'Today' : format(day, 'EEE d');
+      const count = allTasks.filter(t => {
+        if (!t.dueDate || t.status === 'done' || t.status === 'cancelled') return false;
+        try {
+          const d = parseISO(t.dueDate);
+          return isValid(d) && startOfDay(d).getTime() === startOfDay(day).getTime();
+        } catch { return false; }
+      }).length;
+      const color = isToday(day) ? '#f59e0b' : '#1D3461';
+      return { label, count, color, isOverdue: false };
+    });
+
+    return overdueBucket.count > 0 ? [overdueBucket, ...dayBuckets] : dayBuckets;
+  }, [allTasks]);
+
+  // ── Priority distribution donut ─────────────────────────────────────────
+  const priorityData = useMemo(() => {
+    const active = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
+    const counts: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+    active.forEach(t => { if (t.priority && counts[t.priority] !== undefined) counts[t.priority]++; });
+    return [
+      { name: 'Critical', value: counts.critical, color: '#ef4444' },
+      { name: 'High',     value: counts.high,     color: '#f97316' },
+      { name: 'Medium',   value: counts.medium,   color: '#f59e0b' },
+      { name: 'Low',      value: counts.low,       color: '#3b82f6' },
+    ].filter(d => d.value > 0);
+  }, [allTasks]);
+
+  // ── 7-day visual timeline ────────────────────────────────────────────────
+  const timelineDays = useMemo(() => {
+    const today = startOfToday();
+    return eachDayOfInterval({ start: today, end: addDays(today, 13) }).map(day => {
+      const tasks = allTasks.filter(t => {
+        if (!t.dueDate || t.status === 'done' || t.status === 'cancelled') return false;
+        try {
+          const d = parseISO(t.dueDate);
+          return isValid(d) && startOfDay(d).getTime() === startOfDay(day).getTime();
+        } catch { return false; }
+      });
+      return { day, tasks, isToday: isToday(day) };
+    });
+  }, [allTasks]);
+
+  const tip = PLANNING_TIPS[tipIdx];
+  const total = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length;
+
+  return (
+    <div className="rounded-xl border bg-gradient-to-br from-violet-50/60 to-indigo-50/40 dark:from-violet-950/20 dark:to-indigo-950/20 border-violet-200/50 dark:border-violet-800/30">
+      {/* Header toggle */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2.5 px-4 py-3 text-left"
+      >
+        <div className="h-7 w-7 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center flex-shrink-0">
+          <GanttChartSquare className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground">Planning Tools</p>
+          <p className="text-[11px] text-muted-foreground">Workload chart · Timeline · Priority view · Methodology tips</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {total > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{total} active tasks</Badge>}
+          {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-violet-200/50 dark:border-violet-800/30 p-4 space-y-5">
+
+          {/* Tabs for the three chart tools */}
+          <Tabs defaultValue="workload" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 h-8 text-xs">
+              <TabsTrigger value="workload" className="text-xs gap-1"><BarChart2 className="h-3 w-3" />Workload</TabsTrigger>
+              <TabsTrigger value="timeline" className="text-xs gap-1"><Calendar className="h-3 w-3" />Timeline</TabsTrigger>
+              <TabsTrigger value="priority" className="text-xs gap-1"><Flag className="h-3 w-3" />Priority</TabsTrigger>
+            </TabsList>
+
+            {/* ── Workload chart ── */}
+            <TabsContent value="workload" className="mt-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 text-violet-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  <strong>Workload chart</strong> shows how many tasks are due each day over the next 7 days.
+                  Use this to spot overloaded days and reschedule tasks for a more even workload.
+                  Today is highlighted in amber; overdue tasks appear in red.
+                </p>
+              </div>
+              {workloadData.every(d => d.count === 0) ? (
+                <div className="flex items-center justify-center h-28 text-sm text-muted-foreground">
+                  No upcoming tasks with due dates — assign dates to see your workload
+                </div>
+              ) : (
+                <div className="h-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={workloadData} barSize={24} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                        formatter={(v: number) => [`${v} task${v !== 1 ? 's' : ''}`, 'Due']}
+                      />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                        {workloadData.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} opacity={entry.count === 0 ? 0.3 : 1} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground text-center">
+                Tip: If one day is much heavier than others, drag tasks to earlier days to balance your workload
+              </p>
+            </TabsContent>
+
+            {/* ── Timeline strip ── */}
+            <TabsContent value="timeline" className="mt-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 text-violet-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  <strong>14-day timeline</strong> shows each day as a column.
+                  Each coloured dot is one task due that day — hover/tap to see the count.
+                  Use this to spot busy stretches and plan your week visually.
+                </p>
+              </div>
+              <div className="overflow-x-auto pb-1">
+                <div className="flex gap-1.5 min-w-max">
+                  {timelineDays.map(({ day, tasks: dt, isToday: t }) => (
+                    <div key={day.toString()} className="flex flex-col items-center gap-1">
+                      <span className={cn('text-[9px] font-medium', t ? 'text-amber-600' : 'text-muted-foreground')}>
+                        {t ? 'TODAY' : format(day, 'EEE')}
+                      </span>
+                      <span className={cn('text-[10px] font-bold', t ? 'text-amber-600' : 'text-foreground')}>
+                        {format(day, 'd')}
+                      </span>
+                      <div className={cn(
+                        'w-9 min-h-[40px] rounded-md border flex flex-col items-center justify-center gap-0.5 p-1',
+                        t ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30' : 'border-border bg-card',
+                        dt.length > 0 && !t && 'border-[#1D3461]/30 bg-[#1D3461]/5',
+                      )}>
+                        {dt.length === 0 ? (
+                          <div className="h-1.5 w-1.5 rounded-full bg-muted" />
+                        ) : (
+                          <>
+                            {Array.from({ length: Math.min(dt.length, 4) }).map((_, i) => (
+                              <div key={i} className={cn('h-1.5 w-1.5 rounded-full', t ? 'bg-amber-500' : 'bg-[#1D3461]')} />
+                            ))}
+                            {dt.length > 4 && <span className="text-[8px] text-muted-foreground">+{dt.length - 4}</span>}
+                          </>
+                        )}
+                      </div>
+                      {dt.length > 0 && (
+                        <span className={cn('text-[9px] font-semibold', t ? 'text-amber-600' : 'text-[#1D3461]')}>{dt.length}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground text-center">
+                Each dot = one task. Aim for no more than 3–5 tasks per day for sustainable pace.
+              </p>
+            </TabsContent>
+
+            {/* ── Priority donut ── */}
+            <TabsContent value="priority" className="mt-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 text-violet-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  <strong>Priority breakdown</strong> of your active tasks. Ideally, most of your tasks should be
+                  medium or low priority — if critical/high tasks dominate, that signals high pressure or poor
+                  planning ahead of deadlines.
+                </p>
+              </div>
+              {priorityData.length === 0 ? (
+                <div className="flex items-center justify-center h-28 text-sm text-muted-foreground">
+                  No active tasks — great job!
+                </div>
+              ) : (
+                <div className="flex items-center gap-6">
+                  <div className="h-28 w-28 flex-shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={priorityData} dataKey="value" cx="50%" cy="50%" innerRadius={28} outerRadius={48}>
+                          {priorityData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                          formatter={(v: number, n: string) => [`${v} task${v !== 1 ? 's' : ''}`, n]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    {priorityData.map(d => (
+                      <div key={d.name} className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                        <span className="text-xs text-foreground flex-1">{d.name}</span>
+                        <span className="text-xs font-bold text-foreground">{d.value}</span>
+                        <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full rounded-full" style={{ backgroundColor: d.color, width: `${Math.round((d.value / priorityData.reduce((s, x) => s + x.value, 0)) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-muted-foreground pt-1">
+                      {priorityData.find(d => d.name === 'Critical' && d.value > 0)
+                        ? '⚠ Critical tasks detected — handle these today'
+                        : '✓ Priority distribution looks healthy'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          {/* ── Planning Methodology Tips ─────────────────────────────── */}
+          <div className="border-t border-violet-200/40 dark:border-violet-800/30 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-xs font-semibold text-foreground">Planning Methodology</span>
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-violet-600 border-violet-300">{tip.tag}</Badge>
+              </div>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => setTipIdx(i => (i - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length)} className="h-5 w-5 rounded border flex items-center justify-center hover:bg-muted text-muted-foreground text-xs">‹</button>
+                <span className="text-[10px] text-muted-foreground">{tipIdx + 1}/{PLANNING_TIPS.length}</span>
+                <button type="button" onClick={() => setTipIdx(i => (i + 1) % PLANNING_TIPS.length)} className="h-5 w-5 rounded border flex items-center justify-center hover:bg-muted text-muted-foreground text-xs">›</button>
+              </div>
+            </div>
+            <div className="flex gap-3 rounded-lg bg-white/60 dark:bg-black/20 border border-violet-100 dark:border-violet-800/30 p-3">
+              <span className="text-2xl leading-none flex-shrink-0 mt-0.5">{tip.icon}</span>
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-0.5">{tip.title}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{tip.text}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── How to use this page ─────────────────────────────────── */}
+          <div className="border-t border-violet-200/40 dark:border-violet-800/30 pt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <BookOpen className="h-3.5 w-3.5 text-[#1D3461]" />
+              <span className="text-xs font-semibold text-foreground">How to use My Tasks</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { icon: '📌', title: 'Personal vs Project tasks', body: 'Personal tasks are yours alone — created and managed only by you. Project tasks are assigned to you by a project manager or admin.' },
+                { icon: '🎯', title: 'Quick-add at any time', body: 'Type in the quick-add bar and press Enter to instantly create a personal task. Set priority and due date before submitting.' },
+                { icon: '📋', title: 'List vs Board view', body: 'Use List view for a focused, prioritised view. Switch to Board to see tasks as Kanban columns — great for visualising flow.' },
+                { icon: '🔔', title: 'Filter & focus', body: 'Use the filter bar to zoom into Today, This Week, or Overdue tasks. The overdue badge in the sidebar tracks your attention areas.' },
+              ].map(item => (
+                <div key={item.title} className="flex gap-2 rounded-lg bg-white/50 dark:bg-black/20 border border-violet-100/50 p-2.5">
+                  <span className="text-base leading-none flex-shrink-0">{item.icon}</span>
+                  <div>
+                    <p className="text-[11px] font-semibold text-foreground">{item.title}</p>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">{item.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Smart Insights Panel ────────────────────────────────────────────────────
 
 interface InsightItem {
@@ -940,6 +1289,9 @@ export default function MyTasks() {
         )}
       </div>
 
+      {/* ── Planning Hub ── */}
+      <PlanningHub allTasks={[...personalTasks, ...projectTasks]} />
+
       {/* ── Quick Add ── */}
       <QuickAddBar onAdd={handleQuickAdd} isCreating={isCreating} />
 
@@ -979,13 +1331,27 @@ export default function MyTasks() {
 
       {/* ── Project Tasks Section ── */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold flex items-center gap-2">
-            <FolderOpen className="h-4 w-4 text-[#1D3461]" />
-            Project Tasks Assigned to Me
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredProject.length}</Badge>
-          </h2>
-          <a href="/projects" className="text-xs text-[#1D3461] hover:underline flex items-center gap-0.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <FolderOpen className="h-4 w-4 text-[#1D3461]" />
+              Project Tasks Assigned to Me
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredProject.length}</Badge>
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                    These are field tasks from active projects where you are the assigned team member.
+                    Click a task to navigate to the project. Status changes made here are reflected in the project's field tasks view.
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
+            </h2>
+            <p className="text-[11px] text-muted-foreground ml-6">Tasks assigned to you across all active projects — click any task to navigate to its project</p>
+          </div>
+          <a href="/projects" className="text-xs text-[#1D3461] hover:underline flex items-center gap-0.5 flex-shrink-0">
             All Projects <ArrowRight className="h-3 w-3" />
           </a>
         </div>
@@ -1020,12 +1386,26 @@ export default function MyTasks() {
       {/* ── Personal Tasks Section ── */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="text-sm font-semibold flex items-center gap-2">
-            <Star className="h-4 w-4 text-amber-500" />
-            My Personal Tasks
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredPersonal.length}</Badge>
-          </h2>
-          <div className="flex items-center gap-2 ml-auto">
+          <div>
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Star className="h-4 w-4 text-amber-500" />
+              My Personal Tasks
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredPersonal.length}</Badge>
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                    Personal tasks are private to you and not visible to anyone else.
+                    Use the quick-add bar above to create one. Switch to Board view for a visual Kanban layout.
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
+            </h2>
+            <p className="text-[11px] text-muted-foreground ml-6">Private to you only — use the quick-add bar above · toggle ☰ List or ⊞ Board view</p>
+          </div>
+          <div className="flex items-center gap-2">
             {personalTasks.filter(t => t.status === 'done').length > 0 && (
               <span className="text-xs text-muted-foreground">
                 {personalTasks.filter(t => t.status === 'done').length} completed

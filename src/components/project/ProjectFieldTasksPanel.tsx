@@ -2007,24 +2007,29 @@ export function ProjectFieldTasksPanel({
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-base font-semibold text-foreground">Field Tasks</h3>
+          <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+            Field Tasks
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[#1D3461]/10 text-[#1D3461] dark:bg-[#1D3461]/30 dark:text-blue-300">
+              {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+            </span>
+          </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Project-specific field operations — independent of the MMP workflow
+            Project-specific field operations — track, assign, and monitor work items independent of the MMP workflow
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* View switcher */}
+          {/* View switcher with tooltips */}
           <div className="flex items-center rounded-lg border bg-muted/30 p-0.5 gap-0.5">
             {([
-              ['list',     LayoutList,       'List'],
-              ['board',    Columns,          'Board'],
-              ['timeline', CalendarDays,     'Timeline'],
-              ['gantt',    GanttChartSquare, 'Gantt'],
-            ] as const).map(([mode, Icon, label]) => (
+              ['list',     LayoutList,       'List',     'Prioritised list — best for reviewing and bulk actions'],
+              ['board',    Columns,          'Board',    'Kanban board — drag tasks between To Do / In Progress / Done'],
+              ['timeline', CalendarDays,     'Timeline', 'Week-by-week visual timeline — spot scheduling gaps'],
+              ['gantt',    GanttChartSquare, 'Gantt',    'Gantt chart — see start/end bars for full project planning'],
+            ] as const).map(([mode, Icon, label, hint]) => (
               <button
                 key={mode}
                 type="button"
-                title={label}
+                title={hint}
                 onClick={() => setViewMode(mode)}
                 className={cn(
                   'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
@@ -2083,6 +2088,26 @@ export function ProjectFieldTasksPanel({
           )}
         </div>
       </div>
+
+      {/* ── View mode guide ── */}
+      {(() => {
+        const guides: Record<string, { icon: string; text: string; tip: string }> = {
+          list:     { icon: '☰',  text: 'Prioritised list view',      tip: 'Tasks are sorted by priority then due date. Use Bulk mode to change multiple statuses at once. Click any row to open full details.' },
+          board:    { icon: '⊞',  text: 'Kanban board view',          tip: 'Columns represent workflow stages. Drag a task card to a different column to update its status instantly. Best for sprint-style planning.' },
+          timeline: { icon: '📅', text: 'Week-by-week timeline view', tip: 'Each column is one week. Tasks appear as horizontal bars spanning their start–end dates. Great for spotting scheduling conflicts.' },
+          gantt:    { icon: '📊', text: 'Gantt chart view',           tip: 'Full Gantt with per-task bars. Bars scale to the project date range. Tasks without dates appear as single-day markers.' },
+        };
+        const g = guides[viewMode];
+        return (
+          <div className="flex items-start gap-2 rounded-lg bg-[#1D3461]/5 dark:bg-[#1D3461]/20 border border-[#1D3461]/10 px-3 py-2">
+            <span className="text-base flex-shrink-0">{g.icon}</span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-[#1D3461] dark:text-blue-300">{g.text}</p>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">{g.tip}</p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Status strip ── */}
       <div className="grid grid-cols-4 gap-2">
