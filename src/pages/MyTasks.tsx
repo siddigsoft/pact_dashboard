@@ -11,7 +11,7 @@ import {
   Search, PlayCircle, Sparkles, LayoutGrid, LayoutList,
   Users, Trophy, Zap, TrendingUp, Target, ChevronDown,
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
-  GanttChartSquare, Map, HelpCircle, Info,
+  GanttChartSquare, HelpCircle, Info,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
