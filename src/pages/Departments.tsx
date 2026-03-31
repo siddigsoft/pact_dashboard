@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/context/user/UserContext";
@@ -20,7 +21,11 @@ import {
   Users, Search, UserCheck, AlertTriangle, Loader2, GitBranch,
   ArrowLeft, Network, Shield, BarChart3, PieChart as PieIcon,
   TrendingUp, Award, UserX, CheckCircle2,
+  LayoutGrid, AlignLeft, Table2, ArrowUpDown, ChevronsUpDown,
 } from "lucide-react";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
@@ -583,13 +588,383 @@ function OrgNode({
   );
 }
 
+/* ─── Compact Org Node (for "compact" view) ─────── */
+function CompactOrgNode({
+  dept, allProfiles, depth, navigate,
+}: {
+  dept: Department;
+  allProfiles: Profile[];
+  depth: number;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [expanded, setExpanded] = useState(depth < 3);
+  const children = dept.children ?? [];
+  const members = allProfiles.filter(p => p.department_id === dept.id);
+  const palette = levelPalette(depth);
+  const accentColor = dept.color ?? palette.solid;
+
+  return (
+    <div className={depth > 0 ? "relative mt-1.5 ml-5 pl-3" : "mt-1.5"}>
+      {depth > 0 && <span className="absolute left-0 top-0 bottom-0 w-px" style={{ background: accentColor + "50" }} />}
+      {depth > 0 && <span className="absolute top-3.5 left-0 h-px w-3" style={{ background: accentColor + "50" }} />}
+
+      <div
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-default"
+        style={{ borderColor: accentColor + "50", background: palette.light + "cc" }}
+        data-testid={`compact-node-${dept.id}`}
+      >
+        <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: accentColor }}>
+          <Building2 className="h-2.5 w-2.5 text-white" />
+        </div>
+        <span className="text-xs font-semibold truncate flex-1">{dept.name}</span>
+        <span className="text-[9px] font-medium px-1.5 py-0 rounded-full shrink-0" style={{ background: accentColor + "20", color: accentColor }}>
+          {palette.label}
+        </span>
+        <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground shrink-0">
+          <Users className="h-2.5 w-2.5" />{members.length}
+        </span>
+        {children.length > 0 && (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            data-testid={`compact-expand-${dept.id}`}
+          >
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+        )}
+        <button
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={() => navigate(`/departments`)}
+        >
+          <ChevronRight className="h-3 w-3" />
+        </button>
+      </div>
+
+      {expanded && children.length > 0 && (
+        <div className="relative">
+          {children.map(child => (
+            <CompactOrgNode key={child.id} dept={child} allProfiles={allProfiles} depth={depth + 1} navigate={navigate} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Cards Grid view ────────────────────────────── */
+function OrgCardsGrid({
+  departments, allProfiles, navigate,
+}: {
+  departments: Department[];
+  allProfiles: Profile[];
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const flat = flattenTree(buildTree(departments));
+
+  function getDepth(dept: Department, flat: Department[]): number {
+    let d = 0;
+    let cur = dept;
+    while (cur.parent_department_id) {
+      const parent = flat.find(f => f.id === cur.parent_department_id);
+      if (!parent) break;
+      d++;
+      cur = parent;
+    }
+    return d;
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {flat.map(dept => {
+        const depth = getDepth(dept, flat);
+        const palette = levelPalette(depth);
+        const accentColor = dept.color ?? palette.solid;
+        const members = allProfiles.filter(p => p.department_id === dept.id);
+        const parentDept = dept.parent_department_id ? flat.find(f => f.id === dept.parent_department_id) : null;
+        const avatarMembers = members.slice(0, 5);
+        const roleCounts: Record<string, number> = {};
+        members.forEach(m => {
+          const r = (m.role || "unknown").replace(/_/g, " ");
+          roleCounts[r] = (roleCounts[r] || 0) + 1;
+        });
+        const topRoles = Object.entries(roleCounts).sort((a, b) => b[1] - a[1]).slice(0, 2);
+
+        return (
+          <div
+            key={dept.id}
+            className="rounded-xl border shadow-sm hover:shadow-md transition-all overflow-hidden group cursor-pointer"
+            style={{ borderColor: accentColor + "40" }}
+            onClick={() => navigate(`/departments`)}
+            data-testid={`orgcard-${dept.id}`}
+          >
+            {/* Gradient header */}
+            <div
+              className="px-4 py-3 flex items-center justify-between gap-2"
+              style={{ background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}cc 100%)` }}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                  <Building2 className="h-4 w-4 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{dept.name}</p>
+                  {parentDept && (
+                    <p className="text-[9px] text-white/70 truncate">↳ {parentDept.name}</p>
+                  )}
+                </div>
+              </div>
+              <span
+                className="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0"
+                style={{ background: "rgba(255,255,255,0.25)", color: "#fff" }}
+              >
+                {palette.label}
+              </span>
+            </div>
+
+            {/* Body */}
+            <div className="p-3 space-y-2.5" style={{ background: palette.light + "88" }}>
+              {/* Stats row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: accentColor + "18", color: accentColor }}>
+                  <Users className="h-2.5 w-2.5" /> {members.length} {members.length === 1 ? "member" : "members"}
+                </span>
+                {(dept.children?.length ?? 0) > 0 && (
+                  <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/60 text-muted-foreground">
+                    <GitBranch className="h-2.5 w-2.5" /> {dept.children!.length} sub-dept{dept.children!.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+
+              {/* Manager */}
+              <div className="flex items-center gap-1.5">
+                <UserCheck className="h-3 w-3 shrink-0" style={{ color: dept.manager ? accentColor : "#94a3b8" }} />
+                {dept.manager ? (
+                  <span className="text-[10px] text-muted-foreground truncate">
+                    <span className="font-semibold text-foreground">{dept.manager.full_name || dept.manager.email}</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-amber-600 font-medium">No manager</span>
+                )}
+              </div>
+
+              {/* Description */}
+              {dept.description && (
+                <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">{dept.description}</p>
+              )}
+
+              {/* Member avatars */}
+              {members.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    {avatarMembers.map((m, i) => (
+                      <div
+                        key={m.id}
+                        className="w-6 h-6 rounded-full border-2 border-background flex items-center justify-center text-white text-[8px] font-bold shrink-0"
+                        style={{ background: accentColor, marginLeft: i > 0 ? "-5px" : "0", zIndex: avatarMembers.length - i }}
+                        title={m.full_name || m.email || ""}
+                      >
+                        {(m.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                    ))}
+                    {members.length > 5 && (
+                      <div
+                        className="w-6 h-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[7px] font-bold text-muted-foreground shrink-0"
+                        style={{ marginLeft: "-5px" }}
+                      >
+                        +{members.length - 5}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-1 flex-wrap justify-end">
+                    {topRoles.map(([role, count]) => (
+                      <span
+                        key={role}
+                        className="text-[8px] px-1.5 py-0.5 rounded-full capitalize"
+                        style={{ background: accentColor + "18", color: accentColor }}
+                      >
+                        {role} ({count})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Table view ─────────────────────────────────── */
+function OrgTableView({
+  departments, allProfiles, navigate,
+}: {
+  departments: Department[];
+  allProfiles: Profile[];
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [sortField, setSortField] = useState<"name" | "members" | "children">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [search, setSearch] = useState("");
+
+  const flat = flattenTree(buildTree(departments));
+
+  function getDepth(dept: Department): number {
+    let d = 0;
+    let cur = dept;
+    while (cur.parent_department_id) {
+      const parent = flat.find(f => f.id === cur.parent_department_id);
+      if (!parent) break;
+      d++;
+      cur = parent;
+    }
+    return d;
+  }
+
+  const rows = flat.map(dept => ({
+    dept,
+    depth: getDepth(dept),
+    members: allProfiles.filter(p => p.department_id === dept.id).length,
+    children: dept.children?.length ?? 0,
+    parentName: dept.parent_department_id ? flat.find(f => f.id === dept.parent_department_id)?.name ?? "—" : "—",
+  }));
+
+  const filtered = search
+    ? rows.filter(r => r.dept.name.toLowerCase().includes(search.toLowerCase()) || (r.dept.description || "").toLowerCase().includes(search.toLowerCase()))
+    : rows;
+
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0;
+    if (sortField === "name") cmp = a.dept.name.localeCompare(b.dept.name);
+    else if (sortField === "members") cmp = a.members - b.members;
+    else if (sortField === "children") cmp = a.children - b.children;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  function toggleSort(field: typeof sortField) {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  }
+
+  function SortBtn({ field, label }: { field: typeof sortField; label: string }) {
+    const active = sortField === field;
+    return (
+      <button
+        className={`flex items-center gap-1 font-semibold hover:text-foreground transition-colors ${active ? "text-foreground" : "text-muted-foreground"}`}
+        onClick={() => toggleSort(field)}
+      >
+        {label}
+        {active
+          ? <ArrowUpDown className="h-3 w-3" />
+          : <ChevronsUpDown className="h-3 w-3 opacity-50" />}
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Filter departments…"
+          className="pl-9 h-9 text-sm"
+          data-testid="input-table-search"
+        />
+      </div>
+
+      <div className="rounded-xl border overflow-hidden shadow-sm">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/30">
+              <TableHead className="py-2 pl-4 w-8">#</TableHead>
+              <TableHead className="py-2"><SortBtn field="name" label="Department" /></TableHead>
+              <TableHead className="py-2 hidden sm:table-cell text-muted-foreground text-xs font-semibold">Parent</TableHead>
+              <TableHead className="py-2 hidden md:table-cell text-muted-foreground text-xs font-semibold">Level</TableHead>
+              <TableHead className="py-2 hidden md:table-cell text-muted-foreground text-xs font-semibold">Manager</TableHead>
+              <TableHead className="py-2"><SortBtn field="members" label="Members" /></TableHead>
+              <TableHead className="py-2 hidden sm:table-cell"><SortBtn field="children" label="Sub-depts" /></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground text-sm">No departments found</TableCell>
+              </TableRow>
+            ) : sorted.map(({ dept, depth, members, children, parentName }, idx) => {
+              const palette = levelPalette(depth);
+              const accentColor = dept.color ?? palette.solid;
+              return (
+                <TableRow
+                  key={dept.id}
+                  className="hover:bg-muted/30 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/departments`)}
+                  data-testid={`table-row-dept-${dept.id}`}
+                >
+                  <TableCell className="pl-4 py-2.5 text-xs text-muted-foreground font-mono">{idx + 1}</TableCell>
+                  <TableCell className="py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background: accentColor + "20" }}>
+                        <Building2 className="h-3 w-3" style={{ color: accentColor }} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold truncate">{dept.name}</p>
+                        {dept.description && <p className="text-[9px] text-muted-foreground truncate">{dept.description}</p>}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden sm:table-cell">
+                    <span className="text-xs text-muted-foreground">{parentName}</span>
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden md:table-cell">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: palette.light, color: palette.solid }}>
+                      {palette.label}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden md:table-cell">
+                    {dept.manager ? (
+                      <span className="text-xs text-muted-foreground truncate max-w-[120px] block">{dept.manager.full_name || dept.manager.email || "—"}</span>
+                    ) : (
+                      <span className="text-[10px] text-amber-600 font-medium">Unmanaged</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: accentColor }}>
+                      <Users className="h-3 w-3" />{members}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden sm:table-cell">
+                    {children > 0 ? (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <GitBranch className="h-3 w-3" />{children}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <p className="text-xs text-muted-foreground">{sorted.length} of {departments.length} departments</p>
+    </div>
+  );
+}
+
 /* ─── Org Chart Tab ──────────────────────────────── */
+type OrgMode = "dept" | "cards" | "compact" | "table" | "reporting";
+
 function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departments: Department[] }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"dept" | "reporting">("dept");
+  const [mode, setMode] = useState<OrgMode>("dept");
   const [deptFilter, setDeptFilter] = useState<string>("all");
 
   const tree = buildTree(departments);
+  const flat = flattenTree(tree);
 
   // Department tree: filter to a branch if selected
   const treeToShow = deptFilter === "all"
@@ -615,48 +990,57 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
   const totalDepts = departments.length;
   const topLevel = tree.length;
 
+  const VIEW_MODES: { id: OrgMode; label: string; icon: ReactNode; showFilter: boolean }[] = [
+    { id: "dept",      label: "Tree",          icon: <Building2 className="h-3.5 w-3.5" />,  showFilter: true  },
+    { id: "cards",     label: "Cards Grid",    icon: <LayoutGrid className="h-3.5 w-3.5" />, showFilter: false },
+    { id: "compact",   label: "Compact",       icon: <AlignLeft className="h-3.5 w-3.5" />,  showFilter: true  },
+    { id: "table",     label: "Table",         icon: <Table2 className="h-3.5 w-3.5" />,     showFilter: false },
+    { id: "reporting", label: "Reporting",     icon: <Network className="h-3.5 w-3.5" />,    showFilter: true  },
+  ];
+
+  const currentMode = VIEW_MODES.find(m => m.id === mode)!;
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex rounded-lg border overflow-hidden text-xs font-medium">
-          <button
-            onClick={() => setMode("dept")}
-            className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors ${mode === "dept" ? "bg-[#1D3461] text-white" : "hover:bg-muted/60"}`}
-            data-testid="toggle-dept-tree"
-          >
-            <Building2 className="h-3.5 w-3.5" />
-            Department Tree
-          </button>
-          <button
-            onClick={() => setMode("reporting")}
-            className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors ${mode === "reporting" ? "bg-[#1D3461] text-white" : "hover:bg-muted/60"}`}
-            data-testid="toggle-reporting-chain"
-          >
-            <Network className="h-3.5 w-3.5" />
-            Reporting Chain
-          </button>
+        {/* Mode buttons */}
+        <div className="flex rounded-lg border overflow-hidden text-xs font-medium divide-x">
+          {VIEW_MODES.map(m => (
+            <button
+              key={m.id}
+              onClick={() => setMode(m.id)}
+              className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors ${mode === m.id ? "bg-[#1D3461] text-white" : "hover:bg-muted/60"}`}
+              data-testid={`toggle-org-${m.id}`}
+            >
+              {m.icon}
+              {m.label}
+            </button>
+          ))}
         </div>
 
-        <Select value={deptFilter} onValueChange={setDeptFilter}>
-          <SelectTrigger className="w-52 h-9" data-testid="select-orgchart-dept">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {/* Dept filter — only for modes that support it */}
+        {currentMode.showFilter && (
+          <Select value={deptFilter} onValueChange={setDeptFilter}>
+            <SelectTrigger className="w-52 h-9" data-testid="select-orgchart-dept">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
 
         <p className="text-xs text-muted-foreground ml-auto">
-          {mode === "dept"
-            ? `${totalDepts} dept${totalDepts !== 1 ? "s" : ""} · ${topLevel} top-level`
-            : `${filteredProfiles.length} people · ${roots.length} top-level`}
+          {mode === "reporting"
+            ? `${filteredProfiles.length} people · ${roots.length} top-level`
+            : `${totalDepts} dept${totalDepts !== 1 ? "s" : ""} · ${topLevel} top-level`}
         </p>
       </div>
 
-      {/* Level colour legend */}
-      {mode === "dept" && departments.length > 0 && (
+      {/* Level colour legend — for tree/compact modes */}
+      {(mode === "dept" || mode === "compact") && departments.length > 0 && (
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Levels:</span>
           {LEVEL_PALETTE.slice(0, Math.max(1, Math.min(7, topLevel + 2))).map((p, i) => (
@@ -668,14 +1052,43 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
         </div>
       )}
 
-      {/* Content */}
-      {mode === "dept" ? (
+      {/* ── Content ── */}
+
+      {/* Cards Grid */}
+      {mode === "cards" && (
         departments.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
-            <Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No departments yet</p>
-            <p className="text-xs mt-1">Create departments using the "Departments" tab, then come back to see the org chart.</p>
+          <EmptyOrgState icon={<LayoutGrid className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+        ) : (
+          <OrgCardsGrid departments={departments} allProfiles={profiles} navigate={navigate} />
+        )
+      )}
+
+      {/* Compact Tree */}
+      {mode === "compact" && (
+        departments.length === 0 ? (
+          <EmptyOrgState icon={<AlignLeft className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+        ) : (
+          <div className="bg-muted/10 rounded-xl border p-4 overflow-x-auto">
+            {treeToShow.map(dept => (
+              <CompactOrgNode key={dept.id} dept={dept} allProfiles={profiles} depth={0} navigate={navigate} />
+            ))}
           </div>
+        )
+      )}
+
+      {/* Table */}
+      {mode === "table" && (
+        departments.length === 0 ? (
+          <EmptyOrgState icon={<Table2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+        ) : (
+          <OrgTableView departments={flat} allProfiles={profiles} navigate={navigate} />
+        )
+      )}
+
+      {/* Department Tree */}
+      {mode === "dept" && (
+        departments.length === 0 ? (
+          <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" sub='Create departments using the "Departments" tab, then come back here.' />
         ) : (
           <div className="bg-muted/10 rounded-xl border p-4 overflow-x-auto">
             {treeToShow.map(dept => (
@@ -683,13 +1096,12 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
             ))}
           </div>
         )
-      ) : (
+      )}
+
+      {/* Reporting Chain */}
+      {mode === "reporting" && (
         roots.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
-            <Network className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No reporting relationships configured</p>
-            <p className="text-xs mt-1">Set "Reports To" in each employee's profile to build the reporting chain.</p>
-          </div>
+          <EmptyOrgState icon={<Network className="h-10 w-10 mx-auto mb-3 opacity-30" />} message='No reporting relationships configured' sub='Set "Reports To" in each employee's profile to build the reporting chain.' />
         ) : (
           <div className="bg-muted/10 rounded-xl border p-4">
             {roots.map(r => (
@@ -698,6 +1110,16 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
           </div>
         )
       )}
+    </div>
+  );
+}
+
+function EmptyOrgState({ icon, message, sub }: { icon: ReactNode; message: string; sub?: string }) {
+  return (
+    <div className="text-center py-16 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
+      {icon}
+      <p className="font-medium">{message}</p>
+      {sub && <p className="text-xs mt-1">{sub}</p>}
     </div>
   );
 }
@@ -948,8 +1370,23 @@ function DeptCard({
   const [showMembers, setShowMembers] = useState(false);
   const members = allProfiles.filter(p => p.department_id === dept.id);
   const hasChildren = (dept.children?.length ?? 0) > 0;
-
   const accentColor = dept.color ?? "#1D3461";
+
+  // Parent dept name for non-root depts
+  const parentDept = dept.parent_department_id
+    ? allDepts.find(d => d.id === dept.parent_department_id)
+    : null;
+
+  // Role breakdown: top 3 roles in this dept
+  const roleCounts: Record<string, number> = {};
+  members.forEach(m => {
+    const r = (m.role || "unknown").replace(/_/g, " ");
+    roleCounts[r] = (roleCounts[r] || 0) + 1;
+  });
+  const topRoles = Object.entries(roleCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  // Top member avatars (max 4)
+  const avatarMembers = members.slice(0, 4);
 
   return (
     <div className={`${depth > 0 ? "ml-6 border-l-2 pl-4" : ""}`} style={depth > 0 ? { borderColor: accentColor + "40" } : undefined}>
@@ -958,43 +1395,100 @@ function DeptCard({
         style={{ borderColor: accentColor + "30" }}
       >
         {/* Color accent top bar */}
-        <div className="h-1 w-full" style={{ background: accentColor }} />
+        <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}99)` }} />
 
         <div className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              {/* Color swatch */}
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: accentColor + "18" }}>
-                <Building2 className="h-4 w-4" style={{ color: accentColor }} />
+              {/* Icon swatch */}
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{ background: accentColor + "18" }}>
+                <Building2 className="h-5 w-5" style={{ color: accentColor }} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-bold text-base truncate">{dept.name}</h3>
-                  {depth === 0 && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: accentColor + "15", color: accentColor }}>
-                      Top Level
-                    </span>
-                  )}
+                  <span
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: accentColor + "15", color: accentColor }}
+                  >
+                    {depth === 0 ? "Top Level" : `Level ${depth + 1}`}
+                  </span>
                   <span
                     className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                    style={{ background: accentColor + "15", color: accentColor }}
+                    style={{ background: accentColor + "12", color: accentColor }}
                   >
                     <Users className="h-2.5 w-2.5" />
                     {members.length} {members.length === 1 ? "member" : "members"}
                   </span>
                   {hasChildren && (
-                    <span className="text-[10px] font-medium text-muted-foreground">
+                    <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      <GitBranch className="h-2.5 w-2.5" />
                       {dept.children!.length} sub-dept{dept.children!.length > 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
-                {dept.description && <p className="text-xs text-muted-foreground mt-1 truncate">{dept.description}</p>}
-                {dept.manager && (
-                  <div className="flex items-center gap-1 mt-1.5">
-                    <UserCheck className="h-3.5 w-3.5" style={{ color: accentColor }} />
+
+                {/* Parent breadcrumb */}
+                {parentDept && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <Building2 className="h-3 w-3 text-muted-foreground/60" />
+                    <span className="text-[10px] text-muted-foreground">Under: <span className="font-medium text-foreground/70">{parentDept.name}</span></span>
+                  </div>
+                )}
+
+                {dept.description && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{dept.description}</p>
+                )}
+
+                {/* Manager row */}
+                <div className="flex items-center gap-1 mt-1.5">
+                  <UserCheck className="h-3.5 w-3.5 shrink-0" style={{ color: dept.manager ? accentColor : undefined }} />
+                  {dept.manager ? (
                     <span className="text-xs text-muted-foreground">
-                      Manager: <span className="font-semibold text-foreground">{dept.manager.full_name || dept.manager.email || "—"}</span>
+                      Manager: <span className="font-semibold text-foreground">{dept.manager.full_name || dept.manager.email}</span>
                     </span>
+                  ) : (
+                    <span className="text-xs text-amber-600 font-medium">No manager assigned</span>
+                  )}
+                </div>
+
+                {/* Member avatar row + role pills */}
+                {members.length > 0 && (
+                  <div className="flex items-center gap-3 mt-2.5 flex-wrap">
+                    {/* Stacked avatars */}
+                    <div className="flex items-center">
+                      {avatarMembers.map((m, i) => (
+                        <div
+                          key={m.id}
+                          className="w-6 h-6 rounded-full border-2 border-background flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                          style={{ background: accentColor, marginLeft: i > 0 ? "-6px" : "0", zIndex: avatarMembers.length - i }}
+                          title={m.full_name || m.email || ""}
+                        >
+                          {(m.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                        </div>
+                      ))}
+                      {members.length > 4 && (
+                        <div
+                          className="w-6 h-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[8px] font-bold text-muted-foreground shrink-0"
+                          style={{ marginLeft: "-6px" }}
+                        >
+                          +{members.length - 4}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Top role pills */}
+                    <div className="flex flex-wrap gap-1">
+                      {topRoles.map(([role, count]) => (
+                        <span
+                          key={role}
+                          className="text-[9px] px-1.5 py-0.5 rounded-full font-medium capitalize"
+                          style={{ background: accentColor + "12", color: accentColor }}
+                        >
+                          {role} ({count})
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
