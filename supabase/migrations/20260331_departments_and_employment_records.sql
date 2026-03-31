@@ -44,6 +44,9 @@ CREATE INDEX IF NOT EXISTS idx_profiles_contract_end ON profiles(contract_end_da
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
 
 -- Idempotent policy setup (DROP IF EXISTS + CREATE is safe for policies)
+-- SELECT is intentionally open to all authenticated users:
+-- employees need to see the org tree (their department, manager chain, etc.)
+-- without requiring admin access. Writes are restricted to super_admin below.
 DROP POLICY IF EXISTS "departments_select_authenticated" ON departments;
 CREATE POLICY "departments_select_authenticated"
   ON departments FOR SELECT
