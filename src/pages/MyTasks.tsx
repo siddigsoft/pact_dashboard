@@ -552,10 +552,13 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
   const [dueDate, setDueDate] = useState(task?.dueDate ?? '');
   const [category, setCategory] = useState(task?.category ?? 'personal');
   const [notes, setNotes] = useState(task?.notes ?? '');
+  const [rewardAmount, setRewardAmount] = useState(task?.completionRewardAmount ? String(task.completionRewardAmount) : '');
+  const [rewardCurrency, setRewardCurrency] = useState(task?.completionRewardCurrency ?? 'USD');
 
   if (!task) return null;
 
   const handleSave = async () => {
+    const reward = rewardAmount ? parseFloat(rewardAmount) : null;
     await onSave(task.id, {
       title: title.trim(),
       description: description.trim() || null,
@@ -564,6 +567,8 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
       dueDate: dueDate || null,
       category: category || 'personal',
       notes: notes.trim() || null,
+      completionRewardAmount: reward,
+      completionRewardCurrency: reward ? rewardCurrency : null,
     });
     onClose();
   };
@@ -623,6 +628,29 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
           <div className="space-y-1">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Notes</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} className="min-h-[60px] text-sm resize-none" />
+          </div>
+          {/* Completion Reward */}
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Completion Reward (optional)</Label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Amount"
+                value={rewardAmount}
+                onChange={e => setRewardAmount(e.target.value)}
+                className="h-9 flex-1"
+                data-testid="input-edit-reward-amount"
+              />
+              <Select value={rewardCurrency} onValueChange={setRewardCurrency}>
+                <SelectTrigger className="h-9 w-24"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Credited to wallet when task is marked done.</p>
           </div>
         </div>
         <DialogFooter className="gap-2 border-t pt-3">
@@ -1717,8 +1745,6 @@ export default function MyTasks() {
           userId: currentUser?.id,
           userEmail: currentUser?.email,
           taskPriority: task?.priority,
-          rewardAmount: task?.completionRewardAmount ?? null,
-          rewardCurrency: task?.completionRewardCurrency ?? 'USD',
         },
       );
       if (status === 'done') {

@@ -206,51 +206,73 @@ async function sendTaskEmail(opts: {
 const KEY = ['personal_tasks'];
 
 // ── Credit wallet on task completion ─────────────────────────────────────────
+// Server-driven: fetches the reward amount from the DB row (not caller-supplied)
+// and checks for an existing transaction to ensure idempotency.
 
-async function creditWallet(opts: {
-  userId: string;
+async function creditWalletForTask(opts: {
   taskId: string;
-  taskTitle: string;
-  amount: number;
-  currency: string;
+  userId: string;
   userEmail: string | null | undefined;
   taskPriority: PersonalTaskPriority;
 }) {
   try {
-    // Find or upsert wallet for the user
+    // Fetch trusted reward amount from the DB row
+    const { data: task } = await supabase
+      .from('personal_tasks')
+      .select('title, completion_reward_amount, completion_reward_currency')
+      .eq('id', opts.taskId)
+      .maybeSingle();
+
+    if (!task) return;
+    const amount = task.completion_reward_amount as number | null;
+    if (!amount || amount <= 0) return; // No reward configured
+
+    const currency = (task.completion_reward_currency as string | null) ?? 'USD';
+    const taskTitle = task.title as string;
+
+    // Idempotency check: skip if a reward transaction already exists for this task
+    const { count: existingCount } = await supabase
+      .from('wallet_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', opts.userId)
+      .contains('metadata', { source: 'task_completion', task_id: opts.taskId });
+
+    if ((existingCount ?? 0) > 0) return; // Already credited — do not double-credit
+
+    // Find wallet for the user
     const { data: wallet } = await supabase
       .from('wallets')
-      .select('id, total_earned')
+      .select('id')
       .eq('user_id', opts.userId)
       .maybeSingle();
 
-    if (!wallet) return; // No wallet configured — skip silently
+    if (!wallet) return; // No wallet configured
 
-    const amountCents = Math.round(opts.amount * 100);
+    const amountCents = Math.round(amount * 100);
     const now = new Date().toISOString();
 
     await supabase.from('wallet_transactions').insert({
       wallet_id: wallet.id,
       user_id: opts.userId,
-      amount: opts.amount,
+      amount,
       amount_cents: amountCents,
-      currency: opts.currency,
+      currency,
       type: 'credit',
       status: 'completed',
-      memo: `Task reward: ${opts.taskTitle}`,
-      description: `Completion reward for task "${opts.taskTitle}"`,
+      memo: `Task reward: ${taskTitle}`,
+      description: `Completion reward for task "${taskTitle}"`,
       posted_at: now,
       created_at: now,
       metadata: { source: 'task_completion', task_id: opts.taskId },
     });
 
-    const rewardStr = `${opts.currency} ${opts.amount.toFixed(2)}`;
+    const rewardStr = `${currency} ${amount.toFixed(2)}`;
 
     await Promise.all([
       sendTaskNotification({
         userId: opts.userId,
         taskId: opts.taskId,
-        title: opts.taskTitle,
+        title: taskTitle,
         priority: opts.taskPriority,
         event: 'reward_credited',
         extra: rewardStr,
@@ -258,11 +280,11 @@ async function creditWallet(opts: {
       sendTaskEmail({
         email: opts.userEmail,
         titleEn: 'Task Reward Credited',
-        body: `Your wallet has been credited ${rewardStr} for completing the task "${opts.taskTitle}".\n\nView your wallet: https://app.pactorg.com/wallets`,
+        body: `Your wallet has been credited ${rewardStr} for completing the task "${taskTitle}".\n\nView your wallet: https://app.pactorg.com/wallets`,
       }),
     ]);
   } catch (err: unknown) {
-    console.error('[usePersonalTasks] creditWallet error:', err instanceof Error ? err.message : err);
+    console.error('[usePersonalTasks] creditWalletForTask error:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -439,10 +461,8 @@ export function usePersonalTasks(userId: string | undefined) {
       _userId?: string;
       _userEmail?: string | null;
       _taskPriority?: PersonalTaskPriority;
-      _rewardAmount?: number | null;
-      _rewardCurrency?: string;
     }) => {
-      const { id, _prevStatus, _userId, _userEmail, _taskPriority, _rewardAmount, _rewardCurrency, ...updates } = opts;
+      const { id, _prevStatus, _userId, _userEmail, _taskPriority, ...updates } = opts;
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (updates.title !== undefined)       patch.title = updates.title;
       if (updates.description !== undefined) patch.description = updates.description;
@@ -462,18 +482,13 @@ export function usePersonalTasks(userId: string | undefined) {
         const priority = _taskPriority ?? 'medium';
         await sendTaskNotification({ userId: _userId, taskId: id, title: updates.title, priority, event: 'completed' });
 
-        // Credit wallet if there's a completion reward
-        if (_rewardAmount && _rewardAmount > 0) {
-          await creditWallet({
-            userId: _userId,
-            taskId: id,
-            taskTitle: updates.title,
-            amount: _rewardAmount,
-            currency: _rewardCurrency ?? 'USD',
-            userEmail: _userEmail,
-            taskPriority: priority,
-          });
-        }
+        // Credit wallet server-side (reads reward from DB row, idempotent)
+        await creditWalletForTask({
+          taskId: id,
+          userId: _userId,
+          userEmail: _userEmail,
+          taskPriority: priority,
+        });
 
         // Check if this was a subtask and if all siblings are now done
         const { data: taskData } = await supabase
@@ -528,7 +543,7 @@ export function usePersonalTasks(userId: string | undefined) {
       id: string,
       updates: Partial<CreatePersonalTask>,
       prevStatus?: PersonalTaskStatus,
-      meta?: { userId?: string; userEmail?: string | null; taskPriority?: PersonalTaskPriority; rewardAmount?: number | null; rewardCurrency?: string }
+      meta?: { userId?: string; userEmail?: string | null; taskPriority?: PersonalTaskPriority }
     ) =>
       updateMutation.mutateAsync({
         id,
@@ -536,8 +551,6 @@ export function usePersonalTasks(userId: string | undefined) {
         _userId: meta?.userId ?? userId,
         _userEmail: meta?.userEmail,
         _taskPriority: meta?.taskPriority,
-        _rewardAmount: meta?.rewardAmount,
-        _rewardCurrency: meta?.rewardCurrency,
         ...updates,
       }),
     deleteTask: (id: string) => deleteMutation.mutateAsync(id),

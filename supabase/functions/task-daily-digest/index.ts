@@ -75,17 +75,21 @@ function formatDate(iso: string | null | undefined): string {
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  // Security: verify CRON_SECRET
+  // Security: verify CRON_SECRET — reject if secret is not configured or token mismatch
   const cronSecret = Deno.env.get('CRON_SECRET')
-  if (cronSecret) {
-    const authHeader = req.headers.get('Authorization') ?? ''
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    if (token !== cronSecret) {
-      return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+  if (!cronSecret) {
+    return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+  const authHeader = req.headers.get('Authorization') ?? ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (token !== cronSecret) {
+    return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 
   try {

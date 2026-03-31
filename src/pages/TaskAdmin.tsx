@@ -416,6 +416,8 @@ interface PayrollRow {
   userName: string;
   deptName: string;
   taskRewards: number;
+  retainerAmount: number;
+  totalEarnings: number;
   currency: string;
   walletBalance: number;
   tasksCompleted: number;
@@ -442,13 +444,25 @@ function usePayrollData(deptId: string, fromDate: string, toDate: string) {
       const deptMap: Record<string, string> = {};
       (depts ?? []).forEach((d: Record<string, unknown>) => { deptMap[d.id as string] = d.name as string; });
 
-      // Get task reward credits in date range
-      const { data: txns } = await supabase
+      // Get task reward credits in date range (source: task_completion)
+      const { data: taskTxns } = await supabase
         .from('wallet_transactions')
         .select('user_id, amount, currency')
         .in('user_id', userIds)
         .eq('type', 'credit')
         .like('memo', 'Task reward:%')
+        .gte('created_at', fromDate + 'T00:00:00')
+        .lte('created_at', toDate + 'T23:59:59');
+
+      // Get retainer credits in date range (source: retainer or memo containing 'retainer')
+      // Note: a dedicated retainer_payments table is not yet implemented; this queries
+      // wallet_transactions entries that were created by the retainer management workflow.
+      const { data: retainerTxns } = await supabase
+        .from('wallet_transactions')
+        .select('user_id, amount, currency')
+        .in('user_id', userIds)
+        .eq('type', 'credit')
+        .ilike('memo', '%retainer%')
         .gte('created_at', fromDate + 'T00:00:00')
         .lte('created_at', toDate + 'T23:59:59');
 
@@ -472,11 +486,19 @@ function usePayrollData(deptId: string, fromDate: string, toDate: string) {
       (wallets ?? []).forEach((w: Record<string, unknown>) => { walletMap[w.user_id as string] = Number(w.total_earned ?? 0); });
 
       const rewardMap: Record<string, number> = {};
+      const retainerMap: Record<string, number> = {};
       const currencyMap: Record<string, string> = {};
-      (txns ?? []).forEach((t: Record<string, unknown>) => {
+
+      (taskTxns ?? []).forEach((t: Record<string, unknown>) => {
         const uid = t.user_id as string;
         rewardMap[uid] = (rewardMap[uid] ?? 0) + Number(t.amount ?? 0);
-        currencyMap[uid] = t.currency as string ?? 'USD';
+        currencyMap[uid] = (t.currency as string) ?? 'USD';
+      });
+
+      (retainerTxns ?? []).forEach((t: Record<string, unknown>) => {
+        const uid = t.user_id as string;
+        retainerMap[uid] = (retainerMap[uid] ?? 0) + Number(t.amount ?? 0);
+        if (!currencyMap[uid]) currencyMap[uid] = (t.currency as string) ?? 'USD';
       });
 
       const completedMap: Record<string, number> = {};
@@ -485,15 +507,21 @@ function usePayrollData(deptId: string, fromDate: string, toDate: string) {
         completedMap[uid] = (completedMap[uid] ?? 0) + 1;
       });
 
-      return profiles.map((p: Record<string, unknown>) => ({
-        userId: p.id as string,
-        userName: (p.full_name as string) ?? 'Unknown',
-        deptName: deptMap[p.department_id as string] ?? '—',
-        taskRewards: rewardMap[p.id as string] ?? 0,
-        currency: currencyMap[p.id as string] ?? 'USD',
-        walletBalance: walletMap[p.id as string] ?? 0,
-        tasksCompleted: completedMap[p.id as string] ?? 0,
-      })).filter(r => r.taskRewards > 0 || r.walletBalance > 0 || r.tasksCompleted > 0);
+      return profiles.map((p: Record<string, unknown>) => {
+        const taskR   = rewardMap[p.id as string] ?? 0;
+        const retainer = retainerMap[p.id as string] ?? 0;
+        return {
+          userId: p.id as string,
+          userName: (p.full_name as string) ?? 'Unknown',
+          deptName: deptMap[p.department_id as string] ?? '—',
+          taskRewards: taskR,
+          retainerAmount: retainer,
+          totalEarnings: taskR + retainer,
+          currency: currencyMap[p.id as string] ?? 'USD',
+          walletBalance: walletMap[p.id as string] ?? 0,
+          tasksCompleted: completedMap[p.id as string] ?? 0,
+        };
+      }).filter(r => r.totalEarnings > 0 || r.walletBalance > 0 || r.tasksCompleted > 0);
     },
     staleTime: 30_000,
   });
@@ -509,21 +537,34 @@ function PayrollPanel() {
 
   const totals = useMemo(() => ({
     rewards: rows.reduce((s, r) => s + r.taskRewards, 0),
+    retainers: rows.reduce((s, r) => s + r.retainerAmount, 0),
+    total: rows.reduce((s, r) => s + r.totalEarnings, 0),
     balance: rows.reduce((s, r) => s + r.walletBalance, 0),
     tasks: rows.reduce((s, r) => s + r.tasksCompleted, 0),
   }), [rows]);
 
   const exportPDF = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(14);
     doc.text('Payroll Summary Report', 14, 16);
     doc.setFontSize(10);
     doc.text(`Period: ${fromDate} to ${toDate}`, 14, 24);
     autoTable(doc, {
       startY: 30,
-      head: [['Name', 'Department', 'Tasks Done', 'Task Rewards', 'Wallet Balance']],
-      body: rows.map(r => [r.userName, r.deptName, r.tasksCompleted, `${r.currency} ${r.taskRewards.toFixed(2)}`, `${r.currency} ${r.walletBalance.toFixed(2)}`]),
-      foot: [['TOTAL', '', totals.tasks, `${totals.rewards.toFixed(2)}`, `${totals.balance.toFixed(2)}`]],
+      head: [['Name', 'Department', 'Tasks Done', 'Task Rewards', 'Retainer', 'Total Earnings', 'Wallet Balance']],
+      body: rows.map(r => [
+        r.userName, r.deptName, r.tasksCompleted,
+        `${r.currency} ${r.taskRewards.toFixed(2)}`,
+        `${r.currency} ${r.retainerAmount.toFixed(2)}`,
+        `${r.currency} ${r.totalEarnings.toFixed(2)}`,
+        `${r.currency} ${r.walletBalance.toFixed(2)}`,
+      ]),
+      foot: [['TOTAL', '', totals.tasks,
+        totals.rewards.toFixed(2),
+        totals.retainers.toFixed(2),
+        totals.total.toFixed(2),
+        totals.balance.toFixed(2),
+      ]],
       theme: 'grid',
     });
     doc.save(`payroll-${fromDate}-to-${toDate}.pdf`);
@@ -532,9 +573,9 @@ function PayrollPanel() {
 
   const exportExcel = () => {
     const wsData = [
-      ['Name', 'Department', 'Tasks Completed', 'Task Rewards', 'Currency', 'Wallet Balance'],
-      ...rows.map(r => [r.userName, r.deptName, r.tasksCompleted, r.taskRewards, r.currency, r.walletBalance]),
-      ['TOTAL', '', totals.tasks, totals.rewards, '', totals.balance],
+      ['Name', 'Department', 'Tasks Completed', 'Task Rewards', 'Retainer', 'Total Earnings', 'Currency', 'Wallet Balance'],
+      ...rows.map(r => [r.userName, r.deptName, r.tasksCompleted, r.taskRewards, r.retainerAmount, r.totalEarnings, r.currency, r.walletBalance]),
+      ['TOTAL', '', totals.tasks, totals.rewards, totals.retainers, totals.total, '', totals.balance],
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -554,7 +595,7 @@ function PayrollPanel() {
             body: {
               to: profile.email as string,
               subject: 'Your Payroll Summary',
-              html: `<p>Dear ${row.userName},</p><p>Your payroll summary for the period <strong>${fromDate}</strong> to <strong>${toDate}</strong>:</p><ul><li>Tasks completed: <strong>${row.tasksCompleted}</strong></li><li>Task rewards earned: <strong>${row.currency} ${row.taskRewards.toFixed(2)}</strong></li><li>Wallet balance: <strong>${row.currency} ${row.walletBalance.toFixed(2)}</strong></li></ul><p>View your wallet: <a href="https://app.pactorg.com/wallets">https://app.pactorg.com/wallets</a></p>`,
+              html: `<p>Dear ${row.userName},</p><p>Your payroll summary for the period <strong>${fromDate}</strong> to <strong>${toDate}</strong>:</p><ul><li>Tasks completed: <strong>${row.tasksCompleted}</strong></li><li>Task rewards earned: <strong>${row.currency} ${row.taskRewards.toFixed(2)}</strong></li><li>Retainer payments: <strong>${row.currency} ${row.retainerAmount.toFixed(2)}</strong></li><li>Total earnings: <strong>${row.currency} ${row.totalEarnings.toFixed(2)}</strong></li><li>Wallet balance: <strong>${row.currency} ${row.walletBalance.toFixed(2)}</strong></li></ul><p>View your wallet: <a href="https://app.pactorg.com/wallets">https://app.pactorg.com/wallets</a></p>`,
             },
           });
           sent++;
@@ -612,11 +653,12 @@ function PayrollPanel() {
 
         {/* Summary stats */}
         {rows.length > 0 && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: 'Tasks Done', value: totals.tasks, color: 'text-[#1D3461]' },
-              { label: 'Rewards Earned', value: `${totals.rewards.toFixed(2)}`, color: 'text-emerald-600' },
-              { label: 'Total Wallet Balance', value: `${totals.balance.toFixed(2)}`, color: 'text-amber-600' },
+              { label: 'Task Rewards', value: totals.rewards.toFixed(2), color: 'text-emerald-600' },
+              { label: 'Retainer Payments', value: totals.retainers.toFixed(2), color: 'text-blue-600' },
+              { label: 'Total Earnings', value: totals.total.toFixed(2), color: 'text-violet-600' },
             ].map(s => (
               <div key={s.label} className="rounded-lg border bg-muted/20 p-3 text-center">
                 <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>
@@ -641,8 +683,10 @@ function PayrollPanel() {
                   <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Name</th>
                   <th className="text-left py-2 px-3 text-xs font-semibold text-muted-foreground">Department</th>
                   <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Tasks</th>
-                  <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Rewards</th>
-                  <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Balance</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Task Rewards</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Retainer</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Total</th>
+                  <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Wallet Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -652,6 +696,8 @@ function PayrollPanel() {
                     <td className="py-2 px-3 text-muted-foreground text-xs">{r.deptName}</td>
                     <td className="py-2 px-3 text-right">{r.tasksCompleted}</td>
                     <td className="py-2 px-3 text-right text-emerald-600 font-semibold">{r.currency} {r.taskRewards.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-right text-blue-600">{r.currency} {r.retainerAmount.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-right text-violet-600 font-bold">{r.currency} {r.totalEarnings.toFixed(2)}</td>
                     <td className="py-2 px-3 text-right text-amber-600">{r.currency} {r.walletBalance.toFixed(2)}</td>
                   </tr>
                 ))}
@@ -661,6 +707,8 @@ function PayrollPanel() {
                   <td className="py-2 px-3" colSpan={2}>TOTAL ({rows.length} members)</td>
                   <td className="py-2 px-3 text-right">{totals.tasks}</td>
                   <td className="py-2 px-3 text-right text-emerald-600">{totals.rewards.toFixed(2)}</td>
+                  <td className="py-2 px-3 text-right text-blue-600">{totals.retainers.toFixed(2)}</td>
+                  <td className="py-2 px-3 text-right text-violet-600">{totals.total.toFixed(2)}</td>
                   <td className="py-2 px-3 text-right text-amber-600">{totals.balance.toFixed(2)}</td>
                 </tr>
               </tfoot>
