@@ -1712,6 +1712,105 @@ function GanttView({ tasks, onOpen }: {
   );
 }
 
+// ── Team Health Strip ───────────────────────────────────────────────────────
+
+interface TeamHealthStripProps {
+  tasks: FieldTask[];
+  activeMemberId: string | null;
+  onMemberClick: (id: string | null) => void;
+}
+
+function TeamHealthStrip({ tasks, activeMemberId, onMemberClick }: TeamHealthStripProps) {
+  const byMember = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; total: number; done: number; inprogress: number; overdue: number }>();
+    tasks.forEach(t => {
+      if (!t.assignedTo) return;
+      const entry = map.get(t.assignedTo) ?? { id: t.assignedTo, name: t.assignedToName ?? 'Unknown', total: 0, done: 0, inprogress: 0, overdue: 0 };
+      entry.total++;
+      if (t.status === 'done') entry.done++;
+      else if (t.status === 'inprogress') entry.inprogress++;
+      if (isOverdue(t.dueDate, t.status)) entry.overdue++;
+      map.set(t.assignedTo, entry);
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [tasks]);
+
+  const total = tasks.length;
+  const done  = tasks.filter(t => t.status === 'done').length;
+  const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+  const overdue = tasks.filter(t => isOverdue(t.dueDate, t.status)).length;
+
+  if (byMember.length === 0 && total === 0) return null;
+
+  return (
+    <div className="rounded-xl border bg-gradient-to-r from-[#0F2041]/5 to-[#1D3461]/3 dark:from-[#0F2041]/30 dark:to-[#1D3461]/20 p-3.5 space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-[#1D3461]" />
+          <span className="text-xs font-semibold text-[#1D3461] dark:text-blue-300 uppercase tracking-wide">Project Task Health</span>
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <span className="font-bold text-foreground">{pct}% complete</span>
+          <span className="text-muted-foreground">{done}/{total} tasks</span>
+          {overdue > 0 && (
+            <span className="flex items-center gap-1 text-red-600 font-semibold">
+              <AlertTriangle className="h-3 w-3" /> {overdue} overdue
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <Progress value={pct} className="h-1.5" />
+
+      {/* Member chips */}
+      {byMember.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {byMember.map(m => {
+            const mPct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0;
+            const isActive = activeMemberId === m.id;
+            const chipColor = m.overdue > 0 ? 'border-red-300 bg-red-50 dark:bg-red-950/30' : mPct === 100 ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30' : mPct > 50 ? 'border-amber-200 bg-amber-50 dark:bg-amber-950/20' : 'border-border bg-card';
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onMemberClick(isActive ? null : m.id)}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-all hover:shadow-sm',
+                  chipColor,
+                  isActive && 'ring-2 ring-[#1D3461] ring-offset-1',
+                )}
+                title={`${m.name} — ${mPct}% complete${m.overdue > 0 ? ` · ${m.overdue} overdue` : ''}`}
+              >
+                <div className="h-6 w-6 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                  {m.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 text-left">
+                  <p className="text-[11px] font-semibold truncate max-w-[80px]">{m.name.split(' ')[0]}</p>
+                  <div className="flex items-center gap-1">
+                    <div className="w-12 h-1 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full bg-[#1D3461]" style={{ width: `${mPct}%` }} />
+                    </div>
+                    <span className="text-[9px] text-muted-foreground font-medium">{mPct}%</span>
+                  </div>
+                </div>
+                {m.overdue > 0 && <span className="h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">{m.overdue}</span>}
+                {m.inprogress > 0 && m.overdue === 0 && <span className="h-4 min-w-[16px] px-1 rounded-full bg-[#1D3461] text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">{m.inprogress}</span>}
+              </button>
+            );
+          })}
+          {activeMemberId && (
+            <button type="button" onClick={() => onMemberClick(null)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-dashed rounded-lg px-2 py-1">
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Panel ─────────────────────────────────────────────────────────────
 
 interface Props {
@@ -1739,6 +1838,7 @@ export function ProjectFieldTasksPanel({
   const [filterStatus,   setFilterStatus]   = useState<FieldTaskStatus | 'all'>('all');
   const [filterPriority, setFilterPriority] = useState<FieldTaskPriority | 'all'>('all');
   const [filterAssignee, setFilterAssignee] = useState<'all' | 'mine'>('all');
+  const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return tasks
@@ -1746,6 +1846,7 @@ export function ProjectFieldTasksPanel({
         if (filterStatus !== 'all' && t.status !== filterStatus) return false;
         if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
         if (filterAssignee === 'mine' && t.assignedTo !== currentUserId) return false;
+        if (filterMemberId && t.assignedTo !== filterMemberId) return false;
         if (search.trim()) {
           const q = search.toLowerCase();
           return t.title.toLowerCase().includes(q) ||
@@ -1764,7 +1865,7 @@ export function ProjectFieldTasksPanel({
         if (b.dueDate) return 1;
         return b.createdAt.localeCompare(a.createdAt);
       });
-  }, [tasks, filterStatus, filterPriority, filterAssignee, search, currentUserId]);
+  }, [tasks, filterStatus, filterPriority, filterAssignee, filterMemberId, search, currentUserId]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { todo: 0, inprogress: 0, done: 0, cancelled: 0 };
@@ -1891,7 +1992,7 @@ export function ProjectFieldTasksPanel({
     toast({ title: 'PDF exported' });
   };
 
-  const filtersActive = filterStatus !== 'all' || filterPriority !== 'all' || filterAssignee !== 'all' || !!search.trim();
+  const filtersActive = filterStatus !== 'all' || filterPriority !== 'all' || filterAssignee !== 'all' || !!filterMemberId || !!search.trim();
 
   if (isLoading) {
     return (
@@ -2003,6 +2104,13 @@ export function ProjectFieldTasksPanel({
         ))}
       </div>
 
+      {/* ── Team Health Strip ── */}
+      <TeamHealthStrip
+        tasks={tasks}
+        activeMemberId={filterMemberId}
+        onMemberClick={setFilterMemberId}
+      />
+
       {/* ── Timesheet + Cost summary (only when data exists) ── */}
       {(hasTimesheetData || hasCostData) && (
         <div className="grid grid-cols-2 gap-3">
@@ -2094,7 +2202,7 @@ export function ProjectFieldTasksPanel({
         {filtersActive && (
           <Button
             variant="ghost" size="sm" className="h-8 text-xs"
-            onClick={() => { setSearch(''); setFilterStatus('all'); setFilterPriority('all'); setFilterAssignee('all'); }}
+            onClick={() => { setSearch(''); setFilterStatus('all'); setFilterPriority('all'); setFilterAssignee('all'); setFilterMemberId(null); }}
           >
             <X className="h-3.5 w-3.5 mr-1" /> Clear
           </Button>

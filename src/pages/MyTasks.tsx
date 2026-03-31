@@ -5,8 +5,13 @@ import {
   Calendar, Clock, AlertTriangle, CheckCircle2, Circle,
   FolderOpen, User, ChevronRight, RefreshCw, Loader2,
   Filter, X, ListTodo, Inbox, Star, BarChart2, ArrowRight,
-  Search, PlayCircle,
+  Search, PlayCircle, Sparkles, LayoutGrid, LayoutList,
+  Users, Trophy, Zap, TrendingUp, Target, ChevronDown,
+  ChevronUp, Eye, EyeOff, Award,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -488,12 +493,281 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
   );
 }
 
+// ── Smart Insights Panel ────────────────────────────────────────────────────
+
+interface InsightItem {
+  id: string;
+  icon: React.ReactNode;
+  text: string;
+  sub?: string;
+  color: string;
+  action?: { label: string; filter: FilterType };
+}
+
+interface SmartInsightsPanelProps {
+  stats: { dueToday: number; dueWeek: number; overdue: number; done: number };
+  totalPersonal: number;
+  totalProject: number;
+  onFilter: (f: FilterType) => void;
+  onDismiss: () => void;
+}
+
+function SmartInsightsPanel({ stats, totalPersonal, totalProject, onFilter, onDismiss }: SmartInsightsPanelProps) {
+  const total = totalPersonal + totalProject;
+  const insights: InsightItem[] = [];
+
+  if (stats.overdue > 0)
+    insights.push({ id: 'overdue', icon: <AlertTriangle className="h-4 w-4" />, text: `${stats.overdue} task${stats.overdue > 1 ? 's are' : ' is'} overdue`, sub: 'Review and reschedule to stay on track', color: 'border-red-200 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300', action: { label: 'View overdue', filter: 'overdue' } });
+
+  if (stats.dueToday > 0)
+    insights.push({ id: 'today', icon: <Target className="h-4 w-4" />, text: `${stats.dueToday} task${stats.dueToday > 1 ? 's' : ''} due today`, sub: 'Focus on these first for a productive day', color: 'border-amber-200 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300', action: { label: 'Focus today', filter: 'today' } });
+
+  if (stats.overdue === 0 && stats.done > 3)
+    insights.push({ id: 'streak', icon: <Trophy className="h-4 w-4" />, text: `${stats.done} tasks completed — great work!`, sub: 'You\'re keeping pace and making progress', color: 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300' });
+
+  if (total > 0 && stats.overdue === 0 && stats.dueToday === 0)
+    insights.push({ id: 'clear', icon: <Zap className="h-4 w-4" />, text: 'All caught up!', sub: 'No overdue or due-today tasks — momentum is strong', color: 'border-[#1D3461]/20 bg-[#1D3461]/5 dark:bg-[#1D3461]/20 text-[#1D3461] dark:text-blue-300' });
+
+  insights.push({ id: 'tip-board', icon: <LayoutGrid className="h-4 w-4" />, text: 'Try the Kanban Board view', sub: 'Switch to board mode to drag & visualize task flow', color: 'border-violet-200 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300' });
+
+  if (insights.length === 0) return null;
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-2 mb-2">
+        <Sparkles className="h-3.5 w-3.5 text-[#1D3461]" />
+        <span className="text-xs font-semibold text-[#1D3461] dark:text-blue-300 uppercase tracking-wide">Smart Insights</span>
+        <button type="button" onClick={onDismiss} className="ml-auto text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none">
+        {insights.slice(0, 4).map(ins => (
+          <div key={ins.id} className={cn('flex-shrink-0 w-64 rounded-xl border p-3 space-y-1', ins.color)}>
+            <div className="flex items-center gap-2 font-medium text-sm">
+              {ins.icon}
+              <span className="leading-snug">{ins.text}</span>
+            </div>
+            {ins.sub && <p className="text-[11px] opacity-80 leading-snug pl-6">{ins.sub}</p>}
+            {ins.action && (
+              <button
+                type="button"
+                onClick={() => onFilter(ins.action!.filter)}
+                className="text-[11px] font-semibold underline underline-offset-2 pl-6 opacity-90 hover:opacity-100"
+              >
+                {ins.action.label} →
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Kanban Board View ───────────────────────────────────────────────────────
+
+interface BoardViewProps {
+  tasks: PersonalTask[];
+  onStatusChange: (id: string, status: PersonalTaskStatus, prev: PersonalTaskStatus) => void;
+  onEdit: (task: PersonalTask) => void;
+  onDelete: (id: string) => void;
+}
+
+const BOARD_COLS: { key: PersonalTaskStatus; label: string; colBg: string; dot: string }[] = [
+  { key: 'todo',       label: 'To Do',       colBg: 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700',      dot: 'bg-slate-400' },
+  { key: 'inprogress', label: 'In Progress',  colBg: 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800',          dot: 'bg-[#1D3461]' },
+  { key: 'done',       label: 'Done',         colBg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500' },
+];
+
+function BoardView({ tasks, onStatusChange, onEdit, onDelete }: BoardViewProps) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {BOARD_COLS.map(col => {
+        const colTasks = tasks.filter(t => t.status === col.key);
+        return (
+          <div key={col.key} className={cn('rounded-xl border p-3 space-y-2 min-h-[160px]', col.colBg)}>
+            <div className="flex items-center gap-2 mb-3">
+              <div className={cn('h-2 w-2 rounded-full', col.dot)} />
+              <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{col.label}</span>
+              <span className="ml-auto text-xs font-bold text-muted-foreground bg-white/70 dark:bg-black/20 px-1.5 py-0.5 rounded-full">
+                {colTasks.length}
+              </span>
+            </div>
+            {colTasks.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-6 opacity-40">
+                <Circle className="h-6 w-6 mb-1" />
+                <p className="text-xs">Empty</p>
+              </div>
+            )}
+            {colTasks.map(task => {
+              const pCfg = PRIORITY_CFG[task.priority];
+              const overdue = isOverdue(task.dueDate, task.status);
+              return (
+                <div key={task.id} className="group bg-card rounded-lg border shadow-sm p-2.5 space-y-1.5 hover:shadow-md transition-shadow cursor-default">
+                  <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onStatusChange(task.id, task.status === 'done' ? 'todo' : 'done', task.status)}
+                      className={cn(
+                        'mt-0.5 h-4 w-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
+                        task.status === 'done' ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
+                      )}
+                    >
+                      {task.status === 'done' && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
+                    </button>
+                    <p className={cn('text-xs font-medium leading-snug flex-1', task.status === 'done' && 'line-through text-muted-foreground')}>{task.title}</p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button type="button" className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 flex-shrink-0">
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="text-xs">
+                        {col.key !== 'inprogress' && (
+                          <DropdownMenuItem onClick={() => onStatusChange(task.id, 'inprogress', task.status)}>
+                            <PlayCircle className="h-3.5 w-3.5 mr-1.5 text-[#1D3461]" /> Start
+                          </DropdownMenuItem>
+                        )}
+                        {col.key !== 'done' && (
+                          <DropdownMenuItem onClick={() => onStatusChange(task.id, 'done', task.status)}>
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-emerald-600" /> Mark Done
+                          </DropdownMenuItem>
+                        )}
+                        {col.key !== 'todo' && (
+                          <DropdownMenuItem onClick={() => onStatusChange(task.id, 'todo', task.status)}>
+                            <Circle className="h-3.5 w-3.5 mr-1.5" /> Reopen
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => onEdit(task)}><Edit2 className="h-3.5 w-3.5 mr-1.5" /> Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onDelete(task.id)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap pl-6">
+                    <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>{pCfg.label}</span>
+                    {task.dueDate && (
+                      <span className={cn('text-[10px] flex items-center gap-0.5', overdue ? 'text-red-600 font-semibold' : 'text-muted-foreground')}>
+                        <Calendar className="h-2.5 w-2.5" />{fmtDate(task.dueDate)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Team Snapshot (admin only) ───────────────────────────────────────────────
+
+function useTeamTaskSnapshot() {
+  return useQuery({
+    queryKey: ['team_task_snapshot'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('project_field_tasks')
+        .select('assigned_to, assigned_to_name, status')
+        .not('assigned_to', 'is', null);
+      return (data ?? []) as { assigned_to: string; assigned_to_name: string | null; status: string }[];
+    },
+    staleTime: 2 * 60_000,
+  });
+}
+
+function TeamSnapshot() {
+  const { data: rows = [], isLoading } = useTeamTaskSnapshot();
+  const [collapsed, setCollapsed] = useState(false);
+
+  const byMember = useMemo(() => {
+    const map = new Map<string, { name: string; total: number; done: number; overdue: number; inprogress: number }>();
+    rows.forEach(r => {
+      const key = r.assigned_to;
+      const entry = map.get(key) ?? { name: r.assigned_to_name ?? 'Unknown', total: 0, done: 0, overdue: 0, inprogress: 0 };
+      entry.total++;
+      if (r.status === 'done') entry.done++;
+      else if (r.status === 'inprogress') entry.inprogress++;
+      map.set(key, entry);
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [rows]);
+
+  const teamTotal = rows.length;
+  const teamDone = rows.filter(r => r.status === 'done').length;
+  const teamPct = teamTotal > 0 ? Math.round((teamDone / teamTotal) * 100) : 0;
+  const healthColor = teamPct >= 70 ? 'text-emerald-600' : teamPct >= 40 ? 'text-amber-600' : 'text-red-600';
+  const healthBg   = teamPct >= 70 ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200' : teamPct >= 40 ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200' : 'bg-red-50 dark:bg-red-950/30 border-red-200';
+
+  return (
+    <div className={cn('rounded-xl border p-4 space-y-3', healthBg)}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className={cn('h-4 w-4', healthColor)} />
+          <span className="text-sm font-semibold text-foreground">Team Task Health</span>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{byMember.length} members</Badge>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={cn('text-sm font-bold', healthColor)}>{teamPct}% complete</span>
+          <button type="button" onClick={() => setCollapsed(c => !c)} className="text-muted-foreground hover:text-foreground">
+            {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+      <Progress value={teamPct} className="h-1.5" />
+      {!collapsed && (
+        <>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading team data…
+            </div>
+          ) : byMember.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">No assigned project tasks found</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {byMember.map(m => {
+                const pct = m.total > 0 ? Math.round((m.done / m.total) * 100) : 0;
+                const memberColor = pct >= 70 ? 'text-emerald-600' : pct >= 40 ? 'text-amber-600' : 'text-red-600';
+                return (
+                  <div key={m.name} className="flex items-center gap-2.5 bg-white/60 dark:bg-black/20 rounded-lg px-2.5 py-2 border border-white/80 dark:border-white/10">
+                    <div className="h-7 w-7 rounded-full bg-[#1D3461] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                      {m.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{m.name}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Progress value={pct} className="h-1 flex-1" />
+                        <span className={cn('text-[10px] font-bold flex-shrink-0', memberColor)}>{pct}%</span>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <p className="text-[10px] font-semibold text-foreground">{m.done}/{m.total}</p>
+                      {m.inprogress > 0 && <p className="text-[9px] text-[#1D3461]">{m.inprogress} active</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function MyTasks() {
   const { toast } = useToast();
   const { currentUser } = useUser();
+  const { hasAnyRole } = useAuthorization();
   const userId = currentUser?.id;
+  const isAdmin = hasAnyRole(['super_admin', 'admin']);
 
   const { tasks: personalTasks, isLoading: loadingPersonal, createTask, updateTask, deleteTask, isCreating, isUpdating } = usePersonalTasks(userId);
   const { data: projectTasks = [], isLoading: loadingProject, refetch: refetchProject } = useAssignedProjectTasks(userId);
@@ -502,6 +776,9 @@ export default function MyTasks() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
+  const [personalView, setPersonalView] = useState<'list' | 'board'>('list');
+  const [showInsights, setShowInsights] = useState(true);
+  const [showTeam, setShowTeam] = useState(true);
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy');
 
@@ -631,6 +908,17 @@ export default function MyTasks() {
         ))}
       </div>
 
+      {/* ── Smart Insights ── */}
+      {showInsights && (
+        <SmartInsightsPanel
+          stats={stats}
+          totalPersonal={personalTasks.length}
+          totalProject={projectTasks.length}
+          onFilter={setFilter}
+          onDismiss={() => setShowInsights(false)}
+        />
+      )}
+
       {/* ── Search ── */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -731,17 +1019,37 @@ export default function MyTasks() {
 
       {/* ── Personal Tasks Section ── */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="text-sm font-semibold flex items-center gap-2">
             <Star className="h-4 w-4 text-amber-500" />
             My Personal Tasks
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredPersonal.length}</Badge>
           </h2>
-          {personalTasks.filter(t => t.status === 'done').length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {personalTasks.filter(t => t.status === 'done').length} completed
-            </span>
-          )}
+          <div className="flex items-center gap-2 ml-auto">
+            {personalTasks.filter(t => t.status === 'done').length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {personalTasks.filter(t => t.status === 'done').length} completed
+              </span>
+            )}
+            <div className="flex items-center border rounded-lg overflow-hidden h-7">
+              <button
+                type="button"
+                onClick={() => setPersonalView('list')}
+                className={cn('flex items-center gap-1 px-2.5 h-full text-[11px] font-medium transition-colors', personalView === 'list' ? 'bg-[#1D3461] text-white' : 'bg-card text-muted-foreground hover:bg-muted')}
+                title="List view"
+              >
+                <LayoutList className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPersonalView('board')}
+                className={cn('flex items-center gap-1 px-2.5 h-full text-[11px] font-medium transition-colors', personalView === 'board' ? 'bg-[#1D3461] text-white' : 'bg-card text-muted-foreground hover:bg-muted')}
+                title="Kanban board view"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Personal task progress */}
@@ -770,6 +1078,13 @@ export default function MyTasks() {
                 : `No tasks for "${FILTERS.find(f => f.key === filter)?.label}"`}
             </p>
           </div>
+        ) : personalView === 'board' ? (
+          <BoardView
+            tasks={filteredPersonal}
+            onStatusChange={(id, s, prev) => handleStatusChange(id, s, prev)}
+            onEdit={setEditingTask}
+            onDelete={handleDelete}
+          />
         ) : (
           <div className="space-y-1.5">
             {filteredPersonal.map(task => (
@@ -784,6 +1099,38 @@ export default function MyTasks() {
           </div>
         )}
       </div>
+
+      {/* ── Team Task Health (admin only) ── */}
+      {isAdmin && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowTeam(v => !v)}
+            className="flex items-center gap-2 text-sm font-semibold text-foreground w-full group"
+          >
+            <Users className="h-4 w-4 text-[#1D3461]" />
+            Team Task Health
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Admin View</Badge>
+            <span className="ml-auto text-muted-foreground group-hover:text-foreground">
+              {showTeam ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </span>
+          </button>
+          {showTeam && <TeamSnapshot />}
+        </div>
+      )}
+
+      {/* ── Re-show insights ── */}
+      {!showInsights && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShowInsights(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#1D3461] transition-colors"
+          >
+            <Sparkles className="h-3 w-3" /> Show smart insights
+          </button>
+        </div>
+      )}
 
       {/* ── Edit dialog ── */}
       <EditPersonalTaskDialog
