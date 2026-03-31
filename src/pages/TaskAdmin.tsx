@@ -449,7 +449,7 @@ function usePayrollData(deptId: string, fromDate: string, toDate: string) {
         .from('wallet_transactions')
         .select('user_id, amount, currency')
         .in('user_id', userIds)
-        .eq('type', 'credit')
+        .eq('type', 'wallet_credit')
         .like('memo', 'Task reward:%')
         .gte('created_at', fromDate + 'T00:00:00')
         .lte('created_at', toDate + 'T23:59:59');
@@ -461,7 +461,6 @@ function usePayrollData(deptId: string, fromDate: string, toDate: string) {
         .from('wallet_transactions')
         .select('user_id, amount, currency')
         .in('user_id', userIds)
-        .eq('type', 'credit')
         .ilike('memo', '%retainer%')
         .gte('created_at', fromDate + 'T00:00:00')
         .lte('created_at', toDate + 'T23:59:59');

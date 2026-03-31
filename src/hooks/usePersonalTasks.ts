@@ -251,14 +251,14 @@ async function creditWalletForTask(opts: {
     const amountCents = Math.round(amount * 100);
     const now = new Date().toISOString();
 
-    await supabase.from('wallet_transactions').insert({
+    const { error: txErr } = await supabase.from('wallet_transactions').insert({
       wallet_id: wallet.id,
       user_id: opts.userId,
       amount,
       amount_cents: amountCents,
       currency,
-      type: 'credit',
-      status: 'completed',
+      type: 'wallet_credit',
+      status: 'posted',
       memo: `Task reward: ${taskTitle}`,
       description: `Completion reward for task "${taskTitle}"`,
       posted_at: now,
@@ -266,7 +266,21 @@ async function creditWalletForTask(opts: {
       metadata: { source: 'task_completion', task_id: opts.taskId },
     });
 
+    if (txErr) {
+      console.error('[creditWalletForTask] insert failed:', txErr.message);
+      return;
+    }
+
+    // Fetch updated wallet balance to include in notifications
+    const { data: updatedWallet } = await supabase
+      .from('wallets')
+      .select('total_earned')
+      .eq('id', wallet.id)
+      .maybeSingle();
+    const newBalance = updatedWallet ? Number(updatedWallet.total_earned).toFixed(2) : null;
+
     const rewardStr = `${currency} ${amount.toFixed(2)}`;
+    const balanceStr = newBalance ? `${currency} ${newBalance}` : null;
 
     await Promise.all([
       sendTaskNotification({
@@ -275,12 +289,12 @@ async function creditWalletForTask(opts: {
         title: taskTitle,
         priority: opts.taskPriority,
         event: 'reward_credited',
-        extra: rewardStr,
+        extra: balanceStr ? `${rewardStr} — Wallet balance: ${balanceStr}` : rewardStr,
       }),
       sendTaskEmail({
         email: opts.userEmail,
         titleEn: 'Task Reward Credited',
-        body: `Your wallet has been credited ${rewardStr} for completing the task "${taskTitle}".\n\nView your wallet: https://app.pactorg.com/wallets`,
+        body: `Your wallet has been credited ${rewardStr} for completing the task "${taskTitle}".${balanceStr ? `\n\nUpdated wallet balance: ${balanceStr}` : ''}\n\nView your wallet: https://app.pactorg.com/wallets`,
       }),
     ]);
   } catch (err: unknown) {
