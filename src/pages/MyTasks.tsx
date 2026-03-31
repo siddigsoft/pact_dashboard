@@ -177,8 +177,8 @@ interface PersonalTaskCardProps {
 }
 
 function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTaskCardProps) {
-  const pCfg = PRIORITY_CFG[task.priority];
-  const sCfg = STATUS_CFG[task.status];
+  const pCfg = PRIORITY_CFG[task.priority] ?? PRIORITY_CFG.medium;
+  const sCfg = STATUS_CFG[task.status] ?? STATUS_CFG.todo;
   const overdue = isOverdue(task.dueDate, task.status);
   const isDone = task.status === 'done';
   const isInProgress = task.status === 'inprogress';
@@ -950,7 +950,7 @@ function BoardView({ tasks, onStatusChange, onEdit, onDelete }: BoardViewProps) 
               </div>
             )}
             {colTasks.map(task => {
-              const pCfg = PRIORITY_CFG[task.priority];
+              const pCfg = PRIORITY_CFG[task.priority] ?? PRIORITY_CFG.medium;
               const overdue = isOverdue(task.dueDate, task.status);
               return (
                 <div key={task.id} className="group bg-card rounded-lg border shadow-sm p-2.5 space-y-1.5 hover:shadow-md transition-shadow cursor-default">

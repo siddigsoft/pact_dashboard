@@ -172,7 +172,7 @@ const PageCrashFallback = () => (
 );
 
 const PageWrapper = ({ children }: { children: React.ReactNode }) => (
-  <ErrorBoundary fallback={<PageCrashFallback />}>
+  <ErrorBoundary>
     {children}
   </ErrorBoundary>
 );
