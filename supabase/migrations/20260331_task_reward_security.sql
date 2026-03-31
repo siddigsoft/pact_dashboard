@@ -8,14 +8,16 @@ ALTER TABLE public.personal_tasks
 
 -- 2. Trigger function: only admins (role IN ('admin','superAdmin','super_admin'))
 --    can set/update completion_reward_amount / completion_reward_currency.
---    - On INSERT: non-admin reward fields are silently stripped (set to null)
---    - On UPDATE: non-admin attempt raises exception
+--    - On INSERT from a recurring template: reward inherited from template (amount verified)
+--    - On INSERT by non-admin: reward fields are silently stripped (set to null)
+--    - On UPDATE by non-admin: raises exception
 --    - When admin sets reward: reward_set_by is automatically set to auth.uid()
 CREATE OR REPLACE FUNCTION public.guard_task_reward_fields()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $func$
 DECLARE
   caller_role text;
   reward_being_set boolean;
+  tmpl_reward numeric;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     reward_being_set := (NEW.completion_reward_amount IS NOT NULL AND NEW.completion_reward_amount > 0);
@@ -27,6 +29,19 @@ BEGIN
   END IF;
 
   IF reward_being_set THEN
+    -- Template-materialised tasks: allow reward if amount matches the template definition
+    IF TG_OP = 'INSERT' AND NEW.template_id IS NOT NULL THEN
+      SELECT reward_amount INTO tmpl_reward
+      FROM public.daily_task_definitions
+      WHERE id = NEW.template_id;
+
+      IF tmpl_reward IS NOT NULL AND ABS(COALESCE(NEW.completion_reward_amount, 0) - tmpl_reward) < 0.001 THEN
+        -- Reward matches template — allow without individual admin check
+        NEW.reward_set_by := NULL; -- template-authorised (no specific admin uid)
+        RETURN NEW;
+      END IF;
+    END IF;
+
     SELECT p.role INTO caller_role
     FROM public.profiles p
     WHERE p.id = auth.uid();
@@ -58,6 +73,18 @@ CREATE TRIGGER task_reward_fields_guard
   FOR EACH ROW EXECUTE FUNCTION public.guard_task_reward_fields();
 
 COMMENT ON COLUMN public.personal_tasks.reward_set_by IS
-  'UUID of the admin who authorized the completion reward. Populated automatically by guard_task_reward_fields trigger.';
+  'UUID of the admin who authorized the completion reward, or NULL for template-inherited rewards. Populated automatically by guard_task_reward_fields trigger.';
 COMMENT ON FUNCTION public.guard_task_reward_fields() IS
-  'Prevents non-admin users from setting/changing task reward fields on INSERT and UPDATE. Only profiles with role admin/superAdmin/super_admin can use completion_reward_amount. On INSERT by non-admin, reward fields are silently stripped. reward_set_by is auto-populated by the trigger when an admin sets a reward.';
+  'Prevents non-admin users from setting/changing task reward fields on INSERT and UPDATE.
+   Special case: recurring template tasks inherit reward amount directly from daily_task_definitions (amount is verified against template before allowing).
+   Only profiles with role admin/superAdmin/super_admin can set arbitrary rewards.
+   On INSERT by non-admin without a matching template, reward fields are silently stripped.
+   On UPDATE by non-admin, exception is raised.
+   reward_set_by is auto-populated by the trigger when an admin sets a reward.';
+
+-- NOTE: credit-task-reward Edge Function also updated (v3) to allow reward credit for:
+--   1. Tasks where reward_set_by IS NOT NULL (admin-manually-set reward)
+--   2. Tasks where template_id IS NOT NULL (reward inherited from daily_task_definitions;
+--      the trigger verified the amount matches the template at insert time)
+-- Template-materialized task rewards (reward_set_by IS NULL, template_id IS NOT NULL)
+-- are considered admin-authorized because they originate from admin-created templates.

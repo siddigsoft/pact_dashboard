@@ -256,6 +256,9 @@ export async function materialiseDailyTasks(opts: {
 
     const roleNorm = (opts.userRole ?? '').toLowerCase().replace(/[_\s]/g, '');
 
+    // Track newly created tasks for post-loop email digest
+    const newTaskTitles: string[] = [];
+
     for (const def of defs) {
       const d = mapDefRow(def as Record<string, unknown>);
 
@@ -302,6 +305,7 @@ export async function materialiseDailyTasks(opts: {
         .single();
 
       if (created?.id) {
+        newTaskTitles.push(d.title);
         await sendTaskNotification({
           userId: opts.userId,
           taskId: created.id,
@@ -310,6 +314,25 @@ export async function materialiseDailyTasks(opts: {
           event: 'assigned',
         });
       }
+    }
+
+    // Send a single email summary to the user if any new tasks were materialised
+    if (newTaskTitles.length > 0 && opts.userEmail) {
+      const taskList = newTaskTitles.map((t, i) => `<li>${i + 1}. ${t}</li>`).join('');
+      const html = `
+        <p>Hello${opts.userName ? ` ${opts.userName}` : ''},</p>
+        <p>You have <strong>${newTaskTitles.length} new recurring task${newTaskTitles.length > 1 ? 's' : ''}</strong> assigned to you for today (${today}):</p>
+        <ul>${taskList}</ul>
+        <p>Log in to <a href="https://app.pactorg.com/my-tasks">PACT Command Center</a> to view and complete your tasks.</p>
+        <p>– PACT Task System</p>
+      `;
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: opts.userEmail,
+          subject: `Your Daily Tasks – ${today}`,
+          html,
+        },
+      });
     }
   } catch (err: unknown) {
     console.error('[materialiseDailyTasks] error:', err instanceof Error ? err.message : err);
