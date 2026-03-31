@@ -206,9 +206,10 @@ async function sendTaskEmail(opts: {
 const KEY = ['personal_tasks'];
 
 // ── Credit wallet on task completion ─────────────────────────────────────────
-// Server-driven: fetches the reward amount from the DB row (not caller-supplied)
-// and checks for an existing transaction to ensure idempotency.
-
+// Server-side trusted reward credit via Edge Function.
+// The credit-task-reward function validates the caller's JWT,
+// reads reward amount from DB (never trusts caller input),
+// enforces idempotency, and sends notifications.
 async function creditWalletForTask(opts: {
   taskId: string;
   userId: string;
@@ -216,89 +217,14 @@ async function creditWalletForTask(opts: {
   taskPriority: PersonalTaskPriority;
 }) {
   try {
-    // Fetch trusted reward amount from the DB row
-    const { data: task } = await supabase
-      .from('personal_tasks')
-      .select('title, completion_reward_amount, completion_reward_currency')
-      .eq('id', opts.taskId)
-      .maybeSingle();
-
-    if (!task) return;
-    const amount = task.completion_reward_amount as number | null;
-    if (!amount || amount <= 0) return; // No reward configured
-
-    const currency = (task.completion_reward_currency as string | null) ?? 'USD';
-    const taskTitle = task.title as string;
-
-    // Idempotency check: skip if a reward transaction already exists for this task
-    const { count: existingCount } = await supabase
-      .from('wallet_transactions')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', opts.userId)
-      .contains('metadata', { source: 'task_completion', task_id: opts.taskId });
-
-    if ((existingCount ?? 0) > 0) return; // Already credited — do not double-credit
-
-    // Find wallet for the user
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id')
-      .eq('user_id', opts.userId)
-      .maybeSingle();
-
-    if (!wallet) return; // No wallet configured
-
-    const amountCents = Math.round(amount * 100);
-    const now = new Date().toISOString();
-
-    const { error: txErr } = await supabase.from('wallet_transactions').insert({
-      wallet_id: wallet.id,
-      user_id: opts.userId,
-      amount,
-      amount_cents: amountCents,
-      currency,
-      type: 'wallet_credit',
-      status: 'posted',
-      memo: `Task reward: ${taskTitle}`,
-      description: `Completion reward for task "${taskTitle}"`,
-      posted_at: now,
-      created_at: now,
-      metadata: { source: 'task_completion', task_id: opts.taskId },
+    const { error } = await supabase.functions.invoke('credit-task-reward', {
+      body: { taskId: opts.taskId },
     });
-
-    if (txErr) {
-      console.error('[creditWalletForTask] insert failed:', txErr.message);
-      return;
+    if (error) {
+      console.error('[creditWalletForTask] edge function error:', error.message ?? error);
     }
-
-    // Fetch updated wallet balance to include in notifications
-    const { data: updatedWallet } = await supabase
-      .from('wallets')
-      .select('total_earned')
-      .eq('id', wallet.id)
-      .maybeSingle();
-    const newBalance = updatedWallet ? Number(updatedWallet.total_earned).toFixed(2) : null;
-
-    const rewardStr = `${currency} ${amount.toFixed(2)}`;
-    const balanceStr = newBalance ? `${currency} ${newBalance}` : null;
-
-    await Promise.all([
-      sendTaskNotification({
-        userId: opts.userId,
-        taskId: opts.taskId,
-        title: taskTitle,
-        priority: opts.taskPriority,
-        event: 'reward_credited',
-        extra: balanceStr ? `${rewardStr} — Wallet balance: ${balanceStr}` : rewardStr,
-      }),
-      sendTaskEmail({
-        email: opts.userEmail,
-        titleEn: 'Task Reward Credited',
-        body: `Your wallet has been credited ${rewardStr} for completing the task "${taskTitle}".${balanceStr ? `\n\nUpdated wallet balance: ${balanceStr}` : ''}\n\nView your wallet: https://app.pactorg.com/wallets`,
-      }),
-    ]);
   } catch (err: unknown) {
-    console.error('[usePersonalTasks] creditWalletForTask error:', err instanceof Error ? err.message : err);
+    console.error('[creditWalletForTask] invoke failed:', err instanceof Error ? err.message : err);
   }
 }
 

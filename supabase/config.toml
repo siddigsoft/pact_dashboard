@@ -24,3 +24,8 @@ verify_jwt = false
 # Sends each user a daily email + in-app notification of pending tasks.
 [functions.task-daily-digest]
 verify_jwt = false
+
+# Added by Task #10: credit-task-reward validates user JWT server-side and
+# credits wallet for task completion rewards via a trusted server path.
+[functions.credit-task-reward]
+verify_jwt = false

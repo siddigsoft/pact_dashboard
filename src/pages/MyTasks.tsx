@@ -542,9 +542,10 @@ interface EditDialogProps {
   onClose: () => void;
   onSave: (id: string, updates: Partial<CreatePersonalTask>) => Promise<void>;
   isSaving: boolean;
+  isAdmin: boolean;
 }
 
-function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogProps) {
+function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin }: EditDialogProps) {
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [priority, setPriority] = useState<PersonalTaskPriority>(task?.priority ?? 'medium');
@@ -558,7 +559,9 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
   if (!task) return null;
 
   const handleSave = async () => {
-    const reward = rewardAmount ? parseFloat(rewardAmount) : null;
+    // Only admins may modify reward fields; non-admin saves preserve the existing reward unchanged
+    const reward = isAdmin ? (rewardAmount ? parseFloat(rewardAmount) : null) : task.completionRewardAmount;
+    const currency = isAdmin ? (reward ? rewardCurrency : null) : task.completionRewardCurrency;
     await onSave(task.id, {
       title: title.trim(),
       description: description.trim() || null,
@@ -568,7 +571,7 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
       category: category || 'personal',
       notes: notes.trim() || null,
       completionRewardAmount: reward,
-      completionRewardCurrency: reward ? rewardCurrency : null,
+      completionRewardCurrency: currency,
     });
     onClose();
   };
@@ -629,29 +632,37 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving }: EditDialogP
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Notes</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} className="min-h-[60px] text-sm resize-none" />
           </div>
-          {/* Completion Reward */}
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Completion Reward (optional)</Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Amount"
-                value={rewardAmount}
-                onChange={e => setRewardAmount(e.target.value)}
-                className="h-9 flex-1"
-                data-testid="input-edit-reward-amount"
-              />
-              <Select value={rewardCurrency} onValueChange={setRewardCurrency}>
-                <SelectTrigger className="h-9 w-24"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+          {/* Completion Reward — admin only */}
+          {isAdmin ? (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Completion Reward (optional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Amount"
+                  value={rewardAmount}
+                  onChange={e => setRewardAmount(e.target.value)}
+                  className="h-9 flex-1"
+                  data-testid="input-edit-reward-amount"
+                />
+                <Select value={rewardCurrency} onValueChange={setRewardCurrency}>
+                  <SelectTrigger className="h-9 w-24"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Credited to wallet when task is marked done.</p>
             </div>
-            <p className="text-[10px] text-muted-foreground">Credited to wallet when task is marked done.</p>
-          </div>
+          ) : task.completionRewardAmount ? (
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Completion Reward</Label>
+              <p className="text-sm font-medium text-emerald-600">{task.completionRewardCurrency} {task.completionRewardAmount.toFixed(2)}</p>
+              <p className="text-[10px] text-muted-foreground">Reward set by admin. Credited to wallet on completion.</p>
+            </div>
+          ) : null}
         </div>
         <DialogFooter className="gap-2 border-t pt-3">
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
@@ -2182,6 +2193,7 @@ export default function MyTasks() {
         onClose={() => setEditingTask(null)}
         onSave={handleEditSave}
         isSaving={isUpdating}
+        isAdmin={isAdmin}
       />
 
       {/* ── New Task dialog ── */}
