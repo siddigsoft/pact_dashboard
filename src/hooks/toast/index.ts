@@ -8,6 +8,29 @@ import { type ToastActionElement } from "@/components/ui/toast";
 
 type Toast = Omit<ToasterToast, "id">;
 
+function getCurrentRoute(): string {
+  try {
+    if (typeof window !== "undefined" && window.location?.pathname) {
+      return window.location.pathname;
+    }
+  } catch {
+    // no-op
+  }
+  return "/";
+}
+
+function getCurrentUserId(): string | undefined {
+  try {
+    if (typeof window === "undefined") return undefined;
+    const raw = window.localStorage.getItem("PACTCurrentUser");
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { id?: string };
+    return parsed?.id;
+  } catch {
+    return undefined;
+  }
+}
+
 function toast({ variant, duration, action, ...props }: Toast) {
   const id = genId();
 
@@ -99,6 +122,11 @@ function toast({ variant, duration, action, ...props }: Toast) {
       id,
       variant,
       action: finalAction,
+      visibilityScope: props.visibilityScope ?? "route",
+      targetUserId: props.targetUserId ?? getCurrentUserId(),
+      routeScope: props.routeScope ?? [getCurrentRoute()],
+      routeMatchExact: props.routeMatchExact ?? true,
+      createdAtRoute: props.createdAtRoute ?? getCurrentRoute(),
       duration: adjustedDuration,
       open: true,
       onOpenChange: (open) => {

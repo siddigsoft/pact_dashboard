@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/toast"
 import { AlertTriangle, CheckCircle2, Eye } from "lucide-react"
 import * as React from "react"
+import { useLocation } from "react-router-dom"
+import { useUser } from "@/context/user/UserContext"
 
 // Function to check if an object is a ToastActionConfig
 function isToastActionConfig(action: unknown): action is ToastActionConfig {
@@ -25,10 +27,31 @@ function isToastActionConfig(action: unknown): action is ToastActionConfig {
 
 export function Toaster() {
   const { toasts } = useToast()
+  const location = useLocation()
+  const { currentUser } = useUser()
+
+  const activeRoute = location.pathname || "/"
+  const activeUserId = currentUser?.id
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, variant, ...props }) {
+      {toasts
+        .filter((toastItem) => {
+          if (toastItem.visibilityScope === "global") return true;
+
+          if (toastItem.targetUserId && activeUserId && toastItem.targetUserId !== activeUserId) {
+            return false;
+          }
+
+          const allowedRoutes = toastItem.routeScope ?? [];
+          if (allowedRoutes.length === 0) return true;
+
+          const isExact = toastItem.routeMatchExact ?? true;
+          return allowedRoutes.some((route) =>
+            isExact ? route === activeRoute : activeRoute.startsWith(route)
+          );
+        })
+        .map(function ({ id, title, description, action, variant, ...props }) {
         // Check if this is a validation result toast with multiple lines
         const isValidationResult = description && 
           typeof description === 'string' && 

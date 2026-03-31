@@ -17,6 +17,20 @@ export type ToasterToast = ToastProps & {
   variant?: "default" | "success" | "destructive" | "warning" | "info" | "siddig";
   duration?: number;
   important?: boolean;
+  /**
+   * Toast visibility scope:
+   * - 'route' (default): only visible on matching route/user
+   * - 'global': visible regardless of route/user
+   */
+  visibilityScope?: "route" | "global";
+  /** Intended recipient user ID. Undefined means no user restriction. */
+  targetUserId?: string;
+  /** Route(s) where this toast is allowed to render. */
+  routeScope?: string[];
+  /** Match route exactly when true; prefix match when false. */
+  routeMatchExact?: boolean;
+  /** Route at creation time (auto-populated by toast()). */
+  createdAtRoute?: string;
   onDismiss?: () => void; // Add the onDismiss property
 };
 
