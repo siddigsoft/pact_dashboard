@@ -246,16 +246,13 @@ export async function materialiseDailyTasks(opts: {
   try {
     const today = format(new Date(), 'yyyy-MM-dd');
 
-    // Call SECURITY DEFINER RPC — reward amounts are read from template rows
-    // by the trusted DB function, never from caller input. This is the only
-    // correct way to materialise tasks with rewards for non-admin users.
+    // Call SECURITY DEFINER RPC — no caller-supplied parameters.
+    // The DB function reads caller identity (auth.uid()), role, and department
+    // from the profile row. Reward amounts are read from template rows.
+    // This is the only secure path that can materialise rewarded tasks for
+    // non-admin users; direct INSERT is stripped by the reward guard trigger.
     const { data: created, error: rpcErr } = await supabase.rpc(
       'materialise_daily_tasks_for_user',
-      {
-        p_user_id: opts.userId,
-        p_role: opts.userRole ?? '',
-        p_department_id: opts.userDepartmentId ?? null,
-      },
     );
 
     if (rpcErr) {

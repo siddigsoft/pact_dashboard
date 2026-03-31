@@ -1,6 +1,6 @@
 -- Task #10: Reward field authorization security hardening
--- Adds server-side enforcement to prevent non-admin users from
--- setting or modifying task completion reward fields.
+-- MUST run AFTER 20260401_task_hierarchy_and_payroll.sql (which adds
+-- template_id, daily_task_date, completion_reward_amount, etc.)
 
 -- 1. Track which admin set a reward on a task
 ALTER TABLE public.personal_tasks
@@ -16,9 +16,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS personal_tasks_template_user_date_uidx
 --    or SECURITY DEFINER server functions can set/update reward fields.
 --
 --    Authorization logic:
---    - auth.uid() IS NULL → insert comes from a SECURITY DEFINER function
+--    - auth.uid() IS NULL: insert comes from a SECURITY DEFINER function
 --      (materialise_daily_tasks_for_user); trust it and allow through.
---    - admin role → allow; set reward_set_by = caller's uid.
+--    - admin role: allow; set reward_set_by = caller's uid.
 --    - non-admin authenticated user:
 --        INSERT: strip reward fields silently.
 --        UPDATE: raise exception.
@@ -78,13 +78,14 @@ CREATE TRIGGER task_reward_fields_guard
   FOR EACH ROW EXECUTE FUNCTION public.guard_task_reward_fields();
 
 -- 5. Trusted server-side materialisation RPC for daily recurring tasks.
---    SECURITY DEFINER ensures reward amounts are read from template rows (trusted),
---    and auth.uid() returns NULL inside this function (triggers see it as server context).
-CREATE OR REPLACE FUNCTION public.materialise_daily_tasks_for_user(
-  p_user_id       uuid,
-  p_role          text,
-  p_department_id uuid DEFAULT NULL
-)
+--    Security properties:
+--    - SECURITY DEFINER: runs as DB owner; trigger sees auth.uid() IS NULL (trusted context)
+--    - Zero caller-supplied parameters: user identity, role, and department ALL read
+--      from the caller's auth.uid() profiles row (cannot be spoofed by caller)
+--    - Reward amounts read from daily_task_definitions row (not from caller)
+--    - Only eligible templates (role+dept match) are materialised for the calling user
+--    - Deduplication enforced in SQL + unique index
+CREATE OR REPLACE FUNCTION public.materialise_daily_tasks_for_user()
 RETURNS TABLE(task_id uuid, task_title text, reward_amount numeric)
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -93,10 +94,31 @@ AS $func$
 DECLARE
   rec RECORD;
   today date := CURRENT_DATE;
-  role_norm text := lower(regexp_replace(p_role, '[_\s]', '', 'g'));
+  caller_uid uuid;
+  caller_role text;
+  caller_dept uuid;
+  role_norm text;
   existing_count bigint;
   created_id uuid;
 BEGIN
+  -- Enforce: must be called by an authenticated user
+  caller_uid := auth.uid();
+  IF caller_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- Derive role and department from the profile row (trusted, not caller input)
+  SELECT p.role, p.department_id
+  INTO caller_role, caller_dept
+  FROM profiles p
+  WHERE p.id = caller_uid;
+
+  IF caller_role IS NULL THEN
+    RAISE EXCEPTION 'Profile not found';
+  END IF;
+
+  role_norm := lower(regexp_replace(caller_role, '[_\s]', '', 'g'));
+
   FOR rec IN
     SELECT d.*
     FROM daily_task_definitions d
@@ -107,7 +129,7 @@ BEGIN
       CONTINUE;
     END IF;
 
-    -- Role match
+    -- Role match (against caller's actual role from profile, not caller-supplied)
     IF rec.role_targets IS NOT NULL AND array_length(rec.role_targets, 1) > 0 THEN
       IF NOT EXISTS (
         SELECT 1 FROM unnest(rec.role_targets) r
@@ -115,16 +137,16 @@ BEGIN
       ) THEN CONTINUE; END IF;
     END IF;
 
-    -- Department match
+    -- Department match (against caller's actual department from profile)
     IF rec.department_id IS NOT NULL THEN
-      IF rec.department_id IS DISTINCT FROM p_department_id THEN CONTINUE; END IF;
+      IF rec.department_id IS DISTINCT FROM caller_dept THEN CONTINUE; END IF;
     END IF;
 
     -- Deduplication (also enforced by unique index)
     SELECT COUNT(*) INTO existing_count
     FROM personal_tasks
     WHERE template_id = rec.id
-      AND assigned_to = p_user_id
+      AND assigned_to = caller_uid
       AND daily_task_date = today;
 
     IF existing_count > 0 THEN CONTINUE; END IF;
@@ -137,7 +159,7 @@ BEGIN
       recurrence, template_id, daily_task_date,
       created_at, updated_at
     ) VALUES (
-      p_user_id, p_user_id,
+      caller_uid, caller_uid,
       rec.title, rec.description, rec.priority, 'todo', 'recurring',
       rec.reward_amount, rec.reward_currency,
       rec.recurrence, rec.id, today,
@@ -153,24 +175,28 @@ BEGIN
 END;
 $func$;
 
--- Grant execute to authenticated users (each user passes their own user_id)
-REVOKE ALL ON FUNCTION public.materialise_daily_tasks_for_user(uuid, text, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.materialise_daily_tasks_for_user(uuid, text, uuid) TO authenticated;
+-- Grant execute to authenticated users only (no anonymous access)
+REVOKE ALL ON FUNCTION public.materialise_daily_tasks_for_user() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.materialise_daily_tasks_for_user() TO authenticated;
+
+-- Drop old parameterised version if it exists (no longer used)
+DROP FUNCTION IF EXISTS public.materialise_daily_tasks_for_user(uuid, text, uuid);
 
 COMMENT ON COLUMN public.personal_tasks.reward_set_by IS
   'UUID of the admin who authorized the completion reward. NULL for server-materialised template tasks (trusted via SECURITY DEFINER). Populated by guard_task_reward_fields trigger when an admin sets a reward.';
 
 COMMENT ON FUNCTION public.guard_task_reward_fields() IS
   'Prevents non-admin users from setting/changing task reward fields.
-   SECURITY DEFINER inserts (auth.uid() IS NULL) are trusted — used by materialise_daily_tasks_for_user.
+   SECURITY DEFINER inserts (auth.uid() IS NULL) are trusted (materialise_daily_tasks_for_user).
    Admin callers set reward_set_by. Non-admin direct inserts have reward stripped silently. Non-admin updates raise exception.';
 
-COMMENT ON FUNCTION public.materialise_daily_tasks_for_user IS
-  'SECURITY DEFINER function to materialise daily recurring tasks.
-   Reward amounts are read from template rows — never from caller input.
-   Trigger sees auth.uid() IS NULL and trusts the insert.';
+COMMENT ON FUNCTION public.materialise_daily_tasks_for_user() IS
+  'SECURITY DEFINER function. Zero caller-supplied parameters: user id, role, and department all
+   read from auth.uid() profile row (cannot be spoofed). Reward amounts read from template rows.
+   Only eligible templates are materialised for the authenticated caller. Deduplication via SQL + unique index.';
 
--- NOTE: credit-task-reward Edge Function (v3) also deployed with corresponding logic:
---   - reward_set_by IS NOT NULL → admin-authorized credit (path 1)
---   - reward_set_by IS NULL + template_id IS NOT NULL → template-authorized credit (path 2);
---     edge function verifies reward amount matches template row at credit time.
+-- NOTE: credit-task-reward Edge Function (v3) deployed separately with authorization logic:
+--   - reward_set_by IS NOT NULL: admin-authorized credit (path 1)
+--   - reward_set_by IS NULL + template_id IS NOT NULL: template task; edge function
+--     queries daily_task_definitions to verify reward amount matches template row
+--     before processing credit (double-verification at credit time)
