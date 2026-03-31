@@ -462,7 +462,7 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
 
 /* ─── Department Card ────────────────────────────── */
 function DeptCard({
-  dept, allProfiles, allDepts, depth, canManage,
+  dept, allProfiles, allDepts, depth, canManage, canMoveEmployees,
   onEdit, onDelete, onMoveEmployee, navigate,
 }: {
   dept: Department;
@@ -470,6 +470,7 @@ function DeptCard({
   allDepts: Department[];
   depth: number;
   canManage: boolean;
+  canMoveEmployees: boolean;
   onEdit: (d: Department) => void;
   onDelete: (d: Department) => void;
   onMoveEmployee: (p: Profile) => void;
@@ -555,7 +556,7 @@ function DeptCard({
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/users/${m.id}`)} title="View profile" data-testid={`button-view-user-${m.id}`}>
                         <ChevronRight className="h-3.5 w-3.5" />
                       </Button>
-                      {canManage && (
+                      {canMoveEmployees && (
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onMoveEmployee(m)} title="Move to another department" data-testid={`button-move-user-${m.id}`}>
                           <GitBranch className="h-3.5 w-3.5" />
                         </Button>
@@ -573,7 +574,7 @@ function DeptCard({
         <div>
           {dept.children!.map(child => (
             <DeptCard key={child.id} dept={child} allProfiles={allProfiles} allDepts={allDepts} depth={depth + 1}
-              canManage={canManage}
+              canManage={canManage} canMoveEmployees={canMoveEmployees}
               onEdit={onEdit} onDelete={onDelete} onMoveEmployee={onMoveEmployee} navigate={navigate} />
           ))}
         </div>
@@ -588,8 +589,10 @@ export default function Departments() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // super_admin only can create/edit/delete/move employees
+  // super_admin can create/edit/delete departments AND move employees
   const canManage = currentUser?.role === "super_admin" || currentUser?.role === "superadmin";
+  // admin (and super_admin) can move employees between departments
+  const canMoveEmployees = canManage || currentUser?.role === "admin";
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -749,7 +752,7 @@ export default function Departments() {
                 <p className="text-xs text-muted-foreground">{filteredFlat.length} results</p>
                 {filteredFlat.map(d => (
                   <DeptCard key={d.id} dept={d} allProfiles={profiles} allDepts={departments} depth={0}
-                    canManage={canManage}
+                    canManage={canManage} canMoveEmployees={canMoveEmployees}
                     onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
                     onDelete={setDeleteTarget} onMoveEmployee={setMoveTarget} navigate={navigate} />
                 ))}
@@ -758,7 +761,7 @@ export default function Departments() {
               <div>
                 {tree.map(d => (
                   <DeptCard key={d.id} dept={d} allProfiles={profiles} allDepts={departments} depth={0}
-                    canManage={canManage}
+                    canManage={canManage} canMoveEmployees={canMoveEmployees}
                     onEdit={dept => { setEditTarget(dept); setFormOpen(true); }}
                     onDelete={setDeleteTarget} onMoveEmployee={setMoveTarget} navigate={navigate} />
                 ))}
@@ -785,7 +788,7 @@ export default function Departments() {
                             <p className="text-[10px] text-muted-foreground capitalize">{p.role || "—"}</p>
                           </div>
                         </div>
-                        {canManage && (
+                        {canMoveEmployees && (
                           <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0" onClick={() => setMoveTarget(p)} data-testid={`button-assign-dept-${p.id}`}>
                             Assign
                           </Button>
@@ -819,7 +822,7 @@ export default function Departments() {
         />
       )}
 
-      {canManage && moveTarget && (
+      {canMoveEmployees && moveTarget && (
         <MoveEmployeeDialog
           open={!!moveTarget}
           onClose={() => setMoveTarget(null)}
