@@ -193,6 +193,134 @@ function AssigneeSelector({ value, displayName, onChange }: AssigneeSelectorProp
   );
 }
 
+// ── Dependency Search + Task List ──────────────────────────────────────────
+
+interface DepSearchInputProps {
+  otherTasks: FieldTask[];
+  deps: string[];
+  toggleDep: (id: string) => void;
+}
+
+function DepSearchInput({ otherTasks, deps, toggleDep }: DepSearchInputProps) {
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return q ? otherTasks.filter(t =>
+      t.title.toLowerCase().includes(q) ||
+      t.assignedToName?.toLowerCase().includes(q) ||
+      t.stateName?.toLowerCase().includes(q),
+    ) : otherTasks;
+  }, [otherTasks, search]);
+
+  const grouped = useMemo(() => {
+    const order: FieldTaskStatus[] = ['todo', 'inprogress', 'done', 'cancelled'];
+    return order
+      .map(s => ({ status: s, tasks: filtered.filter(t => t.status === s) }))
+      .filter(g => g.tasks.length > 0);
+  }, [filtered]);
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <Input
+          placeholder="Search tasks by name, assignee, or location…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-8 h-8 text-xs"
+        />
+        {search && (
+          <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-4">No tasks match your search</p>
+      ) : (
+        <div className="space-y-3 max-h-52 overflow-y-auto pr-0.5">
+          {grouped.map(({ status, tasks }) => {
+            const sCfg = STATUS_CFG[status];
+            return (
+              <div key={status}>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1">
+                  <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full', sCfg.color)}>{sCfg.label}</span>
+                  <span>{tasks.length}</span>
+                </p>
+                <div className="space-y-1">
+                  {tasks.map(t => {
+                    const selected = deps.includes(t.id);
+                    const pCfg = PRIORITY_CFG[t.priority];
+                    const overdueTask = isOverdue(t.dueDate, t.status);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => toggleDep(t.id)}
+                        className={cn(
+                          'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border-l-4 border border-border text-left transition-all text-sm',
+                          sCfg.border,
+                          selected
+                            ? 'bg-[#1D3461]/5 border-[#1D3461]/40 shadow-sm'
+                            : 'bg-card hover:bg-muted/40',
+                        )}
+                        data-testid={`dep-task-${t.id}`}
+                      >
+                        {/* Checkbox */}
+                        <div className={cn(
+                          'h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                          selected ? 'border-[#1D3461] bg-[#1D3461]' : 'border-muted-foreground/30',
+                        )}>
+                          {selected && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
+                        </div>
+
+                        {/* Task info */}
+                        <div className="flex-1 min-w-0">
+                          <p className={cn('text-xs font-medium truncate leading-snug', t.status === 'done' && 'line-through text-muted-foreground')}>
+                            {t.title}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className={cn('text-[9px] font-semibold px-1 py-0 rounded', pCfg.color)}>{pCfg.label}</span>
+                            {t.dueDate && (
+                              <span className={cn('text-[9px] flex items-center gap-0.5', overdueTask ? 'text-red-600 font-semibold' : 'text-muted-foreground')}>
+                                <Calendar className="h-2.5 w-2.5" />
+                                {overdueTask && '⚠ '}
+                                {fmtDate(t.dueDate)}
+                              </span>
+                            )}
+                            {t.assignedToName && (
+                              <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                                <User className="h-2.5 w-2.5" />{t.assignedToName}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status icon */}
+                        {t.status === 'done' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                        ) : overdueTask ? (
+                          <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" title="Overdue" />
+                        ) : t.status === 'inprogress' ? (
+                          <Clock className="h-3.5 w-3.5 text-[#1D3461] flex-shrink-0" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Task Form Dialog ───────────────────────────────────────────────────────
 
 interface TaskFormProps {
@@ -289,7 +417,14 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
             <TabsTrigger value="basic">Basic</TabsTrigger>
             <TabsTrigger value="timesheet">Timesheet</TabsTrigger>
             <TabsTrigger value="costs">Costs</TabsTrigger>
-            <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
+            <TabsTrigger value="dependencies" className="flex items-center gap-1.5">
+              Dependencies
+              {deps.length > 0 && (
+                <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-[#1D3461] text-white text-[9px] font-bold">
+                  {deps.length}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
@@ -530,57 +665,83 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
             </TabsContent>
 
             {/* ── DEPENDENCIES TAB ── */}
-            <TabsContent value="dependencies" className="space-y-4 mt-0">
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Select tasks that must be completed before this task can begin. Dependency tracking is informational — it doesn't block status changes.
+            <TabsContent value="dependencies" className="space-y-3 mt-0">
+              {/* Header info */}
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/40 border border-dashed">
+                <Link2 className="h-3.5 w-3.5 text-[#1D3461] mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Select tasks that must finish before this one can begin <span className="font-medium text-foreground">(Finish-to-Start)</span>. Dependency tracking is informational and does not block status changes.
                 </p>
-                {otherTasks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6 border rounded-lg">
-                    No other tasks in this project to depend on yet.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                    {otherTasks.map(t => {
-                      const selected = deps.includes(t.id);
-                      const sCfg = STATUS_CFG[t.status];
-                      const pCfg = PRIORITY_CFG[t.priority];
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => toggleDep(t.id)}
-                          className={cn(
-                            'w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all text-sm',
-                            selected
-                              ? 'border-[#1D3461] bg-[#1D3461]/5'
-                              : 'border-border hover:border-[#1D3461]/30 hover:bg-muted/30',
-                          )}
-                        >
-                          <div className={cn('h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0', selected ? 'border-[#1D3461] bg-[#1D3461]' : 'border-muted-foreground/40')}>
-                            {selected && <CheckCircle2 className="h-3 w-3 text-white" />}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium truncate text-xs">{t.title}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', sCfg.color)}>{sCfg.label}</span>
-                              <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>{pCfg.label}</span>
-                            </div>
-                          </div>
-                          {t.assignedToName && (
-                            <div className="h-5 w-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-                              {t.assignedToName.charAt(0)}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {deps.length > 0 && (
-                  <p className="text-xs text-[#1D3461] font-medium">{deps.length} dependenc{deps.length === 1 ? 'y' : 'ies'} selected</p>
-                )}
               </div>
+
+              {otherTasks.length === 0 ? (
+                /* Empty state */
+                <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed rounded-lg gap-2">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <Link2 className="h-5 w-5 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">No other tasks yet</p>
+                  <p className="text-xs text-muted-foreground/70 text-center max-w-[220px]">
+                    Create more tasks in this project and they'll appear here as dependency options.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Search + grouped list */}
+                  <DepSearchInput otherTasks={otherTasks} deps={deps} toggleDep={toggleDep} />
+
+                  {/* Selected tasks summary strip */}
+                  {deps.length > 0 && (
+                    <div className="rounded-lg border border-[#1D3461]/30 bg-[#1D3461]/5 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-[#1D3461] flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          {deps.length} dependenc{deps.length === 1 ? 'y' : 'ies'} selected
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setDeps([])}
+                          className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                      {/* Progress of selected deps */}
+                      {(() => {
+                        const selectedTasks = otherTasks.filter(t => deps.includes(t.id));
+                        const doneCount = selectedTasks.filter(t => t.status === 'done').length;
+                        const pct = deps.length > 0 ? Math.round((doneCount / deps.length) * 100) : 0;
+                        return (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                              <span>{doneCount} of {deps.length} completed</span>
+                              <span className={cn('font-semibold', pct === 100 ? 'text-emerald-600' : 'text-amber-600')}>{pct}%</span>
+                            </div>
+                            <Progress value={pct} className="h-1.5" />
+                          </div>
+                        );
+                      })()}
+                      {/* Chips of selected */}
+                      <div className="flex flex-wrap gap-1">
+                        {otherTasks.filter(t => deps.includes(t.id)).map(t => (
+                          <span key={t.id} className={cn(
+                            'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border',
+                            t.status === 'done'
+                              ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300'
+                              : 'bg-[#1D3461]/10 text-[#1D3461] border-[#1D3461]/30 dark:text-blue-300',
+                          )}>
+                            {t.status === 'done' ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
+                            <span className="max-w-[120px] truncate">{t.title}</span>
+                            <button type="button" onClick={() => toggleDep(t.id)} className="hover:text-destructive ml-0.5">
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </TabsContent>
           </div>
         </Tabs>
@@ -932,59 +1093,133 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
 
             {/* ── DEPENDENCIES ── */}
             <TabsContent value="dependencies" className="space-y-4 mt-0">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    This task depends on ({depTasks.length})
-                  </p>
-                  {depTasks.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-3 border rounded-lg text-center">No dependencies</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {depTasks.map(t => (
-                        <div key={t.id} className={cn('flex items-center gap-3 px-3 py-2 rounded-lg border text-sm', STATUS_CFG[t.status].colBg)}>
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              {/* Health summary banner */}
+              {depTasks.length > 0 && (() => {
+                const doneCount = depTasks.filter(t => t.status === 'done').length;
+                const overdueCount = depTasks.filter(t => isOverdue(t.dueDate, t.status)).length;
+                const pct = Math.round((doneCount / depTasks.length) * 100);
+                const allClear = doneCount === depTasks.length;
+                return (
+                  <div className={cn(
+                    'rounded-lg border p-3 space-y-2',
+                    allClear
+                      ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800'
+                      : overdueCount > 0
+                      ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-900'
+                      : 'bg-amber-50 border-amber-200 dark:bg-amber-900/10 dark:border-amber-900',
+                  )}>
+                    <div className="flex items-center justify-between">
+                      <p className={cn('text-xs font-semibold flex items-center gap-1',
+                        allClear ? 'text-emerald-700 dark:text-emerald-300' : overdueCount > 0 ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300',
+                      )}>
+                        {allClear
+                          ? <><CheckCircle2 className="h-3.5 w-3.5" /> All prerequisites complete</>
+                          : overdueCount > 0
+                          ? <><AlertTriangle className="h-3.5 w-3.5" /> {overdueCount} overdue prerequisite{overdueCount !== 1 ? 's' : ''}</>
+                          : <><Clock className="h-3.5 w-3.5" /> {depTasks.length - doneCount} prerequisite{depTasks.length - doneCount !== 1 ? 's' : ''} pending</>}
+                      </p>
+                      <span className={cn('text-xs font-bold', allClear ? 'text-emerald-600' : 'text-amber-600')}>{pct}%</span>
+                    </div>
+                    <Progress value={pct} className="h-1.5" />
+                    <p className="text-[10px] text-muted-foreground">{doneCount} of {depTasks.length} completed</p>
+                  </div>
+                );
+              })()}
+
+              {/* "Depends on" section */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  Prerequisites — this task depends on ({depTasks.length})
+                </p>
+                {depTasks.length === 0 ? (
+                  <div className="flex flex-col items-center py-5 border-2 border-dashed rounded-lg gap-1">
+                    <Link2 className="h-4 w-4 text-muted-foreground/40" />
+                    <p className="text-xs text-muted-foreground">No prerequisites set</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {depTasks.map(t => {
+                      const pCfg = PRIORITY_CFG[t.priority];
+                      const overdueTask = isOverdue(t.dueDate, t.status);
+                      return (
+                        <div key={t.id} className={cn(
+                          'flex items-center gap-3 px-3 py-2.5 rounded-lg border border-l-4 text-sm',
+                          STATUS_CFG[t.status].colBg,
+                          STATUS_CFG[t.status].border,
+                          overdueTask && t.status !== 'done' && 'border-red-200 border-l-red-500 bg-red-50/50 dark:bg-red-900/10',
+                        )}>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium truncate">{t.title}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className={cn('text-xs font-medium truncate', t.status === 'done' && 'line-through text-muted-foreground')}>{t.title}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                               <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_CFG[t.status].color)}>{STATUS_CFG[t.status].label}</span>
-                              {t.assignedToName && <span className="text-[10px] text-muted-foreground">{t.assignedToName}</span>}
+                              <span className={cn('text-[9px] font-semibold px-1 rounded', pCfg.color)}>{pCfg.label}</span>
+                              {t.dueDate && (
+                                <span className={cn('text-[9px] flex items-center gap-0.5', overdueTask && t.status !== 'done' ? 'text-red-600 font-semibold' : 'text-muted-foreground')}>
+                                  <Calendar className="h-2.5 w-2.5" />
+                                  {overdueTask && t.status !== 'done' ? '⚠ ' : ''}{fmtDate(t.dueDate)}
+                                </span>
+                              )}
+                              {t.assignedToName && (
+                                <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                                  <User className="h-2.5 w-2.5" />{t.assignedToName}
+                                </span>
+                              )}
                             </div>
                           </div>
                           {t.status === 'done' ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                          ) : overdueTask ? (
+                            <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                          ) : t.status === 'inprogress' ? (
+                            <Clock className="h-4 w-4 text-[#1D3461] flex-shrink-0" />
                           ) : (
-                            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                            <Circle className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    Tasks blocked by this ({blockingTasks.length})
-                  </p>
-                  {blockingTasks.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-3 border rounded-lg text-center">No tasks depend on this</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {blockingTasks.map(t => (
-                        <div key={t.id} className={cn('flex items-center gap-3 px-3 py-2 rounded-lg border text-sm', STATUS_CFG[t.status].colBg)}>
-                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              {/* "Blocks" section */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Blocks — tasks waiting on this ({blockingTasks.length})
+                </p>
+                {blockingTasks.length === 0 ? (
+                  <div className="flex items-center justify-center py-4 border-2 border-dashed rounded-lg">
+                    <p className="text-xs text-muted-foreground">No tasks are waiting on this one</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {blockingTasks.map(t => {
+                      const thisIsDone = task.status === 'done';
+                      return (
+                        <div key={t.id} className={cn(
+                          'flex items-center gap-3 px-3 py-2.5 rounded-lg border border-l-4 text-sm',
+                          STATUS_CFG[t.status].colBg,
+                          STATUS_CFG[t.status].border,
+                        )}>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium truncate">{t.title}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_CFG[t.status].color)}>{STATUS_CFG[t.status].label}</span>
-                              {t.assignedToName && <span className="text-[10px] text-muted-foreground">{t.assignedToName}</span>}
+                              {t.assignedToName && <span className="text-[9px] text-muted-foreground flex items-center gap-0.5"><User className="h-2.5 w-2.5" />{t.assignedToName}</span>}
                             </div>
                           </div>
+                          {!thisIsDone && (
+                            <span className="text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full px-1.5 py-0.5 font-medium flex-shrink-0">
+                              Waiting
+                            </span>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </TabsContent>
           </div>
