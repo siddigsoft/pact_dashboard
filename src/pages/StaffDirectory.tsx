@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
 import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/context/user/UserContext";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import {
@@ -980,7 +981,9 @@ function FinSummaryCard({
 ══════════════════════════════════════════════════════════════ */
 export default function StaffDirectory() {
   const { toast } = useToast();
+  const { currentUser } = useUser();
   const { isUserOnline, isConnected, onlineUserIds } = useGlobalPresence();
+  const canAccessDepts = ["admin", "super_admin", "superadmin", "superAdmin"].includes(currentUser?.role ?? "");
   const [profiles, setProfiles]          = useState<StaffProfile[]>([]);
   const [dbHubs, setDbHubs]              = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]            = useState(true);
@@ -1594,14 +1597,16 @@ export default function StaffDirectory() {
             description="View all staff profiles across field operations. The Directory tab shows live online status and device info. Bank Accounts shows full payment details (both web and mobile entries). Capacity shows headcount breakdown by Hub, State, and Role. Online Now shows who is currently active."
             descriptionAr="عرض جميع ملفات تعريف الموظفين عبر العمليات الميدانية. يعرض حساباتهم البنكية وحالتهم الإلكترونية ومعلومات الجهاز وتفاصيل التحصيل."
           />
-          <Link
-            to="/departments"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline whitespace-nowrap"
-            data-testid="link-departments"
-          >
-            <Building2 className="h-3.5 w-3.5" />
-            View Departments
-          </Link>
+          {canAccessDepts && (
+            <Link
+              to="/departments"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline whitespace-nowrap"
+              data-testid="link-departments"
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              View Departments
+            </Link>
+          )}
         </div>
 
         {/* ── Stats row ── */}

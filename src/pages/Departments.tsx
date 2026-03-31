@@ -89,7 +89,7 @@ async function sendDeptNotification(opts: {
   messageEn: string;
   messageAr: string;
   entityId: string;
-  triggeredBy: string;
+  triggeredBy: string | null;
 }) {
   const { error: notifError } = await supabase.from("notifications").insert({
     event_type: "department_update",
@@ -190,7 +190,7 @@ function DeptFormDialog({
               titleAr: `أنت الآن مدير قسم: ${name}`,
               messageEn: `You have been assigned as the department manager of "${name}". You can view your department and team members in the Departments page.`,
               messageAr: `تم تعيينك مديراً لقسم "${name}".`,
-              entityId: existing.id, triggeredBy: currentUser?.id ?? "",
+              entityId: existing.id, triggeredBy: currentUser?.id ?? null,
             });
           }
         }
@@ -207,7 +207,7 @@ function DeptFormDialog({
               titleAr: `تم تعيينك لإدارة قسم: ${name}`,
               messageEn: `A new department "${name}" has been created and you have been assigned as its manager.`,
               messageAr: `تم إنشاء قسم جديد "${name}" وتعيينك مديراً له.`,
-              entityId, triggeredBy: currentUser?.id ?? "",
+              entityId, triggeredBy: currentUser?.id ?? null,
             });
           }
         }
@@ -331,7 +331,7 @@ function MoveEmployeeDialog({
         messageEn: dept ? `Your department assignment has been updated to "${dept.name}".` : "You have been unassigned from your current department.",
         messageAr: dept ? `تم تحديث قسمك إلى "${dept.name}".` : "تمت إزالتك من قسمك الحالي.",
         entityId: newDeptId ?? "none",
-        triggeredBy: currentUser?.id ?? "",
+        triggeredBy: currentUser?.id ?? null,
       });
 
       toast({ title: "Employee moved successfully" });
