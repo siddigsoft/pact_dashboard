@@ -227,7 +227,7 @@ function PersonalTaskCard({ task, onStatusChange, onEdit, onDelete }: PersonalTa
           {task.dueDate && (
             <span className={cn(
               'text-[10px] flex items-center gap-0.5',
-              overdue ? 'text-red-600 font-semibold' : isToday(parseISO(task.dueDate)) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+              overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
             )}>
               <Calendar className="h-2.5 w-2.5" />
               {overdue && '⚠ '}{fmtDate(task.dueDate)}
@@ -358,7 +358,7 @@ function ProjectTaskCard({ task, onStatusChange, isUpdating }: ProjectTaskCardPr
           {task.dueDate && (
             <span className={cn(
               'text-[10px] flex items-center gap-0.5',
-              overdue ? 'text-red-600 font-semibold' : isToday(parseISO(task.dueDate)) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+              overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
             )}>
               <Calendar className="h-2.5 w-2.5" />
               {overdue && '⚠ '}{fmtDate(task.dueDate)}
@@ -877,7 +877,7 @@ function SmartInsightsPanel({ stats, totalPersonal, totalProject, onFilter, onDi
   if (total > 0 && stats.overdue === 0 && stats.dueToday === 0)
     insights.push({ id: 'clear', icon: <Zap className="h-4 w-4" />, text: 'All caught up!', sub: 'No overdue or due-today tasks — momentum is strong', color: 'border-[#1D3461]/20 bg-[#1D3461]/5 dark:bg-[#1D3461]/20 text-[#1D3461] dark:text-blue-300' });
 
-  insights.push({ id: 'tip-board', icon: <LayoutGrid className="h-4 w-4" />, text: 'Try the Kanban Board view', sub: 'Switch to board mode to drag & visualize task flow', color: 'border-violet-200 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300' });
+  insights.push({ id: 'tip-board', icon: <LayoutGrid className="h-4 w-4" />, text: 'Try the Kanban Board view', sub: 'Switch to board mode to see tasks as columns — great for visualising flow', color: 'border-violet-200 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300' });
 
   if (insights.length === 0) return null;
 
@@ -1126,7 +1126,13 @@ export default function MyTasks() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [personalView, setPersonalView] = useState<'list' | 'board'>('list');
-  const [showInsights, setShowInsights] = useState(true);
+  const [showInsights, setShowInsightsRaw] = useState<boolean>(() => {
+    try { return localStorage.getItem('pact_mytasks_insights') !== 'false'; } catch { return true; }
+  });
+  const setShowInsights = (v: boolean) => {
+    try { localStorage.setItem('pact_mytasks_insights', v ? 'true' : 'false'); } catch {}
+    setShowInsightsRaw(v);
+  };
   const [showTeam, setShowTeam] = useState(true);
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy');
@@ -1137,7 +1143,8 @@ export default function MyTasks() {
     const dueToday = allActive.filter(t => t.dueDate && isToday(parseISO(t.dueDate)) && t.status !== 'done' && t.status !== 'cancelled').length;
     const dueWeek = allActive.filter(t => t.dueDate && isThisWeek(parseISO(t.dueDate), { weekStartsOn: 0 }) && t.status !== 'done' && t.status !== 'cancelled').length;
     const overdue = allActive.filter(t => isOverdue(t.dueDate, t.status)).length;
-    const done = [...personalTasks].filter(t => t.status === 'done').length;
+    const done = personalTasks.filter(t => t.status === 'done').length
+      + projectTasks.filter((t: any) => t.status === 'done').length;
     return { dueToday, dueWeek, overdue, done };
   }, [personalTasks, projectTasks]);
 

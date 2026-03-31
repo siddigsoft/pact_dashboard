@@ -103,7 +103,7 @@ function fmtHours(h: number | null) {
 
 function fmtCost(c: number | null) {
   if (c === null || c === undefined) return '—';
-  return `$${c.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return c.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 // ── Assignee Selector ─────────────────────────────────────────────────────
@@ -334,6 +334,19 @@ interface TaskFormProps {
   allTasks: FieldTask[];
 }
 
+function getReachableViaDeps(taskId: string, allTasks: FieldTask[]): Set<string> {
+  const visited = new Set<string>();
+  const queue = [taskId];
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    if (visited.has(curr)) continue;
+    visited.add(curr);
+    const t = allTasks.find(x => x.id === curr);
+    if (t) t.dependencies.forEach(d => { if (!visited.has(d)) queue.push(d); });
+  }
+  return visited;
+}
+
 function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks }: TaskFormProps) {
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
@@ -376,7 +389,14 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   }, [open, initial]);
 
   const isEditing = !!initial;
-  const otherTasks = allTasks.filter(t => t.id !== initial?.id);
+  const otherTasks = useMemo(() => {
+    if (!initial?.id) return allTasks.filter(t => t.id !== initial?.id);
+    return allTasks.filter(t => {
+      if (t.id === initial.id) return false;
+      if (getReachableViaDeps(t.id, allTasks).has(initial.id)) return false;
+      return true;
+    });
+  }, [allTasks, initial?.id]);
 
   const toggleDep = (id: string) =>
     setDeps(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]);
@@ -600,7 +620,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
             {/* ── COSTS TAB ── */}
             <TabsContent value="costs" className="space-y-4 mt-0">
               <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
-                <p className="text-xs text-muted-foreground">Track the budget and actual spend for this task (USD).</p>
+                <p className="text-xs text-muted-foreground">Track the budget and actual spend for this task (in project currency).</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
