@@ -7,22 +7,19 @@ ALTER TABLE public.personal_tasks
   ADD COLUMN IF NOT EXISTS reward_set_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 -- 2. Unique constraint: one materialized task per user+template+date
---    Prevents duplicate task creation and closes race-condition abuse vectors.
 CREATE UNIQUE INDEX IF NOT EXISTS personal_tasks_template_user_date_uidx
   ON public.personal_tasks (template_id, assigned_to, daily_task_date)
   WHERE template_id IS NOT NULL;
 
--- 3. Trigger function: only admins (role IN ('admin','superAdmin','super_admin'))
---    or trusted SECURITY DEFINER functions can set/update reward fields.
---
---    Trusted context detection: the RPC sets app.trusted_materialise='true' (LOCAL)
---    before inserting, and the trigger checks this session variable.
---    Using a session variable (set_config) avoids auth.uid() IS NULL assumptions
---    that are unreliable in Supabase (auth.uid() remains set even in SECURITY DEFINER).
+-- 3. Trigger function: only admins can set/update reward fields.
+--    Role normalization: strips underscores/spaces, lowercases → handles all variants:
+--    'admin', 'superAdmin', 'super_admin', 'superadmin' all map to 'admin'/'superadmin'.
+--    Trusted context: app.trusted_materialise session variable (set by SECURITY DEFINER RPC).
 CREATE OR REPLACE FUNCTION public.guard_task_reward_fields()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $func$
 DECLARE
   caller_role text;
+  caller_role_norm text;
   reward_being_set boolean;
   caller_uid uuid;
   is_trusted_materialise boolean;
@@ -41,7 +38,7 @@ BEGIN
     is_trusted_materialise := (current_setting('app.trusted_materialise', true) = 'true');
 
     IF is_trusted_materialise THEN
-      -- RPC verified eligibility and set context; allow reward through
+      -- RPC verified eligibility; allow reward through
       RETURN NEW;
     END IF;
 
@@ -51,7 +48,11 @@ BEGIN
     FROM public.profiles p
     WHERE p.id = caller_uid;
 
-    IF caller_role IS NULL OR caller_role NOT IN ('admin', 'superAdmin', 'super_admin') THEN
+    -- Normalize role: lowercase + strip underscores/spaces
+    -- Canonical admin roles: 'admin', 'superadmin' (covers superAdmin, super_admin, superadmin)
+    caller_role_norm := lower(regexp_replace(COALESCE(caller_role, ''), '[_\s]', '', 'g'));
+
+    IF caller_role_norm NOT IN ('admin', 'superadmin') THEN
       IF TG_OP = 'INSERT' THEN
         -- Non-admin direct insert: strip reward fields silently
         NEW.completion_reward_amount := NULL;
@@ -63,7 +64,7 @@ BEGIN
       END IF;
     END IF;
 
-    -- Admin is setting/updating a reward: record who authorized it
+    -- Admin: record who authorized it
     NEW.reward_set_by := caller_uid;
   END IF;
 
@@ -78,15 +79,12 @@ CREATE TRIGGER task_reward_fields_guard
   FOR EACH ROW EXECUTE FUNCTION public.guard_task_reward_fields();
 
 -- 5. Trusted server-side materialisation RPC for daily recurring tasks.
---    Security properties:
 --    - SECURITY DEFINER: runs as DB owner for privileged table access
---    - Zero caller-supplied parameters: user identity, role, and department ALL read
---      from the caller's auth.uid() profiles row (cannot be spoofed by caller)
---    - Reward amounts read from daily_task_definitions row (not from caller)
+--    - Zero caller-supplied parameters: identity, role, dept all from auth.uid() profile row
+--    - Reward amounts from template rows (not from caller)
 --    - Sets app.trusted_materialise='true' (transaction-LOCAL) before inserts
---      so the reward-guard trigger allows reward fields through
---    - Only eligible templates (role+dept match from profile) are materialised
---    - Deduplication enforced in SQL + unique index
+--    - Only eligible templates (role+dept match) are materialised
+--    - Deduplication: SQL check + unique index
 CREATE OR REPLACE FUNCTION public.materialise_daily_tasks_for_user()
 RETURNS TABLE(task_id uuid, task_title text, reward_amount numeric)
 LANGUAGE plpgsql
@@ -103,13 +101,11 @@ DECLARE
   existing_count bigint;
   created_id uuid;
 BEGIN
-  -- Enforce: must be called by an authenticated user
   caller_uid := auth.uid();
   IF caller_uid IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  -- Derive role and department from the profile row (trusted, not caller input)
   SELECT p.role, p.department_id
   INTO caller_role, caller_dept
   FROM profiles p
@@ -121,8 +117,7 @@ BEGIN
 
   role_norm := lower(regexp_replace(caller_role, '[_\s]', '', 'g'));
 
-  -- Mark this transaction as trusted so the reward guard trigger allows reward fields
-  -- for the inserts we are about to do (transaction-LOCAL, resets after commit/rollback)
+  -- Mark this transaction as trusted so reward guard trigger allows reward fields
   PERFORM set_config('app.trusted_materialise', 'true', true);
 
   FOR rec IN
@@ -130,10 +125,8 @@ BEGIN
     FROM daily_task_definitions d
     WHERE d.active = true
   LOOP
-    -- Recurrence day check (weekly = Monday only)
     IF rec.recurrence = 'weekly' AND EXTRACT(DOW FROM today) <> 1 THEN CONTINUE; END IF;
 
-    -- Role match (against caller's actual role from profile, not caller-supplied)
     IF rec.role_targets IS NOT NULL AND array_length(rec.role_targets, 1) > 0 THEN
       IF NOT EXISTS (
         SELECT 1 FROM unnest(rec.role_targets) r
@@ -141,12 +134,10 @@ BEGIN
       ) THEN CONTINUE; END IF;
     END IF;
 
-    -- Department match (against caller's actual department from profile)
     IF rec.department_id IS NOT NULL THEN
       IF rec.department_id IS DISTINCT FROM caller_dept THEN CONTINUE; END IF;
     END IF;
 
-    -- Deduplication (also enforced by unique index)
     SELECT COUNT(*) INTO existing_count
     FROM personal_tasks
     WHERE template_id = rec.id
@@ -155,7 +146,6 @@ BEGIN
 
     IF existing_count > 0 THEN CONTINUE; END IF;
 
-    -- Materialise (reward from template row, not from caller)
     INSERT INTO personal_tasks (
       user_id, assigned_to,
       title, description, priority, status, category,
@@ -177,33 +167,30 @@ BEGIN
     RETURN NEXT;
   END LOOP;
 
-  -- Clear trusted context (belt-and-suspenders; already transaction-scoped)
   PERFORM set_config('app.trusted_materialise', 'false', true);
 END;
 $func$;
 
--- Grant execute to authenticated users only
 REVOKE ALL ON FUNCTION public.materialise_daily_tasks_for_user() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.materialise_daily_tasks_for_user() TO authenticated;
 
--- Drop old parameterised version if it exists (replaced by zero-param secure version)
 DROP FUNCTION IF EXISTS public.materialise_daily_tasks_for_user(uuid, text, uuid);
 
 COMMENT ON COLUMN public.personal_tasks.reward_set_by IS
-  'UUID of the admin who authorized the completion reward. NULL for server-materialised template tasks. Populated by guard_task_reward_fields trigger when an admin sets a reward.';
+  'UUID of the admin who authorized the completion reward. NULL for server-materialised template tasks. Populated by guard_task_reward_fields trigger.';
 
 COMMENT ON FUNCTION public.guard_task_reward_fields() IS
   'Prevents non-admin users from setting/changing task reward fields.
-   Trusted materialisation context: checks app.trusted_materialise session variable (set by materialise_daily_tasks_for_user RPC).
-   Admin callers set reward_set_by. Non-admin direct inserts have reward stripped. Non-admin updates raise exception.';
+   Trusted context: app.trusted_materialise session variable (set by materialise_daily_tasks_for_user).
+   Role check: normalized via lower+strip_underscore to handle admin/superAdmin/super_admin/superadmin.
+   Admin callers: reward_set_by set. Non-admin inserts: reward stripped. Non-admin updates: exception.';
 
 COMMENT ON FUNCTION public.materialise_daily_tasks_for_user() IS
-  'SECURITY DEFINER function. Zero caller-supplied parameters: user id, role, and department all
-   read from auth.uid() profile row. Reward amounts from template rows. Sets app.trusted_materialise
-   session variable (transaction-LOCAL) so the reward guard trigger allows reward fields.
-   Only eligible templates are materialised for the authenticated caller. Dedup via SQL + unique index.';
+  'SECURITY DEFINER. Zero caller params: uid/role/dept from auth.uid() profile row.
+   Reward from template rows. Sets app.trusted_materialise (transaction-LOCAL).
+   Dedup via SQL + unique index.';
 
--- NOTE: credit-task-reward Edge Function (v3) deployed separately with authorization:
---   - reward_set_by IS NOT NULL: admin-authorized credit (path 1)
---   - reward_set_by IS NULL + template_id IS NOT NULL: template task; verifies reward amount
---     matches daily_task_definitions row at credit time (double-verification)
+-- NOTE: credit-task-reward Edge Function (v4):
+--   - reward_set_by IS NOT NULL: admin-authorized (path 1)
+--   - reward_set_by IS NULL + template_id IS NOT NULL: materialized by trusted RPC;
+--     stored amount is authoritative (snapshot semantics, no re-verification of template)
