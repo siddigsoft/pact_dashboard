@@ -77,9 +77,12 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 
     try {
       final userId = _supabase.auth.currentUser?.id ?? '';
+      final userProfile = ref.read(userProfileProvider).valueOrNull;
+      final fullName = userProfile?.fullName ?? '';
       final repo = ref.read(projectRepositoryProvider);
       final list = await repo.fetchProjects(
         userId: userId,
+        fullName: fullName,
         isAdmin: _isAdmin,
         page: 0,
         pageSize: _pageSize,
@@ -134,9 +137,12 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
     setState(() => _isLoadingMore = true);
     try {
       final userId = _supabase.auth.currentUser?.id ?? '';
+      final userProfile = ref.read(userProfileProvider).valueOrNull;
+      final fullName = userProfile?.fullName ?? '';
       final repo = ref.read(projectRepositoryProvider);
       final list = await repo.fetchProjects(
         userId: userId,
+        fullName: fullName,
         isAdmin: _isAdmin,
         page: _page + 1,
         pageSize: _pageSize,

@@ -740,6 +740,13 @@ class _MyAppState extends State<MyApp> {
             }
 
             // Only for routes not defined in routes map
+            // Project list and detail routes (dynamic path: /projects/<id>)
+            final _routeName = settings.name ?? '';
+            if (_routeName == RouteNames.projectsList ||
+                _routeName.startsWith('/projects/')) {
+              return RouteGenerator.generateRoute(settings);
+            }
+
             switch (settings.name) {
               // Professional call screen routes
               case '/incoming-call-professional':
