@@ -52,9 +52,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (projectsQuery.isError && projectsQuery.error) {
-      const queryError = projectsQuery.error instanceof Error ? projectsQuery.error.message : 'Failed to fetch projects';
-      setError(queryError);
+      const errMsg = projectsQuery.error instanceof Error ? projectsQuery.error.message : 'Failed to fetch projects';
+      setError(errMsg);
       console.error('[ProjectContext] Failed to fetch projects:', projectsQuery.error);
+      toast({ title: 'Error', description: errMsg, variant: 'destructive' });
     } else if (projectsQuery.data !== undefined && !projectsQuery.isError) {
       setError(null);
     }

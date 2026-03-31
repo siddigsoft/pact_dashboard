@@ -38,6 +38,7 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
 }
 
 async function fetchProjects(): Promise<Project[]> {
+  // Fetch projects first (flat — avoids PostgREST nested-select schema-cache issues)
   const { data: projectsData, error: projectsError } = await supabase
     .from('projects')
     .select(`
@@ -58,61 +59,67 @@ async function fetchProjects(): Promise<Project[]> {
       location,
       team,
       created_at,
-      updated_at,
-      project_activities (
-        id,
-        name,
-        description,
-        start_date,
-        end_date,
-        status,
-        is_active,
-        assigned_to,
-        sub_activities (
-          id,
-          name,
-          description,
-          status,
-          is_active,
-          due_date,
-          assigned_to
-        )
-      )
-    `);
+      updated_at
+    `)
+    .order('created_at', { ascending: false });
 
   if (projectsError) throw new Error(projectsError.message);
+  if (!projectsData || projectsData.length === 0) return [];
 
-  const formattedProjects: Project[] = (projectsData || []).map((dbProject: any) => {
-    const project = mapDbProjectToProject(dbProject);
+  const projectIds = projectsData.map((p: any) => p.id);
 
-    const activities: ProjectActivity[] = (dbProject.project_activities || []).map((dbActivity: any) => {
-      const subActivities: SubActivity[] = (dbActivity.sub_activities || []).map((dbSub: any) => ({
-        id: dbSub.id,
-        name: dbSub.name,
-        description: dbSub.description,
-        status: dbSub.status,
-        isActive: dbSub.is_active,
-        dueDate: dbSub.due_date,
-        assignedTo: dbSub.assigned_to,
-      }));
+  // Fetch activities separately
+  const { data: activitiesData } = await supabase
+    .from('project_activities')
+    .select('id, project_id, name, description, start_date, end_date, status, is_active, assigned_to')
+    .in('project_id', projectIds);
 
-      return {
-        id: dbActivity.id,
-        name: dbActivity.name,
-        description: dbActivity.description,
-        startDate: dbActivity.start_date,
-        endDate: dbActivity.end_date,
-        status: dbActivity.status,
-        isActive: dbActivity.is_active,
-        assignedTo: dbActivity.assigned_to,
-        subActivities,
-      };
+  const activityIds = (activitiesData || []).map((a: any) => a.id);
+
+  // Fetch sub-activities separately
+  const { data: subActivitiesData } = activityIds.length > 0
+    ? await supabase
+        .from('sub_activities')
+        .select('id, activity_id, name, description, status, is_active, due_date, assigned_to')
+        .in('activity_id', activityIds)
+    : { data: [] };
+
+  // Group sub-activities by activity_id
+  const subByActivity: Record<string, SubActivity[]> = {};
+  for (const dbSub of (subActivitiesData || [])) {
+    if (!subByActivity[dbSub.activity_id]) subByActivity[dbSub.activity_id] = [];
+    subByActivity[dbSub.activity_id].push({
+      id: dbSub.id,
+      name: dbSub.name,
+      description: dbSub.description,
+      status: dbSub.status,
+      isActive: dbSub.is_active,
+      dueDate: dbSub.due_date,
+      assignedTo: dbSub.assigned_to,
     });
+  }
 
-    return { ...project, activities } as Project;
-  });
+  // Group activities by project_id
+  const activitiesByProject: Record<string, ProjectActivity[]> = {};
+  for (const dbActivity of (activitiesData || [])) {
+    if (!activitiesByProject[dbActivity.project_id]) activitiesByProject[dbActivity.project_id] = [];
+    activitiesByProject[dbActivity.project_id].push({
+      id: dbActivity.id,
+      name: dbActivity.name,
+      description: dbActivity.description,
+      startDate: dbActivity.start_date,
+      endDate: dbActivity.end_date,
+      status: dbActivity.status,
+      isActive: dbActivity.is_active,
+      assignedTo: dbActivity.assigned_to,
+      subActivities: subByActivity[dbActivity.id] ?? [],
+    });
+  }
 
-  return formattedProjects;
+  return projectsData.map((dbProject: any) => ({
+    ...mapDbProjectToProject(dbProject),
+    activities: activitiesByProject[dbProject.id] ?? [],
+  })) as Project[];
 }
 
 const STALE_MS = 60 * 1000;
