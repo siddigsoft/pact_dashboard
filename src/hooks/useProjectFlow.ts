@@ -29,6 +29,12 @@ export interface CustomStageEntry {
   plannedStart?: string | null;
   plannedEnd?: string | null;
   dueDate?: string | null;
+  /** IDs of stages that must be completed before this stage can start */
+  dependencies?: string[];
+  /** Mark this stage as a project milestone */
+  isMilestone?: boolean;
+  /** Manual % complete override (0-100). If null, derived from checklist. */
+  percentComplete?: number | null;
 }
 
 export interface UseProjectFlowReturn {
@@ -58,6 +64,12 @@ export interface UseProjectFlowReturn {
   updateCustomStages: (customStages: CustomStageEntry[]) => Promise<void>;
   getStageStatus: (stageId: string) => 'completed' | 'current' | 'skipped' | 'upcoming';
   isStageCompleted: (stageId: string) => boolean;
+  /**
+   * Returns labels of incomplete dependency stages that are blocking this stage.
+   * Empty array = not blocked.
+   */
+  getBlockedBy: (stageId: string) => string[];
+  isStageBlocked: (stageId: string) => boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -119,6 +131,7 @@ async function sendStageNotifications(
   teamMembers: string[],
   advancedByName: string,
   advancedById: string,
+  isMilestone = false,
 ) {
   if (!teamMembers.length) return;
 
@@ -132,17 +145,31 @@ async function sendStageNotifications(
 
   const recipientIds = profiles.map((p: any) => p.id);
 
+  const eventType = isMilestone ? 'project_milestone_reached' : 'project_stage_advanced';
+  const titleEn = isMilestone
+    ? `Milestone Reached: ${projectName}`
+    : `Project Stage Advanced: ${projectName}`;
+  const titleAr = isMilestone
+    ? `تم الوصول إلى مرحلة رئيسية: ${projectName}`
+    : `تقدم مرحلة المشروع: ${projectName}`;
+  const msgEn = isMilestone
+    ? `${advancedByName} completed milestone "${nextStageLabel}" in "${projectName}"`
+    : `${advancedByName} advanced "${projectName}" to stage: ${nextStageLabel}`;
+  const msgAr = isMilestone
+    ? `أكمل ${advancedByName} المرحلة الرئيسية "${nextStageLabel}" في "${projectName}"`
+    : `قام ${advancedByName} بتقديم "${projectName}" إلى المرحلة: ${nextStageLabel}`;
+
   supabase.functions.invoke('dispatch-notification', {
     body: {
-      event_type: 'project_stage_advanced',
+      event_type: eventType,
       entity_type: 'project',
       entity_id: projectId,
-      priority: 'normal',
+      priority: isMilestone ? 'high' : 'normal',
       recipient_ids: recipientIds,
-      title_en: `Project Stage Advanced: ${projectName}`,
-      title_ar: `تقدم مرحلة المشروع: ${projectName}`,
-      message_en: `${advancedByName} advanced "${projectName}" to stage: ${nextStageLabel}`,
-      message_ar: `قام ${advancedByName} بتقديم "${projectName}" إلى المرحلة: ${nextStageLabel}`,
+      title_en: titleEn,
+      title_ar: titleAr,
+      message_en: msgEn,
+      message_ar: msgAr,
       triggered_by: advancedById,
       triggered_by_name: advancedByName,
       workflow_stage: nextStageLabel,
@@ -154,15 +181,15 @@ async function sendStageNotifications(
   const notifications = profiles.map((p: any) => ({
     recipient_id: p.id,
     user_id: p.id,
-    title_en: `Project Stage Advanced: ${projectName}`,
-    title_ar: `تقدم مرحلة المشروع: ${projectName}`,
-    message_en: `${advancedByName} advanced "${projectName}" to stage: ${nextStageLabel}`,
-    message_ar: `قام ${advancedByName} بتقديم "${projectName}" إلى المرحلة: ${nextStageLabel}`,
-    priority: 'normal',
+    title_en: titleEn,
+    title_ar: titleAr,
+    message_en: msgEn,
+    message_ar: msgAr,
+    priority: isMilestone ? 'high' : 'normal',
     action_url: `/projects/${projectId}`,
     entity_id: projectId,
     entity_type: 'project',
-    event_type: 'assignments',
+    event_type: eventType,
     status: 'pending',
     email_sent: false,
   }));
@@ -232,6 +259,27 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     [completedStageIds],
   );
 
+  /** Returns labels of incomplete dependency stages blocking this stage */
+  const getBlockedBy = useCallback(
+    (stageId: string): string[] => {
+      const entry = customEntries.find(e => e.id === stageId);
+      if (!entry?.dependencies?.length) return [];
+      return entry.dependencies
+        .filter(depId => !completedStageIds.has(depId))
+        .map(depId => {
+          const depEntry = customEntries.find(e => e.id === depId);
+          const depStage = allDefaultStages.find(s => s.id === depId);
+          return depEntry?.customLabel || depStage?.label || depId;
+        });
+    },
+    [customEntries, completedStageIds, allDefaultStages],
+  );
+
+  const isStageBlocked = useCallback(
+    (stageId: string): boolean => getBlockedBy(stageId).length > 0,
+    [getBlockedBy],
+  );
+
   const getStageStatus = useCallback(
     (stageId: string): 'completed' | 'current' | 'skipped' | 'upcoming' => {
       if (skippedIds.has(stageId)) return 'skipped';
@@ -248,8 +296,17 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       if (!currentUser?.id) throw new Error('Not authenticated');
       if (!canAdvance) throw new Error('You do not have permission');
 
+      // Check dependencies
+      const blockedBy = getBlockedBy(stageId);
+      if (blockedBy.length > 0) {
+        throw new Error(`This stage is blocked. Complete first: ${blockedBy.join(', ')}`);
+      }
+
       const stageToComplete = effectiveStages.find(s => s.id === stageId);
       if (!stageToComplete) throw new Error('Stage not found');
+
+      const entryForStage = customEntries.find(e => e.id === stageId);
+      const isMilestone = entryForStage?.isMilestone ?? false;
 
       // Mark this stage as complete in the log
       const { error: logError } = await supabase.from('project_flow_log').insert({
@@ -291,6 +348,26 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
           [...new Set(teamNames)],
           currentUser.fullName ?? 'A team member',
           currentUser.id,
+          false,
+        ).catch(() => {});
+      }
+
+      // Send milestone notification if this stage is a milestone
+      if (isMilestone) {
+        const teamNames = [
+          project.team?.projectManager,
+          ...(project.team?.members ?? []),
+          ...(project.team?.teamComposition?.map(m => m.name) ?? []),
+        ].filter((n): n is string => !!n && n !== currentUser.fullName);
+
+        sendStageNotifications(
+          project.id,
+          project.name,
+          stageToComplete.label,
+          [...new Set(teamNames)],
+          currentUser.fullName ?? 'A team member',
+          currentUser.id,
+          true,
         ).catch(() => {});
       }
     },
@@ -357,5 +434,7 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     updateCustomStages,
     getStageStatus,
     isStageCompleted,
+    getBlockedBy,
+    isStageBlocked,
   };
 }

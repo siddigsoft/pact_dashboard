@@ -32,6 +32,10 @@ import {
   Users,
   Circle,
   Link2,
+  Diamond,
+  Ban,
+  GitMerge,
+  Percent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -349,6 +353,83 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                       </div>
                     </div>
 
+                    {/* MS Project fields: Milestone + % Complete + Dependencies */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <Diamond className="h-3 w-3 text-amber-500" /> Milestone
+                        </Label>
+                        <div className="flex items-center gap-2 h-8">
+                          <Switch
+                            id={`milestone-${entry.id}`}
+                            checked={entry.isMilestone ?? false}
+                            onCheckedChange={v => updateEntry(entry.id, { isMilestone: v })}
+                          />
+                          <Label htmlFor={`milestone-${entry.id}`} className="text-xs text-muted-foreground cursor-pointer">
+                            {entry.isMilestone ? 'Yes — milestone stage' : 'No'}
+                          </Label>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                          <Percent className="h-3 w-3" /> % Complete
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number" min="0" max="100" placeholder="Auto"
+                            value={entry.percentComplete ?? ''}
+                            onChange={e => updateEntry(entry.id, { percentComplete: e.target.value ? Math.min(100, Math.max(0, parseInt(e.target.value))) : null })}
+                            className="h-8 text-sm w-24"
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Leave blank for auto</p>
+                      </div>
+                    </div>
+
+                    {/* Dependencies */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                        <GitMerge className="h-3 w-3" /> Must complete before this stage
+                      </Label>
+                      <div className="space-y-1.5 max-h-32 overflow-y-auto rounded-lg border border-border/60 p-2 bg-background">
+                        {customEntries.filter(e => e.id !== entry.id && !e.skipped).map(depEntry => {
+                          const depStageDef = allDefaultStages.find(s => s.id === depEntry.id);
+                          const depLabel = depEntry.customLabel || depStageDef?.label || depEntry.id;
+                          const isChecked = (entry.dependencies ?? []).includes(depEntry.id);
+                          return (
+                            <div key={depEntry.id} className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id={`dep-${entry.id}-${depEntry.id}`}
+                                checked={isChecked}
+                                onChange={e => {
+                                  const deps = entry.dependencies ?? [];
+                                  updateEntry(entry.id, {
+                                    dependencies: e.target.checked
+                                      ? [...deps, depEntry.id]
+                                      : deps.filter(d => d !== depEntry.id),
+                                  });
+                                }}
+                                className="h-3.5 w-3.5 rounded accent-[#1D3461] cursor-pointer"
+                              />
+                              <label htmlFor={`dep-${entry.id}-${depEntry.id}`} className="text-xs text-muted-foreground cursor-pointer truncate">
+                                {depLabel}
+                              </label>
+                            </div>
+                          );
+                        })}
+                        {customEntries.filter(e => e.id !== entry.id && !e.skipped).length === 0 && (
+                          <p className="text-[10px] text-muted-foreground italic text-center py-1">No other stages to depend on</p>
+                        )}
+                      </div>
+                      {(entry.dependencies?.length ?? 0) > 0 && (
+                        <p className="text-[10px] text-orange-600 flex items-center gap-1">
+                          <Ban className="h-3 w-3" /> Stage will be blocked until {entry.dependencies!.length} predecessor{entry.dependencies!.length > 1 ? 's are' : ' is'} complete
+                        </p>
+                      )}
+                    </div>
+
                     {/* Custom outputs */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -402,6 +483,7 @@ export function FlowTab({
     stageHistory, isLastGroup, canAdvance, canEditFlow,
     isAdvancing, isSavingCustom,
     completeStage, updateCustomStages, getStageStatus, isStageCompleted,
+    getBlockedBy, isStageBlocked,
   } = flow;
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -629,43 +711,81 @@ export function FlowTab({
             const overdue = isOverdueFn(dueDate || plannedEnd, status);
             const stageNotes = notes[stage.id] ?? '';
 
+            // MS Project features
+            const isMilestone = entry?.isMilestone ?? false;
+            const percentComplete = entry?.percentComplete ?? null;
+            const blockedBy = getBlockedBy(stage.id);
+            const blocked = blockedBy.length > 0 && status !== 'completed' && status !== 'skipped';
+            // WBS number: position among all non-skipped stages
+            const wbsNum = allDefaultStages.filter(s => getStageStatus(s.id) !== 'skipped').findIndex(s => s.id === stage.id) + 1;
+
             return (
               <div
                 key={stage.id}
                 className={cn(
                   'rounded-xl border border-l-4 transition-all duration-200',
-                  cfg.border, cfg.ring, cfg.bg,
-                  isCurrent && 'shadow-sm',
+                  blocked ? 'border-l-orange-400 border-orange-200 dark:border-orange-800 bg-orange-50/40 dark:bg-orange-900/10' : cn(cfg.border, cfg.ring, cfg.bg),
+                  isCurrent && !blocked && 'shadow-sm',
                   status === 'skipped' && 'opacity-60',
                 )}
                 data-testid={`flow-stage-${stage.id}`}
               >
                 {/* Card header */}
-                <button type="button" className="w-full text-left" onClick={() => hasDetails ? toggleExpand(stage.id) : undefined}>
+                <button type="button" className="w-full text-left" onClick={() => hasDetails || blocked ? toggleExpand(stage.id) : undefined}>
                   <div className="flex items-center gap-3 px-4 py-3.5">
-                    {/* Status icon */}
-                    <div className={cn('h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all', cfg.icon, isCurrent && 'ring-2 ring-[#1D3461]/20 ring-offset-1')}>
-                      {status === 'completed' ? <CheckCircle2 className="h-4 w-4" />
-                        : status === 'skipped' ? <SkipForward className="h-3.5 w-3.5" />
-                        : isCurrent ? <span className="h-2.5 w-2.5 rounded-full bg-white animate-pulse" />
-                        : <span className="text-[11px] font-bold">{idx + 1}</span>}
-                    </div>
+                    {/* Status icon — milestone shows diamond, blocked shows ban */}
+                    {isMilestone && status !== 'completed' ? (
+                      <div className={cn('h-8 w-8 flex items-center justify-center flex-shrink-0 transition-all rotate-45 rounded-sm border-2', blocked ? 'bg-orange-100 border-orange-400 dark:bg-orange-900/30' : cfg.icon, isCurrent && 'ring-2 ring-[#1D3461]/20 ring-offset-1')}>
+                        <span className="-rotate-45"><Diamond className="h-3.5 w-3.5" /></span>
+                      </div>
+                    ) : (
+                      <div className={cn('h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all', blocked ? 'bg-orange-100 border-orange-300 dark:bg-orange-900/20 text-orange-500' : cfg.icon, isCurrent && !blocked && 'ring-2 ring-[#1D3461]/20 ring-offset-1')}>
+                        {status === 'completed' ? <CheckCircle2 className="h-4 w-4" />
+                          : status === 'skipped' ? <SkipForward className="h-3.5 w-3.5" />
+                          : blocked ? <Ban className="h-3.5 w-3.5" />
+                          : isCurrent ? <span className="h-2.5 w-2.5 rounded-full bg-white animate-pulse" />
+                          : <span className="text-[11px] font-bold">{wbsNum > 0 ? wbsNum : idx + 1}</span>}
+                      </div>
+                    )}
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={cn('font-semibold text-sm leading-snug', status === 'skipped' && 'line-through text-muted-foreground', isCurrent && 'text-[#1D3461] dark:text-blue-200')}>
+                        {/* WBS prefix for non-skipped stages */}
+                        {status !== 'skipped' && wbsNum > 0 && (
+                          <span className="text-[10px] font-mono text-muted-foreground/60 flex-shrink-0">{wbsNum}.0</span>
+                        )}
+                        {isMilestone && (
+                          <Diamond className="h-3 w-3 text-amber-500 flex-shrink-0" title="Milestone" />
+                        )}
+                        <span className={cn('font-semibold text-sm leading-snug', status === 'skipped' && 'line-through text-muted-foreground', isCurrent && !blocked && 'text-[#1D3461] dark:text-blue-200', blocked && 'text-orange-700 dark:text-orange-300')}>
                           {displayLabel}
                         </span>
-                        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', cfg.badge)}>
-                          {cfg.label}
-                        </span>
+                        {blocked ? (
+                          <span className="text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 rounded-full px-1.5 py-0.5 font-medium flex items-center gap-0.5">
+                            <Ban className="h-2.5 w-2.5" /> Blocked
+                          </span>
+                        ) : (
+                          <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', cfg.badge)}>
+                            {cfg.label}
+                          </span>
+                        )}
+                        {isMilestone && (
+                          <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full px-1.5 py-0.5 font-medium flex items-center gap-0.5">
+                            <Diamond className="h-2.5 w-2.5" /> Milestone
+                          </span>
+                        )}
                         {isInParallelGroup && (
                           <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 rounded-full px-1.5 py-0.5 font-medium flex items-center gap-0.5">
                             <Link2 className="h-2.5 w-2.5" /> Parallel
                           </span>
                         )}
-                        {overdue && (
+                        {overdue && !blocked && (
                           <span className="text-[10px] bg-red-100 text-red-700 rounded-full px-1.5 py-0.5 font-medium">Overdue</span>
+                        )}
+                        {percentComplete !== null && status !== 'completed' && status !== 'skipped' && (
+                          <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-full px-1.5 py-0.5 font-medium flex items-center gap-0.5">
+                            <Percent className="h-2.5 w-2.5" />{percentComplete}%
+                          </span>
                         )}
                       </div>
 
@@ -713,6 +833,35 @@ export function FlowTab({
                 {isExpanded && (
                   <div className="px-4 pb-4 space-y-5 border-t border-border/50">
                     {displayDesc && <p className="text-sm text-muted-foreground pt-3 leading-relaxed">{displayDesc}</p>}
+
+                    {/* Blocked by dependencies warning */}
+                    {blocked && (
+                      <div className="flex items-start gap-2 text-xs bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg px-3 py-2.5 mt-3">
+                        <Ban className="h-4 w-4 text-orange-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold text-orange-800 dark:text-orange-300">Stage Blocked</p>
+                          <p className="text-orange-700 dark:text-orange-400 mt-0.5">
+                            Waiting for completion of: <span className="font-medium">{blockedBy.join(', ')}</span>
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* % Complete bar (when manually set) */}
+                    {percentComplete !== null && status !== 'completed' && status !== 'skipped' && (
+                      <div className="space-y-1 pt-1">
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1 font-medium"><Percent className="h-3 w-3" /> Progress</span>
+                          <span className="font-semibold">{percentComplete}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-[#0F2041] to-[#1D3461] transition-all duration-500"
+                            style={{ width: `${percentComplete}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Parallel partners */}
                     {isInParallelGroup && parallelPartners.length > 0 && (
@@ -774,52 +923,68 @@ export function FlowTab({
 
                     {/* ── Advance control (current stage, not yet completed) ── */}
                     {isCurrent && canAdvance && !isStageCompleted(stage.id) && (
-                      <div className="rounded-xl border border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10 p-4 space-y-3">
+                      <div className={cn(
+                        'rounded-xl border p-4 space-y-3',
+                        blocked
+                          ? 'border-orange-200 bg-orange-50/60 dark:bg-orange-900/10 dark:border-orange-800'
+                          : 'border-[#1D3461]/20 bg-[#0F2041]/5 dark:bg-[#1D3461]/10'
+                      )}>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <ArrowRight className="h-4 w-4 text-[#1D3461] flex-shrink-0" />
-                          <p className="text-sm font-semibold text-[#1D3461] dark:text-blue-200">
-                            {isInParallelGroup
-                              ? `Mark "${displayLabel}" as complete`
-                              : `Advance to: ${nextGroupStages[0] ? (resolvedEntry(nextGroupStages[0].id)?.customLabel || nextGroupStages[0].label) : 'next stage'}`}
+                          {blocked ? <Ban className="h-4 w-4 text-orange-500 flex-shrink-0" /> : <ArrowRight className="h-4 w-4 text-[#1D3461] flex-shrink-0" />}
+                          <p className={cn('text-sm font-semibold', blocked ? 'text-orange-700 dark:text-orange-300' : 'text-[#1D3461] dark:text-blue-200')}>
+                            {blocked
+                              ? `Cannot advance — waiting for: ${blockedBy.join(', ')}`
+                              : isInParallelGroup
+                                ? `Mark "${displayLabel}" as complete`
+                                : `Advance to: ${nextGroupStages[0] ? (resolvedEntry(nextGroupStages[0].id)?.customLabel || nextGroupStages[0].label) : 'next stage'}`}
                           </p>
-                          {isInParallelGroup && (
+                          {!blocked && isInParallelGroup && (
                             <span className="text-xs text-muted-foreground">
                               (Flow advances when all {stageGroup?.length} parallel stages are done)
                             </span>
                           )}
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor={`advance-notes-${stage.id}`} className="text-xs font-medium text-muted-foreground">
-                            {isInParallelGroup ? 'Completion notes (optional)' : 'Transition notes (optional)'}
-                          </Label>
-                          <Textarea
-                            id={`advance-notes-${stage.id}`}
-                            placeholder="What was achieved? Any handoff notes..."
-                            value={stageNotes}
-                            onChange={e => setNotes(prev => ({ ...prev, [stage.id]: e.target.value }))}
-                            rows={2} className="text-sm resize-none" data-testid="input-advance-notes"
-                          />
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Button
-                            size="sm"
-                            onClick={() => handleCompleteStage(stage.id)}
-                            disabled={isAdvancing}
-                            className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
-                            data-testid="button-confirm-advance"
-                          >
-                            {isAdvancing ? (
-                              <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Completing…</>
-                            ) : (
-                              <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                                {isInParallelGroup ? 'Mark Stage Complete' : 'Mark Complete & Advance'}
-                              </>
-                            )}
-                          </Button>
-                          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3 flex-shrink-0" /> Team will be notified
-                          </p>
-                        </div>
+                        {!blocked && (
+                          <>
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`advance-notes-${stage.id}`} className="text-xs font-medium text-muted-foreground">
+                                {isInParallelGroup ? 'Completion notes (optional)' : 'Transition notes (optional)'}
+                              </Label>
+                              <Textarea
+                                id={`advance-notes-${stage.id}`}
+                                placeholder="What was achieved? Any handoff notes..."
+                                value={stageNotes}
+                                onChange={e => setNotes(prev => ({ ...prev, [stage.id]: e.target.value }))}
+                                rows={2} className="text-sm resize-none" data-testid="input-advance-notes"
+                              />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Button
+                                size="sm"
+                                onClick={() => handleCompleteStage(stage.id)}
+                                disabled={isAdvancing || blocked}
+                                className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
+                                data-testid="button-confirm-advance"
+                              >
+                                {isAdvancing ? (
+                                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Completing…</>
+                                ) : (
+                                  <><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                                    {isMilestone
+                                      ? 'Complete Milestone'
+                                      : isInParallelGroup
+                                        ? 'Mark Stage Complete'
+                                        : 'Mark Complete & Advance'}
+                                  </>
+                                )}
+                              </Button>
+                              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                                {isMilestone ? 'Team will be notified (Milestone!)' : 'Team will be notified'}
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
 
