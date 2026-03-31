@@ -153,3 +153,18 @@ CREATE POLICY "project_documents_delete"
         AND pr.role IN ('super_admin', 'admin', 'fom')
     )
   );
+
+-- ============================================================
+-- 3. Enable Realtime for project_comments
+-- ============================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'project_comments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.project_comments;
+  END IF;
+END $$;
