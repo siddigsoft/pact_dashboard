@@ -317,6 +317,14 @@ function MoveEmployeeDialog({
     setSaving(true);
     try {
       const newDeptId = targetDeptId === "none" ? null : targetDeptId;
+      // Skip if department is unchanged — no DB write or notification needed
+      const prevDeptId = employee.department_id ?? null;
+      if (newDeptId === prevDeptId) {
+        toast({ title: "No change", description: "Employee is already in this department." });
+        onClose();
+        return;
+      }
+
       const { error } = await supabase.from("profiles")
         .update({ department_id: newDeptId, updated_at: new Date().toISOString() })
         .eq("id", employee.id);
