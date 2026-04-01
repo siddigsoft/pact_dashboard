@@ -225,8 +225,11 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem) {
 export default function PayrollAdmin() {
   const { currentUser } = useUser();
 
+  const PA_CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
+
   const { data: employees = [], isLoading: loadingEmp } = useQuery<EmployeeRow[]>({
     queryKey: ['payroll-admin-employees'],
+    ...PA_CACHE,
     queryFn: async () => {
       const [{ data: profs }, { data: depts }, { data: configs }] = await Promise.all([
         supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date, contract_end_date').order('full_name'),
@@ -237,7 +240,6 @@ export default function PayrollAdmin() {
       (depts ?? []).forEach((d: any) => { deptMap[d.id] = d.name; });
       const cfgMap: Record<string, SalaryConfig> = {};
       (configs ?? []).forEach((c: any) => { cfgMap[c.user_id] = { ...c, allowances: Array.isArray(c.allowances) ? c.allowances : [], deductions: Array.isArray(c.deductions) ? c.deductions : [] }; });
-      // Only include employees who have an Employment Record (employment_type is set)
       return (profs ?? [])
         .filter((p: any) => p.employment_type != null && p.employment_type !== '')
         .map((p: any) => ({
@@ -252,6 +254,7 @@ export default function PayrollAdmin() {
 
   const { data: runs = [], isLoading: loadingRuns } = useQuery<PayrollRun[]>({
     queryKey: ['payroll-runs'],
+    ...PA_CACHE,
     queryFn: async () => {
       const { data } = await supabase.from('payroll_runs').select('*').order('created_at', { ascending: false });
       return (data ?? []) as PayrollRun[];
@@ -975,9 +978,12 @@ function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; emplo
   const [selectedRunId, setSelectedRunId] = useState<string>('projection');
 
   // Fetch run items for selected payroll run
+  const RPT_CACHE = { staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false } as const;
+
   const { data: fetchedItems = [], isLoading: loadingItems } = useQuery<RunItem[]>({
     queryKey: ['payroll-report-items', selectedRunId],
     enabled: selectedRunId !== 'projection',
+    ...RPT_CACHE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payroll_run_items')
@@ -1591,6 +1597,7 @@ function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: Employe
   const { data: allItems = [], isLoading } = useQuery<RunItem[]>({
     queryKey: ['ytd-report-items', thisYear],
     enabled: yearRuns.length > 0,
+    staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payroll_run_items')
@@ -1786,11 +1793,13 @@ function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
   const { data: itemsA = [], isLoading: loadA } = useQuery<RunItem[]>({
     queryKey: ['compare-items-a', runAId],
     enabled: !!runAId,
+    staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false,
     queryFn: () => fetchItems(runAId),
   });
   const { data: itemsB = [], isLoading: loadB } = useQuery<RunItem[]>({
     queryKey: ['compare-items-b', runBId],
     enabled: !!runBId,
+    staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false,
     queryFn: () => fetchItems(runBId),
   });
 
@@ -1979,6 +1988,7 @@ function StatutoryReport({ runs }: { runs: PayrollRun[] }) {
   const { data: items = [], isLoading } = useQuery<RunItem[]>({
     queryKey: ['statutory-items', selectedRunId],
     enabled: !!selectedRunId,
+    staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase.from('payroll_run_items').select('*').eq('run_id', selectedRunId);
       if (error) throw error;
@@ -2137,6 +2147,7 @@ function BudgetVsActualReport({ runs, employees, currentUserId }: { runs: Payrol
   const { data: items = [], isLoading: loadingItems } = useQuery<RunItem[]>({
     queryKey: ['budget-items', selectedRunId],
     enabled: !!selectedRunId,
+    staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase.from('payroll_run_items').select('*').eq('run_id', selectedRunId);
       if (error) throw error;
@@ -2147,6 +2158,7 @@ function BudgetVsActualReport({ runs, employees, currentUserId }: { runs: Payrol
   const { data: budgets = [], isLoading: loadingBudgets } = useQuery<DeptBudget[]>({
     queryKey: ['dept-budgets', run?.period_label],
     enabled: !!run,
+    staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data } = await supabase.from('payroll_department_budgets').select('*').eq('period_label', run!.period_label);
       return (data ?? []) as DeptBudget[];
@@ -2339,6 +2351,7 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
 
   const { data: advances = [], isLoading } = useQuery<PayrollAdvance[]>({
     queryKey: ['payroll-advances'],
+    staleTime: 3 * 60_000, gcTime: 8 * 60_000, refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payroll_advances')

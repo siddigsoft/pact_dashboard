@@ -90,9 +90,12 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   const periodLabel = format(periodStart, 'MMMM yyyy');
 
   // ── Queries ──────────────────────────────────────────────────────────────
+  const CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
+
   const { data: wallet, isLoading: loadingWallet } = useQuery<WalletRow | null>({
     queryKey: ['payroll-wallet', userId],
     enabled: !!userId,
+    ...CACHE,
     queryFn: async () => {
       const { data } = await supabase.from('wallets').select('id, balances, total_earned').eq('user_id', userId!).maybeSingle();
       return data as WalletRow | null;
@@ -102,6 +105,7 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   const { data: transactions = [], isLoading: loadingTx } = useQuery<WalletTx[]>({
     queryKey: ['payroll-transactions', userId, wallet?.id],
     enabled: !!wallet?.id,
+    ...CACHE,
     queryFn: async () => {
       const { data } = await supabase.from('wallet_transactions').select('id, amount, currency, tx_type, description, created_at, status').eq('wallet_id', wallet!.id).order('created_at', { ascending: false }).limit(500);
       return (data ?? []) as WalletTx[];
@@ -111,6 +115,7 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   const { data: tasks = [], isLoading: loadingTasks } = useQuery<PersonalTask[]>({
     queryKey: ['payroll-tasks', userId],
     enabled: !!userId,
+    ...CACHE,
     queryFn: async () => {
       const { data } = await supabase.from('personal_tasks').select('id, title, status, completed_at, completion_reward_amount, completion_reward_currency, due_date, priority, category').eq('assigned_to', userId!).eq('status', 'completed').not('completion_reward_amount', 'is', null).order('completed_at', { ascending: false }).limit(500);
       return (data ?? []) as PersonalTask[];
@@ -120,6 +125,7 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   const { data: salaryConfig, isLoading: loadingSalary } = useQuery<SalaryConfig | null>({
     queryKey: ['payroll-salary-config', userId],
     enabled: !!userId,
+    ...CACHE,
     queryFn: async () => {
       const { data } = await supabase.from('employee_salary_config').select('*').eq('user_id', userId!).maybeSingle();
       if (!data) return null;
@@ -130,20 +136,27 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   const { data: employmentRecord, isLoading: loadingEmp } = useQuery<EmploymentRecord | null>({
     queryKey: ['payroll-employment-record', userId],
     enabled: !!userId,
+    ...CACHE,
     queryFn: async () => {
       const { data: prof } = await supabase.from('profiles').select('full_name, role, email, employment_type, contract_start_date, contract_end_date, department_id, reports_to').eq('id', userId!).maybeSingle();
       if (!prof) return null;
-      let dept_name: string | null = null;
-      let mgr_name: string | null = null;
-      if (prof.department_id) {
-        const { data: dept } = await supabase.from('departments').select('name').eq('id', prof.department_id).maybeSingle();
-        dept_name = dept?.name ?? null;
-      }
-      if (prof.reports_to) {
-        const { data: mgr } = await supabase.from('profiles').select('full_name').eq('id', prof.reports_to).maybeSingle();
-        mgr_name = (mgr as any)?.full_name ?? null;
-      }
-      return { full_name: prof.full_name, role: prof.role, email: prof.email, employment_type: prof.employment_type, contract_start_date: prof.contract_start_date, contract_end_date: prof.contract_end_date, department_name: dept_name, manager_name: mgr_name } as EmploymentRecord;
+      // Fetch department name and manager name in parallel
+      const [deptRes, mgrRes] = await Promise.all([
+        prof.department_id
+          ? supabase.from('departments').select('name').eq('id', prof.department_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        prof.reports_to
+          ? supabase.from('profiles').select('full_name').eq('id', prof.reports_to).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      return {
+        full_name: prof.full_name, role: prof.role, email: prof.email,
+        employment_type: prof.employment_type,
+        contract_start_date: prof.contract_start_date,
+        contract_end_date: prof.contract_end_date,
+        department_name: (deptRes.data as any)?.name ?? null,
+        manager_name: (mgrRes.data as any)?.full_name ?? null,
+      } as EmploymentRecord;
     },
   });
 
@@ -877,9 +890,12 @@ function MyPayslipsTab({ userId }: { userId: string }) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const SLIP_CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
+
   const { data: myItems = [], isLoading } = useQuery<PayslipRunItem[]>({
     queryKey: ['my-payslips', userId],
     enabled: !!userId,
+    ...SLIP_CACHE,
     queryFn: async () => {
       const { data, error } = await supabase.from('payroll_run_items').select('*').eq('user_id', userId).order('created_at', { ascending: false });
       if (error) throw error;
@@ -895,6 +911,7 @@ function MyPayslipsTab({ userId }: { userId: string }) {
   const { data: runsMap = {} } = useQuery<Record<string, PayslipRun>>({
     queryKey: ['my-payslips-runs', myItems.map(i => i.run_id).join(',')],
     enabled: myItems.length > 0,
+    ...SLIP_CACHE,
     queryFn: async () => {
       const runIds = [...new Set(myItems.map(i => i.run_id))];
       const { data } = await supabase.from('payroll_runs').select('id, period_label, period_start, status').in('id', runIds);

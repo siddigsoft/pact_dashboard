@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConnectedPagesBar } from "@/components/ui/connected-pages-bar";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -2529,20 +2530,17 @@ export default function Departments() {
   // Only admin+ may access this page; non-admins see an access-denied screen
   const canAccess = canMoveEmployees;
 
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Department | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
-  const [moveTarget, setMoveTarget] = useState<Profile | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const qc = useQueryClient();
+  const DEPT_KEY = ["departments-page-data"] as const;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [{ data: depts }, { data: profs }] = await Promise.all([
+  const { data: pageData, isLoading: loading } = useQuery({
+    queryKey: DEPT_KEY,
+    enabled: !!canAccess,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const [{ data: depts }, { data: profs }, { data: classData }] = await Promise.all([
         supabase
           .from("departments")
           .select("*, manager:profiles!departments_manager_user_id_fkey(full_name,email)")
@@ -2551,31 +2549,32 @@ export default function Departments() {
           .from("profiles")
           .select("id, full_name, email, role, department_id, reports_to, avatar_url")
           .order("full_name"),
+        supabase
+          .from("user_classifications")
+          .select("user_id, classification_level")
+          .is("effective_until", null),
       ]);
-
-      const { data: classData } = await supabase
-        .from("user_classifications")
-        .select("user_id, classification_level")
-        .is("effective_until", null);
       const classMap: Record<string, string> = {};
-      (classData || []).forEach((c) => { if (c.user_id && c.classification_level) classMap[c.user_id] = c.classification_level; });
-
+      (classData ?? []).forEach((c) => { if (c.user_id && c.classification_level) classMap[c.user_id] = c.classification_level; });
       const memberCount: Record<string, number> = {};
-      (profs || []).forEach(p => {
+      (profs ?? []).forEach(p => {
         if (p.department_id) memberCount[p.department_id] = (memberCount[p.department_id] || 0) + 1;
       });
+      const departments = ((depts ?? []).map(d => ({ ...d, member_count: memberCount[(d as any).id] || 0 }))) as Department[];
+      const profiles = (profs ?? []).map(p => ({ ...p, classification_level: classMap[p.id] || null })) as Profile[];
+      return { departments, profiles };
+    },
+  });
 
-      setDepartments(((depts || []).map(d => ({ ...d, member_count: memberCount[d.id] || 0 }))) as Department[]);
-      setProfiles((profs || []).map(p => ({ ...p, classification_level: classMap[p.id] || null })) as Profile[]);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unexpected error";
-      toast({ title: "Error loading departments", description: message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  const departments = useMemo(() => pageData?.departments ?? [], [pageData]);
+  const profiles    = useMemo(() => pageData?.profiles    ?? [], [pageData]);
 
-  useEffect(() => { if (canAccess) load(); }, [canAccess, load]);
+  const [search, setSearch] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Department | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
+  const [moveTarget, setMoveTarget] = useState<Profile | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -2589,7 +2588,7 @@ export default function Departments() {
       if (error) throw error;
       toast({ title: "Department deleted" });
       setDeleteTarget(null);
-      await load();
+      qc.invalidateQueries({ queryKey: DEPT_KEY });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unexpected error";
       toast({ title: "Error", description: message, variant: "destructive" });
@@ -2789,7 +2788,7 @@ export default function Departments() {
           existing={editTarget}
           allDepts={departments}
           profiles={profiles}
-          onSaved={load}
+          onSaved={() => qc.invalidateQueries({ queryKey: DEPT_KEY })}
         />
       )}
 
@@ -2799,7 +2798,7 @@ export default function Departments() {
           onClose={() => setMoveTarget(null)}
           employee={moveTarget}
           departments={departments}
-          onMoved={load}
+          onMoved={() => qc.invalidateQueries({ queryKey: DEPT_KEY })}
         />
       )}
 
