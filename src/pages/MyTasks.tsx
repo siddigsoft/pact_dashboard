@@ -20,6 +20,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useOutlookCalendar, type CalendarEvent } from '@/hooks/useOutlookCalendar';
 import {
   Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip';
@@ -1424,6 +1425,35 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
   const [autoPlay, setAutoPlay] = useState(true);
   const [progress, setProgress] = useState(0);
 
+  // ── Outlook Calendar integration ─────────────────────────────────────────
+  const {
+    isConnected: outlookConnected,
+    isConnecting: outlookConnecting,
+    isFetchingEvents: outlookFetching,
+    error: outlookError,
+    events: outlookEvents,
+    connect: connectOutlook,
+    disconnect: disconnectOutlook,
+    fetchMyEvents,
+    hasClientId: outlookConfigured,
+  } = useOutlookCalendar();
+
+  useEffect(() => {
+    if (!outlookConnected || !open) return;
+    const today = startOfToday();
+    fetchMyEvents(today, addDays(today, 14));
+  }, [outlookConnected, open, fetchMyEvents]);
+
+  const meetingsByDay = useMemo(() => {
+    const map: Record<string, CalendarEvent[]> = {};
+    outlookEvents.forEach(evt => {
+      const dateKey = evt.start.split('T')[0];
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push(evt);
+    });
+    return map;
+  }, [outlookEvents]);
+
   // Navigate with fade-slide animation
   const navigate = useCallback((newIdx: number) => {
     setTransitioning(true);
@@ -1629,50 +1659,199 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
             </TabsContent>
 
             {/* ── Timeline strip ── */}
-            <TabsContent value="timeline" className="mt-3 space-y-2">
-              <div className="flex items-start gap-2">
-                <Info className="h-3.5 w-3.5 text-violet-500 flex-shrink-0 mt-0.5" />
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  <strong>14-day timeline</strong> shows each day as a column.
-                  Each coloured dot is one task due that day — hover/tap to see the count.
-                  Use this to spot busy stretches and plan your week visually.
-                </p>
-              </div>
-              <div className="overflow-x-auto pb-1">
-                <div className="flex gap-1.5 min-w-max">
-                  {timelineDays.map(({ day, tasks: dt, isToday: t }) => (
-                    <div key={day.toString()} className="flex flex-col items-center gap-1">
-                      <span className={cn('text-[9px] font-medium', t ? 'text-amber-600' : 'text-muted-foreground')}>
-                        {t ? 'TODAY' : format(day, 'EEE')}
-                      </span>
-                      <span className={cn('text-[10px] font-bold', t ? 'text-amber-600' : 'text-foreground')}>
-                        {format(day, 'd')}
-                      </span>
-                      <div className={cn(
-                        'w-9 min-h-[40px] rounded-md border flex flex-col items-center justify-center gap-0.5 p-1',
-                        t ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30' : 'border-border bg-card',
-                        dt.length > 0 && !t && 'border-[#1D3461]/30 bg-[#1D3461]/5',
-                      )}>
-                        {dt.length === 0 ? (
-                          <div className="h-1.5 w-1.5 rounded-full bg-muted" />
-                        ) : (
-                          <>
-                            {Array.from({ length: Math.min(dt.length, 4) }).map((_, i) => (
-                              <div key={i} className={cn('h-1.5 w-1.5 rounded-full', t ? 'bg-amber-500' : 'bg-[#1D3461]')} />
-                            ))}
-                            {dt.length > 4 && <span className="text-[8px] text-muted-foreground">+{dt.length - 4}</span>}
-                          </>
-                        )}
-                      </div>
-                      {dt.length > 0 && (
-                        <span className={cn('text-[9px] font-semibold', t ? 'text-amber-600' : 'text-[#1D3461]')}>{dt.length}</span>
-                      )}
+            <TabsContent value="timeline" className="mt-3 space-y-3">
+
+              {/* Outlook connect/status bar */}
+              <div className={cn(
+                'flex items-center justify-between gap-2 rounded-xl px-3 py-2 border',
+                outlookConnected
+                  ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-700',
+              )}>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📅</span>
+                  {outlookConnected ? (
+                    <div>
+                      <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">Outlook Connected</p>
+                      <p className="text-[10px] text-muted-foreground">Meetings shown in orange on the timeline</p>
                     </div>
-                  ))}
+                  ) : (
+                    <div>
+                      <p className="text-[11px] font-bold text-foreground">Connect Outlook Calendar</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {outlookConfigured ? 'See your meetings alongside tasks in the timeline' : 'VITE_MICROSOFT_CLIENT_ID not set — contact admin'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                {outlookConnected ? (
+                  <div className="flex items-center gap-1.5">
+                    {outlookFetching && <Loader2 className="h-3.5 w-3.5 text-emerald-500 animate-spin" />}
+                    <button
+                      type="button"
+                      onClick={() => { const today = startOfToday(); fetchMyEvents(today, addDays(today, 14)); }}
+                      className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 transition-colors"
+                      title="Refresh meetings"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => disconnectOutlook()}
+                      className="text-[10px] font-semibold text-muted-foreground hover:text-red-500 transition-colors px-1.5 py-0.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                ) : outlookConfigured ? (
+                  <button
+                    type="button"
+                    onClick={() => connectOutlook()}
+                    disabled={outlookConnecting}
+                    className="flex items-center gap-1.5 rounded-lg bg-[#0078d4] hover:bg-[#106ebe] text-white text-[11px] font-bold px-3 py-1.5 transition-colors disabled:opacity-60"
+                  >
+                    {outlookConnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>🪟</span>}
+                    {outlookConnecting ? 'Connecting…' : 'Sign in with Microsoft'}
+                  </button>
+                ) : null}
+              </div>
+
+              {/* Outlook error */}
+              {outlookError && (
+                <p className="text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1.5 px-1">
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />{outlookError}
+                </p>
+              )}
+
+              {/* Legend */}
+              <div className="flex items-center gap-4 px-0.5">
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <Info className="h-3 w-3 text-violet-500" />
+                  <strong className="text-foreground">14-day timeline</strong> — hover a column for details
+                </div>
+                <div className="flex items-center gap-3 ml-auto">
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <span className="h-2 w-2 rounded-full bg-[#1D3461] inline-block" /> Tasks
+                  </span>
+                  {outlookConnected && (
+                    <>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full bg-orange-400 inline-block" /> Meetings
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full bg-purple-400 inline-block" /> OOO
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
+
+              {/* Day columns */}
+              <div className="overflow-x-auto pb-1">
+                <div className="flex gap-1 min-w-max">
+                  {timelineDays.map(({ day, tasks: dt, isToday: t }) => {
+                    const dayKey = format(day, 'yyyy-MM-dd');
+                    const dayMeetings = meetingsByDay[dayKey] ?? [];
+                    const busyMeetings = dayMeetings.filter(m => m.status === 'busy' || m.status === 'tentative');
+                    const oooMeetings  = dayMeetings.filter(m => m.status === 'oof');
+                    const totalLoad    = dt.length + busyMeetings.length + oooMeetings.length;
+                    const isHeavy      = totalLoad >= 5;
+
+                    return (
+                      <UITooltip key={day.toString()}>
+                        <TooltipTrigger asChild>
+                          <div className={cn(
+                            'flex flex-col items-center gap-0.5 cursor-default rounded-lg px-1 py-1 transition-colors hover:bg-muted/60',
+                            isHeavy && 'ring-1 ring-red-200 dark:ring-red-800 bg-red-50/40 dark:bg-red-950/10 rounded-lg',
+                          )}>
+                            <span className={cn('text-[9px] font-bold', t ? 'text-amber-600' : 'text-muted-foreground')}>
+                              {t ? 'TODAY' : format(day, 'EEE')}
+                            </span>
+                            <span className={cn('text-[10px] font-black', t ? 'text-amber-600' : 'text-foreground')}>
+                              {format(day, 'd')}
+                            </span>
+                            {/* Tasks box */}
+                            <div className={cn(
+                              'w-8 min-h-[36px] rounded-md border flex flex-col items-center justify-center gap-0.5 p-0.5',
+                              t ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30'
+                                : dt.length > 0 ? 'border-[#1D3461]/30 bg-[#1D3461]/5'
+                                : 'border-border bg-card',
+                            )}>
+                              {dt.length === 0 ? (
+                                <div className="h-1.5 w-1.5 rounded-full bg-muted" />
+                              ) : (
+                                <>
+                                  {Array.from({ length: Math.min(dt.length, 3) }).map((_, i) => (
+                                    <div key={i} className={cn('h-1.5 w-1.5 rounded-full', t ? 'bg-amber-500' : 'bg-[#1D3461]')} />
+                                  ))}
+                                  {dt.length > 3 && <span className="text-[7px] text-muted-foreground">+{dt.length - 3}</span>}
+                                </>
+                              )}
+                            </div>
+                            {/* Meetings box (only when connected) */}
+                            {outlookConnected && (
+                              <div className={cn(
+                                'w-8 min-h-[28px] rounded-md border flex flex-col items-center justify-center gap-0.5 p-0.5',
+                                dayMeetings.length > 0
+                                  ? 'border-orange-200 bg-orange-50 dark:bg-orange-950/20'
+                                  : 'border-dashed border-slate-200 dark:border-slate-700 bg-transparent',
+                              )}>
+                                {dayMeetings.length === 0 ? (
+                                  <div className="h-1.5 w-1.5 rounded-full bg-slate-200 dark:bg-slate-700" />
+                                ) : (
+                                  <>
+                                    {busyMeetings.slice(0, 2).map((_, i) => (
+                                      <div key={`b${i}`} className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                                    ))}
+                                    {oooMeetings.slice(0, 1).map((_, i) => (
+                                      <div key={`o${i}`} className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                                    ))}
+                                    {dayMeetings.length > 3 && <span className="text-[7px] text-muted-foreground">+{dayMeetings.length - 3}</span>}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {/* Count badges */}
+                            {(dt.length > 0 || dayMeetings.length > 0) && (
+                              <div className="flex items-center gap-0.5">
+                                {dt.length > 0 && (
+                                  <span className={cn('text-[8px] font-bold', t ? 'text-amber-600' : 'text-[#1D3461]')}>{dt.length}T</span>
+                                )}
+                                {outlookConnected && dayMeetings.length > 0 && (
+                                  <span className="text-[8px] font-bold text-orange-500">{dayMeetings.length}M</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[220px] p-3 space-y-1.5">
+                          <p className="font-bold text-xs">{format(day, 'EEEE, MMM d')}</p>
+                          {dt.length > 0 && (
+                            <p className="text-[11px]">📌 <strong>{dt.length}</strong> task{dt.length !== 1 ? 's' : ''} due</p>
+                          )}
+                          {dayMeetings.length > 0 && (
+                            <div className="space-y-1 border-t pt-1">
+                              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wide">📅 Meetings ({dayMeetings.length})</p>
+                              {dayMeetings.slice(0, 4).map(m => (
+                                <p key={m.id} className="text-[10px] text-muted-foreground leading-tight">
+                                  · {m.isAllDay ? 'All day' : m.start.includes('T') ? format(parseISO(m.start), 'h:mm a') : ''} — {m.subject}
+                                </p>
+                              ))}
+                              {dayMeetings.length > 4 && <p className="text-[10px] text-muted-foreground">+{dayMeetings.length - 4} more</p>}
+                            </div>
+                          )}
+                          {dt.length === 0 && dayMeetings.length === 0 && (
+                            <p className="text-[11px] text-muted-foreground">Free day 🎉</p>
+                          )}
+                        </TooltipContent>
+                      </UITooltip>
+                    );
+                  })}
+                </div>
+              </div>
+
               <p className="text-[10px] text-muted-foreground text-center">
-                Each dot = one task. Aim for no more than 3–5 tasks per day for sustainable pace.
+                T = tasks · M = meetings · Days with 5+ items flagged in red · Aim for 3–5 tasks/day
               </p>
             </TabsContent>
 
@@ -1732,111 +1911,55 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
           {/* ── Planning Methodology Tips ─────────────────────────────── */}
           <div className="border-t border-violet-200/40 dark:border-violet-800/30 pt-4">
 
-            {/* ── DYNAMIC HEADER BANNER ── */}
-            <div
-              className="relative rounded-2xl overflow-hidden mb-4 transition-all duration-500"
-              style={{ background: `linear-gradient(135deg, ${tip.from}ee, ${tip.to}cc)` }}
-            >
-              {/* Decorative background orbs */}
-              <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full opacity-20" style={{ background: tip.from, filter: 'blur(24px)' }} />
-                <div className="absolute -bottom-4 -left-4 h-24 w-24 rounded-full opacity-15" style={{ background: tip.to, filter: 'blur(20px)' }} />
+            {/* ── Section header row ── */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Lightbulb className="h-3.5 w-3.5 text-violet-500" />
+                <span className="text-[11px] font-black tracking-widest uppercase text-muted-foreground">Planning Methodology</span>
               </div>
-
-              <div className="relative p-4 pb-3">
-                {/* Top row: section icon + title + play/pause */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2.5">
-                    {/* Pulsing brain/methodology icon */}
-                    <div className="h-9 w-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl shadow-sm border border-white/30">
-                      🧠
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black tracking-[0.18em] uppercase text-white/70">Daily Method</p>
-                      <p className="text-lg font-black text-white leading-tight tracking-tight">Planning Methodology</p>
-                    </div>
-                  </div>
-
-                  {/* Play/Pause + keyboard hint */}
-                  <div className="flex flex-col items-end gap-1">
-                    <button
-                      type="button"
-                      onClick={() => { setAutoPlay(v => !v); setProgress(0); }}
-                      className="h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center text-white transition-all border border-white/30 text-sm"
-                      aria-label={autoPlay ? 'Pause auto-play' : 'Resume auto-play'}
-                      title={autoPlay ? 'Pause' : 'Play'}
-                    >
-                      {autoPlay ? '⏸' : '▶'}
-                    </button>
-                    <span className="text-[9px] text-white/60 hidden sm:block">← → keys</span>
-                  </div>
-                </div>
-
-                {/* Current tip subtitle */}
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl">{tip.icon}</span>
-                  <div>
-                    <p className="text-sm font-extrabold text-white leading-tight">{tip.title}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] font-bold text-white/80 uppercase tracking-wide">{tip.tag}</span>
-                      <span className="text-white/40">·</span>
-                      <span className="text-[10px] text-white/70">{tip.difficulty}</span>
-                      <span className="text-white/40">·</span>
-                      <span className="text-[10px] text-white/70">⏱ {tip.timeToTry}</span>
-                      {tipIdx === dailyIdx && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-black text-white tracking-wide">✦ TODAY</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Icon tab strip — each tip gets a clickable icon pill */}
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => navigate((tipIdx - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length)}
+                  className="h-5 w-5 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground text-xs transition-colors"
+                >‹</button>
+                {PLANNING_TIPS.map((_, i) => (
                   <button
+                    key={i}
                     type="button"
-                    onClick={() => navigate((tipIdx - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length)}
-                    className="h-7 w-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white text-xs transition-all flex-shrink-0"
-                  >‹</button>
-
-                  <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                    {PLANNING_TIPS.map((t, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => navigate(i)}
-                        className="flex-shrink-0 flex flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 transition-all duration-200 border"
-                        style={{
-                          background: i === tipIdx ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
-                          borderColor: i === tipIdx ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.15)',
-                          transform: i === tipIdx ? 'scale(1.08)' : 'scale(1)',
-                        }}
-                        title={t.title}
-                        aria-label={t.title}
-                      >
-                        <span className="text-base leading-none">{t.icon}</span>
-                        <span className="text-[8px] font-bold text-white/80 leading-none whitespace-nowrap hidden sm:block">{t.tag}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => navigate((tipIdx + 1) % PLANNING_TIPS.length)}
-                    className="h-7 w-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white text-xs transition-all flex-shrink-0"
-                  >›</button>
-                </div>
-              </div>
-
-              {/* Auto-advance progress bar at bottom of banner */}
-              {autoPlay && (
-                <div className="h-1 w-full bg-white/15">
-                  <div
-                    className="h-full bg-white/70 transition-none"
-                    style={{ width: `${progress}%` }}
+                    onClick={() => navigate(i)}
+                    className={cn(
+                      'rounded-full transition-all duration-200',
+                      i === tipIdx ? 'h-2.5 w-2.5 bg-violet-500' : 'h-1.5 w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60',
+                    )}
+                    aria-label={PLANNING_TIPS[i].title}
                   />
-                </div>
-              )}
+                ))}
+                <button
+                  type="button"
+                  onClick={() => navigate((tipIdx + 1) % PLANNING_TIPS.length)}
+                  className="h-5 w-5 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground text-xs transition-colors"
+                >›</button>
+                <button
+                  type="button"
+                  onClick={() => { setAutoPlay(v => !v); setProgress(0); }}
+                  className="ml-1 h-5 w-5 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground text-[10px] transition-colors"
+                  title={autoPlay ? 'Pause auto-advance' : 'Resume auto-advance'}
+                >
+                  {autoPlay ? '⏸' : '▶'}
+                </button>
+              </div>
             </div>
+
+            {/* Thin progress bar */}
+            {autoPlay && (
+              <div className="h-0.5 w-full bg-muted rounded-full mb-3 overflow-hidden">
+                <div
+                  className="h-full bg-violet-400 transition-none rounded-full"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
 
             {/* Main tip card — fades and slides on change */}
             <div
