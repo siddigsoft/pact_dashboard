@@ -269,7 +269,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     proofPreviewUrl: string | null;
     notes: string;
     uploading: boolean;
-  }>({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+    partialPercent: number | null;
+  }>({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
+
+  const [bulkConfirmRequests, setBulkConfirmRequests] = useState<DownPaymentRequest[]>([]);
 
   const [editDialog, setEditDialog] = useState<{
     open: boolean;
@@ -1473,7 +1476,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const handleOpenBatchPay = (reqs: DownPaymentRequest[]) => {
     const eligible = reqs.filter(r => r.status === 'approved');
     if (eligible.length === 0) return;
-    setBatchPayDialog({ open: true, requests: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+    setBatchPayDialog({ open: true, requests: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
   };
 
   const handleBatchPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1484,7 +1487,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const handleConfirmBatchPay = async () => {
-    const { requests: reqs, proofFile, notes } = batchPayDialog;
+    const { requests: reqs, proofFile, notes, partialPercent } = batchPayDialog;
     if (!currentUser?.id || reqs.length === 0) return;
     if (!proofFile) {
       toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach one receipt that covers all selected payments.", variant: "destructive" });
@@ -1500,14 +1503,19 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       if (uploadErr) throw new Error(uploadErr.message);
       const proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
       const now = new Date().toISOString();
+      const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
 
       let successCount = 0;
       let failCount = 0;
       for (const req of reqs) {
+        const approved = req.approvedAmount || req.requestedAmount;
+        const paidAmount = isPartial ? Math.round(approved * (partialPercent! / 100)) : approved;
+        const remainingAmount = isPartial ? approved - paidAmount : 0;
+        const newStatus = isPartial ? 'partially_paid' : 'fully_paid';
         const { error } = await supabase.from('down_payment_requests').update({
-          status: 'fully_paid',
-          total_paid_amount: req.approvedAmount || req.requestedAmount,
-          remaining_amount: 0,
+          status: newStatus,
+          total_paid_amount: paidAmount,
+          remaining_amount: remainingAmount,
           updated_at: now,
           payment_proof_url: proofUrl,
           payment_proof_uploaded_at: now,
@@ -1544,11 +1552,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         }).catch(console.error);
       });
 
+      const isPartialFinal = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
       toast({
         title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
-        description: `${successCount} paid with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
+        description: `${successCount} ${isPartialFinal ? `partially paid (${partialPercent}%)` : 'fully paid'} with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
       });
-      setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+      setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
       clearSelection();
       refreshRequests();
     } catch (err: any) {
@@ -1556,6 +1565,31 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     } finally {
       setBatchPayDialog(prev => ({ ...prev, uploading: false }));
     }
+  };
+
+  const handleBulkConfirmComplete = async (signature: { signatureId: string; signatureHash: string; method: string; signedAt: string }) => {
+    if (!currentUser?.id || bulkConfirmRequests.length === 0) return;
+    let successCount = 0;
+    let failCount = 0;
+    for (const req of bulkConfirmRequests) {
+      const ok = await confirmReceipt({
+        requestId: req.id,
+        userId: currentUser.id,
+        userName: currentUser.fullName || currentUser.email || '',
+        signatureId: signature.signatureId,
+        signatureHash: signature.signatureHash,
+        signatureMethod: signature.method,
+        signedAt: signature.signedAt,
+      });
+      if (ok) successCount++; else failCount++;
+    }
+    toast({
+      title: `Receipt${successCount > 1 ? 's' : ''} Confirmed / تم التأكيد`,
+      description: `${successCount} confirmed with one signature${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
+    });
+    setBulkConfirmRequests([]);
+    clearSelection();
+    refreshRequests();
   };
 
   const isApprovedOrPaid = (status: string) => ['approved', 'partially_paid', 'fully_paid'].includes(status);
@@ -3181,7 +3215,38 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               paidWaitingRequests.length === 0 ? (
                 <Card><CardContent className="py-8 text-center text-muted-foreground">No requests awaiting confirmation / لا توجد طلبات بانتظار التأكيد</CardContent></Card>
               ) : (
-                <VirtualizedRequestList requests={paidWaitingRequests} renderCard={(r) => <RequestCard request={r} />} />
+                <div>
+                  {/* Bulk confirm action bar */}
+                  <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={paidWaitingRequests.every(r => selectedIds.has(r.id))}
+                        onCheckedChange={(checked) => {
+                          if (checked) selectAll(paidWaitingRequests);
+                          else clearSelection();
+                        }}
+                        data-testid="checkbox-select-all-waiting"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {paidWaitingRequests.filter(r => selectedIds.has(r.id)).length > 0
+                          ? `${paidWaitingRequests.filter(r => selectedIds.has(r.id)).length} selected`
+                          : `${paidWaitingRequests.length} awaiting confirmation`}
+                      </span>
+                    </div>
+                    {paidWaitingRequests.filter(r => selectedIds.has(r.id)).length > 0 && (
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => setBulkConfirmRequests(paidWaitingRequests.filter(r => selectedIds.has(r.id)))}
+                        data-testid="button-bulk-confirm-selected"
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                        Confirm {paidWaitingRequests.filter(r => selectedIds.has(r.id)).length} with One Signature
+                      </Button>
+                    )}
+                  </div>
+                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
+                </div>
               )
             ) : (
               paidConfirmedRequests.length === 0 ? (
@@ -3821,6 +3886,33 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         />
       )}
 
+      {bulkConfirmRequests.length > 0 && currentUser && (
+        <SignatureConfirmationModal
+          open={bulkConfirmRequests.length > 0}
+          onOpenChange={(open) => { if (!open) setBulkConfirmRequests([]); }}
+          transaction={{
+            id: `bulk-${bulkConfirmRequests.map(r => r.id).join('-').slice(0, 40)}`,
+            type: 'advance_payment',
+            title: `Bulk Receipt Confirmation (${bulkConfirmRequests.length}) / تأكيد جماعي`,
+            description: `I confirm receipt of ${bulkConfirmRequests.length} advance payment${bulkConfirmRequests.length > 1 ? 's' : ''} for sites: ${bulkConfirmRequests.map(r => r.siteName).join(', ')}. / أؤكد استلام ${bulkConfirmRequests.length} سلفة للمواقع المذكورة.`,
+            amount: bulkConfirmRequests.reduce((sum, r) => sum + (r.totalPaidAmount || r.approvedAmount || r.requestedAmount || 0), 0),
+            currency: 'SDG',
+            counterparty: 'Finance',
+            date: new Date().toISOString(),
+            reference: `BULK-${bulkConfirmRequests.length}`,
+          }}
+          userId={currentUser.id}
+          userName={currentUser.fullName || currentUser.email || ''}
+          userEmail={currentUser.email}
+          userRole={currentUser.role}
+          allowedMethods={['handwriting', 'uuid']}
+          onSignatureComplete={async (signature) => {
+            await handleBulkConfirmComplete(signature);
+          }}
+          onCancel={() => setBulkConfirmRequests([])}
+        />
+      )}
+
       <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' }); }}>
         <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
@@ -4452,7 +4544,60 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 </div>
               </div>
 
-              {/* Notes */}
+              {/* Partial payment (patches) toggle */}
+              <div className="space-y-2 border rounded-md p-3 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="partial-payment-toggle"
+                    checked={batchPayDialog.partialPercent !== null}
+                    onCheckedChange={(checked) => {
+                      setBatchPayDialog(prev => ({ ...prev, partialPercent: checked ? 50 : null }));
+                    }}
+                    disabled={batchPayDialog.uploading}
+                    data-testid="checkbox-partial-payment"
+                  />
+                  <Label htmlFor="partial-payment-toggle" className="text-sm font-medium cursor-pointer">
+                    Partial Payment / دفع جزئي
+                    <span className="ml-2 text-xs text-muted-foreground font-normal">Pay a percentage now — leaves remainder as &quot;Partially Paid&quot;</span>
+                  </Label>
+                </div>
+                {batchPayDialog.partialPercent !== null && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <Label className="text-sm text-muted-foreground min-w-fit">Pay %:</Label>
+                    <input
+                      type="range"
+                      min={5}
+                      max={95}
+                      step={5}
+                      value={batchPayDialog.partialPercent}
+                      onChange={(e) => setBatchPayDialog(prev => ({ ...prev, partialPercent: Number(e.target.value) }))}
+                      className="flex-1 accent-amber-600"
+                      disabled={batchPayDialog.uploading}
+                      data-testid="slider-partial-percent"
+                    />
+                    <span className="font-bold text-amber-700 dark:text-amber-400 min-w-[3rem] text-center">
+                      {batchPayDialog.partialPercent}%
+                    </span>
+                  </div>
+                )}
+                {batchPayDialog.partialPercent !== null && (
+                  <div className="mt-1 space-y-0.5">
+                    {batchPayDialog.requests.slice(0, 5).map(r => {
+                      const approved = r.approvedAmount || r.requestedAmount;
+                      const paying = Math.round(approved * (batchPayDialog.partialPercent! / 100));
+                      return (
+                        <p key={r.id} className="text-xs text-muted-foreground">
+                          {r.siteName}: pay <span className="font-semibold text-foreground">{paying.toLocaleString()} SDG</span> / leave {(approved - paying).toLocaleString()} SDG
+                        </p>
+                      );
+                    })}
+                    {batchPayDialog.requests.length > 5 && (
+                      <p className="text-xs text-muted-foreground">…and {batchPayDialog.requests.length - 5} more</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
                   Notes / ملاحظات <span className="text-muted-foreground font-normal">(optional)</span>
@@ -4479,7 +4624,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               variant="outline"
               onClick={() => {
                 if (batchPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchPayDialog.proofPreviewUrl);
-                setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+                setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
               }}
               disabled={batchPayDialog.uploading}
               data-testid="button-cancel-batch-pay"
@@ -4495,6 +4640,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             >
               {batchPayDialog.uploading ? (
                 <><RefreshCw className="h-4 w-4 mr-1.5 animate-spin" /> Processing...</>
+              ) : batchPayDialog.partialPercent !== null ? (
+                <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.partialPercent}% of {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
               ) : (
                 <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Pay {batchPayDialog.requests.length} Request{batchPayDialog.requests.length > 1 ? 's' : ''}</>
               )}
