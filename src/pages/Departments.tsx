@@ -56,6 +56,7 @@ interface Profile {
   role: string | null;
   department_id: string | null;
   reports_to: string | null;
+  avatar_url?: string | null;
   classification_level?: string | null;
 }
 
@@ -405,16 +406,44 @@ function levelPalette(depth: number) {
 }
 
 /* ─── Department Org Node ────────────────────────── */
+function MemberAvatar({ m, accent, navigate }: { m: Profile; accent: string; navigate: ReturnType<typeof useNavigate> }) {
+  return m.avatar_url ? (
+    <img
+      src={m.avatar_url}
+      alt={m.full_name || ""}
+      title={m.full_name || m.email || ""}
+      className="w-6 h-6 rounded-full object-cover ring-1 ring-white cursor-pointer hover:scale-110 transition-transform shrink-0"
+      onClick={() => navigate(`/users/${m.id}`)}
+    />
+  ) : (
+    <div
+      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-white cursor-pointer hover:scale-110 transition-transform shrink-0"
+      style={{ background: accent }}
+      title={m.full_name || m.email || ""}
+      onClick={() => navigate(`/users/${m.id}`)}
+    >
+      {(m.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
 function DeptOrgNode({
-  dept, allProfiles, depth, navigate,
+  dept, allProfiles, depth, navigate, forceExpand,
 }: {
   dept: Department;
   allProfiles: Profile[];
   depth: number;
   navigate: ReturnType<typeof useNavigate>;
+  forceExpand?: boolean | null;
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
+  const [showMembers, setShowMembers] = useState(false);
   const children = dept.children ?? [];
+
+  useEffect(() => {
+    if (forceExpand === true) setExpanded(true);
+    else if (forceExpand === false) setExpanded(false);
+  }, [forceExpand]);
   const members = allProfiles.filter(p => p.department_id === dept.id);
   const palette = levelPalette(depth);
   const accentColor = dept.color ?? palette.solid;
@@ -471,49 +500,75 @@ function DeptOrgNode({
         </div>
 
         {/* Body */}
-        <div className="px-3 py-2 flex flex-wrap items-center gap-3" style={{ background: palette.light + "cc" }}>
-          {/* Manager */}
-          <div className="flex items-center gap-1 min-w-0">
-            <UserCheck className="h-3 w-3 text-muted-foreground shrink-0" />
-            <span className="text-[11px] text-muted-foreground truncate">
-              {dept.manager?.full_name || dept.manager?.email || <em>No manager</em>}
-            </span>
-          </div>
-
-          {/* Members badge */}
-          <span
-            className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: accentColor + "20", color: accentColor }}
-          >
-            <Users className="h-2.5 w-2.5" />
-            {members.length} {members.length === 1 ? "member" : "members"}
-          </span>
-
-          {/* Sub-depts badge */}
-          {children.length > 0 && (
+        <div className="px-3 py-2 space-y-2" style={{ background: palette.light + "cc" }}>
+          {/* Row 1: Manager + badges */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 min-w-0">
+              <UserCheck className="h-3 w-3 text-muted-foreground shrink-0" />
+              <span className="text-[11px] text-muted-foreground truncate">
+                {dept.manager?.full_name || dept.manager?.email || <em>No manager</em>}
+              </span>
+            </div>
             <span
-              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: accentColor + "15", color: accentColor }}
+              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full cursor-pointer hover:opacity-80"
+              style={{ background: accentColor + "20", color: accentColor }}
+              onClick={() => members.length > 0 && setShowMembers(s => !s)}
+              title={members.length > 0 ? "Click to show/hide members" : ""}
             >
-              <GitBranch className="h-2.5 w-2.5" />
-              {children.length} sub-dept{children.length > 1 ? "s" : ""}
+              <Users className="h-2.5 w-2.5" />
+              {members.length} {members.length === 1 ? "member" : "members"}
+              {members.length > 0 && (showMembers ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />)}
             </span>
+            {children.length > 0 && (
+              <span
+                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: accentColor + "15", color: accentColor }}
+              >
+                <GitBranch className="h-2.5 w-2.5" />
+                {children.length} sub-dept{children.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {dept.description && (
+              <span className="text-[10px] text-muted-foreground italic truncate max-w-xs">{dept.description}</span>
+            )}
+            <button
+              className="ml-auto text-[10px] flex items-center gap-0.5 hover:underline"
+              style={{ color: accentColor }}
+              onClick={() => navigate(`/departments`)}
+              data-testid={`button-dept-link-${dept.id}`}
+            >
+              View <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          {/* Row 2: Member avatar strip */}
+          {members.length > 0 && (
+            <div className="flex items-center gap-1">
+              {members.slice(0, 6).map(m => (
+                <MemberAvatar key={m.id} m={m} accent={accentColor} navigate={navigate} />
+              ))}
+              {members.length > 6 && (
+                <span className="text-[9px] text-muted-foreground font-semibold ml-1">+{members.length - 6} more</span>
+              )}
+            </div>
           )}
-
-          {/* Dept description */}
-          {dept.description && (
-            <span className="text-[10px] text-muted-foreground italic truncate max-w-xs">{dept.description}</span>
+          {/* Row 3: Expanded member list */}
+          {showMembers && members.length > 0 && (
+            <div className="border-t pt-2 space-y-1 max-h-36 overflow-y-auto" style={{ borderColor: accentColor + "30" }}>
+              {members.map(m => (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-2 px-1.5 py-0.5 rounded-md hover:bg-black/5 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/users/${m.id}`)}
+                >
+                  <MemberAvatar m={m} accent={accentColor} navigate={navigate} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold truncate">{m.full_name || m.email}</p>
+                    <p className="text-[9px] text-muted-foreground capitalize">{m.role?.replace(/_/g, " ") || "—"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-
-          {/* Navigate to detail */}
-          <button
-            className="ml-auto text-[10px] flex items-center gap-0.5 hover:underline"
-            style={{ color: accentColor }}
-            onClick={() => navigate(`/departments`)}
-            data-testid={`button-dept-link-${dept.id}`}
-          >
-            View <ChevronRight className="h-3 w-3" />
-          </button>
         </div>
       </div>
 
@@ -521,7 +576,7 @@ function DeptOrgNode({
       {expanded && children.length > 0 && (
         <div className="relative">
           {children.map(child => (
-            <DeptOrgNode key={child.id} dept={child} allProfiles={allProfiles} depth={depth + 1} navigate={navigate} />
+            <DeptOrgNode key={child.id} dept={child} allProfiles={allProfiles} depth={depth + 1} navigate={navigate} forceExpand={forceExpand} />
           ))}
         </div>
       )}
@@ -1084,60 +1139,169 @@ function HorizontalOrgChart({ departments, allProfiles, navigate }: CommonOrgPro
   );
 }
 
-/* ─── 3. Circular (Level Rings) ─────────────────── */
-function CircularOrgChart({ departments, allProfiles }: CommonOrgProps) {
-  const tree = buildTree(departments);
-  const levels: Department[][] = [];
-  function collect(nodes: Department[], depth: number) {
-    if (!levels[depth]) levels[depth] = [];
-    nodes.forEach(n => { levels[depth].push(n); collect(n.children ?? [], depth + 1); });
-  }
-  collect(tree, 0);
+/* ─── 3. Circular / Hub-and-Spoke Org Chart ─────── */
+function HubDeptCard({
+  dept, allProfiles, navigate, depth,
+}: { dept: Department; allProfiles: Profile[]; navigate: ReturnType<typeof useNavigate>; depth: number }) {
+  const [open, setOpen] = useState(true);
+  const children = dept.children ?? [];
+  const members = allProfiles.filter(p => p.department_id === dept.id);
+  const palette = levelPalette(depth);
+  const accent = dept.color ?? palette.solid;
+
   return (
-    <div className="flex flex-col items-center gap-4 py-6 overflow-x-auto">
-      {/* Center hub */}
-      <div className="w-20 h-20 rounded-full bg-[#0F2041] flex flex-col items-center justify-center text-white text-center shadow-xl">
-        <Building2 className="h-5 w-5 mb-0.5" />
-        <span className="text-[9px] font-bold">Organization</span>
-        <span className="text-[8px] opacity-70">{departments.length} depts</span>
-      </div>
-      {levels.map((levelDepts, depth) => {
-        const palette = levelPalette(depth);
-        return (
-          <div key={depth} className="relative w-full flex justify-center">
-            {/* Ring border hint */}
-            <div
-              className="absolute inset-x-0 top-1/2 -translate-y-1/2 border-t border-dashed opacity-30"
-              style={{ borderColor: palette.solid }}
-            />
-            <div className="relative flex flex-wrap justify-center gap-2 px-4">
-              {levelDepts.map(dept => {
-                const members = allProfiles.filter(p => p.department_id === dept.id);
-                return (
-                  <div
-                    key={dept.id}
-                    className="rounded-full px-3.5 py-1.5 text-[11px] font-bold border-2 shadow-sm flex items-center gap-1.5"
-                    style={{ background: palette.light, borderColor: palette.solid, color: palette.solid }}
-                  >
-                    <span>{dept.name}</span>
-                    <span className="text-[9px] opacity-60">({members.length})</span>
-                  </div>
-                );
-              })}
-            </div>
+    <div className="flex flex-col items-center">
+      {/* Card */}
+      <div
+        className="rounded-xl border-2 overflow-hidden shadow-md hover:shadow-xl transition-all w-44 cursor-pointer select-none"
+        style={{ borderColor: accent }}
+        onClick={() => navigate("/departments")}
+        data-testid={`hub-card-${dept.id}`}
+      >
+        {/* Header band */}
+        <div className="px-3 py-2 flex items-center gap-2" style={{ background: accent }}>
+          <Building2 className="h-3.5 w-3.5 text-white/80 shrink-0" />
+          <p className="text-[11px] font-bold text-white truncate flex-1">{dept.name}</p>
+          <span className="text-[9px] font-bold text-white/80 shrink-0 bg-white/20 px-1.5 py-0.5 rounded-full">
+            {members.length}
+          </span>
+        </div>
+        {/* Body */}
+        <div className="px-2.5 py-2 space-y-1.5" style={{ background: palette.light + "dd" }}>
+          {/* Manager */}
+          <div className="flex items-center gap-1">
+            <UserCheck className="h-3 w-3 shrink-0" style={{ color: accent + "cc" }} />
+            <p className="text-[9px] truncate" style={{ color: accent + "cc" }}>
+              {dept.manager?.full_name || dept.manager?.email || <em className="opacity-50">No manager</em>}
+            </p>
           </div>
-        );
-      })}
-      {/* Legend */}
-      <div className="flex flex-wrap gap-2 justify-center mt-2">
-        {levels.map((_, depth) => {
-          const p = levelPalette(depth);
-          return (
-            <span key={depth} className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: p.light, color: p.solid }}>
-              <span className="w-2 h-2 rounded-full" style={{ background: p.solid }} />{p.label}
-            </span>
-          );
-        })}
+          {/* Member avatars */}
+          {members.length > 0 && (
+            <div className="flex items-center gap-0.5 flex-wrap">
+              {members.slice(0, 5).map(m => (
+                m.avatar_url ? (
+                  <img
+                    key={m.id}
+                    src={m.avatar_url}
+                    alt={m.full_name || ""}
+                    title={m.full_name || m.email || ""}
+                    className="w-5 h-5 rounded-full object-cover ring-1 ring-white hover:scale-110 transition-transform"
+                    onClick={e => { e.stopPropagation(); navigate(`/users/${m.id}`); }}
+                  />
+                ) : (
+                  <div
+                    key={m.id}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[7px] font-bold ring-1 ring-white hover:scale-110 transition-transform"
+                    style={{ background: accent }}
+                    title={m.full_name || m.email || ""}
+                    onClick={e => { e.stopPropagation(); navigate(`/users/${m.id}`); }}
+                  >
+                    {(m.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                )
+              ))}
+              {members.length > 5 && (
+                <span className="text-[8px] font-semibold ml-0.5" style={{ color: accent + "99" }}>+{members.length - 5}</span>
+              )}
+            </div>
+          )}
+          {/* Sub-depts + expand toggle */}
+          {children.length > 0 && (
+            <button
+              className="text-[9px] flex items-center gap-1 font-semibold hover:opacity-70 transition-opacity"
+              style={{ color: accent }}
+              onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+            >
+              <GitBranch className="h-2.5 w-2.5" />
+              {children.length} sub-dept{children.length > 1 ? "s" : ""}
+              {open ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Children subtree */}
+      {open && children.length > 0 && (
+        <div className="flex flex-col items-center">
+          {/* vertical stem */}
+          <div className="w-0.5 h-5" style={{ background: accent + "60" }} />
+          {/* horizontal bar if multiple children */}
+          {children.length > 1 && (
+            <div className="relative flex gap-4 justify-center">
+              <div
+                className="absolute top-0 left-0 right-0 h-0.5"
+                style={{ background: accent + "40" }}
+              />
+              {children.map(child => (
+                <div key={child.id} className="flex flex-col items-center pt-0">
+                  <div className="w-0.5 h-5" style={{ background: accent + "60" }} />
+                  <HubDeptCard dept={child} allProfiles={allProfiles} navigate={navigate} depth={depth + 1} />
+                </div>
+              ))}
+            </div>
+          )}
+          {children.length === 1 && (
+            <HubDeptCard dept={children[0]} allProfiles={allProfiles} navigate={navigate} depth={depth + 1} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CircularOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const tree = buildTree(departments);
+  const allFlat = flattenTree(tree);
+  const totalMembers = allProfiles.filter(p => p.department_id).length;
+
+  return (
+    <div className="flex flex-col items-center gap-0 py-6 overflow-x-auto min-w-full">
+      {/* Center hub */}
+      <div
+        className="w-28 h-28 rounded-full flex flex-col items-center justify-center text-white shadow-2xl border-4 border-white ring-2 ring-[#2563EB]/30 z-10"
+        style={{ background: "linear-gradient(135deg, #0F2041 0%, #1D3461 60%, #2563EB 100%)" }}
+      >
+        <Building2 className="h-6 w-6 mb-1 opacity-90" />
+        <span className="text-[10px] font-black uppercase tracking-wider">PACT Org</span>
+        <span className="text-[9px] font-semibold opacity-80 mt-0.5">{allFlat.length} depts</span>
+        <span className="text-[8px] opacity-60">{totalMembers} staff</span>
+      </div>
+
+      {/* Vertical stem from hub to L1 row */}
+      {tree.length > 0 && <div className="w-0.5 h-8 bg-[#1D3461]/30" />}
+
+      {/* Top-level departments */}
+      {tree.length > 0 && (
+        <div className="relative flex gap-6 flex-wrap justify-center px-6">
+          {/* Horizontal crossbar */}
+          {tree.length > 1 && (
+            <div
+              className="absolute top-0 left-1/4 right-1/4 h-0.5"
+              style={{ background: "#1D346130" }}
+            />
+          )}
+          {tree.map(dept => (
+            <div key={dept.id} className="flex flex-col items-center">
+              {/* Short vertical drop from crossbar to card */}
+              <div className="w-0.5 h-5 bg-[#1D3461]/30" />
+              <HubDeptCard dept={dept} allProfiles={allProfiles} navigate={navigate} depth={0} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Summary bar */}
+      <div className="mt-8 flex flex-wrap gap-3 justify-center text-[10px] text-muted-foreground border-t pt-4 w-full max-w-2xl">
+        {LEVEL_PALETTE.slice(0, Math.min(3, Math.max(1, tree.length > 0 ? 2 : 1))).map((p, i) => (
+          <span key={i} className="flex items-center gap-1 font-semibold px-2.5 py-1 rounded-full" style={{ background: p.light, color: p.solid }}>
+            <span className="w-2 h-2 rounded-full inline-block" style={{ background: p.solid }} />
+            {p.label}
+          </span>
+        ))}
+        <span className="flex items-center gap-1 ml-auto">
+          <Users className="h-3 w-3" />
+          {allFlat.length} dept{allFlat.length !== 1 ? "s" : ""} · {totalMembers} staff
+        </span>
       </div>
     </div>
   );
@@ -1529,12 +1693,14 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
   const navigate = useNavigate();
   const [mode, setMode] = useState<OrgMode>("dept");
   const [deptFilter, setDeptFilter] = useState<string>("all");
+  const [orgSearch, setOrgSearch] = useState("");
+  const [forceExpand, setForceExpand] = useState<boolean | null>(null);
 
   const tree = buildTree(departments);
   const flat = flattenTree(tree);
 
   // Department tree: filter to a branch if selected
-  const treeToShow = deptFilter === "all"
+  const branchTree = deptFilter === "all"
     ? tree
     : (() => {
         function findBranch(nodes: Department[]): Department | null {
@@ -1548,6 +1714,19 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
         const branch = findBranch(tree);
         return branch ? [branch] : tree;
       })();
+
+  // Search filter: prune tree to nodes matching name or having matching descendants
+  function filterOrgTree(nodes: Department[], q: string): Department[] {
+    return nodes.reduce<Department[]>((acc, n) => {
+      const filteredChildren = filterOrgTree(n.children ?? [], q);
+      if (n.name.toLowerCase().includes(q) || filteredChildren.length > 0) {
+        acc.push({ ...n, children: filteredChildren });
+      }
+      return acc;
+    }, []);
+  }
+  const q = orgSearch.trim().toLowerCase();
+  const treeToShow = q ? filterOrgTree(branchTree, q) : branchTree;
 
   // Reporting chain filter
   const filteredProfiles = deptFilter === "all" ? profiles : profiles.filter(p => p.department_id === deptFilter);
@@ -1607,16 +1786,19 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
 
   const currentMode = VIEW_MODES.find(m => m.id === mode)!;
 
+  const isTreeMode = mode === "dept" || mode === "compact";
+  const showExpandControls = isTreeMode;
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* View selector dropdown */}
-        <Select value={mode} onValueChange={v => setMode(v as OrgMode)}>
-          <SelectTrigger className="w-56 h-9 font-medium text-sm" data-testid="select-org-view">
+      <div className="flex flex-wrap items-center gap-2">
+        {/* View selector */}
+        <Select value={mode} onValueChange={v => { setMode(v as OrgMode); setForceExpand(null); }}>
+          <SelectTrigger className="w-52 h-9 font-medium text-sm" data-testid="select-org-view">
             <span className="flex items-center gap-1.5">
-              <span>{currentMode.icon}</span>
-              <SelectValue />
+              <span className="text-base leading-none">{currentMode.icon}</span>
+              <span className="truncate">{currentMode.label}</span>
             </span>
           </SelectTrigger>
           <SelectContent className="max-h-80">
@@ -1639,7 +1821,7 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
         {/* Dept filter — only for modes that support it */}
         {currentMode.showFilter && (
           <Select value={deptFilter} onValueChange={setDeptFilter}>
-            <SelectTrigger className="w-52 h-9" data-testid="select-orgchart-dept">
+            <SelectTrigger className="w-44 h-9 text-sm" data-testid="select-orgchart-dept">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1649,11 +1831,45 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
           </Select>
         )}
 
-        <p className="text-xs text-muted-foreground ml-auto">
+        {/* Search input */}
+        <div className="relative flex-1 min-w-[160px] max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            value={orgSearch}
+            onChange={e => setOrgSearch(e.target.value)}
+            placeholder="Search departments…"
+            className="h-9 pl-8 text-sm"
+            data-testid="input-org-search"
+          />
+        </div>
+
+        {/* Expand / Collapse all — tree modes only */}
+        {showExpandControls && (
+          <div className="flex gap-1">
+            <Button
+              variant="outline" size="sm" className="h-9 text-xs gap-1.5"
+              onClick={() => setForceExpand(true)}
+              data-testid="button-expand-all"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" /> Expand All
+            </Button>
+            <Button
+              variant="outline" size="sm" className="h-9 text-xs gap-1.5"
+              onClick={() => setForceExpand(false)}
+              data-testid="button-collapse-all"
+            >
+              <ChevronDown className="h-3.5 w-3.5" /> Collapse
+            </Button>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground ml-auto shrink-0">
           {mode === "reporting"
             ? `${filteredProfiles.length} people · ${effectiveRoots.length} top-level`
             : mode === "photo" || mode === "functional"
             ? `${allProfiles.length} people`
+            : q
+            ? `${flattenTree(treeToShow).length} of ${totalDepts} dept${totalDepts !== 1 ? "s" : ""}`
             : `${totalDepts} dept${totalDepts !== 1 ? "s" : ""} · ${topLevel} top-level`}
         </p>
       </div>
@@ -1668,6 +1884,14 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
               {p.label}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Search result hint */}
+      {q && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 flex items-center gap-2">
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          Showing results for "<strong>{orgSearch}</strong>" — {flattenTree(treeToShow).length} department{flattenTree(treeToShow).length !== 1 ? "s" : ""} found
         </div>
       )}
 
@@ -1706,12 +1930,16 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
 
       {/* Department Tree */}
       {mode === "dept" && (
-        departments.length === 0 ? (
-          <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" sub='Create departments using the "Departments" tab, then come back here.' />
+        treeToShow.length === 0 ? (
+          q ? (
+            <EmptyOrgState icon={<Search className="h-10 w-10 mx-auto mb-3 opacity-30" />} message={`No departments match "${orgSearch}"`} sub="Try a different search term." />
+          ) : (
+            <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" sub='Create departments using the "Departments" tab, then come back here.' />
+          )
         ) : (
           <div className="bg-muted/10 rounded-xl border p-4 overflow-x-auto">
             {treeToShow.map(dept => (
-              <DeptOrgNode key={dept.id} dept={dept} allProfiles={profiles} depth={0} navigate={navigate} />
+              <DeptOrgNode key={dept.id} dept={dept} allProfiles={profiles} depth={0} navigate={navigate} forceExpand={forceExpand} />
             ))}
           </div>
         )
@@ -2321,7 +2549,7 @@ export default function Departments() {
           .order("name"),
         supabase
           .from("profiles")
-          .select("id, full_name, email, role, department_id, reports_to")
+          .select("id, full_name, email, role, department_id, reports_to, avatar_url")
           .order("full_name"),
       ]);
 
