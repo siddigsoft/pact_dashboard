@@ -182,6 +182,55 @@ function QuickAddBar({ onAdd, isCreating }: QuickAddProps) {
 
 // ── Personal Task Card ──────────────────────────────────────────────────────
 
+type HealthSignal = 'at-risk' | 'on-track' | 'done' | 'cancelled';
+
+function getHealthSignal(
+  status: PersonalTaskStatus,
+  dueDate: string | null | undefined,
+  priority: string,
+): HealthSignal {
+  if (status === 'done') return 'done';
+  if (status === 'cancelled') return 'cancelled';
+  if (isOverdue(dueDate, status)) return 'at-risk';
+  if (dueDate && isValid(parseISO(dueDate)) && isToday(parseISO(dueDate)) && status === 'todo') return 'at-risk';
+  return 'on-track';
+}
+
+const HEALTH_CFG: Record<HealthSignal, { label: string; bg: string; text: string; ring: string; icon: ReactNode; arcColor: string }> = {
+  'at-risk':   { label: 'At Risk',   bg: 'bg-red-50',      text: 'text-red-700',     ring: 'ring-red-200',     icon: <AlertTriangle className="h-3.5 w-3.5" />, arcColor: '#ef4444' },
+  'on-track':  { label: 'On Track',  bg: 'bg-emerald-50',  text: 'text-emerald-700', ring: 'ring-emerald-200', icon: <TrendingUp className="h-3.5 w-3.5" />,    arcColor: '#10b981' },
+  'done':      { label: 'Done',      bg: 'bg-slate-100',   text: 'text-slate-500',   ring: 'ring-slate-200',   icon: <CheckCircle2 className="h-3.5 w-3.5" />,  arcColor: '#94a3b8' },
+  'cancelled': { label: 'Cancelled', bg: 'bg-slate-100',   text: 'text-slate-400',   ring: 'ring-slate-200',   icon: <Circle className="h-3.5 w-3.5" />,        arcColor: '#cbd5e1' },
+};
+
+function TaskArcRing({
+  pct, health, onClick, isDone,
+}: { pct: number; health: HealthSignal; onClick: () => void; isDone: boolean }) {
+  const r = 20; const circ = 2 * Math.PI * r;
+  const color = HEALTH_CFG[health].arcColor;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={isDone ? 'Click to reopen' : 'Click to mark as done'}
+      data-testid="task-arc-ring"
+      className="flex-shrink-0 hover:scale-105 active:scale-95 transition-transform focus:outline-none"
+    >
+      <svg width="52" height="52" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="26" cy="26" r={r} fill="none" stroke="#e2e8f0" strokeWidth="5" />
+        <circle cx="26" cy="26" r={r} fill="none" stroke={color} strokeWidth="5"
+          strokeDasharray={circ} strokeDashoffset={circ * (1 - pct / 100)}
+          strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
+        <text x="26" y="26" dominantBaseline="middle" textAnchor="middle"
+          style={{ transform: 'rotate(90deg)', transformOrigin: '26px 26px' }}
+          fill="#64748b" fontSize="11" fontWeight="700" fontFamily="sans-serif">
+          {pct}%
+        </text>
+      </svg>
+    </button>
+  );
+}
+
 interface PersonalTaskCardProps {
   task: PersonalTask;
   subtasks: PersonalTask[];
@@ -197,18 +246,20 @@ function PersonalTaskCard({
   task, subtasks, onStatusChange, onEdit, onDelete,
   onCreateSubtask, onSubtaskStatusChange, onOpenDetail,
 }: PersonalTaskCardProps) {
-  const pCfg = PRIORITY_CFG[task.priority] ?? PRIORITY_CFG.medium;
-  const sCfg = STATUS_CFG[task.status] ?? STATUS_CFG.todo;
   const overdue = isOverdue(task.dueDate, task.status);
   const isDone = task.status === 'done';
-  const isInProgress = task.status === 'inprogress';
   const [subtaskOpen, setSubtaskOpen] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
 
   const doneSubs = subtasks.filter(s => s.status === 'done').length;
   const totalSubs = subtasks.length;
-  const subProgress = totalSubs > 0 ? Math.round((doneSubs / totalSubs) * 100) : 0;
+  const arcPct = totalSubs > 0
+    ? Math.round((doneSubs / totalSubs) * 100)
+    : isDone ? 100 : task.status === 'inprogress' ? 50 : 0;
+
+  const health = getHealthSignal(task.status, task.dueDate, task.priority);
+  const hCfg = HEALTH_CFG[health];
 
   const handleAddSubtask = async () => {
     const t = newSubtaskTitle.trim();
@@ -223,73 +274,65 @@ function PersonalTaskCard({
   };
 
   return (
-    <div className={cn(
-      'rounded-xl border border-l-[3px] bg-card shadow-sm hover:shadow-md transition-all duration-150',
-      sCfg.border,
-      isDone && 'opacity-55',
-    )}>
+    <div className={cn('rounded-xl bg-card shadow-sm hover:shadow-md transition-all duration-150 border border-border/60', isDone && 'opacity-60')}>
       {/* Main row */}
-      <div className="group flex items-start gap-3 px-4 py-3">
-        {/* Status toggle circle */}
-        <button
-          type="button"
-          className={cn(
-            'mt-0.5 h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110 active:scale-95',
-            isDone
-              ? 'border-emerald-500 bg-emerald-500'
-              : isInProgress
-              ? 'border-[#1D3461] bg-[#1D3461]/10 ring-2 ring-[#1D3461]/15'
-              : 'border-muted-foreground/30 hover:border-emerald-500 hover:bg-emerald-50',
-          )}
+      <div className="flex items-center gap-4 px-4 py-3">
+        {/* Arc ring — click to toggle done */}
+        <TaskArcRing
+          pct={arcPct}
+          health={health}
+          isDone={isDone}
           onClick={() => onStatusChange(isDone ? 'todo' : 'done', task.status)}
-          title={isDone ? 'Click to reopen' : 'Click to mark as done'}
           data-testid={`task-toggle-${task.id}`}
-        >
-          {isDone
-            ? <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-            : isInProgress
-            ? <div className="h-2.5 w-2.5 rounded-full bg-[#1D3461]" />
-            : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
-          }
-        </button>
+        />
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-1.5">
-            <button
-              type="button"
-              onClick={onOpenDetail}
-              className={cn(
-                'text-[15px] font-semibold leading-snug text-left flex-1 hover:text-[#1D3461] transition-colors',
-                isDone && 'line-through text-muted-foreground hover:text-muted-foreground',
-                onOpenDetail && 'cursor-pointer',
-              )}
-              title="Open task details"
-              data-testid={`task-title-${task.id}`}
-            >
-              {task.title}
-            </button>
-            {task.notes && (
-              <StickyNote className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" title="Has notes" />
+          {/* Health chip row */}
+          <div className="flex items-center gap-2 mb-1">
+            <span className={cn(
+              'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1',
+              hCfg.bg, hCfg.text, hCfg.ring,
+            )}>
+              {hCfg.icon} {hCfg.label}
+            </span>
+            {task.notes && <StickyNote className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" title="Has notes" />}
+            {task.recurrence && task.recurrence !== 'none' && (
+              <span className="text-[11px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full capitalize">{task.recurrence}</span>
             )}
           </div>
+
+          {/* Title */}
+          <button
+            type="button"
+            onClick={onOpenDetail}
+            className={cn(
+              'text-[14px] font-semibold leading-snug text-left w-full hover:text-[#1D3461] transition-colors',
+              isDone && 'line-through text-muted-foreground hover:text-muted-foreground',
+              onOpenDetail && 'cursor-pointer',
+            )}
+            title="Open task details"
+            data-testid={`task-title-${task.id}`}
+          >
+            {task.title}
+          </button>
+
           {task.description && (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{task.description}</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
           )}
-          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full', pCfg.color)}>
-              {pCfg.label}
-            </span>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             {task.dueDate && (
               <span className={cn(
-                'text-[11px] flex items-center gap-1 px-2 py-0.5 rounded-full font-medium',
+                'text-[11px] flex items-center gap-1 font-medium',
                 overdue
-                  ? 'bg-red-50 text-red-600 border border-red-200'
+                  ? 'text-red-600'
                   : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate)))
-                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                  ? 'text-amber-600'
                   : 'text-muted-foreground',
               )}>
-                <Calendar className="h-3 w-3" />
+                <Clock className="h-3 w-3" />
                 {overdue && '⚠ '}{fmtDate(task.dueDate)}
               </span>
             )}
@@ -301,9 +344,6 @@ function PersonalTaskCard({
                 +{task.completionRewardCurrency} {task.completionRewardAmount}
               </span>
             )}
-            {task.recurrence && task.recurrence !== 'none' && (
-              <span className="text-[11px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full capitalize">{task.recurrence}</span>
-            )}
             {(task.tags ?? []).slice(0, 3).map(tag => (
               <span key={tag} className="text-[11px] flex items-center gap-0.5 bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/15 px-2 py-0.5 rounded-full font-medium">
                 <Hash className="h-2.5 w-2.5" />{tag}
@@ -312,71 +352,31 @@ function PersonalTaskCard({
             {(task.tags ?? []).length > 3 && (
               <span className="text-[11px] text-muted-foreground">+{(task.tags ?? []).length - 3}</span>
             )}
-          </div>
-          {/* Co-assignees avatars */}
-          {task.coAssignees && task.coAssignees.length > 0 && (
-            <div className="flex items-center gap-1 mt-1.5">
-              {task.coAssignees.slice(0, 4).map((a) => (
-                <span
-                  key={a.id}
-                  title={a.name}
-                  className="h-5 w-5 rounded-full bg-[#1D3461]/10 border border-[#1D3461]/20 flex items-center justify-center text-[9px] font-bold text-[#1D3461] flex-shrink-0"
-                >
-                  {a.name.charAt(0).toUpperCase()}
-                </span>
-              ))}
-              {task.coAssignees.length > 4 && (
-                <span className="text-[10px] text-muted-foreground">+{task.coAssignees.length - 4}</span>
-              )}
-            </div>
-          )}
-
-          {/* Subtask progress bar */}
-          {totalSubs > 0 && (
-            <button
-              type="button"
-              onClick={() => setSubtaskOpen(v => !v)}
-              className="mt-2 flex items-center gap-2 hover:opacity-80 transition-opacity w-full"
-              data-testid={`subtask-toggle-${task.id}`}
-            >
-              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-[#1D3461] rounded-full transition-all" style={{ width: `${subProgress}%` }} />
+            {/* Co-assignees */}
+            {task.coAssignees && task.coAssignees.length > 0 && (
+              <div className="flex items-center gap-1">
+                {task.coAssignees.slice(0, 3).map((a) => (
+                  <span key={a.id} title={a.name} className="h-5 w-5 rounded-full bg-[#1D3461]/10 border border-[#1D3461]/20 flex items-center justify-center text-[9px] font-bold text-[#1D3461] flex-shrink-0">
+                    {a.name.charAt(0).toUpperCase()}
+                  </span>
+                ))}
+                {task.coAssignees.length > 3 && (
+                  <span className="text-[10px] text-muted-foreground">+{task.coAssignees.length - 3}</span>
+                )}
               </div>
-              <span className="text-[11px] text-muted-foreground font-medium flex-shrink-0">
-                {doneSubs}/{totalSubs}
-              </span>
-              {subtaskOpen
-                ? <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                : <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-              }
-            </button>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Right-side action buttons */}
-        <div className="flex items-center gap-1 flex-shrink-0 self-start mt-0.5">
-          {/* Mark Done */}
-          {!isDone && (
-            <button
-              type="button"
-              onClick={() => onStatusChange('done', task.status)}
-              className="opacity-0 group-hover:opacity-100 transition-all text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1 flex-shrink-0"
-              data-testid={`task-mark-done-${task.id}`}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Done
-            </button>
-          )}
-
-          {/* Subtask toggle */}
+        {/* Right — subtask expand + combined menu */}
+        <div className="flex items-center gap-1 flex-shrink-0 self-start mt-1">
           {onCreateSubtask && (
             <button
               type="button"
               onClick={() => setSubtaskOpen(v => !v)}
               className={cn(
-                'opacity-0 group-hover:opacity-100 transition-all rounded-lg p-1.5 flex-shrink-0',
-                subtaskOpen
-                  ? 'opacity-100 bg-[#1D3461]/10 text-[#1D3461]'
-                  : 'text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5',
+                'rounded-lg p-1.5 flex-shrink-0 transition-all',
+                subtaskOpen ? 'bg-[#1D3461]/10 text-[#1D3461]' : 'text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5',
               )}
               title={subtaskOpen ? 'Hide subtasks' : 'Add / view subtasks'}
               data-testid={`subtask-expand-${task.id}`}
@@ -385,44 +385,39 @@ function PersonalTaskCard({
             </button>
           )}
 
-          {/* Status dropdown */}
-          <Select
-            value={task.status}
-            onValueChange={v => onStatusChange(v as PersonalTaskStatus, task.status)}
-          >
-            <SelectTrigger
-              className="h-8 w-8 border-0 bg-transparent p-0 focus:ring-0 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 rounded-lg hover:bg-muted"
-              title="Change status"
-            >
-              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-            </SelectTrigger>
-            <SelectContent>
-              <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Change Status</div>
-              {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
-                <SelectItem key={s} value={s} className="text-xs">
-                  <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* More actions */}
+          {/* Combined status + actions menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="opacity-0 group-hover:opacity-100 transition-all text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg p-1.5 flex-shrink-0"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg p-1.5 flex-shrink-0 transition-all"
+                data-testid={`task-menu-${task.id}`}
               >
-                <Edit2 className="h-4 w-4" />
+                <MoreHorizontal className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="text-sm">
+            <DropdownMenuContent align="end" className="text-sm w-44">
+              <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Set Status</div>
+              {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
+                <DropdownMenuItem
+                  key={s}
+                  onClick={() => onStatusChange(s, task.status)}
+                  className={cn('gap-2 text-xs', task.status === s && 'bg-muted')}
+                  data-testid={`task-status-${s}-${task.id}`}
+                >
+                  <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onEdit} className="gap-2">
-                <Edit2 className="h-3.5 w-3.5" />Edit Task
+                <Edit2 className="h-3.5 w-3.5" /> Edit Task
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenDetail} className="gap-2">
+                <ExternalLink className="h-3.5 w-3.5" /> Open Details
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive gap-2">
-                <Trash2 className="h-3.5 w-3.5" />Delete
+                <Trash2 className="h-3.5 w-3.5" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -431,7 +426,7 @@ function PersonalTaskCard({
 
       {/* Subtask panel */}
       {subtaskOpen && (
-        <div className="px-4 pb-3 pt-0 ml-9 border-t border-dashed border-muted/70 space-y-1.5" data-testid={`subtask-panel-${task.id}`}>
+        <div className="px-4 pb-3 pt-0 ml-16 border-t border-dashed border-muted/70 space-y-1.5" data-testid={`subtask-panel-${task.id}`}>
           {subtasks.length === 0 && (
             <p className="text-xs text-muted-foreground py-1.5">No subtasks yet — type below to add one.</p>
           )}
@@ -442,7 +437,7 @@ function PersonalTaskCard({
                 <button
                   type="button"
                   className={cn(
-                    'h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+                    'h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
                     subDone ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
                   )}
                   onClick={() => onSubtaskStatusChange?.(sub.id, subDone ? 'todo' : 'done', sub.status)}
@@ -457,7 +452,6 @@ function PersonalTaskCard({
               </div>
             );
           })}
-          {/* Quick-add subtask */}
           {onCreateSubtask && (
             <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-dashed border-muted/50">
               <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
