@@ -155,14 +155,20 @@ const Users = () => {
     return isGoogleAuthUser(user) ? 'google' : 'email';
   };
 
+  // Roles that qualify as "admin" for tab/stat purposes
+  const ADMIN_ROLE_VARIANTS = [
+    'admin', 'Admin', 'Administrator', 'administrator',
+    'super_admin', 'superAdmin', 'SuperAdmin', 'super admin',
+  ];
+  const isAdminRole = (u: User) =>
+    ADMIN_ROLE_VARIANTS.includes(u.role ?? '') ||
+    (u.roles && Array.isArray(u.roles) && u.roles.some(r => ADMIN_ROLE_VARIANTS.includes(r as string)));
+
   // Statistics
   const stats = useMemo(() => {
     const pending = users.filter(u => !u.isApproved);
     const approved = users.filter(u => u.isApproved);
-    const admins = users.filter(u => 
-      u.role === 'admin' || 
-      (u.roles && Array.isArray(u.roles) && u.roles.includes('admin' as any))
-    );
+    const admins = users.filter(isAdminRole);
     return {
       total: users.length,
       pending: pending.length,
@@ -203,10 +209,7 @@ const Users = () => {
     } else if (activeTab === 'approved') {
       result = result.filter(u => u.isApproved);
     } else if (activeTab === 'admins') {
-      result = result.filter(u => 
-        u.role === 'admin' || 
-        (u.roles && Array.isArray(u.roles) && u.roles.includes('admin' as any))
-      );
+      result = result.filter(isAdminRole);
     }
     
     // Search filter (using debounced value for performance)
