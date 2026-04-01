@@ -36,7 +36,7 @@ const ProjectsPage = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
-            <FolderKanban className="h-4.5 w-4.5 text-white" />
+            <FolderKanban className="h-5 w-5 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-semibold leading-tight">Projects</h1>

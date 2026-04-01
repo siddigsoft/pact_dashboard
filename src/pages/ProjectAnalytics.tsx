@@ -23,6 +23,8 @@ import {
   ArrowUpDown,
   Filter,
   TrendingUp,
+  ChevronLeft,
+  RefreshCw,
 } from 'lucide-react';
 import { format, parseISO, isValid, differenceInDays } from 'date-fns';
 
@@ -48,6 +50,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { getProjectFlow } from '@/config/projectFlows';
 import { normaliseProjectType } from '@/types/project';
 
@@ -125,13 +128,11 @@ interface AnalyticsData {
 }
 
 async function fetchAnalyticsData(filters: QueryFilters): Promise<AnalyticsData> {
-  // Use RPC to bypass PostgREST schema cache for new columns (current_flow_stage etc.)
   const { data: allProjects, error: projError } = await supabase
     .rpc('get_projects_for_analytics');
 
   if (projError) throw new Error(projError.message);
 
-  // Apply filters client-side
   let projects = (allProjects ?? []) as ProjectRow[];
   if (filters.projectId !== 'all') {
     projects = projects.filter(p => p.id === filters.projectId);
@@ -201,6 +202,7 @@ export default function ProjectAnalytics() {
   const [startFrom, setStartFrom] = useState('');
   const [startTo, setStartTo] = useState('');
   const [stallSort, setStallSort] = useState<{ field: SortField; dir: SortDir }>({ field: 'daysSince', dir: 'desc' });
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const { data: allProjectNames } = useQuery({
     queryKey: ['project_names_list'],
@@ -211,14 +213,17 @@ export default function ProjectAnalytics() {
         .order('name', { ascending: true });
       return (data ?? []) as { id: string; name: string; project_code: string }[];
     },
-    staleTime: 120_000,
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
   });
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['project_analytics', projectIdFilter, clientTypeFilter, pmFilter, startFrom, startTo],
     queryFn: () => fetchAnalyticsData({ projectId: projectIdFilter, clientType: clientTypeFilter, pmFilter, startFrom, startTo }),
-    staleTime: 60_000,
+    staleTime: 300_000,
+    gcTime: 600_000,
     retry: 1,
+    refetchOnWindowFocus: false,
   });
 
   const projects = data?.projects ?? [];
@@ -374,48 +379,90 @@ export default function ProjectAnalytics() {
     URL.revokeObjectURL(url);
   }, [projects, data]);
 
+  const hasFilters = projectIdFilter !== 'all' || clientTypeFilter !== 'all' || pmFilter !== 'all' || !!startFrom || !!startTo;
+  const activeFilterCount = [
+    projectIdFilter !== 'all',
+    clientTypeFilter !== 'all',
+    pmFilter !== 'all',
+    !!startFrom,
+    !!startTo,
+  ].filter(Boolean).length;
+
+  const PageHeader = () => (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('/projects')}
+          className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+          title="Back to Projects"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <BarChart3 className="h-5 w-5 text-white" />
+        </div>
+        <div>
+          <h1 className="text-lg font-bold leading-tight">Project Analytics</h1>
+          <p className="text-xs text-muted-foreground">Flow progress and health across all projects</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="h-8 text-xs gap-1.5"
+          data-testid="button-refresh"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+          {isFetching ? 'Refreshing…' : 'Refresh'}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={downloadCSV}
+          disabled={projects.length === 0}
+          className="h-8 text-xs gap-1.5"
+          data-testid="button-export-csv"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export CSV
+        </Button>
+      </div>
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-3 md:p-4 space-y-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-md bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0">
-            <BarChart3 className="h-4.5 w-4.5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold">Project Analytics</h1>
-            <p className="text-xs text-muted-foreground">Loading data…</p>
-          </div>
-        </div>
+      <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
+        <PageHeader />
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
+            <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-72 bg-muted animate-pulse rounded-lg" />
-          <div className="h-72 bg-muted animate-pulse rounded-lg" />
+          <div className="h-72 bg-muted animate-pulse rounded-xl" />
+          <div className="h-72 bg-muted animate-pulse rounded-xl" />
         </div>
+        <div className="h-48 bg-muted animate-pulse rounded-xl" />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-background p-3 md:p-4">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-9 h-9 rounded-md bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0">
-            <BarChart3 className="h-4.5 w-4.5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold">Project Analytics</h1>
-          </div>
-        </div>
+      <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
+        <PageHeader />
         <Card>
           <CardContent className="py-12 text-center">
             <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
             <p className="font-medium text-sm mb-1">Failed to load analytics data</p>
             <p className="text-xs text-muted-foreground mb-4">Please check your connection and try again.</p>
-            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
               Retry
             </Button>
           </CardContent>
@@ -424,129 +471,96 @@ export default function ProjectAnalytics() {
     );
   }
 
-  const hasFilters = projectIdFilter !== 'all' || clientTypeFilter !== 'all' || pmFilter !== 'all' || !!startFrom || !!startTo;
-
   return (
     <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-md bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0">
-            <BarChart3 className="h-4.5 w-4.5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">Project Analytics</h1>
-            <p className="text-xs text-muted-foreground">Flow progress and health across all projects</p>
-          </div>
+      <PageHeader />
+
+      {/* Inline filter bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground mr-1">
+          <Filter className="h-3.5 w-3.5" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="bg-[#1D3461] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>
+          )}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={downloadCSV}
-          disabled={projects.length === 0}
-          data-testid="button-export-csv"
-        >
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          Export CSV
-        </Button>
+
+        <Select value={projectIdFilter} onValueChange={setProjectIdFilter}>
+          <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-project-filter">
+            <SelectValue placeholder="All Projects" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Projects</SelectItem>
+            {(allProjectNames ?? []).map(p => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.project_code ? `[${p.project_code}] ${p.name}` : p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={clientTypeFilter} onValueChange={setClientTypeFilter}>
+          <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-client-type-filter">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            <SelectItem value="internal">Internal</SelectItem>
+            <SelectItem value="customer">Customer / Donor</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={pmFilter} onValueChange={setPmFilter}>
+          <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-pm-filter">
+            <SelectValue placeholder="All PMs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All PMs</SelectItem>
+            {uniquePMs.map(name => (
+              <SelectItem key={name} value={name}>{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">Start from</Label>
+          <Input
+            type="date"
+            className="h-8 text-xs w-[140px]"
+            value={startFrom}
+            onChange={e => setStartFrom(e.target.value)}
+            data-testid="input-start-from"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">to</Label>
+          <Input
+            type="date"
+            className="h-8 text-xs w-[140px]"
+            value={startTo}
+            onChange={e => setStartTo(e.target.value)}
+            data-testid="input-start-to"
+          />
+        </div>
+
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs text-muted-foreground"
+            onClick={() => { setProjectIdFilter('all'); setClientTypeFilter('all'); setPmFilter('all'); setStartFrom(''); setStartTo(''); }}
+            data-testid="button-clear-filters"
+          >
+            Clear
+          </Button>
+        )}
+
+        <div className="ml-auto text-xs text-muted-foreground font-medium">
+          {projects.length} project{projects.length !== 1 ? 's' : ''}
+        </div>
       </div>
-
-      {/* Filters */}
-      <Card>
-        <CardHeader className="pb-3 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-            Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="flex flex-wrap gap-3 items-end">
-            <div className="space-y-1">
-              <Label className="text-xs">Project List</Label>
-              <Select value={projectIdFilter} onValueChange={setProjectIdFilter}>
-                <SelectTrigger className="h-8 w-[220px] text-xs" data-testid="select-project-filter">
-                  <SelectValue placeholder="All Projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {(allProjectNames ?? []).map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.project_code ? `[${p.project_code}] ${p.name}` : p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Category</Label>
-              <Select value={clientTypeFilter} onValueChange={setClientTypeFilter}>
-                <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-client-type-filter">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  <SelectItem value="internal">Internal</SelectItem>
-                  <SelectItem value="customer">Customer / Donor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Project Manager</Label>
-              <Select value={pmFilter} onValueChange={setPmFilter}>
-                <SelectTrigger className="h-8 w-[180px] text-xs" data-testid="select-pm-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All PMs</SelectItem>
-                  {uniquePMs.map(name => (
-                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Start Date From</Label>
-              <Input
-                type="date"
-                className="h-8 text-xs w-[150px]"
-                value={startFrom}
-                onChange={e => setStartFrom(e.target.value)}
-                data-testid="input-start-from"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Start Date To</Label>
-              <Input
-                type="date"
-                className="h-8 text-xs w-[150px]"
-                value={startTo}
-                onChange={e => setStartTo(e.target.value)}
-                data-testid="input-start-to"
-              />
-            </div>
-
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => { setProjectIdFilter('all'); setClientTypeFilter('all'); setPmFilter('all'); setStartFrom(''); setStartTo(''); }}
-                data-testid="button-clear-filters"
-              >
-                Clear filters
-              </Button>
-            )}
-
-            <div className="ml-auto text-xs text-muted-foreground self-end pb-1">
-              {projects.length} project{projects.length !== 1 ? 's' : ''} shown
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
@@ -599,29 +613,33 @@ export default function ProjectAnalytics() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Stage Distribution — stacked bar coloured by status */}
-        <Card>
+        {/* Stage Distribution */}
+        <Card className="shadow-sm">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">Stage Distribution</CardTitle>
             <p className="text-xs text-muted-foreground">Projects at each flow stage, coloured by status</p>
           </CardHeader>
-          <CardContent className="px-2 pb-4">
+          <Separator />
+          <CardContent className="px-2 pb-4 pt-3">
             {stageDistribution.length === 0 ? (
-              <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
+              <div className="h-52 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+                <BarChart3 className="h-8 w-8 opacity-20" />
+                No stage data available
+              </div>
             ) : (
               <ChartErrorBoundary>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={stageDistribution} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={stageDistribution} margin={{ top: 4, right: 8, left: -20, bottom: 72 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis
                       dataKey="label"
-                      tick={{ fontSize: 10 }}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
                       angle={-40}
                       textAnchor="end"
                       interval={0}
                     />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <Tooltip contentStyle={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                     <Legend
                       iconSize={10}
                       wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
@@ -644,30 +662,34 @@ export default function ProjectAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Completion Rate by Type — dual bars (total vs reached final) + % in tooltip */}
-        <Card>
+        {/* Completion Rate by Type */}
+        <Card className="shadow-sm">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">Completion Rate by Type</CardTitle>
             <p className="text-xs text-muted-foreground">Completed / final-stage vs. total, per project type</p>
           </CardHeader>
-          <CardContent className="px-2 pb-4">
+          <Separator />
+          <CardContent className="px-2 pb-4 pt-3">
             {completionByType.length === 0 ? (
-              <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">No data</div>
+              <div className="h-52 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+                <BarChart3 className="h-8 w-8 opacity-20" />
+                No type data available
+              </div>
             ) : (
               <ChartErrorBoundary>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 70 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={completionByType} margin={{ top: 4, right: 8, left: -20, bottom: 72 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis
                       dataKey="label"
-                      tick={{ fontSize: 10 }}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
                       angle={-40}
                       textAnchor="end"
                       interval={0}
                     />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
                     <Tooltip
-                      contentStyle={{ fontSize: 12 }}
+                      contentStyle={{ fontSize: 12, borderRadius: 8 }}
                       formatter={(v, name, entry) => {
                         if (name === 'reachedFinal') {
                           const rate = (entry?.payload as { rate?: number })?.rate ?? 0;
@@ -692,7 +714,7 @@ export default function ProjectAnalytics() {
       </div>
 
       {/* Stalled Projects Table */}
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader className="pb-3 pt-4 px-4">
           <div className="flex items-center justify-between">
             <div>
@@ -705,11 +727,14 @@ export default function ProjectAnalytics() {
               </p>
             </div>
             {stalledProjects.length > 0 && (
-              <Badge variant="secondary" className="text-xs">{stalledProjects.length}</Badge>
+              <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-300 border">
+                {stalledProjects.length} stalled
+              </Badge>
             )}
           </div>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
+        <Separator />
+        <CardContent className="px-4 pb-4 pt-3">
           {stalledProjects.length === 0 ? (
             <div className="text-center py-8 text-xs text-muted-foreground">
               <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500 opacity-60" />
@@ -719,10 +744,10 @@ export default function ProjectAnalytics() {
             <div className="overflow-x-auto -mx-1">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="hover:bg-transparent">
                     <TableHead className="text-xs w-[200px]">
                       <button
-                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 hover:text-foreground transition-colors font-semibold"
                         onClick={() => handleSort('name')}
                         data-testid="sort-by-name"
                       >
@@ -731,7 +756,7 @@ export default function ProjectAnalytics() {
                     </TableHead>
                     <TableHead className="text-xs">
                       <button
-                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 hover:text-foreground transition-colors font-semibold"
                         onClick={() => handleSort('type')}
                         data-testid="sort-by-type"
                       >
@@ -740,17 +765,17 @@ export default function ProjectAnalytics() {
                     </TableHead>
                     <TableHead className="text-xs">
                       <button
-                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 hover:text-foreground transition-colors font-semibold"
                         onClick={() => handleSort('stage')}
                         data-testid="sort-by-stage"
                       >
                         Current Stage <ArrowUpDown className="h-3 w-3" />
                       </button>
                     </TableHead>
-                    <TableHead className="text-xs">Last Advanced</TableHead>
+                    <TableHead className="text-xs font-semibold">Last Advanced</TableHead>
                     <TableHead className="text-xs text-right">
                       <button
-                        className="flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
+                        className="flex items-center gap-1 hover:text-foreground transition-colors ml-auto font-semibold"
                         onClick={() => handleSort('daysSince')}
                         data-testid="sort-by-days"
                       >
@@ -762,35 +787,36 @@ export default function ProjectAnalytics() {
                 </TableHeader>
                 <TableBody>
                   {stalledProjects.map(p => (
-                    <TableRow key={p.id} data-testid={`row-stalled-${p.id}`}>
-                      <TableCell className="py-2">
-                        <div className="font-medium text-sm truncate max-w-[180px]" title={p.name}>{p.name}</div>
+                    <TableRow key={p.id} className="hover:bg-muted/40" data-testid={`row-stalled-${p.id}`}>
+                      <TableCell className="py-2.5">
+                        <div className="font-semibold text-sm truncate max-w-[180px]" title={p.name}>{p.name}</div>
                         <div className="text-xs text-muted-foreground font-mono">{p.projectCode}</div>
                       </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">{p.type}</TableCell>
-                      <TableCell className="py-2">
+                      <TableCell className="py-2.5 text-xs text-muted-foreground">{p.type}</TableCell>
+                      <TableCell className="py-2.5">
                         <Badge
                           variant="outline"
-                          className="text-xs"
+                          className="text-xs font-medium"
                           style={{
                             borderColor: STATUS_COLORS[p.status] ?? '#64748b',
                             color: STATUS_COLORS[p.status] ?? '#64748b',
+                            backgroundColor: `${STATUS_COLORS[p.status] ?? '#64748b'}12`,
                           }}
                         >
                           {p.stageName}
                         </Badge>
                       </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">{fmtDate(p.lastAdvancedAt)}</TableCell>
-                      <TableCell className="py-2 text-right">
-                        <span className={`text-sm font-semibold ${p.daysSince >= 30 ? 'text-red-600' : 'text-amber-600'}`}>
+                      <TableCell className="py-2.5 text-xs text-muted-foreground">{fmtDate(p.lastAdvancedAt)}</TableCell>
+                      <TableCell className="py-2.5 text-right">
+                        <span className={`text-sm font-bold ${p.daysSince >= 30 ? 'text-red-600' : 'text-amber-600'}`}>
                           {p.daysSince}d
                         </span>
                       </TableCell>
-                      <TableCell className="py-2">
+                      <TableCell className="py-2.5">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 text-xs px-2"
+                          className="h-7 text-xs px-2 hover:bg-[#1D3461]/10 hover:text-[#1D3461]"
                           onClick={() => navigate(`/projects/${p.id}`)}
                           data-testid={`button-view-stalled-${p.id}`}
                         >

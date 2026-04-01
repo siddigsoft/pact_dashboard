@@ -189,21 +189,22 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
   return (
     <div className="w-full">
-      <div className="flex flex-col md:flex-row gap-3 mb-4 items-start md:items-center justify-between">
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-col sm:flex-row gap-2 mb-4 items-start sm:items-center">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Search projects..."
+            placeholder="Search by name, code or description…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 w-full"
+            className="pl-9 h-9 text-sm"
+            data-testid="input-search-projects"
           />
         </div>
         
-        <div className="flex flex-wrap gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap gap-2 shrink-0">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full md:w-[200px]">
-              <SelectValue placeholder="Project Type" />
+            <SelectTrigger className="h-9 w-[175px] text-sm">
+              <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
@@ -214,8 +215,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
           </Select>
           
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-[180px]">
-              <SelectValue placeholder="Status" />
+            <SelectTrigger className="h-9 w-[155px] text-sm">
+              <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
@@ -232,7 +233,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
               variant={showArchived ? 'secondary' : 'outline'}
               size="sm"
               onClick={() => setShowArchived(v => !v)}
-              className="whitespace-nowrap"
+              className="h-9 whitespace-nowrap"
               data-testid="button-toggle-archived"
             >
               <Archive className="h-4 w-4 mr-1.5" />
@@ -241,6 +242,11 @@ const ProjectList: React.FC<ProjectListProps> = ({
           )}
         </div>
       </div>
+      {filteredProjects.length !== projects.length && (
+        <p className="text-xs text-muted-foreground mb-3">
+          Showing {filteredProjects.length} of {projects.filter(p => showArchived || !p.archived).length} projects
+        </p>
+      )}
       
       {filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
