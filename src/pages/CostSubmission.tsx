@@ -116,6 +116,8 @@ interface OperationalCostSubmission {
   payment_proof_url?: string | null;
   payment_proof_notes?: string | null;
   payment_proof_uploaded_at?: string | null;
+  request_group_id?: string | null;
+  request_title?: string | null;
 }
 
 const CostSubmission = () => {
@@ -3021,6 +3023,22 @@ const CostSubmission = () => {
             const statusFiltered = statusFilter === 'all'
               ? filteredOperationalCosts
               : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+
+            // Build ordered group list — items sharing request_group_id become one entry
+            type OcGroup = { groupId: string | null; items: typeof statusFiltered };
+            const ocGroups: OcGroup[] = [];
+            const seenGroupIds = new Set<string>();
+            for (const oc of statusFiltered) {
+              const gid = oc.request_group_id ?? null;
+              if (gid && seenGroupIds.has(gid)) continue;
+              if (gid) {
+                seenGroupIds.add(gid);
+                ocGroups.push({ groupId: gid, items: statusFiltered.filter(o => o.request_group_id === gid) });
+              } else {
+                ocGroups.push({ groupId: null, items: [oc] });
+              }
+            }
+
             return statusFiltered.length > 0 ? (
             <Card>
               <CardHeader className="pb-3">
@@ -3028,13 +3046,47 @@ const CostSubmission = () => {
                   <div className="flex items-center gap-2">
                     <Receipt className="h-5 w-5 text-blue-600" />
                     <CardTitle className="text-base">Operational Cost Requests</CardTitle>
-                    <Badge variant="secondary">{statusFiltered.length}</Badge>
+                    <Badge variant="secondary">{ocGroups.length}</Badge>
+                    {ocGroups.length !== statusFiltered.length && (
+                      <span className="text-xs text-muted-foreground">({statusFiltered.length} items)</span>
+                    )}
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {statusFiltered.map((oc) => {
+                  {ocGroups.map(({ groupId, items: groupItems }) => {
+                    const isMultiItem = groupItems.length > 1;
+
+                    // GROUP HEADER (only for multi-item groups)
+                    const GroupHeader = isMultiItem ? (() => {
+                      const totalCents = groupItems.reduce((s, o) => s + o.amount_cents, 0);
+                      const currency = groupItems[0].currency;
+                      const groupTitle = groupItems[0].request_title
+                        || groupItems[0].description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')
+                        || 'Grouped Request';
+                      const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
+                      const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
+                      return (
+                        <div className="px-4 py-3 bg-muted/40 border-b flex items-start justify-between gap-3 flex-wrap">
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <p className="font-semibold text-[15px] leading-tight">{groupTitle}</p>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                              {linkedProjectName && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{linkedProjectName}</span>}
+                              {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{submitterName}</span>}
+                              <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
+                              <Badge variant="secondary" className="text-[11px] h-5">{groupItems.length} expense items</Badge>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-0.5 shrink-0">
+                            <span className="font-bold text-lg tabular-nums">{currency} {(totalCents / 100).toLocaleString()}</span>
+                            <span className="text-[11px] text-muted-foreground">Total</span>
+                          </div>
+                        </div>
+                      );
+                    })() : null;
+
+                    const itemElements = groupItems.map((oc) => {
                     const catMeta = EXPENSE_CATEGORY_MAP[oc.expense_category];
                     const CatIcon = catMeta?.icon;
                     const statusColors: Record<string, string> = {
@@ -3071,7 +3123,9 @@ const CostSubmission = () => {
                     return (
                       <div
                         key={oc.id}
-                        className={`rounded-md border bg-background p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
+                        className={isMultiItem
+                          ? `p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`
+                          : `rounded-md border bg-background p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
                         data-testid={`operational-cost-${oc.id}`}
                       >
                           {canMarkAsPaid(oc) && (
@@ -3088,7 +3142,9 @@ const CostSubmission = () => {
                           <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-semibold text-base truncate" data-testid={`text-title-${oc.id}`}>{title}</span>
+                                {!isMultiItem && (
+                                  <span className="font-semibold text-base truncate" data-testid={`text-title-${oc.id}`}>{title}</span>
+                                )}
                                 <Badge variant="outline" className="text-xs flex items-center gap-1">
                                   {CatIcon && <CatIcon className="h-3 w-3" />}
                                   {catMeta?.label || oc.expense_category}
@@ -3099,13 +3155,13 @@ const CostSubmission = () => {
                                   <FileText className="h-3 w-3" />
                                   ID: {requestId}
                                 </span>
-                                {linkedProjectName && (
+                                {!isMultiItem && linkedProjectName && (
                                   <span className="flex items-center gap-1">
                                     <Briefcase className="h-3 w-3" />
                                     {linkedProjectName}
                                   </span>
                                 )}
-                                {canViewTeamSubmissions && (
+                                {!isMultiItem && canViewTeamSubmissions && (
                                   <span className="flex items-center gap-1">
                                     <Users className="h-3 w-3" />
                                     {submitterName}
@@ -3521,6 +3577,16 @@ const CostSubmission = () => {
                             )}
                           </div>
                       </div>
+                    );
+                    }); // end itemElements map
+
+                    return isMultiItem ? (
+                      <div key={groupId} className="rounded-md border bg-background overflow-hidden">
+                        {GroupHeader}
+                        <div className="divide-y space-y-0">{itemElements}</div>
+                      </div>
+                    ) : (
+                      itemElements[0]
                     );
                   })}
                 </div>
