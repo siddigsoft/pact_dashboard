@@ -270,6 +270,19 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           setFieldErrors(prev => ({ ...prev, email: true }));
           if (!firstErrorField) firstErrorField = 'email';
           hasErrors = true;
+        } else {
+          const allowedDomains = ['pactorg.com', 'pactorg.org'];
+          const emailDomain = email.trim().split('@')[1]?.toLowerCase();
+          if (!emailDomain || !allowedDomains.includes(emailDomain)) {
+            setFieldErrors(prev => ({ ...prev, email: true }));
+            if (!firstErrorField) firstErrorField = 'email';
+            hasErrors = true;
+            toast({
+              title: "Email domain not allowed",
+              description: "Registration is restricted to @pactorg.com and @pactorg.org addresses only.",
+              variant: "destructive",
+            });
+          }
         }
 
         if (email.trim() && /\S+@\S+\.\S+/.test(email)) {
@@ -725,11 +738,17 @@ const AuthForm = ({ mode }: AuthFormProps) => {
             </div>
             <Input
               type="email"
-              placeholder="Email"
+              placeholder="name@pactorg.com"
               value={email}
               onChange={(e) => {
-                setEmail(e.target.value);
-                if (fieldErrors.email) {
+                const val = e.target.value;
+                setEmail(val);
+                // Clear error while typing; re-validate domain once there's an @ symbol
+                const domain = val.split('@')[1]?.toLowerCase();
+                if (domain) {
+                  const allowed = ['pactorg.com', 'pactorg.org'];
+                  setFieldErrors(prev => ({ ...prev, email: domain.length > 3 && !allowed.includes(domain) }));
+                } else {
                   setFieldErrors(prev => ({ ...prev, email: false }));
                 }
               }}
@@ -740,8 +759,14 @@ const AuthForm = ({ mode }: AuthFormProps) => {
               }`}
             />
           </div>
-          {fieldErrors.email && (
-            <p className="text-red-500 text-sm mt-1">Email is required</p>
+          {fieldErrors.email ? (
+            <p className="text-red-500 text-sm mt-1">
+              {email.trim() && !['pactorg.com', 'pactorg.org'].includes(email.trim().split('@')[1]?.toLowerCase())
+                ? 'Only @pactorg.com or @pactorg.org email addresses are allowed'
+                : 'Email is required'}
+            </p>
+          ) : (
+            !email && <p className="text-xs text-muted-foreground mt-1">Must be a @pactorg.com or @pactorg.org address</p>
           )}
           {checkingEmail && !fieldErrors.email && email.length >= 5 && (
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1" data-testid="text-checking-email">
