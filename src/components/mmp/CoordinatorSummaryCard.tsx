@@ -172,12 +172,51 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     if (!siteEntries || siteEntries.length === 0) return [];
 
     const stateMap = new Map<string, StateCoordinatorGroup>();
-    const coordIds = new Set<string>();
 
-    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'costed', 'dispatched', 'completed'];
-    const returnedStatuses = ['returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom'];
-    const rejectedStatuses = ['rejected'];
-    const inProgressStatuses = ['in_progress', 'accepted', 'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
+    // Normalise status to lowercase for reliable matching regardless of DB casing
+    // (DB stores: 'Accepted', 'Pending', 'Completed', 'Approved and Costed', 'In Progress', etc.)
+    const verifiedStatuses = new Set([
+      'verified', 'approved', 'approved and costed', 'costed',
+      'dispatched', 'completed', 'partially_paid', 'fully_paid',
+      'pending_admin', 'pending_supervisor',
+    ]);
+    const returnedStatuses = new Set([
+      'returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom',
+    ]);
+    const rejectedStatuses = new Set(['rejected']);
+    const inProgressStatuses = new Set([
+      'in_progress', 'accepted', 'permits_attached', 'assigned',
+      'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators',
+    ]);
+
+    // Human-readable labels for every known status (keyed by normalised lowercase)
+    const statusLabels: Record<string, string> = {
+      verified: 'Verified',
+      approved: 'Approved',
+      'approved and costed': 'Approved & Costed',
+      costed: 'Costed',
+      dispatched: 'Dispatched',
+      completed: 'Completed',
+      partially_paid: 'Partially Paid',
+      fully_paid: 'Fully Paid',
+      pending_admin: 'Pending Admin',
+      pending_supervisor: 'Pending Supervisor',
+      returned_to_fom: 'Returned to FOM',
+      returned: 'Returned',
+      rejected: 'Rejected',
+      recalled: 'Recalled',
+      sent_back: 'Sent Back',
+      sent_back_to_fom: 'Sent Back to FOM',
+      in_progress: 'In Progress',
+      accepted: 'Accepted',
+      permits_attached: 'Permits Attached',
+      assigned: 'Assigned',
+      forwarded: 'Forwarded',
+      forwarded_to_fom: 'With FOM',
+      forwarded_to_coordinator: 'With Coordinator',
+      forwarded_to_coordinators: 'With Coordinators',
+      pending: 'Pending',
+    };
 
     siteEntries.forEach((entry: any) => {
       const stateName = entry.state || entry.stateName || 'Unknown State';
@@ -205,22 +244,26 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                        entry.coordinatorName;
       const receivedAt = entry.forwarded_at || entry.forwardedAt || entry.dispatched_at || entry.dispatchedAt;
       
-      const entryStatus = (entry.status || '').toLowerCase();
-      const isVerified = verifiedStatuses.includes(entryStatus);
-      const isReturned = returnedStatuses.includes(entryStatus);
-      const isRejected = rejectedStatuses.includes(entryStatus);
-      const isInProgress = inProgressStatuses.includes(entryStatus);
+      // Normalise to lowercase for all set lookups
+      const entryStatus = (entry.status || '').toLowerCase().trim();
+      const isVerified = verifiedStatuses.has(entryStatus);
+      const isReturned = returnedStatuses.has(entryStatus);
+      const isRejected = rejectedStatuses.has(entryStatus);
+      const isInProgress = inProgressStatuses.has(entryStatus);
       
       if (isVerified) stateData.verifiedSites++;
       if (isReturned || isRejected) stateData.returnedSites++;
 
       const ad = entry.additional_data || entry.additionalData || {};
-      const statusCategory: SiteStatusDetail['statusCategory'] = isVerified ? 'verified' : isRejected ? 'rejected' : isReturned ? 'returned' : isInProgress ? 'in_progress' : 'pending';
-      const statusLabels: Record<string, string> = {
-        verified: 'Verified', approved: 'Approved', 'approved and costed': 'Costed', costed: 'Costed', dispatched: 'Dispatched', completed: 'Completed',
-        returned_to_fom: 'Returned to FOM', returned: 'Returned', rejected: 'Rejected', recalled: 'Recalled', sent_back: 'Sent Back', sent_back_to_fom: 'Sent Back to FOM',
-        in_progress: 'In Progress', accepted: 'Accepted', forwarded: 'Forwarded', forwarded_to_fom: 'With FOM', forwarded_to_coordinator: 'With Coordinator', forwarded_to_coordinators: 'With Coordinators',
-      };
+      const statusCategory: SiteStatusDetail['statusCategory'] = isVerified
+        ? 'verified'
+        : isRejected
+          ? 'rejected'
+          : isReturned
+            ? 'returned'
+            : isInProgress
+              ? 'in_progress'
+              : 'pending';
 
       const actionByRaw = isVerified 
         ? (entry.verified_by || '') 
@@ -233,16 +276,19 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         name: entry.site_name || entry.siteName || 'Unknown',
         siteCode: entry.site_code || entry.siteCode || '',
         status: entryStatus,
-        statusLabel: statusLabels[entryStatus] || entryStatus.replace(/_/g, ' '),
+        statusLabel: statusLabels[entryStatus] || (entry.status || entryStatus).replace(/_/g, ' '),
         statusCategory,
         locality: entry.locality || entry.localityName || '',
         reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
         actionBy: actionByRaw,
-        actionAt: isVerified ? (entry.verified_at || '') : isReturned ? (entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '') : (entry.dispatched_at || entry.forwarded_at || ''),
+        actionAt: isVerified
+          ? (entry.verified_at || '')
+          : isReturned
+            ? (entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '')
+            : (entry.dispatched_at || entry.forwarded_at || ''),
       };
 
       if (coordId) {
-        coordIds.add(coordId);
         const existingCoord = stateData.coordinators.find(c => c.id === coordId);
         
         if (existingCoord) {
@@ -515,15 +561,10 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                             </div>
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
                               {coord.sitesVerified > 0 && (
                                 <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                                   {coord.sitesVerified} verified
-                                </Badge>
-                              )}
-                              {coord.sitesReturned > 0 && (
-                                <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                  {coord.sitesReturned} returned
                                 </Badge>
                               )}
                               {coord.sitesInProgress > 0 && (
@@ -531,13 +572,25 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                                   {coord.sitesInProgress} active
                                 </Badge>
                               )}
+                              {coord.sitesPending > 0 && (
+                                <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                  {coord.sitesPending} pending
+                                </Badge>
+                              )}
+                              {coord.sitesReturned > 0 && (
+                                <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                  {coord.sitesReturned} returned
+                                </Badge>
+                              )}
                             </div>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {coord.sitesAssigned} sites
                             </span>
                             <div className="w-12">
                               <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
                                 <div className="bg-green-500 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesVerified / coord.sitesAssigned) * 100 : 0}%` }} />
+                                <div className="bg-blue-400 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesInProgress / coord.sitesAssigned) * 100 : 0}%` }} />
+                                <div className="bg-amber-400 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesPending / coord.sitesAssigned) * 100 : 0}%` }} />
                                 <div className="bg-red-500 transition-all" style={{ width: `${coord.sitesAssigned > 0 ? (coord.sitesReturned / coord.sitesAssigned) * 100 : 0}%` }} />
                               </div>
                             </div>
@@ -547,11 +600,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="px-2 pb-2 space-y-3 mt-2">
-                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} />
+                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} />
                           <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} />
+                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} />
                           <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} />
                           <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} />
-                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
