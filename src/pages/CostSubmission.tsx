@@ -190,6 +190,8 @@ const CostSubmission = () => {
   }>({ open: false, action: 'approve', tier: 1, submission: null });
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approvalProcessing, setApprovalProcessing] = useState(false);
+  const [approvalAttachments, setApprovalAttachments] = useState<File[]>([]);
+  const pendingApprovalDocsRef = React.useRef<Array<{ url: string; filename: string }>>([]);
 
   const [groupApprovalDialog, setGroupApprovalDialog] = useState<{
     open: boolean;
@@ -201,6 +203,7 @@ const CostSubmission = () => {
   }>({ open: false, action: 'approve', tier: 1, groupId: '', groupTitle: '', submissions: [] });
   const [groupApprovalNotes, setGroupApprovalNotes] = useState('');
   const [groupApprovalProcessing, setGroupApprovalProcessing] = useState(false);
+  const [groupApprovalAttachments, setGroupApprovalAttachments] = useState<File[]>([]);
 
   const [signatureModal, setSignatureModal] = useState<{
     open: boolean;
@@ -681,12 +684,32 @@ const CostSubmission = () => {
     setGroupApprovalNotes('');
   };
 
+  const uploadApprovalFiles = async (files: File[], prefix: string): Promise<Array<{ url: string; filename: string }>> => {
+    const uploaded: Array<{ url: string; filename: string }> = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop() || 'bin';
+      const filePath = `approval-attachments/${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from('mmp-files').upload(filePath, file, { cacheControl: '3600', upsert: false });
+      if (!error) {
+        const url = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+        uploaded.push({ url, filename: file.name });
+      }
+    }
+    return uploaded;
+  };
+
   const handleGroupApproval = async () => {
     const { action, tier, groupId, submissions } = groupApprovalDialog;
     if (!submissions.length || !currentUser?.id || !groupId) return;
     setGroupApprovalProcessing(true);
     try {
       const now = new Date().toISOString();
+
+      /* upload any approval attachments first */
+      const newDocs = groupApprovalAttachments.length > 0
+        ? await uploadApprovalFiles(groupApprovalAttachments, `group-${groupId.slice(0, 8)}`)
+        : [];
+
       const updates: Record<string, any> = {};
 
       if (tier === 1) {
@@ -721,6 +744,17 @@ const CostSubmission = () => {
         .eq('request_group_id', groupId)
         .eq(tierStatusKey, 'pending');
 
+      /* append new docs to each submission's supporting_documents */
+      if (!error && newDocs.length > 0) {
+        await Promise.all(submissions.map(async s => {
+          const existing = Array.isArray(s.supporting_documents) ? s.supporting_documents : [];
+          await supabase
+            .from('operational_cost_submissions')
+            .update({ supporting_documents: [...existing, ...newDocs] })
+            .eq('id', s.id);
+        }));
+      }
+
       if (error) {
         toast({ title: 'Group Approval Failed', description: error.message, variant: 'destructive', duration: 8000 });
       } else {
@@ -730,12 +764,13 @@ const CostSubmission = () => {
             ? `Group Approved (${count} items) / تمت الموافقة على المجموعة`
             : `Group Rejected (${count} items) / تم رفض المجموعة`,
           description: action === 'approve'
-            ? `All ${count} expense items have been approved at Tier ${tier}.`
-            : `All ${count} expense items have been rejected.`,
+            ? `All ${count} expense items have been approved at Tier ${tier}.${newDocs.length > 0 ? ` ${newDocs.length} attachment(s) added.` : ''}`
+            : `All ${count} expense items have been rejected.${newDocs.length > 0 ? ` ${newDocs.length} attachment(s) added.` : ''}`,
           duration: 6000,
         });
         setGroupApprovalDialog(prev => ({ ...prev, open: false }));
         setGroupApprovalNotes('');
+        setGroupApprovalAttachments([]);
         await fetchOperationalCosts();
       }
     } catch (e: any) {
@@ -760,9 +795,15 @@ const CostSubmission = () => {
   const handleApprovalAction = async () => {
     const { action, tier, submission } = approvalDialog;
     if (!submission || !currentUser?.id) return;
-    
+
+    /* upload any approval-stage attachments first */
+    setApprovalProcessing(true);
+    const uploadedDocs = approvalAttachments.length > 0
+      ? await uploadApprovalFiles(approvalAttachments, submission.id.slice(0, 8))
+      : [];
+    pendingApprovalDocsRef.current = uploadedDocs;
+
     if (shouldRequireSignature(submission, tier) && action === 'approve') {
-      setApprovalProcessing(true);
       setSignatureModal({
         open: true,
         submission,
@@ -770,10 +811,13 @@ const CostSubmission = () => {
         notes: approvalNotes,
       });
       setApprovalDialog({ open: false, action: 'approve', tier, submission: null });
+      setApprovalProcessing(false);
       return;
     }
-    
-    await processApproval(action, tier, submission, approvalNotes);
+
+    await processApproval(action, tier, submission, approvalNotes, undefined, uploadedDocs);
+    setApprovalAttachments([]);
+    pendingApprovalDocsRef.current = [];
   };
 
   const processApproval = async (
@@ -781,7 +825,8 @@ const CostSubmission = () => {
     tier: 1 | 2 | 3,
     submission: OperationalCostSubmission,
     notes: string,
-    signatureData?: { signatureId: string; signatureHash: string; method: SignatureMethod; signedAt: string }
+    signatureData?: { signatureId: string; signatureHash: string; method: SignatureMethod; signedAt: string },
+    extraDocs: Array<{ url: string; filename: string }> = []
   ) => {
     if (!currentUser?.id) return;
     
@@ -841,6 +886,12 @@ const CostSubmission = () => {
           updates.status = 'rejected';
           updates.rejection_reason = notes || 'Rejected at Tier 3 / تم الرفض في المرحلة الثالثة';
         }
+      }
+
+      /* merge any approval-stage attachments into supporting_documents */
+      if (extraDocs.length > 0) {
+        const existing = Array.isArray(submission.supporting_documents) ? submission.supporting_documents : [];
+        updates.supporting_documents = [...existing, ...extraDocs];
       }
 
       console.log('[CostApproval] Processing:', {
@@ -970,7 +1021,10 @@ const CostSubmission = () => {
     if (isBypass) {
       processFOMBypassApproval(submission, notes, signatureData);
     } else {
-      processApproval('approve', tier, submission, notes, signatureData);
+      const pendingDocs = pendingApprovalDocsRef.current;
+      pendingApprovalDocsRef.current = [];
+      setApprovalAttachments([]);
+      processApproval('approve', tier, submission, notes, signatureData, pendingDocs);
     }
     setTimeout(() => {
       setSignatureModal({ open: false, submission: null, tier: 2, notes: '', isBypass: false });
@@ -3900,6 +3954,7 @@ const CostSubmission = () => {
         if (!open) {
           setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null });
           setApprovalNotes('');
+          setApprovalAttachments([]);
         }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -4142,13 +4197,61 @@ const CostSubmission = () => {
                     </p>
                   )}
                 </div>
+
+                {/* ── Approval-stage attachment upload ── */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    Attachments (optional)
+                    <span dir="rtl" className="text-xs font-normal text-muted-foreground">/ مرفقات اختيارية</span>
+                  </Label>
+                  <label
+                    className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                    data-testid="dropzone-approval-attachments"
+                  >
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      <Upload className="h-4 w-4" />
+                      <span className="text-xs">Click to attach Excel, PDF, images…</span>
+                    </div>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.doc,.docx"
+                      className="hidden"
+                      onChange={e => {
+                        if (e.target.files) {
+                          setApprovalAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                  {approvalAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {approvalAttachments.map((f, i) => (
+                        <div key={i} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 max-w-[200px]">
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{f.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setApprovalAttachments(prev => prev.filter((_, j) => j !== i))}
+                            className="ml-0.5 text-blue-400 hover:text-red-500 shrink-0"
+                            data-testid={`button-remove-approval-attachment-${i}`}
+                          >
+                            <XCircle className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })()}
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              onClick={() => setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null })}
+              onClick={() => { setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null }); setApprovalAttachments([]); }}
               disabled={approvalProcessing}
               data-testid="button-approval-cancel"
             >
@@ -4175,6 +4278,7 @@ const CostSubmission = () => {
           if (!open) {
             setGroupApprovalDialog(prev => ({ ...prev, open: false }));
             setGroupApprovalNotes('');
+            setGroupApprovalAttachments([]);
           }
         }}
       >
@@ -4363,6 +4467,55 @@ const CostSubmission = () => {
                       </p>
                     )}
                   </div>
+
+                  {/* ── Approval-stage attachments ── */}
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5 text-sm">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      Attachments (optional)
+                      <span dir="rtl" className="text-xs font-normal text-muted-foreground">/ مرفقات — تُضاف لجميع البنود</span>
+                    </Label>
+                    <label
+                      className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                      data-testid="dropzone-group-approval-attachments"
+                    >
+                      <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                        <Upload className="h-4 w-4" />
+                        <span className="text-xs">Click to attach Excel, PDF, images…</span>
+                        <span className="text-[10px] opacity-60">Will be added to all {groupApprovalDialog.submissions.length} items</span>
+                      </div>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        className="hidden"
+                        onChange={e => {
+                          if (e.target.files) {
+                            setGroupApprovalAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+                    {groupApprovalAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {groupApprovalAttachments.map((f, i) => (
+                          <div key={i} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 max-w-[200px]">
+                            <FileText className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{f.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setGroupApprovalAttachments(prev => prev.filter((_, j) => j !== i))}
+                              className="ml-0.5 text-blue-400 hover:text-red-500 shrink-0"
+                              data-testid={`button-remove-group-attachment-${i}`}
+                            >
+                              <XCircle className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* ── Footer (outside scroll) ── */}
@@ -4370,7 +4523,7 @@ const CostSubmission = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setGroupApprovalDialog(prev => ({ ...prev, open: false })); setGroupApprovalNotes(''); }}
+                    onClick={() => { setGroupApprovalDialog(prev => ({ ...prev, open: false })); setGroupApprovalNotes(''); setGroupApprovalAttachments([]); }}
                     disabled={groupApprovalProcessing}
                     data-testid="button-group-approval-cancel"
                   >
