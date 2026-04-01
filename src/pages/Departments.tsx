@@ -956,8 +956,564 @@ function OrgTableView({
   );
 }
 
+/* ─── Shared props for new view components ─────────── */
+interface CommonOrgProps {
+  departments: Department[];
+  allProfiles: Profile[];
+  navigate: ReturnType<typeof useNavigate>;
+}
+
+/* ─── 1. Classic (Top-Down) ──────────────────────── */
+function ClassicOrgNode({ dept, allProfiles, navigate, depth = 0 }: {
+  dept: Department; allProfiles: Profile[]; navigate: ReturnType<typeof useNavigate>; depth?: number;
+}) {
+  const [open, setOpen] = useState(depth < 2);
+  const children = dept.children ?? [];
+  const members = allProfiles.filter(p => p.department_id === dept.id);
+  const palette = levelPalette(depth);
+  const accent = dept.color ?? palette.solid;
+  return (
+    <div className="flex flex-col items-center min-w-[130px] max-w-[160px]">
+      <div
+        className="rounded-xl border-2 px-3 py-2.5 w-full text-center cursor-pointer hover:shadow-md transition-all shadow-sm"
+        style={{ borderColor: accent, background: palette.light }}
+        onClick={() => navigate("/departments")}
+      >
+        <div className="w-8 h-8 rounded-lg mx-auto mb-1 flex items-center justify-center" style={{ background: accent }}>
+          <Building2 className="h-4 w-4 text-white" />
+        </div>
+        <p className="text-[11px] font-bold leading-snug truncate" style={{ color: accent }}>{dept.name}</p>
+        <p className="text-[9px] text-muted-foreground mt-0.5">{members.length} members</p>
+        {dept.manager && <p className="text-[9px] text-muted-foreground truncate">{dept.manager.full_name || dept.manager.email}</p>}
+        {children.length > 0 && (
+          <button onClick={e => { e.stopPropagation(); setOpen(v => !v); }} className="mt-1 text-[9px] font-bold" style={{ color: accent }}>
+            {open ? "▲ hide" : `▼ +${children.length}`}
+          </button>
+        )}
+      </div>
+      {open && children.length > 0 && (
+        <div className="flex flex-col items-center w-full">
+          <div className="w-0.5 h-5" style={{ background: accent + "60" }} />
+          {children.length > 1 && (
+            <div className="h-0.5 self-stretch" style={{ background: accent + "40" }} />
+          )}
+          <div className="flex flex-wrap justify-center gap-2 mt-0">
+            {children.map(child => (
+              <div key={child.id} className="flex flex-col items-center">
+                <div className="w-0.5 h-5" style={{ background: accent + "60" }} />
+                <ClassicOrgNode dept={child} allProfiles={allProfiles} navigate={navigate} depth={depth + 1} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function ClassicOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const tree = buildTree(departments);
+  return (
+    <div className="overflow-x-auto pb-4 bg-muted/10 rounded-xl border p-4">
+      <div className="flex gap-6 justify-start min-w-max">
+        {tree.map(root => <ClassicOrgNode key={root.id} dept={root} allProfiles={allProfiles} navigate={navigate} />)}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 2. Horizontal (Left-to-Right) ─────────────── */
+function HorizontalOrgNode({ dept, allProfiles, navigate, depth = 0 }: {
+  dept: Department; allProfiles: Profile[]; navigate: ReturnType<typeof useNavigate>; depth?: number;
+}) {
+  const [open, setOpen] = useState(depth < 2);
+  const children = dept.children ?? [];
+  const members = allProfiles.filter(p => p.department_id === dept.id);
+  const palette = levelPalette(depth);
+  const accent = dept.color ?? palette.solid;
+  return (
+    <div className="flex items-center">
+      <div
+        className="rounded-lg border-2 px-3 py-2 min-w-[120px] max-w-[170px] cursor-pointer hover:shadow-md transition-all shadow-sm shrink-0"
+        style={{ borderColor: accent, background: palette.light }}
+        onClick={() => navigate("/departments")}
+      >
+        <p className="text-[11px] font-bold leading-snug truncate" style={{ color: accent }}>{dept.name}</p>
+        <p className="text-[9px] text-muted-foreground">{members.length} members · {palette.label}</p>
+        {dept.manager && <p className="text-[9px] text-muted-foreground truncate">{dept.manager.full_name || dept.manager.email}</p>}
+        {children.length > 0 && (
+          <button onClick={e => { e.stopPropagation(); setOpen(v => !v); }} className="text-[9px] font-bold mt-0.5" style={{ color: accent }}>
+            {open ? "◀ hide" : `▶ +${children.length}`}
+          </button>
+        )}
+      </div>
+      {open && children.length > 0 && (
+        <div className="flex items-center">
+          <div className="h-0.5 w-5" style={{ background: accent + "60" }} />
+          <div className="flex flex-col gap-1.5">
+            {children.map((child, i) => (
+              <div key={child.id} className="flex items-center">
+                {children.length > 1 && <div className="w-0.5 h-full absolute" />}
+                <div className="h-0.5 w-3" style={{ background: accent + "40" }} />
+                <HorizontalOrgNode dept={child} allProfiles={allProfiles} navigate={navigate} depth={depth + 1} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function HorizontalOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const tree = buildTree(departments);
+  return (
+    <div className="overflow-x-auto pb-4 bg-muted/10 rounded-xl border p-4">
+      <div className="flex flex-col gap-4 min-w-max">
+        {tree.map(root => <HorizontalOrgNode key={root.id} dept={root} allProfiles={allProfiles} navigate={navigate} />)}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 3. Circular (Level Rings) ─────────────────── */
+function CircularOrgChart({ departments, allProfiles }: CommonOrgProps) {
+  const tree = buildTree(departments);
+  const levels: Department[][] = [];
+  function collect(nodes: Department[], depth: number) {
+    if (!levels[depth]) levels[depth] = [];
+    nodes.forEach(n => { levels[depth].push(n); collect(n.children ?? [], depth + 1); });
+  }
+  collect(tree, 0);
+  return (
+    <div className="flex flex-col items-center gap-4 py-6 overflow-x-auto">
+      {/* Center hub */}
+      <div className="w-20 h-20 rounded-full bg-[#0F2041] flex flex-col items-center justify-center text-white text-center shadow-xl">
+        <Building2 className="h-5 w-5 mb-0.5" />
+        <span className="text-[9px] font-bold">Organization</span>
+        <span className="text-[8px] opacity-70">{departments.length} depts</span>
+      </div>
+      {levels.map((levelDepts, depth) => {
+        const palette = levelPalette(depth);
+        return (
+          <div key={depth} className="relative w-full flex justify-center">
+            {/* Ring border hint */}
+            <div
+              className="absolute inset-x-0 top-1/2 -translate-y-1/2 border-t border-dashed opacity-30"
+              style={{ borderColor: palette.solid }}
+            />
+            <div className="relative flex flex-wrap justify-center gap-2 px-4">
+              {levelDepts.map(dept => {
+                const members = allProfiles.filter(p => p.department_id === dept.id);
+                return (
+                  <div
+                    key={dept.id}
+                    className="rounded-full px-3.5 py-1.5 text-[11px] font-bold border-2 shadow-sm flex items-center gap-1.5"
+                    style={{ background: palette.light, borderColor: palette.solid, color: palette.solid }}
+                  >
+                    <span>{dept.name}</span>
+                    <span className="text-[9px] opacity-60">({members.length})</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {/* Legend */}
+      <div className="flex flex-wrap gap-2 justify-center mt-2">
+        {levels.map((_, depth) => {
+          const p = levelPalette(depth);
+          return (
+            <span key={depth} className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: p.light, color: p.solid }}>
+              <span className="w-2 h-2 rounded-full" style={{ background: p.solid }} />{p.label}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 4. Flat Org Chart ──────────────────────────── */
+function FlatOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const flat = flattenTree(buildTree(departments));
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">All {flat.length} departments shown at equal weight — no hierarchy applied.</p>
+      <div className="flex flex-wrap gap-2">
+        {flat.map(dept => {
+          const members = allProfiles.filter(p => p.department_id === dept.id);
+          const hasChildren = (dept.children?.length ?? 0) > 0;
+          return (
+            <button
+              key={dept.id}
+              onClick={() => navigate("/departments")}
+              className="flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm hover:shadow-md transition-all shadow-sm"
+              style={{ borderColor: (dept.color ?? "#1D3461") + "50", background: (dept.color ?? "#1D3461") + "08" }}
+            >
+              <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: dept.color ?? "#1D3461" }}>
+                <Building2 className="h-3.5 w-3.5 text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-bold leading-none" style={{ color: dept.color ?? "#1D3461" }}>{dept.name}</p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">
+                  {members.length} member{members.length !== 1 ? "s" : ""}{hasChildren ? ` · ${dept.children!.length} sub-dept${dept.children!.length > 1 ? "s" : ""}` : ""}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 5. Team-Based Org Chart ────────────────────── */
+function TeamBasedOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const flat = flattenTree(buildTree(departments));
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      {flat.map(dept => {
+        const members = allProfiles.filter(p => p.department_id === dept.id);
+        const accent = dept.color ?? "#1D3461";
+        return (
+          <div key={dept.id} className="rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-all">
+            <div className="px-3.5 py-2.5 flex items-center justify-between gap-2" style={{ background: accent }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <Users className="h-4 w-4 text-white/80 shrink-0" />
+                <p className="text-sm font-bold text-white truncate">{dept.name}</p>
+              </div>
+              <span className="text-[10px] font-bold text-white/70 shrink-0">{members.length} members</span>
+            </div>
+            <div className="p-2.5 space-y-1 max-h-40 overflow-y-auto">
+              {members.length === 0 ? (
+                <p className="text-[10px] text-muted-foreground py-2 text-center">No members</p>
+              ) : members.map(m => (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/users/${m.id}`)}
+                >
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                    style={{ background: accent }}
+                  >
+                    {(m.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold truncate">{m.full_name || m.email}</p>
+                    <p className="text-[9px] text-muted-foreground capitalize">{m.role?.replace(/_/g, " ") || "—"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {dept.manager && (
+              <div className="px-3 py-1.5 border-t bg-muted/20 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <UserCheck className="h-3 w-3" style={{ color: accent }} />
+                <span className="font-semibold text-foreground">{dept.manager.full_name || dept.manager.email}</span> (Manager)
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── 6. Photo Org Chart ─────────────────────────── */
+function PhotoOrgChart({ allProfiles, navigate }: CommonOrgProps) {
+  const [search, setSearch] = useState("");
+  const filtered = search
+    ? allProfiles.filter(p => (p.full_name || "").toLowerCase().includes(search.toLowerCase()) || (p.email || "").toLowerCase().includes(search.toLowerCase()) || (p.role || "").toLowerCase().includes(search.toLowerCase()))
+    : allProfiles;
+  const ROLE_COLORS: Record<string, string> = {
+    super_admin: "#0F2041", admin: "#1D3461", field_coordinator: "#2563EB",
+    data_collector: "#059669", hub_manager: "#7C3AED", finance: "#D97706",
+  };
+  return (
+    <div className="space-y-3">
+      <div className="relative max-w-xs">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search people…"
+          className="w-full pl-9 pr-3 py-2 rounded-lg border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        {filtered.map(p => {
+          const initials = (p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+          const accent = ROLE_COLORS[p.role || ""] ?? "#1D3461";
+          return (
+            <div
+              key={p.id}
+              className="flex flex-col items-center gap-1.5 p-3 rounded-xl border hover:shadow-md transition-all cursor-pointer text-center"
+              style={{ borderColor: accent + "30" }}
+              onClick={() => navigate(`/users/${p.id}`)}
+            >
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-black shadow-md"
+                style={{ background: `linear-gradient(135deg, ${accent}, ${accent}bb)` }}
+              >
+                {initials}
+              </div>
+              <p className="text-[11px] font-bold leading-tight">{p.full_name || p.email}</p>
+              <span
+                className="text-[9px] font-bold px-2 py-0.5 rounded-full capitalize"
+                style={{ background: accent + "18", color: accent }}
+              >
+                {(p.role || "unknown").replace(/_/g, " ")}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">{filtered.length} of {allProfiles.length} people</p>
+    </div>
+  );
+}
+
+/* ─── 7. Color-Coded Org Chart ───────────────────── */
+function ColorCodedOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const flat = flattenTree(buildTree(departments));
+  const maxMembers = Math.max(1, ...flat.map(d => allProfiles.filter(p => p.department_id === d.id).length));
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">Bar width reflects team size relative to the largest team.</p>
+      <div className="space-y-1.5">
+        {flat.map(dept => {
+          const members = allProfiles.filter(p => p.department_id === dept.id);
+          const pct = Math.max(6, Math.round((members.length / maxMembers) * 100));
+          const accent = dept.color ?? "#1D3461";
+          return (
+            <div
+              key={dept.id}
+              className="flex items-center gap-3 group cursor-pointer"
+              onClick={() => navigate("/departments")}
+            >
+              <div className="w-36 shrink-0 text-right">
+                <p className="text-[11px] font-bold truncate" style={{ color: accent }}>{dept.name}</p>
+                <p className="text-[9px] text-muted-foreground">{members.length} members</p>
+              </div>
+              <div className="flex-1 h-8 rounded-full bg-muted/30 overflow-hidden shadow-inner">
+                <div
+                  className="h-full rounded-full flex items-center px-2.5 transition-all duration-500 group-hover:brightness-110"
+                  style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${accent}, ${accent}bb)` }}
+                >
+                  {pct > 20 && <span className="text-[9px] font-bold text-white truncate">{members.length > 0 ? members.slice(0, 3).map(m => (m.full_name || "?").split(" ")[0]).join(", ") : ""}</span>}
+                </div>
+              </div>
+              <span className="text-[10px] text-muted-foreground w-8 text-right shrink-0">{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 8. Matrix Org Chart ────────────────────────── */
+function MatrixOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const flat = flattenTree(buildTree(departments));
+  const roleSet = Array.from(new Set(allProfiles.map(p => (p.role || "unknown").replace(/_/g, " ")))).sort();
+  const topRoles = roleSet.slice(0, 8);
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-xs min-w-[600px]">
+        <thead>
+          <tr className="bg-muted/40">
+            <th className="text-left py-2 px-3 font-bold rounded-tl-lg w-36 border-r border-border">Department</th>
+            {topRoles.map(role => (
+              <th key={role} className="py-2 px-2 font-semibold capitalize text-center border-r border-border last:border-r-0 last:rounded-tr-lg">
+                {role}
+              </th>
+            ))}
+            <th className="py-2 px-3 font-bold text-center rounded-tr-lg">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {flat.map((dept, rowIdx) => {
+            const members = allProfiles.filter(p => p.department_id === dept.id);
+            const accent = dept.color ?? "#1D3461";
+            return (
+              <tr
+                key={dept.id}
+                className="border-t border-border hover:bg-muted/30 transition-colors cursor-pointer"
+                onClick={() => navigate("/departments")}
+              >
+                <td className="py-2.5 px-3 border-r border-border">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: accent }} />
+                    <span className="font-semibold truncate max-w-[110px]" style={{ color: accent }}>{dept.name}</span>
+                  </div>
+                </td>
+                {topRoles.map(role => {
+                  const count = members.filter(m => (m.role || "unknown").replace(/_/g, " ") === role).length;
+                  return (
+                    <td key={role} className="py-2.5 px-2 text-center border-r border-border last:border-r-0">
+                      {count > 0 ? (
+                        <span
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-full text-white text-[11px] font-bold"
+                          style={{ background: accent }}
+                        >{count}</span>
+                      ) : (
+                        <span className="text-muted-foreground/30">·</span>
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="py-2.5 px-3 text-center font-bold" style={{ color: accent }}>{members.length}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-border bg-muted/20">
+            <td className="py-2 px-3 font-bold text-xs rounded-bl-lg">Totals</td>
+            {topRoles.map(role => {
+              const total = allProfiles.filter(p => (p.role || "unknown").replace(/_/g, " ") === role).length;
+              return <td key={role} className="py-2 px-2 text-center font-bold">{total || "—"}</td>;
+            })}
+            <td className="py-2 px-3 text-center font-black text-[#1D3461] rounded-br-lg">{allProfiles.length}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+/* ─── 9. Functional Org Chart ────────────────────── */
+function FunctionalOrgChart({ allProfiles, navigate }: CommonOrgProps) {
+  const roleGroups: Record<string, Profile[]> = {};
+  allProfiles.forEach(p => {
+    const r = (p.role || "unknown").replace(/_/g, " ");
+    if (!roleGroups[r]) roleGroups[r] = [];
+    roleGroups[r].push(p);
+  });
+  const ROLE_COLORS: Record<string, string> = {
+    "super admin": "#0F2041", "admin": "#1D3461", "field coordinator": "#2563EB",
+    "data collector": "#059669", "hub manager": "#7C3AED", "finance": "#D97706",
+  };
+  const getColor = (role: string) => ROLE_COLORS[role] ?? "#64748b";
+  return (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex gap-3 min-w-max">
+        {Object.entries(roleGroups).sort((a, b) => b[1].length - a[1].length).map(([role, people]) => {
+          const accent = getColor(role);
+          return (
+            <div key={role} className="rounded-xl border overflow-hidden shadow-sm w-44 flex-shrink-0">
+              <div className="px-3 py-2.5" style={{ background: accent }}>
+                <p className="text-xs font-bold text-white capitalize">{role}</p>
+                <p className="text-[9px] text-white/70">{people.length} people</p>
+              </div>
+              <div className="divide-y divide-border max-h-72 overflow-y-auto">
+                {people.map(p => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/40 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/users/${p.id}`)}
+                  >
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0"
+                      style={{ background: accent }}
+                    >
+                      {(p.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                    </div>
+                    <p className="text-[10px] font-medium truncate">{p.full_name || p.email}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 10. Divisional Org Chart ───────────────────── */
+function DivisionalOrgChart({ departments, allProfiles, navigate }: CommonOrgProps) {
+  const tree = buildTree(departments);
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {tree.map(div => {
+        const allDivMembers = allProfiles.filter(p => {
+          const allIds = flattenTree([div]).map(d => d.id);
+          return allIds.includes(p.department_id ?? "");
+        });
+        const accent = div.color ?? "#1D3461";
+        return (
+          <div key={div.id} className="rounded-2xl border-2 overflow-hidden shadow-sm hover:shadow-md transition-all" style={{ borderColor: accent + "60" }}>
+            {/* Division header */}
+            <div className="px-4 py-3 flex items-center justify-between" style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)` }}>
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Building2 className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-white">{div.name}</p>
+                  <p className="text-[10px] text-white/70">{allDivMembers.length} total members</p>
+                </div>
+              </div>
+              {div.manager && (
+                <div className="flex items-center gap-1.5 bg-white/15 rounded-lg px-2 py-1">
+                  <UserCheck className="h-3 w-3 text-white/80" />
+                  <p className="text-[10px] text-white/90 font-semibold truncate max-w-[90px]">{div.manager.full_name || div.manager.email}</p>
+                </div>
+              )}
+            </div>
+            {/* Sub-departments */}
+            {(div.children ?? []).length > 0 && (
+              <div className="p-3 flex flex-wrap gap-2 bg-muted/10">
+                {(div.children ?? []).map(sub => {
+                  const subMembers = allProfiles.filter(p => p.department_id === sub.id);
+                  const subAccent = sub.color ?? levelPalette(1).solid;
+                  return (
+                    <div
+                      key={sub.id}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border cursor-pointer hover:shadow-sm transition-all"
+                      style={{ borderColor: subAccent + "50", background: subAccent + "0f" }}
+                      onClick={() => navigate("/departments")}
+                    >
+                      <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: subAccent }}>
+                        <Building2 className="h-2.5 w-2.5 text-white" />
+                      </div>
+                      <span className="text-[11px] font-semibold" style={{ color: subAccent }}>{sub.name}</span>
+                      <span className="text-[9px] text-muted-foreground">({subMembers.length})</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Quick member avatars */}
+            {allDivMembers.length > 0 && (
+              <div className="px-3 pb-3 flex items-center gap-1 flex-wrap">
+                {allDivMembers.slice(0, 8).map(m => (
+                  <div
+                    key={m.id}
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[8px] font-bold cursor-pointer hover:ring-2 transition-all"
+                    style={{ background: accent, ringColor: accent }}
+                    title={m.full_name || m.email || ""}
+                    onClick={() => navigate(`/users/${m.id}`)}
+                  >
+                    {(m.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                ))}
+                {allDivMembers.length > 8 && (
+                  <span className="text-[10px] text-muted-foreground font-medium ml-1">+{allDivMembers.length - 8} more</span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── Org Chart Tab ──────────────────────────────── */
-type OrgMode = "dept" | "cards" | "compact" | "table" | "reporting";
+type OrgMode = "dept" | "cards" | "compact" | "table" | "reporting" |
+  "classic" | "horizontal" | "circular" | "flat" | "team" |
+  "photo" | "colorcode" | "matrix" | "functional" | "divisional";
 
 function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departments: Department[] }) {
   const navigate = useNavigate();
@@ -991,12 +1547,24 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
   const totalDepts = departments.length;
   const topLevel = tree.length;
 
-  const VIEW_MODES: { id: OrgMode; label: string; icon: ReactNode; showFilter: boolean }[] = [
-    { id: "dept",      label: "Tree",          icon: <Building2 className="h-3.5 w-3.5" />,  showFilter: true  },
-    { id: "cards",     label: "Cards Grid",    icon: <LayoutGrid className="h-3.5 w-3.5" />, showFilter: false },
-    { id: "compact",   label: "Compact",       icon: <AlignLeft className="h-3.5 w-3.5" />,  showFilter: true  },
-    { id: "table",     label: "Table",         icon: <Table2 className="h-3.5 w-3.5" />,     showFilter: false },
-    { id: "reporting", label: "Reporting",     icon: <Network className="h-3.5 w-3.5" />,    showFilter: true  },
+  const VIEW_MODES: { id: OrgMode; label: string; icon: string; showFilter: boolean; group: string }[] = [
+    // Existing
+    { id: "dept",       label: "Tree (Top-Down)",         icon: "🌳", showFilter: true,  group: "Classic" },
+    { id: "cards",      label: "Cards Grid",              icon: "🃏", showFilter: false, group: "Classic" },
+    { id: "compact",    label: "Compact",                 icon: "📋", showFilter: true,  group: "Classic" },
+    { id: "table",      label: "Table",                   icon: "📊", showFilter: false, group: "Classic" },
+    { id: "reporting",  label: "Reporting Chain",         icon: "🔗", showFilter: true,  group: "Classic" },
+    // New
+    { id: "classic",    label: "Classic Hierarchical",    icon: "🏛️", showFilter: false, group: "Hierarchy" },
+    { id: "horizontal", label: "Horizontal",              icon: "↔️", showFilter: false, group: "Hierarchy" },
+    { id: "circular",   label: "Circular",                icon: "⭕", showFilter: false, group: "Hierarchy" },
+    { id: "divisional", label: "Divisional",              icon: "🏢", showFilter: false, group: "Hierarchy" },
+    { id: "flat",       label: "Flat",                    icon: "▬",  showFilter: false, group: "Layout" },
+    { id: "team",       label: "Team-Based",              icon: "👥", showFilter: false, group: "Layout" },
+    { id: "functional", label: "Functional",              icon: "⚙️", showFilter: false, group: "Layout" },
+    { id: "photo",      label: "Photo",                   icon: "🖼️", showFilter: false, group: "People" },
+    { id: "colorcode",  label: "Color-Coded",             icon: "🎨", showFilter: false, group: "People" },
+    { id: "matrix",     label: "Matrix",                  icon: "🔢", showFilter: false, group: "People" },
   ];
 
   const currentMode = VIEW_MODES.find(m => m.id === mode)!;
@@ -1005,20 +1573,30 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Mode buttons */}
-        <div className="flex rounded-lg border overflow-hidden text-xs font-medium divide-x">
-          {VIEW_MODES.map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMode(m.id)}
-              className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors ${mode === m.id ? "bg-[#1D3461] text-white" : "hover:bg-muted/60"}`}
-              data-testid={`toggle-org-${m.id}`}
-            >
-              {m.icon}
-              {m.label}
-            </button>
-          ))}
-        </div>
+        {/* View selector dropdown */}
+        <Select value={mode} onValueChange={v => setMode(v as OrgMode)}>
+          <SelectTrigger className="w-56 h-9 font-medium text-sm" data-testid="select-org-view">
+            <span className="flex items-center gap-1.5">
+              <span>{currentMode.icon}</span>
+              <SelectValue />
+            </span>
+          </SelectTrigger>
+          <SelectContent className="max-h-80">
+            {["Classic", "Hierarchy", "Layout", "People"].map(group => (
+              <div key={group}>
+                <div className="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{group}</div>
+                {VIEW_MODES.filter(m => m.group === group).map(m => (
+                  <SelectItem key={m.id} value={m.id}>
+                    <span className="flex items-center gap-2">
+                      <span>{m.icon}</span>
+                      <span>{m.label}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </div>
+            ))}
+          </SelectContent>
+        </Select>
 
         {/* Dept filter — only for modes that support it */}
         {currentMode.showFilter && (
@@ -1036,6 +1614,8 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
         <p className="text-xs text-muted-foreground ml-auto">
           {mode === "reporting"
             ? `${filteredProfiles.length} people · ${roots.length} top-level`
+            : mode === "photo" || mode === "functional"
+            ? `${allProfiles.length} people`
             : `${totalDepts} dept${totalDepts !== 1 ? "s" : ""} · ${topLevel} top-level`}
         </p>
       </div>
@@ -1110,6 +1690,67 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
             ))}
           </div>
         )
+      )}
+
+      {/* ── 10 New Views ── */}
+      {mode === "classic" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <ClassicOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "horizontal" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <HorizontalOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "circular" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <CircularOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "divisional" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <DivisionalOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "flat" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<LayoutGrid className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <FlatOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "team" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<Users className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <TeamBasedOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "functional" && (
+        profiles.length === 0
+          ? <EmptyOrgState icon={<Users className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No staff profiles found" />
+          : <FunctionalOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "photo" && (
+        profiles.length === 0
+          ? <EmptyOrgState icon={<Users className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No staff profiles found" />
+          : <PhotoOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "colorcode" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <ColorCodedOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
+      )}
+
+      {mode === "matrix" && (
+        departments.length === 0
+          ? <EmptyOrgState icon={<Table2 className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No departments yet" />
+          : <MatrixOrgChart departments={departments} allProfiles={profiles} navigate={navigate} />
       )}
     </div>
   );
