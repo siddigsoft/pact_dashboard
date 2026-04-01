@@ -14,7 +14,9 @@ import {
   TrendingUp, ReceiptText, PlayCircle, ChevronLeft, ChevronRight,
   Search, AlertCircle, UserCheck, FileDown, MoreVertical,
   BarChart3, Building2, FileSpreadsheet, Send, Plus, X, FileText,
-  History, Clock,
+  History, Clock, ShieldCheck, Target, Wallet, AlertTriangle,
+  CheckCircle, DollarSign, Info, PlusCircle as PlusCircleIcon,
+  GitBranch, ChevronDown,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
@@ -299,6 +301,9 @@ export default function PayrollAdmin() {
             <TabsTrigger value="reports" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
               <BarChart3 className="h-3.5 w-3.5" />Reports
             </TabsTrigger>
+            <TabsTrigger value="advances" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
+              <Wallet className="h-3.5 w-3.5" />Advances
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="salaries" className="mt-0">
@@ -311,7 +316,10 @@ export default function PayrollAdmin() {
             <PayslipsTab runs={runs} loading={loadingRuns} employees={employees} />
           </TabsContent>
           <TabsContent value="reports" className="mt-0">
-            <PayrollReportsTab runs={runs} employees={employees} />
+            <PayrollReportsTab runs={runs} employees={employees} currentUserId={currentUser?.id ?? ''} />
+          </TabsContent>
+          <TabsContent value="advances" className="mt-0">
+            <AdvancesTab employees={employees} currentUserId={currentUser?.id ?? ''} />
           </TabsContent>
         </Tabs>
       </div>
@@ -332,18 +340,32 @@ function Kpi({ label, value, color }: { label: string; value: string; color: str
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 1 — Employee Salaries
 // ══════════════════════════════════════════════════════════════════════════════
+function onboardingScore(emp: EmployeeRow): { score: number; items: { label: string; done: boolean }[] } {
+  const items = [
+    { label: 'Salary configured',  done: !!emp.salary_config },
+    { label: 'Department assigned', done: !!emp.department_name },
+    { label: 'Contract type set',   done: !!emp.employment_type },
+    { label: 'Start date set',      done: !!emp.contract_start_date },
+  ];
+  return { score: items.filter(i => i.done).length, items };
+}
+
 function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; loading: boolean }) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'configured' | 'missing'>('configured');
+  const [filter, setFilter] = useState<'all' | 'configured' | 'missing' | 'incomplete-onboarding'>('configured');
   const [editEmp, setEditEmp] = useState<EmployeeRow | null>(null);
+  const [showOnboardingFor, setShowOnboardingFor] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     let list = employees;
     if (search) list = list.filter(e => (e.full_name ?? '').toLowerCase().includes(search.toLowerCase()) || (e.department_name ?? '').toLowerCase().includes(search.toLowerCase()));
-    if (filter === 'configured') list = list.filter(e => e.salary_config);
-    if (filter === 'missing')    list = list.filter(e => !e.salary_config);
+    if (filter === 'configured')           list = list.filter(e => e.salary_config);
+    if (filter === 'missing')              list = list.filter(e => !e.salary_config);
+    if (filter === 'incomplete-onboarding') list = list.filter(e => onboardingScore(e).score < 4);
     return list;
   }, [employees, search, filter]);
+
+  const incompleteCount = useMemo(() => employees.filter(e => onboardingScore(e).score < 4).length, [employees]);
 
   return (
     <div className="space-y-4">
@@ -359,13 +381,16 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
           <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or department…" className="pl-9 h-9 text-sm bg-white dark:bg-slate-900" />
         </div>
         <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
-          <SelectTrigger className="h-9 w-[160px] text-sm bg-white dark:bg-slate-900">
+          <SelectTrigger className="h-9 w-[200px] text-sm bg-white dark:bg-slate-900">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All employees</SelectItem>
             <SelectItem value="configured">Configured</SelectItem>
             <SelectItem value="missing">Not configured</SelectItem>
+            <SelectItem value="incomplete-onboarding">
+              Incomplete onboarding {incompleteCount > 0 ? `(${incompleteCount})` : ''}
+            </SelectItem>
           </SelectContent>
         </Select>
         <Badge variant="outline" className="h-9 px-3 text-xs font-medium bg-white dark:bg-slate-900">
@@ -385,6 +410,7 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
                 <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Base</th>
                 <th className="text-right text-xs font-semibold text-emerald-600 px-3 py-3 uppercase tracking-wide">Gross</th>
                 <th className="text-right text-xs font-semibold text-blue-600 px-3 py-3 uppercase tracking-wide">Net Pay</th>
+                <th className="text-center text-xs font-semibold text-violet-600 px-3 py-3 uppercase tracking-wide">Onboarding</th>
                 <th className="text-center text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Status</th>
                 <th className="px-5 py-3"></th>
               </tr>
@@ -419,6 +445,43 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
                     <td className="px-3 py-3.5 text-right font-medium text-sm">{calc ? fmt(calc.base, cur) : <span className="text-muted-foreground/30">—</span>}</td>
                     <td className="px-3 py-3.5 text-right font-semibold text-emerald-600 text-sm">{calc ? fmt(calc.gross, cur) : <span className="text-muted-foreground/30">—</span>}</td>
                     <td className="px-3 py-3.5 text-right font-bold text-blue-600 text-sm">{calc ? fmt(calc.net, cur) : <span className="text-muted-foreground/30">—</span>}</td>
+                    <td className="px-3 py-3.5 text-center">
+                      {(() => {
+                        const ob = onboardingScore(emp);
+                        const isOpen = showOnboardingFor === emp.id;
+                        const pct = (ob.score / 4) * 100;
+                        return (
+                          <div className="inline-block relative">
+                            <button onClick={() => setShowOnboardingFor(isOpen ? null : emp.id)}
+                              className={cn('flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border transition-all',
+                                ob.score === 4 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : ob.score >= 2 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-red-700 bg-red-50 border-red-200'
+                              )}>
+                              <span>{ob.score}/4</span>
+                              {ob.score === 4 ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                            </button>
+                            {isOpen && (
+                              <div className="absolute z-50 top-8 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-900 border rounded-xl shadow-lg p-3 min-w-[180px] text-left space-y-1.5">
+                                <p className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground mb-2">Onboarding Checklist</p>
+                                {ob.items.map(item => (
+                                  <div key={item.label} className="flex items-center gap-2">
+                                    {item.done
+                                      ? <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                      : <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />}
+                                    <span className={cn('text-xs', item.done ? 'text-foreground' : 'text-muted-foreground')}>{item.label}</span>
+                                  </div>
+                                ))}
+                                <div className="mt-2 pt-2 border-t">
+                                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className={cn('h-full rounded-full transition-all', pct === 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400')} style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground mt-1 text-center">{pct.toFixed(0)}% complete</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-3.5 text-center">
                       {emp.salary_config
                         ? <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />Active</span>
@@ -867,19 +930,21 @@ function deptBreakdown(items: RunItem[]): DeptSummary[] {
   return Object.values(map).sort((a, b) => b.gross - a.gross);
 }
 
-function PayrollReportsTab({ runs, employees }: { runs: PayrollRun[]; employees: EmployeeRow[] }) {
-  const [reportTab, setReportTab] = useState<'breakdown' | 'contracts' | 'headcount' | 'ytd' | 'compare'>('breakdown');
+function PayrollReportsTab({ runs, employees, currentUserId }: { runs: PayrollRun[]; employees: EmployeeRow[]; currentUserId: string }) {
+  const [reportTab, setReportTab] = useState<'breakdown' | 'contracts' | 'headcount' | 'ytd' | 'compare' | 'statutory' | 'budget'>('breakdown');
 
   return (
     <div className="space-y-4">
       {/* Sub-tab navigation */}
       <div className="flex gap-1.5 flex-wrap">
         {([
-          { id: 'breakdown', label: 'Payroll Breakdown', icon: <BarChart3 className="h-3.5 w-3.5" /> },
-          { id: 'contracts', label: 'Contract Expiry',   icon: <CalendarRange className="h-3.5 w-3.5" /> },
-          { id: 'headcount', label: 'Headcount',         icon: <Users className="h-3.5 w-3.5" /> },
-          { id: 'ytd',       label: 'Year-to-Date',      icon: <TrendingUp className="h-3.5 w-3.5" /> },
-          { id: 'compare',   label: 'Month Comparison',  icon: <ChevronRight className="h-3.5 w-3.5" /> },
+          { id: 'breakdown', label: 'Payroll Breakdown',  icon: <BarChart3 className="h-3.5 w-3.5" /> },
+          { id: 'contracts', label: 'Contract Expiry',    icon: <CalendarRange className="h-3.5 w-3.5" /> },
+          { id: 'headcount', label: 'Headcount',          icon: <Users className="h-3.5 w-3.5" /> },
+          { id: 'ytd',       label: 'Year-to-Date',       icon: <TrendingUp className="h-3.5 w-3.5" /> },
+          { id: 'compare',   label: 'Month Comparison',   icon: <ChevronRight className="h-3.5 w-3.5" /> },
+          { id: 'statutory', label: 'Statutory Filing',   icon: <ShieldCheck className="h-3.5 w-3.5" /> },
+          { id: 'budget',    label: 'Budget vs. Actual',  icon: <Target className="h-3.5 w-3.5" /> },
         ] as const).map(t => (
           <button
             key={t.id}
@@ -899,6 +964,8 @@ function PayrollReportsTab({ runs, employees }: { runs: PayrollRun[]; employees:
       {reportTab === 'headcount' && <HeadcountReport employees={employees} />}
       {reportTab === 'ytd'       && <YTDReport runs={runs} employees={employees} />}
       {reportTab === 'compare'   && <MonthComparisonReport runs={runs} />}
+      {reportTab === 'statutory' && <StatutoryReport runs={runs} />}
+      {reportTab === 'budget'    && <BudgetVsActualReport runs={runs} employees={employees} currentUserId={currentUserId} />}
     </div>
   );
 }
@@ -1904,6 +1971,589 @@ function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
   );
 }
 
+// ── Sub-report: Statutory Filing ──────────────────────────────────────────────
+function StatutoryReport({ runs }: { runs: PayrollRun[] }) {
+  const [selectedRunId, setSelectedRunId] = useState<string>(runs[0]?.id ?? '');
+  const run = runs.find(r => r.id === selectedRunId);
+
+  const { data: items = [], isLoading } = useQuery<RunItem[]>({
+    queryKey: ['statutory-items', selectedRunId],
+    enabled: !!selectedRunId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('payroll_run_items').select('*').eq('run_id', selectedRunId);
+      if (error) throw error;
+      return (data ?? []).map((d: any) => ({
+        ...d,
+        allowances_snapshot: Array.isArray(d.allowances_snapshot) ? d.allowances_snapshot : [],
+        deductions_snapshot: Array.isArray(d.deductions_snapshot) ? d.deductions_snapshot : [],
+        adjustments: Array.isArray(d.adjustments) ? d.adjustments : [],
+      })) as RunItem[];
+    },
+  });
+
+  // Extract statutory deductions (Income Tax, Social Security, Pension)
+  const STATUTORY_KEYS = ['income tax', 'tax', 'social security', 'pension', 'nhis', 'retirement'];
+  const isStatutory = (name: string) => STATUTORY_KEYS.some(k => name.toLowerCase().includes(k));
+
+  const rows = useMemo(() => items.map(item => {
+    const gross = item.gross_salary;
+    const statutory = item.deductions_snapshot
+      .filter(d => isStatutory(d.name))
+      .map(d => ({ name: d.name, amount: d.type === 'fixed' ? d.amount : Math.round(gross * d.amount / 100) }));
+    return { ...item, statutory, total: statutory.reduce((s, d) => s + d.amount, 0) };
+  }), [items]);
+
+  const allNames = useMemo(() => {
+    const s = new Set<string>();
+    rows.forEach(r => r.statutory.forEach(d => s.add(d.name)));
+    return Array.from(s);
+  }, [rows]);
+
+  const grandTotals = useMemo(() => {
+    const m: Record<string, number> = {};
+    rows.forEach(r => r.statutory.forEach(d => { m[d.name] = (m[d.name] ?? 0) + d.amount; }));
+    return m;
+  }, [rows]);
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      rows.map(r => ({
+        Employee: r.user_name, Department: r.department_name, 'Gross Salary': r.gross_salary,
+        ...Object.fromEntries(r.statutory.map(d => [d.name, d.amount])),
+        'Total Statutory': r.total,
+      }))
+    ), 'Statutory');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      Object.entries(grandTotals).map(([name, total]) => ({ 'Statutory Item': name, 'Total Amount': total }))
+    ), 'Summary');
+    XLSX.writeFile(wb, `pact-statutory-${run?.period_label?.replace(/\s/g, '-') ?? 'report'}.xlsx`);
+  };
+
+  if (runs.length === 0) return (
+    <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+      <CardContent className="py-16 text-center space-y-3">
+        <ShieldCheck className="h-10 w-10 text-slate-300 mx-auto" />
+        <p className="text-sm font-semibold">No payroll runs yet</p>
+        <p className="text-sm text-muted-foreground">Run and save payroll first to generate statutory filing data.</p>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-blue-500" />
+          <span className="text-sm font-semibold">Statutory Deductions for Filing</span>
+        </div>
+        <Select value={selectedRunId} onValueChange={setSelectedRunId}>
+          <SelectTrigger className="h-9 w-[200px] text-sm bg-white dark:bg-slate-900"><SelectValue placeholder="Select period" /></SelectTrigger>
+          <SelectContent>{runs.map(r => <SelectItem key={r.id} value={r.id}>{r.period_label} {r.status === 'locked' ? '🔒' : ''}</SelectItem>)}</SelectContent>
+        </Select>
+        <Button onClick={exportExcel} size="sm" variant="outline" disabled={items.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Filing Sheet
+        </Button>
+      </div>
+
+      {/* Summary KPIs */}
+      {Object.keys(grandTotals).length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {Object.entries(grandTotals).map(([name, total]) => (
+            <div key={name} className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 rounded-xl px-4 py-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-blue-600 font-semibold">{name}</p>
+              <p className="text-base font-bold text-blue-700 mt-0.5">{fmt(total)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="py-16 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>
+      ) : rows.length === 0 ? (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900"><CardContent className="py-12 text-center"><p className="text-sm text-muted-foreground">No data for this period.</p></CardContent></Card>
+      ) : (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-blue-500" />
+            <h3 className="text-sm font-semibold">Per-Employee Statutory Breakdown — {run?.period_label}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/40 border-b">
+                  <th className="px-5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Employee</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase text-emerald-600">Gross</th>
+                  {allNames.map(n => (
+                    <th key={n} className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-blue-600">{n}</th>
+                  ))}
+                  <th className="px-5 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-[#0F2041]">Total Statutory</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((r, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                    <td className="px-5 py-2.5">
+                      <p className="font-medium text-sm">{r.user_name}</p>
+                      <p className="text-[11px] text-muted-foreground">{r.department_name}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-sm text-emerald-600">{fmt(r.gross_salary)}</td>
+                    {allNames.map(n => {
+                      const d = r.statutory.find(s => s.name === n);
+                      return <td key={n} className="px-3 py-2.5 text-right text-sm">{d ? fmt(d.amount) : '—'}</td>;
+                    })}
+                    <td className="px-5 py-2.5 text-right text-sm font-bold text-[#0F2041] dark:text-blue-300">{fmt(r.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 border-t-2 border-slate-200">
+                  <td className="px-5 py-2.5 text-xs font-bold text-muted-foreground uppercase">Totals</td>
+                  <td className="px-3 py-2.5 text-right text-sm font-bold text-emerald-600">{fmt(rows.reduce((s, r) => s + r.gross_salary, 0))}</td>
+                  {allNames.map(n => (
+                    <td key={n} className="px-3 py-2.5 text-right text-sm font-bold text-blue-600">{fmt(grandTotals[n] ?? 0)}</td>
+                  ))}
+                  <td className="px-5 py-2.5 text-right text-sm font-bold text-[#0F2041]">{fmt(rows.reduce((s, r) => s + r.total, 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Sub-report: Budget vs. Actual ─────────────────────────────────────────────
+interface DeptBudget { id: string; department_name: string | null; period_label: string; target_amount: number; currency: string; }
+
+function BudgetVsActualReport({ runs, employees, currentUserId }: { runs: PayrollRun[]; employees: EmployeeRow[]; currentUserId: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedRunId, setSelectedRunId] = useState<string>(runs.find(r => r.status === 'locked')?.id ?? runs[0]?.id ?? '');
+  const [editingBudget, setEditingBudget] = useState<{ dept: string; amount: string } | null>(null);
+  const run = runs.find(r => r.id === selectedRunId);
+
+  const { data: items = [], isLoading: loadingItems } = useQuery<RunItem[]>({
+    queryKey: ['budget-items', selectedRunId],
+    enabled: !!selectedRunId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('payroll_run_items').select('*').eq('run_id', selectedRunId);
+      if (error) throw error;
+      return (data ?? []).map((d: any) => ({ ...d, adjustments: Array.isArray(d.adjustments) ? d.adjustments : [] })) as RunItem[];
+    },
+  });
+
+  const { data: budgets = [], isLoading: loadingBudgets } = useQuery<DeptBudget[]>({
+    queryKey: ['dept-budgets', run?.period_label],
+    enabled: !!run,
+    queryFn: async () => {
+      const { data } = await supabase.from('payroll_department_budgets').select('*').eq('period_label', run!.period_label);
+      return (data ?? []) as DeptBudget[];
+    },
+  });
+
+  // Compute dept actuals from run items
+  const deptActuals = useMemo(() => {
+    const m: Record<string, { dept: string; headcount: number; actual: number }> = {};
+    items.forEach(item => {
+      const d = item.department_name ?? 'No Department';
+      if (!m[d]) m[d] = { dept: d, headcount: 0, actual: 0 };
+      m[d].headcount++;
+      m[d].actual += item.net_salary;
+    });
+    return Object.values(m).sort((a, b) => b.actual - a.actual);
+  }, [items]);
+
+  const budgetMap = useMemo(() => {
+    const m: Record<string, DeptBudget> = {};
+    budgets.forEach(b => { if (b.department_name) m[b.department_name] = b; });
+    return m;
+  }, [budgets]);
+
+  const totalActual = deptActuals.reduce((s, d) => s + d.actual, 0);
+  const totalBudget = budgets.reduce((s, b) => s + b.target_amount, 0);
+
+  const saveBudget = async (dept: string, amount: number) => {
+    const existing = budgets.find(b => b.department_name === dept);
+    if (existing) {
+      await supabase.from('payroll_department_budgets').update({ target_amount: amount, updated_at: new Date().toISOString() }).eq('id', existing.id);
+    } else {
+      await supabase.from('payroll_department_budgets').insert({
+        department_name: dept, period_label: run!.period_label,
+        target_amount: amount, currency: 'SDG', created_by: currentUserId,
+      });
+    }
+    qc.invalidateQueries({ queryKey: ['dept-budgets', run?.period_label] });
+    setEditingBudget(null);
+    toast({ title: `Budget set for ${dept}` });
+  };
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      deptActuals.map(d => {
+        const budget = budgetMap[d.dept]?.target_amount ?? 0;
+        const variance = d.actual - budget;
+        return { Department: d.dept, Headcount: d.headcount, Budget: budget, Actual: d.actual, Variance: variance, '% Used': budget ? `${((d.actual / budget) * 100).toFixed(1)}%` : 'N/A' };
+      })
+    ), 'Budget vs Actual');
+    XLSX.writeFile(wb, `pact-budget-vs-actual-${run?.period_label?.replace(/\s/g, '-') ?? 'report'}.xlsx`);
+  };
+
+  if (runs.length === 0) return (
+    <Card className="shadow-sm border-0 bg-white dark:bg-slate-900"><CardContent className="py-16 text-center"><Target className="h-10 w-10 text-slate-300 mx-auto mb-3" /><p className="text-sm font-semibold">No payroll runs yet</p></CardContent></Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Target className="h-4 w-4 text-violet-500" />
+          <span className="text-sm font-semibold">Budget vs. Actual Payroll</span>
+        </div>
+        <Select value={selectedRunId} onValueChange={setSelectedRunId}>
+          <SelectTrigger className="h-9 w-[200px] text-sm bg-white dark:bg-slate-900"><SelectValue /></SelectTrigger>
+          <SelectContent>{runs.map(r => <SelectItem key={r.id} value={r.id}>{r.period_label}</SelectItem>)}</SelectContent>
+        </Select>
+        <Button onClick={exportExcel} size="sm" variant="outline" disabled={deptActuals.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
+        </Button>
+      </div>
+
+      {/* Overall KPIs */}
+      {(totalBudget > 0 || totalActual > 0) && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Total Budget',  value: totalBudget,   color: 'text-violet-600' },
+            { label: 'Total Actual',  value: totalActual,   color: 'text-[#0F2041] dark:text-blue-300' },
+            { label: 'Variance',      value: Math.abs(totalActual - totalBudget), color: totalActual > totalBudget ? 'text-red-600' : 'text-emerald-600', prefix: totalActual > totalBudget ? 'Over by ' : 'Under by ' },
+          ].map(k => (
+            <div key={k.label} className="bg-white dark:bg-slate-900 border rounded-xl px-4 py-3 text-center shadow-sm">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
+              <p className={cn('text-sm font-bold mt-0.5', k.color)}>{(k as any).prefix ?? ''}{fmt(k.value)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loadingItems ? (
+        <div className="py-12 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>
+      ) : (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+            <Target className="h-4 w-4 text-violet-500" />
+            <h3 className="text-sm font-semibold">By Department — {run?.period_label ?? 'Select a period'}</h3>
+            <span className="ml-auto text-xs text-muted-foreground">Click budget to edit</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/40 border-b">
+                  <th className="px-5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Department</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase text-muted-foreground">Staff</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase text-violet-600">Budget</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase text-[#0F2041]">Actual Net</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase text-muted-foreground">Variance</th>
+                  <th className="px-5 py-2 text-left text-[11px] font-semibold uppercase text-muted-foreground">Usage</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {deptActuals.map((d, i) => {
+                  const budget = budgetMap[d.dept]?.target_amount ?? 0;
+                  const variance = d.actual - budget;
+                  const pct = budget > 0 ? (d.actual / budget) * 100 : null;
+                  const over = variance > 0 && budget > 0;
+                  const isEditing = editingBudget?.dept === d.dept;
+                  return (
+                    <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                      <td className="px-5 py-2.5 font-medium">{d.dept}</td>
+                      <td className="px-3 py-2.5 text-center font-semibold">{d.headcount}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 justify-end">
+                            <Input type="number" value={editingBudget!.amount} onChange={e => setEditingBudget({ dept: d.dept, amount: e.target.value })}
+                              className="h-7 w-28 text-xs text-right" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveBudget(d.dept, parseFloat(editingBudget!.amount) || 0); if (e.key === 'Escape') setEditingBudget(null); }} />
+                            <button onClick={() => saveBudget(d.dept, parseFloat(editingBudget!.amount) || 0)} className="text-emerald-600 hover:text-emerald-700 p-0.5"><CheckCircle className="h-4 w-4" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setEditingBudget({ dept: d.dept, amount: String(budget || '') })}
+                            className={cn('text-xs font-medium px-2 py-0.5 rounded border transition-colors hover:border-violet-300 hover:text-violet-600', budget > 0 ? 'text-violet-600 border-violet-200 bg-violet-50' : 'text-muted-foreground border-slate-200 italic')}>
+                            {budget > 0 ? fmt(budget) : 'Set budget'}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-sm font-semibold text-[#0F2041] dark:text-blue-300">{fmt(d.actual)}</td>
+                      <td className={cn('px-3 py-2.5 text-right text-sm font-semibold', budget === 0 ? 'text-muted-foreground' : over ? 'text-red-600' : 'text-emerald-600')}>
+                        {budget === 0 ? '—' : `${over ? '+' : ''}${fmt(Math.abs(variance))}`}
+                      </td>
+                      <td className="px-5 py-2.5">
+                        {pct !== null ? (
+                          <div className="space-y-0.5">
+                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden w-32">
+                              <div className={cn('h-full rounded-full', pct > 100 ? 'bg-red-500' : pct > 90 ? 'bg-amber-400' : 'bg-emerald-500')} style={{ width: `${Math.min(pct, 100)}%` }} />
+                            </div>
+                            <span className={cn('text-[10px] font-semibold', pct > 100 ? 'text-red-600' : 'text-muted-foreground')}>{pct.toFixed(0)}%</span>
+                          </div>
+                        ) : <span className="text-xs text-muted-foreground">No budget set</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 border-t-2">
+                  <td className="px-5 py-2.5 text-xs font-bold text-muted-foreground uppercase">Total</td>
+                  <td className="px-3 py-2.5 text-center text-sm font-bold">{deptActuals.reduce((s, d) => s + d.headcount, 0)}</td>
+                  <td className="px-3 py-2.5 text-right text-sm font-bold text-violet-600">{totalBudget > 0 ? fmt(totalBudget) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right text-sm font-bold text-[#0F2041]">{fmt(totalActual)}</td>
+                  <td className={cn('px-3 py-2.5 text-right text-sm font-bold', totalBudget === 0 ? 'text-muted-foreground' : totalActual > totalBudget ? 'text-red-600' : 'text-emerald-600')}>
+                    {totalBudget > 0 ? `${totalActual > totalBudget ? '+' : ''}${fmt(Math.abs(totalActual - totalBudget))}` : '—'}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {deptActuals.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground">No payroll data for this period.</div>}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Advance / Loan Tracker ────────────────────────────────────────────────────
+interface PayrollAdvance {
+  id: string; user_id: string; user_name?: string;
+  amount: number; currency: string; reason: string | null;
+  advance_date: string; status: string; recovered_amount: number; notes: string | null;
+}
+
+function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; currentUserId: string }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [newAdv, setNewAdv] = useState({ user_id: '', amount: '', currency: 'SDG', reason: '', advance_date: format(new Date(), 'yyyy-MM-dd'), notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [recoveryInputs, setRecoveryInputs] = useState<Record<string, string>>({});
+
+  const { data: advances = [], isLoading } = useQuery<PayrollAdvance[]>({
+    queryKey: ['payroll-advances'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payroll_advances')
+        .select('id, user_id, amount, currency, reason, advance_date, status, recovered_amount, notes')
+        .order('advance_date', { ascending: false });
+      if (error) throw error;
+      // Enrich with names from employees
+      return (data ?? []).map((a: any) => {
+        const emp = employees.find(e => e.id === a.user_id);
+        return { ...a, user_name: emp?.full_name ?? 'Unknown' };
+      }) as PayrollAdvance[];
+    },
+  });
+
+  const outstanding   = advances.filter(a => a.status === 'outstanding');
+  const recovered     = advances.filter(a => a.status === 'recovered');
+  const totalOutstanding = outstanding.reduce((s, a) => s + (a.amount - a.recovered_amount), 0);
+
+  const saveAdvance = async () => {
+    if (!newAdv.user_id || !newAdv.amount) { toast({ title: 'Fill in employee and amount', variant: 'destructive' }); return; }
+    setSaving(true);
+    const { error } = await supabase.from('payroll_advances').insert({
+      user_id: newAdv.user_id, amount: parseFloat(newAdv.amount), currency: newAdv.currency,
+      reason: newAdv.reason || null, advance_date: newAdv.advance_date,
+      status: 'outstanding', recovered_amount: 0, notes: newAdv.notes || null,
+      created_by: currentUserId,
+    });
+    setSaving(false);
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Advance recorded' });
+    qc.invalidateQueries({ queryKey: ['payroll-advances'] });
+    setShowForm(false);
+    setNewAdv({ user_id: '', amount: '', currency: 'SDG', reason: '', advance_date: format(new Date(), 'yyyy-MM-dd'), notes: '' });
+  };
+
+  const markRecovered = async (adv: PayrollAdvance, partialAmt?: number) => {
+    const recAmount = partialAmt ?? adv.amount;
+    const newRecovered = Math.min(adv.recovered_amount + recAmount, adv.amount);
+    const newStatus = newRecovered >= adv.amount ? 'recovered' : 'outstanding';
+    const { error } = await supabase.from('payroll_advances').update({ recovered_amount: newRecovered, status: newStatus }).eq('id', adv.id);
+    if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: newStatus === 'recovered' ? 'Advance fully recovered' : 'Partial recovery recorded' });
+    qc.invalidateQueries({ queryKey: ['payroll-advances'] });
+    setRecoveryInputs(prev => { const n = { ...prev }; delete n[adv.id]; return n; });
+  };
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      advances.map(a => ({
+        Employee: a.user_name, Date: a.advance_date, Amount: a.amount, Currency: a.currency,
+        Reason: a.reason ?? '—', 'Recovered': a.recovered_amount, 'Outstanding Balance': a.amount - a.recovered_amount, Status: a.status, Notes: a.notes ?? '—',
+      }))
+    ), 'Advances');
+    XLSX.writeFile(wb, `pact-advances-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header with KPIs */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="grid grid-cols-3 gap-3 flex-1">
+          {[
+            { label: 'Total Outstanding', value: fmt(totalOutstanding), color: 'text-amber-600 bg-amber-50', count: outstanding.length },
+            { label: 'Recovered',         value: fmt(recovered.reduce((s, a) => s + a.amount, 0)), color: 'text-emerald-600 bg-emerald-50', count: recovered.length },
+            { label: 'All Advances',      value: fmt(advances.reduce((s, a) => s + a.amount, 0)), color: 'text-[#0F2041] bg-blue-50', count: advances.length },
+          ].map(k => (
+            <div key={k.label} className={cn('rounded-xl px-4 py-2.5 border text-center', k.color)}>
+              <p className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground">{k.label}</p>
+              <p className="text-lg font-bold mt-0.5">{k.value}</p>
+              <p className="text-[10px] text-muted-foreground">{k.count} advance{k.count !== 1 ? 's' : ''}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white" disabled={advances.length === 0}>
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export
+          </Button>
+          <Button onClick={() => setShowForm(v => !v)} size="sm" className="h-9 gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white text-xs">
+            <Plus className="h-4 w-4" />{showForm ? 'Cancel' : 'Record Advance'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Add advance form */}
+      {showForm && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+            <Plus className="h-4 w-4 text-[#0F2041]" />
+            <h3 className="text-sm font-semibold">Record New Advance</h3>
+          </div>
+          <CardContent className="pt-4 pb-5 space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="col-span-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Employee</p>
+                <Select value={newAdv.user_id} onValueChange={v => setNewAdv(p => ({ ...p, user_id: v }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select employee" /></SelectTrigger>
+                  <SelectContent>{employees.map(e => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Amount</p>
+                <Input type="number" placeholder="0" value={newAdv.amount} onChange={e => setNewAdv(p => ({ ...p, amount: e.target.value }))} className="h-9 text-sm" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Currency</p>
+                <Select value={newAdv.currency} onValueChange={v => setNewAdv(p => ({ ...p, currency: v }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{['SDG','USD','EUR','GBP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Date</p>
+                <Input type="date" value={newAdv.advance_date} onChange={e => setNewAdv(p => ({ ...p, advance_date: e.target.value }))} className="h-9 text-sm" />
+              </div>
+              <div className="col-span-2 sm:col-span-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Reason</p>
+                <Input placeholder="e.g. Emergency medical advance" value={newAdv.reason} onChange={e => setNewAdv(p => ({ ...p, reason: e.target.value }))} className="h-9 text-sm" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={saveAdvance} disabled={saving} className="h-9 gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Save Advance
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Outstanding advances */}
+      {outstanding.length > 0 && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <h3 className="text-sm font-semibold">Outstanding Advances</h3>
+            <span className="ml-auto text-xs text-muted-foreground">{outstanding.length} active</span>
+          </div>
+          <div className="divide-y">
+            {outstanding.map(adv => {
+              const balance = adv.amount - adv.recovered_amount;
+              const pct = adv.amount > 0 ? (adv.recovered_amount / adv.amount) * 100 : 0;
+              const ridKey = adv.id;
+              return (
+                <div key={adv.id} className="px-5 py-4 flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0', avatarColor(adv.user_id))}>{initials(adv.user_name)}</div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">{adv.user_name}</p>
+                      <p className="text-[11px] text-muted-foreground">{adv.advance_date} · {adv.reason ?? 'No reason given'}</p>
+                      {adv.recovered_amount > 0 && (
+                        <div className="mt-1.5 space-y-0.5">
+                          <div className="h-1.5 bg-slate-100 rounded-full w-40 overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">{pct.toFixed(0)}% recovered</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-amber-600">{fmt(balance, adv.currency)} outstanding</p>
+                    <p className="text-[11px] text-muted-foreground">of {fmt(adv.amount, adv.currency)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Input type="number" placeholder={`Partial (max ${fmt(balance)})`} value={recoveryInputs[ridKey] ?? ''} onChange={e => setRecoveryInputs(p => ({ ...p, [ridKey]: e.target.value }))} className="h-8 w-36 text-xs text-right" />
+                    <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => { const amt = parseFloat(recoveryInputs[ridKey] ?? ''); markRecovered(adv, amt > 0 ? Math.min(amt, balance) : undefined); }}>
+                      <CheckCircle className="h-3.5 w-3.5" />Recover
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Recovered */}
+      {recovered.length > 0 && (
+        <details className="group">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground px-1 flex items-center gap-1.5 list-none">
+            <ChevronDown className="h-3.5 w-3.5 group-open:rotate-180 transition-transform" />
+            {recovered.length} fully recovered advance{recovered.length !== 1 ? 's' : ''}
+          </summary>
+          <Card className="mt-2 shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="divide-y">
+              {recovered.map(adv => (
+                <div key={adv.id} className="px-5 py-3 flex items-center gap-4 opacity-70">
+                  <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0', avatarColor(adv.user_id))}>{initials(adv.user_name)}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{adv.user_name}</p>
+                    <p className="text-[11px] text-muted-foreground">{adv.advance_date} · {adv.reason ?? '—'}</p>
+                  </div>
+                  <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✓ Recovered {fmt(adv.amount, adv.currency)}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </details>
+      )}
+
+      {isLoading && <div className="py-16 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>}
+      {!isLoading && advances.length === 0 && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+          <CardContent className="py-16 text-center space-y-3">
+            <DollarSign className="h-10 w-10 text-slate-300 mx-auto" />
+            <p className="text-sm font-semibold">No advances recorded</p>
+            <p className="text-sm text-muted-foreground">Record salary advances to track outstanding balances.</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function EnhancedLineRow({ item, computed, currency, onUpdate, onRemove, typeSuffix, valueColor }: {
   item: LineItem & { computed?: number }; computed: number; currency: string;
   onUpdate: (f: keyof LineItem, v: any) => void; onRemove: () => void;
@@ -2011,6 +2661,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   const [savedRunId, setSavedRunId]     = useState<string | null>(null);
   const [adjustments, setAdjustments]  = useState<Record<string, Adjustment[]>>({});
   const [adjEmp, setAdjEmp]            = useState<RunItem | null>(null);
+  const [includeTaskRewards, setIncludeTaskRewards] = useState(false);
 
   const periodStart = startOfMonth(subMonths(new Date(), -monthOffset));
   const periodEnd   = endOfMonth(subMonths(new Date(), -monthOffset));
@@ -2035,28 +2686,46 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
     return { net: row.net_salary + bonus - ded, bonus, ded, adjs };
   };
 
-  const computePreview = useCallback(() => {
+  const computePreview = useCallback(async () => {
     if (!configured.length) { toast({ title: 'No employees have salary configured.', variant: 'destructive' }); return; }
     setComputing(true);
-    setTimeout(() => {
-      setPreview(configured.map(emp => {
-        const calc = computePayroll(emp.salary_config!);
-        return {
-          id: crypto.randomUUID(), run_id: '',
-          user_id: emp.id, user_name: emp.full_name ?? '—',
-          department_name: emp.department_name ?? '—',
-          base_salary: calc.base, allowances_total: calc.allowTotal,
-          gross_salary: calc.gross, deductions_total: calc.dedTotal,
-          net_salary: calc.net, task_rewards: 0, retainer_amount: 0,
-          currency: emp.salary_config!.currency,
-          allowances_snapshot: emp.salary_config!.allowances,
-          deductions_snapshot: emp.salary_config!.deductions,
-          adjustments: [],
-        };
-      }));
-      setComputing(false);
-    }, 200);
-  }, [configured, toast]);
+
+    // Fetch task rewards if toggle is on
+    let rewardsByUser: Record<string, number> = {};
+    if (includeTaskRewards) {
+      const startStr = format(periodStart, 'yyyy-MM-dd');
+      const endStr   = format(periodEnd,   'yyyy-MM-dd');
+      const { data: tasks } = await supabase
+        .from('personal_tasks')
+        .select('assigned_to, completion_reward')
+        .eq('status', 'completed')
+        .gte('updated_at', startStr)
+        .lte('updated_at', endStr + 'T23:59:59')
+        .not('completion_reward', 'is', null)
+        .gt('completion_reward', 0);
+      (tasks ?? []).forEach((t: any) => {
+        rewardsByUser[t.assigned_to] = (rewardsByUser[t.assigned_to] ?? 0) + (t.completion_reward ?? 0);
+      });
+    }
+
+    setPreview(configured.map(emp => {
+      const calc = computePayroll(emp.salary_config!);
+      const rewards = rewardsByUser[emp.id] ?? 0;
+      return {
+        id: crypto.randomUUID(), run_id: '',
+        user_id: emp.id, user_name: emp.full_name ?? '—',
+        department_name: emp.department_name ?? '—',
+        base_salary: calc.base, allowances_total: calc.allowTotal,
+        gross_salary: calc.gross, deductions_total: calc.dedTotal,
+        net_salary: calc.net + rewards, task_rewards: rewards, retainer_amount: 0,
+        currency: emp.salary_config!.currency,
+        allowances_snapshot: emp.salary_config!.allowances,
+        deductions_snapshot: emp.salary_config!.deductions,
+        adjustments: [],
+      };
+    }));
+    setComputing(false);
+  }, [configured, includeTaskRewards, periodStart, periodEnd, toast]);
 
   const saveRun = async (newStatus: 'draft' | 'submitted' | 'approved' | 'locked') => {
     if (!preview.length) { toast({ title: 'Compute preview first', variant: 'destructive' }); return; }
@@ -2147,6 +2816,11 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
 
             <div className="ml-auto flex items-center gap-2 flex-wrap">
               <span className="text-xs text-muted-foreground">{configured.length}/{employees.length} configured</span>
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors select-none bg-white dark:bg-slate-900 border rounded-lg px-3 h-9">
+                <input type="checkbox" checked={includeTaskRewards} onChange={e => setIncludeTaskRewards(e.target.checked)} className="rounded" />
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                Task Rewards
+              </label>
               <Button onClick={computePreview} disabled={computing || isLocked || isApproved} className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 h-9">
                 {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                 Compute
