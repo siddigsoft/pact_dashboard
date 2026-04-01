@@ -12,6 +12,7 @@ import {
   Users, Trophy, Zap, TrendingUp, Target, ChevronDown,
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
   GanttChartSquare, HelpCircle, Info, Building2, ListChecks, DollarSign,
+  Tag, FileText, StickyNote, ArrowUpDown, Layers, Hash, ExternalLink,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -43,6 +44,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -74,6 +78,10 @@ const STATUS_CFG: Record<PersonalTaskStatus, { label: string; color: string; bor
 };
 
 type FilterType = 'all' | 'today' | 'week' | 'overdue' | 'done';
+type SortBy = 'created' | 'due' | 'priority' | 'title';
+type GroupBy = 'none' | 'priority' | 'status';
+
+const PRIORITY_ORDER: Record<PersonalTaskPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 function isOverdue(dueDate?: string | null, status?: string): boolean {
   if (!dueDate || status === 'done' || status === 'cancelled') return false;
@@ -181,11 +189,12 @@ interface PersonalTaskCardProps {
   onDelete: () => void;
   onCreateSubtask?: (title: string) => Promise<void>;
   onSubtaskStatusChange?: (id: string, status: PersonalTaskStatus, prev: PersonalTaskStatus) => void;
+  onOpenDetail?: () => void;
 }
 
 function PersonalTaskCard({
   task, subtasks, onStatusChange, onEdit, onDelete,
-  onCreateSubtask, onSubtaskStatusChange,
+  onCreateSubtask, onSubtaskStatusChange, onOpenDetail,
 }: PersonalTaskCardProps) {
   const pCfg = PRIORITY_CFG[task.priority] ?? PRIORITY_CFG.medium;
   const sCfg = STATUS_CFG[task.status] ?? STATUS_CFG.todo;
@@ -245,9 +254,24 @@ function PersonalTaskCard({
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <p className={cn('text-sm font-medium leading-snug', isDone && 'line-through text-muted-foreground')}>
-            {task.title}
-          </p>
+          <div className="flex items-start gap-1">
+            <button
+              type="button"
+              onClick={onOpenDetail}
+              className={cn(
+                'text-sm font-medium leading-snug text-left flex-1 hover:text-[#1D3461] transition-colors',
+                isDone && 'line-through text-muted-foreground hover:text-muted-foreground',
+                onOpenDetail && 'cursor-pointer',
+              )}
+              title="Open task details"
+              data-testid={`task-title-${task.id}`}
+            >
+              {task.title}
+            </button>
+            {task.notes && (
+              <StickyNote className="h-3 w-3 text-amber-400 flex-shrink-0 mt-0.5" title="Has notes" />
+            )}
+          </div>
           {task.description && (
             <p className="text-xs text-muted-foreground mt-0.5 truncate">{task.description}</p>
           )}
@@ -274,6 +298,14 @@ function PersonalTaskCard({
             )}
             {task.recurrence && task.recurrence !== 'none' && (
               <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full capitalize">{task.recurrence}</span>
+            )}
+            {(task.tags ?? []).slice(0, 3).map(tag => (
+              <span key={tag} className="text-[9px] flex items-center gap-0.5 bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/15 px-1.5 py-0.5 rounded-full font-medium">
+                <Hash className="h-2 w-2" />{tag}
+              </span>
+            ))}
+            {(task.tags ?? []).length > 3 && (
+              <span className="text-[9px] text-muted-foreground">+{(task.tags ?? []).length - 3}</span>
             )}
           </div>
           {/* Subtask progress bar */}
@@ -417,6 +449,394 @@ function PersonalTaskCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ── Task Detail Sheet ────────────────────────────────────────────────────────
+
+interface TaskDetailSheetProps {
+  task: PersonalTask | null;
+  subtasks: PersonalTask[];
+  onClose: () => void;
+  onSave: (id: string, updates: Partial<CreatePersonalTask>) => Promise<void>;
+  onCreateSubtask: (title: string) => Promise<void>;
+  onSubtaskStatusChange: (id: string, status: PersonalTaskStatus) => void;
+  onDelete: () => void;
+  isSaving: boolean;
+  isAdmin: boolean;
+}
+
+function TaskDetailSheet({
+  task, subtasks, onClose, onSave, onCreateSubtask, onSubtaskStatusChange, onDelete, isSaving, isAdmin,
+}: TaskDetailSheetProps) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<PersonalTaskPriority>('medium');
+  const [status, setStatus] = useState<PersonalTaskStatus>('todo');
+  const [dueDate, setDueDate] = useState('');
+  const [notes, setNotes] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [category, setCategory] = useState('');
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [rewardAmount, setRewardAmount] = useState('');
+  const [rewardCurrency, setRewardCurrency] = useState('USD');
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (task) {
+      setTitle(task.title);
+      setDescription(task.description ?? '');
+      setPriority(task.priority);
+      setStatus(task.status);
+      setDueDate(task.dueDate ?? '');
+      setNotes(task.notes ?? '');
+      setTags(task.tags ?? []);
+      setCategory(task.category ?? '');
+      setRewardAmount(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
+      setRewardCurrency(task.completionRewardCurrency ?? 'USD');
+      setDirty(false);
+      setTagInput('');
+      setNewSubtaskTitle('');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.id]);
+
+  const markDirty = () => setDirty(true);
+
+  const handleSave = async () => {
+    if (!task) return;
+    const reward = isAdmin ? (rewardAmount ? parseFloat(rewardAmount) : null) : task.completionRewardAmount;
+    const currency = isAdmin ? (reward ? rewardCurrency : null) : task.completionRewardCurrency;
+    await onSave(task.id, {
+      title: title.trim(),
+      description: description.trim() || null,
+      priority,
+      status,
+      dueDate: dueDate || null,
+      notes: notes.trim() || null,
+      tags: tags.length > 0 ? tags : null,
+      category: category.trim() || 'personal',
+      completionRewardAmount: reward,
+      completionRewardCurrency: currency,
+    });
+    setDirty(false);
+  };
+
+  const handleAddTag = () => {
+    const t = tagInput.trim().toLowerCase().replace(/\s+/g, '-');
+    if (t && !tags.includes(t)) {
+      setTags(prev => [...prev, t]);
+      markDirty();
+    }
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setTags(prev => prev.filter(t => t !== tag));
+    markDirty();
+  };
+
+  const handleAddSubtask = async () => {
+    const t = newSubtaskTitle.trim();
+    if (!t) return;
+    setAddingSubtask(true);
+    try {
+      await onCreateSubtask(t);
+      setNewSubtaskTitle('');
+    } finally {
+      setAddingSubtask(false);
+    }
+  };
+
+  if (!task) return null;
+
+  const overdue = isOverdue(task.dueDate, task.status);
+  const pCfg = PRIORITY_CFG[priority] ?? PRIORITY_CFG.medium;
+  const doneSubs = subtasks.filter(s => s.status === 'done').length;
+
+  return (
+    <Sheet open={!!task} onOpenChange={onClose}>
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0 gap-0 overflow-hidden">
+        <SheetHeader className="px-4 pt-4 pb-3 border-b bg-card flex-shrink-0">
+          <div className="flex items-start gap-2">
+            <div className={cn('h-2 w-2 rounded-full mt-2 flex-shrink-0', pCfg.dot)} />
+            <div className="flex-1 min-w-0">
+              <SheetTitle asChild>
+                <input
+                  value={title}
+                  onChange={e => { setTitle(e.target.value); markDirty(); }}
+                  className="text-base font-semibold w-full bg-transparent border-0 outline-none focus:bg-muted/30 rounded px-1 -ml-1 transition-colors"
+                  data-testid="sheet-input-title"
+                />
+              </SheetTitle>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="text-[10px] text-muted-foreground">
+                  Created {format(parseISO(task.createdAt), 'dd MMM yyyy')}
+                </span>
+                {task.assignedToName && (
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                    <User className="h-2.5 w-2.5" />{task.assignedToName}
+                  </span>
+                )}
+                {task.recurrence && task.recurrence !== 'none' && (
+                  <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0 rounded-full capitalize">{task.recurrence}</span>
+                )}
+                {overdue && !dirty && (
+                  <span className="text-[10px] text-red-600 font-medium flex items-center gap-0.5">
+                    <AlertTriangle className="h-2.5 w-2.5" />Overdue
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {dirty && (
+                <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSaving}
+                  className="h-7 px-2.5 text-xs bg-[#1D3461] hover:bg-[#0F2041] text-white">
+                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Save
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />Delete Task
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </SheetHeader>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          {/* Status · Priority · Due */}
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="space-y-1">
+              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Circle className="h-2.5 w-2.5" />Status
+              </Label>
+              <Select value={status} onValueChange={v => { setStatus(v as PersonalTaskStatus); markDirty(); }}>
+                <SelectTrigger className="h-8 text-xs">
+                  <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_CFG[status]?.color)}>
+                    {STATUS_CFG[status]?.label}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
+                    <SelectItem key={s} value={s} className="text-xs">
+                      <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Flag className="h-2.5 w-2.5" />Priority
+              </Label>
+              <Select value={priority} onValueChange={v => { setPriority(v as PersonalTaskPriority); markDirty(); }}>
+                <SelectTrigger className="h-8 text-xs">
+                  <span className={cn('text-[9px] font-semibold', pCfg.color.replace(/bg-\S+\s/, '').split(' ')[0])}>
+                    {pCfg.label}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {(['low', 'medium', 'high', 'critical'] as PersonalTaskPriority[]).map(p => (
+                    <SelectItem key={p} value={p} className="text-xs">
+                      <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', PRIORITY_CFG[p].color)}>{PRIORITY_CFG[p].label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Calendar className="h-2.5 w-2.5" />Due Date
+              </Label>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={e => { setDueDate(e.target.value); markDirty(); }}
+                className={cn('h-8 text-xs', overdue && !dueDate && 'border-red-300')}
+              />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1.5">
+            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <FileText className="h-2.5 w-2.5" />Description
+            </Label>
+            <Textarea
+              value={description}
+              onChange={e => { setDescription(e.target.value); markDirty(); }}
+              placeholder="Add a description…"
+              className="resize-none text-sm min-h-[72px]"
+              data-testid="sheet-input-description"
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <StickyNote className="h-2.5 w-2.5" />Notes
+            </Label>
+            <Textarea
+              value={notes}
+              onChange={e => { setNotes(e.target.value); markDirty(); }}
+              placeholder="Add private notes, links, or context…"
+              className="resize-none text-sm min-h-[90px]"
+              data-testid="sheet-input-notes"
+            />
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-1.5">
+            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Tag className="h-2.5 w-2.5" />Tags
+            </Label>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {tags.map(tag => (
+                  <span key={tag} className="flex items-center gap-1 text-[10px] bg-[#1D3461]/10 text-[#1D3461] border border-[#1D3461]/20 px-2 py-0.5 rounded-full font-medium">
+                    #{tag}
+                    <button type="button" onClick={() => handleRemoveTag(tag)} className="text-[#1D3461]/50 hover:text-[#1D3461] ml-0.5">
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-1.5">
+              <Input
+                placeholder="Type tag and press Enter…"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
+                className="h-8 text-xs flex-1"
+                data-testid="sheet-input-tag"
+              />
+              <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-8 px-2.5 text-xs">
+                <Plus className="h-3 w-3 mr-1" />Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Category */}
+          <div className="space-y-1.5">
+            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Inbox className="h-2.5 w-2.5" />Category
+            </Label>
+            <Input
+              value={category}
+              onChange={e => { setCategory(e.target.value); markDirty(); }}
+              placeholder="e.g. work, personal, follow-up"
+              className="h-8 text-xs"
+            />
+          </div>
+
+          {/* Subtasks */}
+          <div className="space-y-1.5">
+            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <ListChecks className="h-2.5 w-2.5" />Subtasks
+              {subtasks.length > 0 && (
+                <span className="ml-1 font-normal text-muted-foreground">{doneSubs}/{subtasks.length} done</span>
+              )}
+            </Label>
+            {subtasks.length > 0 && (
+              <div className="space-y-0.5 rounded-lg border bg-muted/20 p-2">
+                {subtasks.map(sub => {
+                  const subDone = sub.status === 'done';
+                  return (
+                    <div key={sub.id} className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/60 transition-colors" data-testid={`sheet-subtask-${sub.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => onSubtaskStatusChange(sub.id, subDone ? 'todo' : 'done')}
+                        className={cn(
+                          'h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all',
+                          subDone ? 'bg-emerald-500 border-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
+                        )}
+                      >
+                        {subDone && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
+                      </button>
+                      <span className={cn('text-xs flex-1', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
+                      {sub.priority !== 'medium' && (
+                        <span className={cn('text-[9px] px-1 py-0.5 rounded-full', PRIORITY_CFG[sub.priority].color)}>{PRIORITY_CFG[sub.priority].label}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="h-1 bg-muted rounded-full overflow-hidden mt-2">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    style={{ width: `${subtasks.length > 0 ? Math.round((doneSubs / subtasks.length) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex gap-1.5">
+              <Input
+                placeholder="Add subtask…"
+                value={newSubtaskTitle}
+                onChange={e => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubtask(); } }}
+                className="h-8 text-xs flex-1"
+                data-testid="sheet-input-subtask"
+              />
+              <Button size="sm" variant="outline" onClick={handleAddSubtask} disabled={!newSubtaskTitle.trim() || addingSubtask} className="h-8 px-2.5 text-xs">
+                {addingSubtask ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+                {addingSubtask ? '' : 'Add'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Completion Reward */}
+          {(task.completionRewardAmount || isAdmin) && (
+            <div className="space-y-1.5">
+              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <DollarSign className="h-2.5 w-2.5" />Completion Reward
+              </Label>
+              {isAdmin ? (
+                <div className="flex gap-2">
+                  <Input
+                    type="number" min="0" step="0.01" placeholder="Amount"
+                    value={rewardAmount}
+                    onChange={e => { setRewardAmount(e.target.value); markDirty(); }}
+                    className="h-8 text-xs flex-1"
+                  />
+                  <Select value={rewardCurrency} onValueChange={v => { setRewardCurrency(v); markDirty(); }}>
+                    <SelectTrigger className="h-8 w-20 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-emerald-600">{task.completionRewardCurrency} {task.completionRewardAmount?.toFixed(2)}</p>
+              )}
+              <p className="text-[10px] text-muted-foreground">Credited to wallet when task is marked done.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Sticky footer */}
+        {dirty && (
+          <div className="px-4 py-3 border-t flex items-center justify-end gap-2 flex-shrink-0 bg-card">
+            <Button variant="outline" size="sm" onClick={() => { setDirty(false); onClose(); }}>Discard</Button>
+            <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSaving} className="bg-[#1D3461] hover:bg-[#0F2041] text-white">
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Save Changes
+            </Button>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -2390,6 +2810,9 @@ export default function MyTasks() {
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [personalView, setPersonalView] = useState<'list' | 'board'>('list');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortBy>('created');
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const [showInsights, setShowInsightsRaw] = useState<boolean>(() => {
     try { return localStorage.getItem('pact_mytasks_insights') !== 'false'; } catch { return true; }
   });
@@ -2474,6 +2897,45 @@ export default function MyTasks() {
       .filter(t => !q || String(t.title ?? '').toLowerCase().includes(q) || String(t.description ?? '').toLowerCase().includes(q) || t.projectName.toLowerCase().includes(q)),
     [projectTasks, filter, q],
   );
+
+  // Sort personal tasks
+  const sortedPersonal = useMemo(() => {
+    const arr = [...filteredPersonal];
+    switch (sortBy) {
+      case 'priority':
+        return arr.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2));
+      case 'due':
+        return arr.sort((a, b) => {
+          if (!a.dueDate && !b.dueDate) return 0;
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return a.dueDate.localeCompare(b.dueDate);
+        });
+      case 'title':
+        return arr.sort((a, b) => a.title.localeCompare(b.title));
+      default: // 'created' — newest first
+        return arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+  }, [filteredPersonal, sortBy]);
+
+  // Group personal tasks
+  const groupedPersonal = useMemo(() => {
+    if (groupBy === 'priority') {
+      return (['critical', 'high', 'medium', 'low'] as PersonalTaskPriority[])
+        .map(p => ({ key: p, label: PRIORITY_CFG[p].label, dot: PRIORITY_CFG[p].dot, tasks: sortedPersonal.filter(t => t.priority === p) }))
+        .filter(g => g.tasks.length > 0);
+    }
+    if (groupBy === 'status') {
+      return (['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[])
+        .map(s => ({ key: s, label: STATUS_CFG[s].label, dot: '', tasks: sortedPersonal.filter(t => t.status === s) }))
+        .filter(g => g.tasks.length > 0);
+    }
+    return [{ key: 'all', label: '', dot: '', tasks: sortedPersonal }];
+  }, [sortedPersonal, groupBy]);
+
+  // Resolved selected task for detail sheet
+  const selectedTask = useMemo(() => allPersonalTasks.find(t => t.id === selectedTaskId) ?? null, [allPersonalTasks, selectedTaskId]);
+  const selectedTaskSubtasks = useMemo(() => selectedTask ? allPersonalTasks.filter(t => t.parentTaskId === selectedTask.id) : [], [allPersonalTasks, selectedTask]);
 
   const handleQuickAdd = async (title: string, priority: PersonalTaskPriority, dueDate: string) => {
     try {
@@ -2803,19 +3265,40 @@ export default function MyTasks() {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs leading-relaxed">
                     Personal tasks are private to you and not visible to anyone else.
-                    Use the quick-add bar above to create one. Switch to Board view for a visual Kanban layout.
+                    Click any task title to open the full detail panel. Switch to Board view for a visual Kanban layout.
                   </TooltipContent>
                 </UITooltip>
               </TooltipProvider>
             </h2>
-            <p className="text-[11px] text-muted-foreground ml-6">Private to you only — use the quick-add bar above · toggle ☰ List or ⊞ Board view</p>
+            <p className="text-[11px] text-muted-foreground ml-6">Private to you only — click a task title to open details · toggle ☰ List or ⊞ Board view</p>
           </div>
-          <div className="flex items-center gap-2">
-            {personalTasks.filter(t => t.status === 'done').length > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {personalTasks.filter(t => t.status === 'done').length} completed
-              </span>
-            )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Sort */}
+            <Select value={sortBy} onValueChange={v => setSortBy(v as SortBy)}>
+              <SelectTrigger className="h-7 w-auto text-xs gap-1 border-muted bg-card" data-testid="select-sort-by">
+                <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="created" className="text-xs">Newest first</SelectItem>
+                <SelectItem value="due" className="text-xs">Due date</SelectItem>
+                <SelectItem value="priority" className="text-xs">Priority</SelectItem>
+                <SelectItem value="title" className="text-xs">Title A–Z</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Group */}
+            <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupBy)}>
+              <SelectTrigger className="h-7 w-auto text-xs gap-1 border-muted bg-card" data-testid="select-group-by">
+                <Layers className="h-3 w-3 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-xs">No grouping</SelectItem>
+                <SelectItem value="priority" className="text-xs">Group by Priority</SelectItem>
+                <SelectItem value="status" className="text-xs">Group by Status</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* View toggle */}
             <div className="flex items-center border rounded-lg overflow-hidden h-7">
               <button
                 type="button"
@@ -2871,20 +3354,35 @@ export default function MyTasks() {
             onDelete={handleDelete}
           />
         ) : (
-          <div className="space-y-1.5">
-            {filteredPersonal.map(task => (
-              <PersonalTaskCard
-                key={task.id}
-                task={task}
-                subtasks={allPersonalTasks.filter(t => t.parentTaskId === task.id)}
-                onStatusChange={(s, prev) => handleStatusChange(task.id, s, prev)}
-                onEdit={() => setEditingTask(task)}
-                onDelete={() => handleDelete(task.id)}
-                onCreateSubtask={async (title) => {
-                  await createTask({ title, priority: task.priority, category: task.category ?? 'personal', parentTaskId: task.id });
-                }}
-                onSubtaskStatusChange={(id, s, prev) => handleStatusChange(id, s, prev)}
-              />
+          <div className="space-y-3">
+            {groupedPersonal.map(group => (
+              <div key={group.key}>
+                {groupBy !== 'none' && (
+                  <div className="flex items-center gap-2 mb-1.5 px-1">
+                    {group.dot && <div className={cn('h-2 w-2 rounded-full flex-shrink-0', group.dot)} />}
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{group.label}</span>
+                    <span className="text-[10px] text-muted-foreground">({group.tasks.length})</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  {group.tasks.map(task => (
+                    <PersonalTaskCard
+                      key={task.id}
+                      task={task}
+                      subtasks={allPersonalTasks.filter(t => t.parentTaskId === task.id)}
+                      onStatusChange={(s, prev) => handleStatusChange(task.id, s, prev)}
+                      onEdit={() => setEditingTask(task)}
+                      onDelete={() => handleDelete(task.id)}
+                      onOpenDetail={() => setSelectedTaskId(task.id)}
+                      onCreateSubtask={async (title) => {
+                        await createTask({ title, priority: task.priority, category: task.category ?? 'personal', parentTaskId: task.id });
+                      }}
+                      onSubtaskStatusChange={(id, s, prev) => handleStatusChange(id, s, prev)}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -3024,6 +3522,22 @@ export default function MyTasks() {
           </button>
         </div>
       )}
+
+      {/* ── Task Detail Sheet ── */}
+      <TaskDetailSheet
+        task={selectedTask}
+        subtasks={selectedTaskSubtasks}
+        onClose={() => setSelectedTaskId(null)}
+        onSave={handleEditSave}
+        onCreateSubtask={async (title) => {
+          if (!selectedTask) return;
+          await createTask({ title, priority: selectedTask.priority, category: selectedTask.category ?? 'personal', parentTaskId: selectedTask.id });
+        }}
+        onSubtaskStatusChange={(id, s) => handleStatusChange(id, s as PersonalTaskStatus, s === 'done' ? 'todo' : 'done')}
+        onDelete={() => { if (selectedTaskId) { handleDelete(selectedTaskId); setSelectedTaskId(null); } }}
+        isSaving={isUpdating}
+        isAdmin={isAdmin}
+      />
 
       {/* ── Edit dialog ── */}
       <EditPersonalTaskDialog
