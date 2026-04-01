@@ -104,7 +104,7 @@ function SiteDetailRow({ site, userNames, advance }: { site: SiteStatusDetail; u
           <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${badgeColors[site.statusCategory]}`}>
             {site.statusLabel}
           </Badge>
-          {advance && advanceCfg && (
+          {advance && advanceCfg ? (
             <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${advanceCfg.color}`}>
               <Wallet className="h-2.5 w-2.5" />
               {advanceCfg.label}
@@ -117,6 +117,11 @@ function SiteDetailRow({ site, userNames, advance }: { site: SiteStatusDetail; u
                       : `(${advance.requestedAmount.toLocaleString()} SDG)`}
                 </span>
               )}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex items-center gap-1 text-muted-foreground border-dashed">
+              <Wallet className="h-2.5 w-2.5" />
+              No Advance Request
             </Badge>
           )}
         </div>
