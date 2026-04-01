@@ -617,7 +617,17 @@ function CompactOrgNode({
         <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: accentColor }}>
           <Building2 className="h-2.5 w-2.5 text-white" />
         </div>
-        <span className="text-xs font-semibold truncate flex-1">{dept.name}</span>
+        <div className="flex items-baseline gap-1.5 min-w-0 flex-1">
+          {dept.manager?.full_name && (
+            <span className="text-xs font-bold truncate shrink-0" style={{ color: accentColor }}>
+              {dept.manager.full_name}
+            </span>
+          )}
+          {dept.manager?.full_name && (
+            <span className="text-[9px] text-muted-foreground/60 shrink-0">·</span>
+          )}
+          <span className="text-[11px] font-medium text-muted-foreground truncate">{dept.name}</span>
+        </div>
         <span className="text-[9px] font-medium px-1.5 py-0 rounded-full shrink-0" style={{ background: accentColor + "20", color: accentColor }}>
           {palette.label}
         </span>
