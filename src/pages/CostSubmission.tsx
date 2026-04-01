@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -204,6 +205,8 @@ const CostSubmission = () => {
   const [groupApprovalNotes, setGroupApprovalNotes] = useState('');
   const [groupApprovalProcessing, setGroupApprovalProcessing] = useState(false);
   const [groupApprovalAttachments, setGroupApprovalAttachments] = useState<File[]>([]);
+
+  const [viewingSubmission, setViewingSubmission] = useState<OperationalCostSubmission | null>(null);
 
   const [signatureModal, setSignatureModal] = useState<{
     open: boolean;
@@ -3566,6 +3569,16 @@ const CostSubmission = () => {
                           )}
 
                           <div className="flex items-center gap-2 pt-1 border-t flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setViewingSubmission(oc)}
+                              data-testid={`button-view-details-${oc.id}`}
+                            >
+                              <Eye className="h-3.5 w-3.5 mr-1" />
+                              View Details
+                            </Button>
                             {!isMultiItem && canTier1Approve(oc) && (
                               <>
                                 <Button
@@ -3949,6 +3962,290 @@ const CostSubmission = () => {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* ── Request Detail Sheet ─────────────────────────────────────────── */}
+      <Sheet open={!!viewingSubmission} onOpenChange={(open) => { if (!open) setViewingSubmission(null); }}>
+        <SheetContent className="w-full sm:max-w-xl p-0 flex flex-col overflow-hidden" side="right">
+          {viewingSubmission && (() => {
+            const oc = viewingSubmission;
+            const catMeta = EXPENSE_CATEGORY_MAP[oc.expense_category];
+            const CatIcon = catMeta?.icon;
+            const submitter = users.find(u => u.id === oc.submitted_by);
+            const t1User = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
+            const t2User = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
+            const t3User = oc.tier3_approved_by ? users.find(u => u.id === oc.tier3_approved_by) : null;
+            const linkedProject = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
+            const derivedStatus = oc.paid_at ? 'paid' : oc.reconciled_at ? 'reconciled' : oc.status;
+            const cleanNote = (n: string | null) => n?.replace(/\[Signed:.*?\]/g, '').trim() || null;
+
+            const statusBand: Record<string, string> = {
+              approved: 'bg-emerald-600 dark:bg-emerald-700',
+              paid: 'bg-purple-600 dark:bg-purple-700',
+              reconciled: 'bg-teal-600 dark:bg-teal-700',
+              rejected: 'bg-red-600 dark:bg-red-700',
+              under_review: 'bg-blue-600 dark:bg-blue-700',
+              pending: 'bg-amber-500 dark:bg-amber-600',
+            };
+
+            const ApprovalStep = ({ tier, tStatus, tUser: tu, tAt, tNotes }: {
+              tier: number;
+              tStatus: string | null;
+              tUser: { name?: string; email?: string } | null | undefined;
+              tAt: string | null;
+              tNotes: string | null;
+            }) => (
+              <div className="flex items-start gap-3">
+                <div className={`mt-0.5 flex-none w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
+                  tStatus === 'approved' ? 'bg-emerald-500' : tStatus === 'rejected' ? 'bg-red-500' : 'bg-muted-foreground/40'
+                }`}>T{tier}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium">
+                      {tStatus === 'approved' ? 'Approved' : tStatus === 'rejected' ? 'Rejected' : tStatus === 'pending' ? 'Pending' : 'Not reached'}
+                    </span>
+                    {tu && <span className="text-xs text-muted-foreground">by {tu.name || tu.email}</span>}
+                    {tAt && <span className="text-xs text-muted-foreground">{format(new Date(tAt), 'dd MMM yyyy, h:mm a')}</span>}
+                  </div>
+                  {cleanNote(tNotes) && (
+                    <p className="text-xs text-muted-foreground mt-0.5 bg-muted/50 rounded px-2 py-1">{cleanNote(tNotes)}</p>
+                  )}
+                </div>
+              </div>
+            );
+
+            const docs = Array.isArray(oc.supporting_documents) ? oc.supporting_documents as any[] : [];
+
+            return (
+              <>
+                {/* ── Colored status header ── */}
+                <div className={`${statusBand[derivedStatus] || statusBand.pending} text-white px-5 py-4 shrink-0`}>
+                  <SheetHeader>
+                    <SheetTitle className="text-white flex items-center gap-2 text-base">
+                      {CatIcon && <CatIcon className="h-4 w-4 opacity-90" />}
+                      {catMeta?.label || oc.expense_category}
+                    </SheetTitle>
+                  </SheetHeader>
+                  <div className="flex items-end justify-between mt-2">
+                    <div>
+                      <p className="text-3xl font-bold tabular-nums leading-none">{oc.currency} {(oc.amount_cents / 100).toLocaleString()}</p>
+                      <p className="text-xs opacity-75 mt-1">
+                        {oc.expense_date ? format(new Date(oc.expense_date), 'dd MMM yyyy') : 'No date'}
+                        {submitter && <span> · {submitter.name || submitter.email}</span>}
+                      </p>
+                    </div>
+                    <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending} !bg-white/20 !text-white`}>
+                      {statusLabels[derivedStatus] || derivedStatus}
+                    </Badge>
+                  </div>
+                  {oc.request_title && (
+                    <div className="mt-2.5 rounded bg-white/10 px-3 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide opacity-70 font-semibold">Request</p>
+                      <p className="text-sm font-medium">{oc.request_title}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Scrollable body ── */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+                  {/* ── Expense Details ── */}
+                  <section>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Expense Details / تفاصيل المصروف</p>
+                    <div className="rounded-lg border divide-y text-sm">
+                      {oc.description && (
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground mb-0.5">Description / الوصف</p>
+                          <p className="whitespace-pre-wrap leading-relaxed">{oc.description.replace(/^\[.*?\]\s*/, '')}</p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 divide-x">
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground mb-0.5">Category</p>
+                          <p className="font-medium flex items-center gap-1">
+                            {CatIcon && <CatIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+                            {catMeta?.label || oc.expense_category}
+                          </p>
+                        </div>
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
+                          <p className="font-bold tabular-nums">{oc.currency} {(oc.amount_cents / 100).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      {(oc.vendor || oc.reference_number) && (
+                        <div className="grid grid-cols-2 divide-x">
+                          {oc.vendor && (
+                            <div className="px-3 py-2">
+                              <p className="text-xs text-muted-foreground mb-0.5">Vendor / المورد</p>
+                              <p>{oc.vendor}</p>
+                            </div>
+                          )}
+                          {oc.reference_number && (
+                            <div className="px-3 py-2">
+                              <p className="text-xs text-muted-foreground mb-0.5">Reference #</p>
+                              <p className="font-mono text-xs">{oc.reference_number}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {oc.expense_date && (
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground mb-0.5">Expense Date / تاريخ المصروف</p>
+                          <p className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                            {format(new Date(oc.expense_date), 'EEEE, dd MMMM yyyy')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* ── Submission Info ── */}
+                  <section>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Submission Info / معلومات الطلب</p>
+                    <div className="rounded-lg border divide-y text-sm">
+                      <div className="px-3 py-2">
+                        <p className="text-xs text-muted-foreground mb-0.5">Submitted By / مقدم الطلب</p>
+                        <p className="font-medium">{submitter?.name || submitter?.email || oc.submitted_by.slice(0, 8)}</p>
+                        {oc.submitter_role && <p className="text-xs text-muted-foreground capitalize">{oc.submitter_role.replace(/_/g, ' ')}</p>}
+                      </div>
+                      {oc.submitted_at && (
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground mb-0.5">Submitted At / وقت التقديم</p>
+                          <p>{format(new Date(oc.submitted_at), 'dd MMM yyyy, h:mm a')}</p>
+                        </div>
+                      )}
+                      {linkedProject && (
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground mb-0.5">Project / المشروع</p>
+                          <button
+                            onClick={() => { setViewingSubmission(null); navigate(`/projects/${linkedProject.id}`); }}
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-left"
+                          >
+                            {linkedProject.name}
+                          </button>
+                        </div>
+                      )}
+                      <div className="px-3 py-2">
+                        <p className="text-xs text-muted-foreground mb-0.5">Submission ID</p>
+                        <p className="font-mono text-xs opacity-60">{oc.id}</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* ── Rejection Reason ── */}
+                  {oc.rejection_reason && (
+                    <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-3">
+                      <div className="flex items-center gap-2 text-red-700 dark:text-red-300 mb-1">
+                        <XCircle className="h-4 w-4" />
+                        <span className="text-sm font-semibold">Rejection Reason / سبب الرفض</span>
+                      </div>
+                      <p className="text-sm text-red-700 dark:text-red-300">{oc.rejection_reason}</p>
+                    </div>
+                  )}
+
+                  {/* ── Approval Trail ── */}
+                  <section>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-3">Approval Trail / مسار الموافقة</p>
+                    <div className="space-y-3">
+                      <ApprovalStep tier={1} tStatus={oc.tier1_status} tUser={t1User} tAt={oc.tier1_approved_at} tNotes={oc.tier1_notes} />
+                      <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
+                      <ApprovalStep tier={2} tStatus={oc.tier2_status} tUser={t2User} tAt={oc.tier2_approved_at} tNotes={oc.tier2_notes} />
+                      {hasThreeTiers(oc) && (
+                        <>
+                          <div className="ml-3 border-l-2 border-dashed border-muted h-3" />
+                          <ApprovalStep tier={3} tStatus={oc.tier3_status} tUser={t3User} tAt={oc.tier3_approved_at} tNotes={oc.tier3_notes} />
+                        </>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* ── Payment Info ── */}
+                  {oc.paid_at && (
+                    <section>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Payment / الدفع</p>
+                      <div className="rounded-lg border divide-y text-sm">
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-muted-foreground mb-0.5">Paid At</p>
+                          <p className="flex items-center gap-1.5">
+                            <Wallet className="h-3.5 w-3.5 text-purple-500" />
+                            {format(new Date(oc.paid_at), 'dd MMM yyyy, h:mm a')}
+                          </p>
+                        </div>
+                        {oc.payment_proof_url && (
+                          <div className="px-3 py-2">
+                            <a href={oc.payment_proof_url} target="_blank" rel="noopener noreferrer"
+                              className="text-blue-600 dark:text-blue-400 hover:underline text-xs flex items-center gap-1">
+                              <Eye className="h-3.5 w-3.5" /> View Payment Proof
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* ── Attachments ── */}
+                  {docs.length > 0 && (
+                    <section>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                        Attachments / المرفقات ({docs.length})
+                      </p>
+                      <div className="space-y-1.5">
+                        {docs.map((doc: any, idx: number) => (
+                          <a
+                            key={idx}
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                            data-testid={`link-detail-doc-${oc.id}-${idx}`}
+                          >
+                            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span className="flex-1 text-sm text-blue-700 dark:text-blue-300 truncate">{doc.filename || `Document ${idx + 1}`}</span>
+                            <Download className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                          </a>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </div>
+
+                {/* ── Footer action bar ── */}
+                <div className="shrink-0 border-t px-5 py-3 flex items-center justify-between gap-2 bg-muted/20">
+                  <Button variant="ghost" size="sm" onClick={() => setViewingSubmission(null)} data-testid="button-detail-close">
+                    Close
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    {canTier1Approve(oc) && (
+                      <Button size="sm" onClick={() => { setViewingSubmission(null); openApprovalDialog(oc, 'approve', 1); }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid={`button-detail-approve-${oc.id}`}>
+                        <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Approve T1
+                      </Button>
+                    )}
+                    {canTier2Approve(oc) && (
+                      <Button size="sm" onClick={() => { setViewingSubmission(null); openApprovalDialog(oc, 'approve', 2); }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid={`button-detail-approve-t2-${oc.id}`}>
+                        <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Approve T2
+                      </Button>
+                    )}
+                    {canTier3Approve(oc) && (
+                      <Button size="sm" onClick={() => { setViewingSubmission(null); openApprovalDialog(oc, 'approve', 3); }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid={`button-detail-approve-t3-${oc.id}`}>
+                        <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Approve T3
+                      </Button>
+                    )}
+                    {canEditSubmission(oc) && (
+                      <Button size="sm" variant="outline" onClick={() => { setViewingSubmission(null); handleEditSubmission(oc); }}
+                        data-testid={`button-detail-edit-${oc.id}`}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={approvalDialog.open} onOpenChange={(open) => {
         if (!open) {
