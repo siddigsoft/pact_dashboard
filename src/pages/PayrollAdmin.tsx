@@ -7,11 +7,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import {
   Users, Trash2, Edit3, Save, Lock, CheckCircle2, Download,
   Loader2, Banknote, CalendarRange, PlusCircle, TrendingDown,
   TrendingUp, ReceiptText, PlayCircle, ChevronLeft, ChevronRight,
   Search, AlertCircle, UserCheck, FileDown, MoreVertical,
+  BarChart3, Building2, FileSpreadsheet,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
@@ -271,7 +273,7 @@ export default function PayrollAdmin() {
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5">
         <Tabs defaultValue="salaries">
-          <TabsList className="w-full sm:w-auto h-10 bg-white dark:bg-slate-900 border shadow-sm rounded-xl p-1 mb-5">
+          <TabsList className="w-full sm:w-auto h-10 bg-white dark:bg-slate-900 border shadow-sm rounded-xl p-1 mb-5 flex-wrap gap-0">
             <TabsTrigger value="salaries" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
               <Users className="h-3.5 w-3.5" />Employee Salaries
             </TabsTrigger>
@@ -280,6 +282,9 @@ export default function PayrollAdmin() {
             </TabsTrigger>
             <TabsTrigger value="history" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
               <ReceiptText className="h-3.5 w-3.5" />Payslips &amp; History
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
+              <BarChart3 className="h-3.5 w-3.5" />Reports
             </TabsTrigger>
           </TabsList>
 
@@ -291,6 +296,9 @@ export default function PayrollAdmin() {
           </TabsContent>
           <TabsContent value="history" className="mt-0">
             <PayslipsTab runs={runs} loading={loadingRuns} employees={employees} />
+          </TabsContent>
+          <TabsContent value="reports" className="mt-0">
+            <PayrollReportsTab runs={runs} employees={employees} />
           </TabsContent>
         </Tabs>
       </div>
@@ -751,6 +759,410 @@ function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string })
     <div className="flex items-center gap-1.5">
       {icon}
       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 4 — Payroll Reports
+// ══════════════════════════════════════════════════════════════════════════════
+interface AggregateLine { name: string; total: number; count: number; pctOfGross: number; }
+interface DeptSummary { dept: string; headcount: number; base: number; gross: number; deductions: number; net: number; }
+
+function aggregateLines(items: RunItem[], kind: 'allowances_snapshot' | 'deductions_snapshot'): AggregateLine[] {
+  const map: Record<string, { total: number; count: number; grossSum: number }> = {};
+  for (const item of items) {
+    const lines = item[kind] ?? [];
+    const base  = item.base_salary;
+    const gross = item.gross_salary;
+    for (const line of lines) {
+      const computed = line.type === 'fixed'
+        ? line.amount
+        : (kind === 'allowances_snapshot' ? base : gross) * line.amount / 100;
+      if (!map[line.name]) map[line.name] = { total: 0, count: 0, grossSum: 0 };
+      map[line.name].total    += computed;
+      map[line.name].count    += 1;
+      map[line.name].grossSum += gross;
+    }
+  }
+  return Object.entries(map)
+    .map(([name, v]) => ({ name, total: v.total, count: v.count, pctOfGross: v.grossSum > 0 ? (v.total / v.grossSum) * 100 : 0 }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function deptBreakdown(items: RunItem[]): DeptSummary[] {
+  const map: Record<string, DeptSummary> = {};
+  for (const item of items) {
+    const d = item.department_name || 'No Department';
+    if (!map[d]) map[d] = { dept: d, headcount: 0, base: 0, gross: 0, deductions: 0, net: 0 };
+    map[d].headcount  += 1;
+    map[d].base       += item.base_salary;
+    map[d].gross      += item.gross_salary;
+    map[d].deductions += item.deductions_total;
+    map[d].net        += item.net_salary;
+  }
+  return Object.values(map).sort((a, b) => b.gross - a.gross);
+}
+
+function PayrollReportsTab({ runs, employees }: { runs: PayrollRun[]; employees: EmployeeRow[] }) {
+  const [selectedRunId, setSelectedRunId] = useState<string>('projection');
+
+  // Fetch run items for selected payroll run
+  const { data: fetchedItems = [], isLoading: loadingItems } = useQuery<RunItem[]>({
+    queryKey: ['payroll-report-items', selectedRunId],
+    enabled: selectedRunId !== 'projection',
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payroll_run_items')
+        .select('*')
+        .eq('run_id', selectedRunId);
+      if (error) throw error;
+      return (data ?? []) as RunItem[];
+    },
+  });
+
+  // Build projection from current salary configs
+  const projectionItems: RunItem[] = useMemo(() => {
+    return employees
+      .filter(e => e.salary_config)
+      .map(emp => {
+        const calc = computePayroll(emp.salary_config!);
+        return {
+          id: emp.id, run_id: '', user_id: emp.id,
+          user_name: emp.full_name ?? '—',
+          department_name: emp.department_name ?? 'No Department',
+          base_salary: calc.base, allowances_total: calc.allowTotal,
+          gross_salary: calc.gross, deductions_total: calc.dedTotal,
+          net_salary: calc.net, task_rewards: 0, retainer_amount: 0,
+          currency: emp.salary_config!.currency,
+          allowances_snapshot: emp.salary_config!.allowances,
+          deductions_snapshot: emp.salary_config!.deductions,
+        };
+      });
+  }, [employees]);
+
+  const items = selectedRunId === 'projection' ? projectionItems : fetchedItems;
+  const isProjection = selectedRunId === 'projection';
+  const selectedRun  = runs.find(r => r.id === selectedRunId);
+
+  const allowanceSummary = useMemo(() => aggregateLines(items, 'allowances_snapshot'), [items]);
+  const deductionSummary = useMemo(() => aggregateLines(items, 'deductions_snapshot'), [items]);
+  const deptSummary      = useMemo(() => deptBreakdown(items), [items]);
+
+  const totalGross  = items.reduce((s, i) => s + i.gross_salary, 0);
+  const totalDed    = items.reduce((s, i) => s + i.deductions_total, 0);
+  const totalNet    = items.reduce((s, i) => s + i.net_salary, 0);
+  const totalBase   = items.reduce((s, i) => s + i.base_salary, 0);
+  const totalAllow  = items.reduce((s, i) => s + i.allowances_total, 0);
+
+  const maxAllowBar = allowanceSummary[0]?.total || 1;
+  const maxDedBar   = deductionSummary[0]?.total || 1;
+  const maxDeptBar  = deptSummary[0]?.gross || 1;
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Summary sheet
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['PACT Payroll Report', isProjection ? 'Current Configuration (Projection)' : selectedRun?.period_label ?? ''],
+      ['Generated', format(new Date(), 'dd MMM yyyy HH:mm')],
+      [],
+      ['SUMMARY'],
+      ['Headcount', items.length],
+      ['Total Base', totalBase],
+      ['Total Allowances', totalAllow],
+      ['Total Gross', totalGross],
+      ['Total Deductions', totalDed],
+      ['Total Net Pay', totalNet],
+    ]), 'Summary');
+
+    // Allowances sheet
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Allowance', 'Employees', 'Total Amount', '% of Gross'],
+      ...allowanceSummary.map(a => [a.name, a.count, a.total, `${a.pctOfGross.toFixed(1)}%`]),
+    ]), 'Allowances');
+
+    // Deductions sheet
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Deduction', 'Employees', 'Total Amount', '% of Gross'],
+      ...deductionSummary.map(d => [d.name, d.count, d.total, `${d.pctOfGross.toFixed(1)}%`]),
+    ]), 'Deductions');
+
+    // Department sheet
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Department', 'Headcount', 'Total Base', 'Total Gross', 'Total Deductions', 'Total Net'],
+      ...deptSummary.map(d => [d.dept, d.headcount, d.base, d.gross, d.deductions, d.net]),
+    ]), 'By Department');
+
+    // Full employee list
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Employee', 'Department', 'Base', 'Allowances', 'Gross', 'Deductions', 'Net'],
+      ...items.map(i => [i.user_name, i.department_name, i.base_salary, i.allowances_total, i.gross_salary, i.deductions_total, i.net_salary]),
+    ]), 'Employee Detail');
+
+    const label = isProjection ? 'projection' : (selectedRun?.period_label ?? 'report');
+    XLSX.writeFile(wb, `pact-payroll-${label.replace(/\s/g, '-').toLowerCase()}.xlsx`);
+  };
+
+  const loading = selectedRunId !== 'projection' && loadingItems;
+
+  return (
+    <div className="space-y-5">
+      {/* Controls */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <CalendarRange className="h-4 w-4 text-muted-foreground" />
+          <Select value={selectedRunId} onValueChange={setSelectedRunId}>
+            <SelectTrigger className="h-9 w-[240px] text-sm bg-white dark:bg-slate-900">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="projection">Current Config (Live Projection)</SelectItem>
+              {runs.map(r => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.period_label} — {r.status === 'locked' ? '🔒 Locked' : 'Draft'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {isProjection && (
+          <span className="text-[11px] px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-medium">
+            Live projection from current salary configs
+          </span>
+        )}
+        {selectedRun && (
+          <span className={cn(
+            'text-[11px] px-2.5 py-1 rounded-full border font-medium',
+            selectedRun.status === 'locked'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : 'bg-blue-50 border-blue-200 text-blue-700',
+          )}>
+            {selectedRun.status === 'locked' ? '🔒 Locked payroll run' : 'Draft payroll run'}
+          </span>
+        )}
+        <Button onClick={exportExcel} disabled={items.length === 0} size="sm" variant="outline" className="ml-auto h-9 gap-2 text-xs bg-white dark:bg-slate-900">
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+        </Button>
+      </div>
+
+      {loading && (
+        <div className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-7 w-7 animate-spin opacity-30" />
+          <span className="text-sm">Loading payroll data…</span>
+        </div>
+      )}
+
+      {!loading && items.length === 0 && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+          <CardContent className="py-16 text-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto">
+              <BarChart3 className="h-7 w-7 text-slate-400" />
+            </div>
+            <p className="text-sm font-semibold">No data available</p>
+            <p className="text-sm text-muted-foreground">Configure employee salaries or run payroll first.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && items.length > 0 && (
+        <>
+          {/* KPI summary row */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {[
+              { label: 'Headcount',     value: String(items.length),           color: 'text-[#0F2041] dark:text-blue-300' },
+              { label: 'Total Base',    value: fmt(totalBase),                 color: 'text-slate-600' },
+              { label: 'Total Allow.',  value: fmt(totalAllow),                color: 'text-emerald-600' },
+              { label: 'Total Deductions', value: fmt(totalDed),               color: 'text-red-500' },
+              { label: 'Total Net Pay', value: fmt(totalNet),                  color: 'text-blue-600' },
+            ].map(k => (
+              <div key={k.label} className="bg-white dark:bg-slate-900 border rounded-xl px-4 py-3 shadow-sm text-center">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
+                <p className={cn('text-sm font-bold mt-0.5', k.color)}>{k.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Allowance breakdown */}
+            <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+                <h3 className="text-sm font-semibold">Allowance Breakdown</h3>
+                <span className="ml-auto text-xs text-muted-foreground">{allowanceSummary.length} types</span>
+              </div>
+              <CardContent className="p-0">
+                {allowanceSummary.length === 0
+                  ? <p className="px-5 py-8 text-xs text-muted-foreground italic text-center">No allowances configured</p>
+                  : (
+                    <div className="divide-y">
+                      {allowanceSummary.map((a, i) => (
+                        <div key={i} className="px-5 py-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium truncate max-w-[180px]">{a.name}</span>
+                            <div className="text-right shrink-0 ml-2">
+                              <span className="text-sm font-bold text-emerald-600">{fmt(a.total)}</span>
+                              <span className="text-[11px] text-muted-foreground ml-2">({a.pctOfGross.toFixed(1)}% gross)</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${(a.total / maxAllowBar) * 100}%` }} />
+                            </div>
+                            <span className="text-[10px] text-muted-foreground shrink-0">{a.count} emp</span>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between px-5 py-2.5 bg-emerald-50/60 dark:bg-emerald-950/10">
+                        <span className="text-xs font-semibold text-emerald-700">Total Allowances</span>
+                        <span className="text-sm font-bold text-emerald-600">{fmt(totalAllow)}</span>
+                      </div>
+                    </div>
+                  )
+                }
+              </CardContent>
+            </Card>
+
+            {/* Deduction breakdown */}
+            <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-red-500" />
+                <h3 className="text-sm font-semibold">Deduction Breakdown</h3>
+                <span className="ml-auto text-xs text-muted-foreground">{deductionSummary.length} types</span>
+              </div>
+              <CardContent className="p-0">
+                {deductionSummary.length === 0
+                  ? <p className="px-5 py-8 text-xs text-muted-foreground italic text-center">No deductions configured</p>
+                  : (
+                    <div className="divide-y">
+                      {deductionSummary.map((d, i) => (
+                        <div key={i} className="px-5 py-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium truncate max-w-[180px]">{d.name}</span>
+                            <div className="text-right shrink-0 ml-2">
+                              <span className="text-sm font-bold text-red-500">{fmt(d.total)}</span>
+                              <span className="text-[11px] text-muted-foreground ml-2">({d.pctOfGross.toFixed(1)}% gross)</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-red-400 rounded-full transition-all" style={{ width: `${(d.total / maxDedBar) * 100}%` }} />
+                            </div>
+                            <span className="text-[10px] text-muted-foreground shrink-0">{d.count} emp</span>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between px-5 py-2.5 bg-red-50/60 dark:bg-red-950/10">
+                        <span className="text-xs font-semibold text-red-700">Total Deductions</span>
+                        <span className="text-sm font-bold text-red-500">{fmt(totalDed)}</span>
+                      </div>
+                    </div>
+                  )
+                }
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Department comparison */}
+          <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-violet-500" />
+              <h3 className="text-sm font-semibold">By Department</h3>
+              <span className="ml-auto text-xs text-muted-foreground">{deptSummary.length} departments</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/40 border-b">
+                    <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Department</th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Staff</th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Base</th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-emerald-600">Gross</th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-red-500">Deductions</th>
+                    <th className="px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-blue-600">Net Pay</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {deptSummary.map((d, i) => (
+                    <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                      <td className="px-5 py-3">
+                        <div className="space-y-1">
+                          <span className="font-medium">{d.dept}</span>
+                          <div className="w-32 h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-[#0F2041] rounded-full" style={{ width: `${(d.gross / maxDeptBar) * 100}%` }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className="text-xs font-semibold bg-slate-100 dark:bg-slate-800 rounded-full px-2.5 py-0.5">{d.headcount}</span>
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm text-muted-foreground">{fmt(d.base)}</td>
+                      <td className="px-3 py-3 text-right text-sm font-semibold text-emerald-600">{fmt(d.gross)}</td>
+                      <td className="px-3 py-3 text-right text-sm font-medium text-red-500">−{fmt(d.deductions)}</td>
+                      <td className="px-5 py-3 text-right text-sm font-bold text-blue-600">{fmt(d.net)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-50 dark:bg-slate-800/40 border-t-2 border-slate-200">
+                    <td className="px-5 py-3 text-xs font-bold uppercase tracking-wide text-muted-foreground">Total</td>
+                    <td className="px-3 py-3 text-center text-xs font-bold">{items.length}</td>
+                    <td className="px-3 py-3 text-right text-sm font-bold text-muted-foreground">{fmt(totalBase)}</td>
+                    <td className="px-3 py-3 text-right text-sm font-bold text-emerald-600">{fmt(totalGross)}</td>
+                    <td className="px-3 py-3 text-right text-sm font-bold text-red-500">−{fmt(totalDed)}</td>
+                    <td className="px-5 py-3 text-right text-sm font-bold text-blue-600">{fmt(totalNet)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Card>
+
+          {/* Gross composition bar */}
+          <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-[#0F2041]" />
+              <h3 className="text-sm font-semibold">Gross Salary Composition</h3>
+            </div>
+            <CardContent className="pt-4 pb-5 space-y-3">
+              {[
+                { label: 'Base Salary',      value: totalBase,  pct: totalGross > 0 ? totalBase / totalGross * 100 : 0,  color: 'bg-[#0F2041]',   text: 'text-[#0F2041] dark:text-blue-300' },
+                { label: 'Total Allowances', value: totalAllow, pct: totalGross > 0 ? totalAllow / totalGross * 100 : 0, color: 'bg-emerald-400', text: 'text-emerald-600' },
+              ].map(c => (
+                <div key={c.label} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <span className={cn('w-2.5 h-2.5 rounded-sm', c.color)} />{c.label}
+                    </span>
+                    <span className={cn('font-bold', c.text)}>{fmt(c.value)} <span className="text-muted-foreground font-normal">({c.pct.toFixed(1)}%)</span></span>
+                  </div>
+                  <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full transition-all', c.color)} style={{ width: `${c.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between text-xs pt-1 border-t">
+                <span className="font-semibold text-[#0F2041] dark:text-blue-300">= Total Gross</span>
+                <span className="font-bold text-[#0F2041] dark:text-blue-300">{fmt(totalGross)}</span>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5 font-medium text-red-600">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-red-400" />Total Deductions
+                  </span>
+                  <span className="font-bold text-red-500">−{fmt(totalDed)} <span className="text-muted-foreground font-normal">({totalGross > 0 ? (totalDed / totalGross * 100).toFixed(1) : 0}% of gross)</span></span>
+                </div>
+                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-red-400 transition-all" style={{ width: `${totalGross > 0 ? (totalDed / totalGross) * 100 : 0}%` }} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t">
+                <span className="text-xs font-bold text-blue-600">= Total Net Pay</span>
+                <span className="text-base font-bold text-blue-600">{fmt(totalNet)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
