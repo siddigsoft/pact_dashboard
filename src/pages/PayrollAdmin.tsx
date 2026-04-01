@@ -38,6 +38,7 @@ interface SalaryConfig {
 interface EmployeeRow {
   id: string; full_name: string | null; role: string | null;
   department_name: string | null; department_id: string | null; email: string | null;
+  employment_type: string | null; contract_start_date: string | null;
   salary_config: SalaryConfig | null;
 }
 interface RunItem {
@@ -212,7 +213,7 @@ export default function PayrollAdmin() {
     queryKey: ['payroll-admin-employees'],
     queryFn: async () => {
       const [{ data: profs }, { data: depts }, { data: configs }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, role, email, department_id').order('full_name'),
+        supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date').order('full_name'),
         supabase.from('departments').select('id, name'),
         supabase.from('employee_salary_config').select('*'),
       ]);
@@ -220,11 +221,15 @@ export default function PayrollAdmin() {
       (depts ?? []).forEach((d: any) => { deptMap[d.id] = d.name; });
       const cfgMap: Record<string, SalaryConfig> = {};
       (configs ?? []).forEach((c: any) => { cfgMap[c.user_id] = { ...c, allowances: Array.isArray(c.allowances) ? c.allowances : [], deductions: Array.isArray(c.deductions) ? c.deductions : [] }; });
-      return (profs ?? []).map((p: any) => ({
-        id: p.id, full_name: p.full_name, role: p.role, email: p.email,
-        department_id: p.department_id, department_name: deptMap[p.department_id] ?? null,
-        salary_config: cfgMap[p.id] ?? null,
-      }));
+      // Only include employees who have an Employment Record (employment_type is set)
+      return (profs ?? [])
+        .filter((p: any) => p.employment_type != null && p.employment_type !== '')
+        .map((p: any) => ({
+          id: p.id, full_name: p.full_name, role: p.role, email: p.email,
+          department_id: p.department_id, department_name: deptMap[p.department_id] ?? null,
+          employment_type: p.employment_type, contract_start_date: p.contract_start_date,
+          salary_config: cfgMap[p.id] ?? null,
+        }));
     },
   });
 
@@ -321,7 +326,12 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
+      {/* Employment Record notice */}
+      <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/40 text-sm text-blue-800 dark:text-blue-200">
+        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+        <p>Only employees with an <strong>Employment Record</strong> (employment type set in their profile) appear here. To add an employee, set their Employment Type in their user profile first.</p>
+      </div>
+
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -349,6 +359,7 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 border-b">
                 <th className="text-left text-xs font-semibold text-muted-foreground px-5 py-3 uppercase tracking-wide">Employee</th>
+                <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide hidden md:table-cell">Contract</th>
                 <th className="text-left text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Department</th>
                 <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Base</th>
                 <th className="text-right text-xs font-semibold text-emerald-600 px-3 py-3 uppercase tracking-wide">Gross</th>
@@ -359,9 +370,9 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="py-20 text-center"><Loader2 className="h-6 w-6 animate-spin opacity-30 mx-auto" /></td></tr>
+                <tr><td colSpan={8} className="py-20 text-center"><Loader2 className="h-6 w-6 animate-spin opacity-30 mx-auto" /></td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="py-16 text-center text-sm text-muted-foreground">No employees found.</td></tr>
+                <tr><td colSpan={8} className="py-16 text-center text-sm text-muted-foreground">No employees with employment records found.</td></tr>
               ) : filtered.map(emp => {
                 const calc = emp.salary_config ? computePayroll(emp.salary_config) : null;
                 const cur  = emp.salary_config?.currency ?? 'SDG';
@@ -377,6 +388,11 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
                           <p className="text-[11px] text-muted-foreground capitalize mt-0.5">{emp.role?.replace(/_/g, ' ') ?? '—'}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-3 py-3.5 hidden md:table-cell">
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize">
+                        {emp.employment_type?.replace(/_/g, ' ') ?? '—'}
+                      </span>
                     </td>
                     <td className="px-3 py-3.5 text-sm text-muted-foreground">{emp.department_name ?? <span className="opacity-30">—</span>}</td>
                     <td className="px-3 py-3.5 text-right font-medium text-sm">{calc ? fmt(calc.base, cur) : <span className="text-muted-foreground/30">—</span>}</td>

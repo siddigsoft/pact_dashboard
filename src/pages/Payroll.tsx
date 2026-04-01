@@ -5,8 +5,8 @@ import {
 import {
   Wallet, TrendingUp, CheckCircle2, Clock, ChevronLeft, ChevronRight,
   Award, Banknote, BarChart2, AlertCircle, ListChecks,
-  Download, PieChart as PieIcon, Search, X,
-  CalendarRange, Tag, ArrowUpDown, Loader2,
+  Download, Search, X, CalendarRange, Tag, ArrowUpDown, Loader2,
+  Briefcase, TrendingDown, Building2, UserCheck, ShieldCheck,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +35,18 @@ interface WalletTx {
 }
 interface WalletRow {
   id: string; balances: Record<string, number>; total_earned: number | null;
+}
+interface SalaryLineItem { name: string; amount: number; type: 'fixed' | 'percent'; }
+interface SalaryConfig {
+  id: string; user_id: string; base_salary: number; currency: string;
+  allowances: SalaryLineItem[]; deductions: SalaryLineItem[];
+  effective_date: string; notes: string | null;
+}
+interface EmploymentRecord {
+  full_name: string | null; role: string | null; email: string | null;
+  employment_type: string | null; contract_start_date: string | null;
+  contract_end_date: string | null; department_name: string | null;
+  manager_name: string | null;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -102,6 +114,36 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
     },
   });
 
+  const { data: salaryConfig, isLoading: loadingSalary } = useQuery<SalaryConfig | null>({
+    queryKey: ['payroll-salary-config', userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data } = await supabase.from('employee_salary_config').select('*').eq('user_id', userId!).maybeSingle();
+      if (!data) return null;
+      return { ...data, allowances: Array.isArray(data.allowances) ? data.allowances : [], deductions: Array.isArray(data.deductions) ? data.deductions : [] } as SalaryConfig;
+    },
+  });
+
+  const { data: employmentRecord, isLoading: loadingEmp } = useQuery<EmploymentRecord | null>({
+    queryKey: ['payroll-employment-record', userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data: prof } = await supabase.from('profiles').select('full_name, role, email, employment_type, contract_start_date, contract_end_date, department_id, reports_to').eq('id', userId!).maybeSingle();
+      if (!prof) return null;
+      let dept_name: string | null = null;
+      let mgr_name: string | null = null;
+      if (prof.department_id) {
+        const { data: dept } = await supabase.from('departments').select('name').eq('id', prof.department_id).maybeSingle();
+        dept_name = dept?.name ?? null;
+      }
+      if (prof.reports_to) {
+        const { data: mgr } = await supabase.from('profiles').select('full_name').eq('id', prof.reports_to).maybeSingle();
+        mgr_name = (mgr as any)?.full_name ?? null;
+      }
+      return { full_name: prof.full_name, role: prof.role, email: prof.email, employment_type: prof.employment_type, contract_start_date: prof.contract_start_date, contract_end_date: prof.contract_end_date, department_name: dept_name, manager_name: mgr_name } as EmploymentRecord;
+    },
+  });
+
   // ── Derived ──────────────────────────────────────────────────────────────
   const inPeriod = (d: string | null) => {
     if (!d) return false;
@@ -150,6 +192,25 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
     return list;
   }, [transactions, txTypeFilter, txSearch]);
 
+  // Salary calculation
+  const salaryCalc = useMemo(() => {
+    if (!salaryConfig) return null;
+    const base = salaryConfig.base_salary;
+    const allowances = salaryConfig.allowances.map(a => ({
+      ...a,
+      computed: a.type === 'fixed' ? a.amount : base * a.amount / 100,
+    }));
+    const allowTotal = allowances.reduce((s, a) => s + a.computed, 0);
+    const gross = base + allowTotal;
+    const deductions = salaryConfig.deductions.map(d => ({
+      ...d,
+      computed: d.type === 'fixed' ? d.amount : gross * d.amount / 100,
+    }));
+    const dedTotal = deductions.reduce((s, d) => s + d.computed, 0);
+    const net = Math.max(0, gross - dedTotal);
+    return { base, allowances, allowTotal, gross, deductions, dedTotal, net, currency: salaryConfig.currency };
+  }, [salaryConfig]);
+
   const isLoading = loadingWallet || loadingTx || loadingTasks;
 
   const exportPeriodTasks = () => downloadCSV([
@@ -195,13 +256,24 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="overview">
-          <TabsList className="w-full sm:w-auto h-10 bg-white dark:bg-slate-900 border shadow-sm rounded-xl p-1">
-            <TabsTrigger value="overview"      className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><BarChart2 className="h-3.5 w-3.5" />Overview</TabsTrigger>
+        <Tabs defaultValue="salary">
+          <TabsList className="w-full sm:w-auto h-10 bg-white dark:bg-slate-900 border shadow-sm rounded-xl p-1 flex-wrap gap-0">
+            <TabsTrigger value="salary"        className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><Briefcase className="h-3.5 w-3.5" />My Salary</TabsTrigger>
+            <TabsTrigger value="overview"      className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><BarChart2 className="h-3.5 w-3.5" />Task Rewards</TabsTrigger>
             <TabsTrigger value="annual"        className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><CalendarRange className="h-3.5 w-3.5" />Annual</TabsTrigger>
             <TabsTrigger value="category"      className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><Tag className="h-3.5 w-3.5" />By Category</TabsTrigger>
             <TabsTrigger value="transactions"  className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><ArrowUpDown className="h-3.5 w-3.5" />Transactions</TabsTrigger>
           </TabsList>
+
+          {/* ── MY SALARY ── */}
+          <TabsContent value="salary" className="mt-4 space-y-4">
+            <MySalaryTab
+              salaryCalc={salaryCalc}
+              salaryConfig={salaryConfig ?? null}
+              employmentRecord={employmentRecord ?? null}
+              loading={loadingSalary || loadingEmp}
+            />
+          </TabsContent>
 
           {/* ── OVERVIEW ── */}
           <TabsContent value="overview" className="mt-4 space-y-4">
@@ -478,6 +550,201 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
           </TabsContent>
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MY SALARY TAB
+// ══════════════════════════════════════════════════════════════════════════════
+function MySalaryTab({
+  salaryCalc, salaryConfig, employmentRecord, loading,
+}: {
+  salaryCalc: { base: number; allowances: (SalaryLineItem & { computed: number })[]; allowTotal: number; gross: number; deductions: (SalaryLineItem & { computed: number })[]; dedTotal: number; net: number; currency: string } | null;
+  salaryConfig: SalaryConfig | null;
+  employmentRecord: EmploymentRecord | null;
+  loading: boolean;
+}) {
+  if (loading) return (
+    <div className="space-y-4">
+      {Array(3).fill(0).map((_, i) => <div key={i} className="h-32 rounded-2xl bg-white border animate-pulse" />)}
+    </div>
+  );
+
+  const fmt = (n: number, c = 'SDG') => `${c} ${(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+  return (
+    <div className="space-y-4">
+
+      {/* Employment Record card */}
+      {employmentRecord && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-indigo-500" />
+            <h3 className="text-sm font-semibold">Employment Record</h3>
+          </div>
+          <CardContent className="pt-4 pb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <EmpField icon={<UserCheck className="h-3.5 w-3.5 text-blue-500" />}  label="Employment Type" value={employmentRecord.employment_type?.replace(/_/g, ' ') ?? '—'} capitalize />
+              <EmpField icon={<Building2 className="h-3.5 w-3.5 text-violet-500" />} label="Department"       value={employmentRecord.department_name ?? '—'} />
+              <EmpField icon={<CalendarRange className="h-3.5 w-3.5 text-emerald-500" />} label="Contract Start" value={employmentRecord.contract_start_date ? format(parseISO(employmentRecord.contract_start_date), 'dd MMM yyyy') : '—'} />
+              <EmpField icon={<CalendarRange className="h-3.5 w-3.5 text-rose-500" />}    label="Contract End"   value={employmentRecord.contract_end_date   ? format(parseISO(employmentRecord.contract_end_date),   'dd MMM yyyy') : 'Open-ended'} />
+              {employmentRecord.manager_name && (
+                <EmpField icon={<ShieldCheck className="h-3.5 w-3.5 text-amber-500" />} label="Reports To" value={employmentRecord.manager_name} />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No salary configured */}
+      {!salaryCalc && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+          <CardContent className="py-16 text-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto">
+              <AlertCircle className="h-7 w-7 text-amber-400" />
+            </div>
+            <p className="text-sm font-semibold text-foreground">No salary configuration yet</p>
+            <p className="text-sm text-muted-foreground max-w-xs mx-auto">Your salary package has not been set up. Please contact your administrator or HR team.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Full salary breakdown */}
+      {salaryCalc && salaryConfig && (
+        <>
+          {/* Net pay hero */}
+          <div
+            className="rounded-2xl p-6 text-white relative overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, #0F2041 0%, #1D3461 100%)' }}
+          >
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, rgba(255,255,255,0.3) 0%, transparent 60%)' }} />
+            <div className="relative z-10 flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <p className="text-blue-200/80 text-xs font-medium uppercase tracking-wide mb-1">Monthly Net Pay</p>
+                <p className="text-4xl font-bold tracking-tight">{fmt(salaryCalc.net, salaryCalc.currency)}</p>
+                <p className="text-blue-200/70 text-xs mt-2">
+                  Effective from {salaryConfig.effective_date ? format(parseISO(salaryConfig.effective_date), 'dd MMM yyyy') : '—'}
+                </p>
+              </div>
+              <div className="space-y-1.5 text-right">
+                <div><span className="text-blue-200/70 text-xs">Gross:</span> <span className="text-sm font-semibold ml-2">{fmt(salaryCalc.gross, salaryCalc.currency)}</span></div>
+                <div><span className="text-blue-200/70 text-xs">Deductions:</span> <span className="text-sm font-semibold text-red-300 ml-2">−{fmt(salaryCalc.dedTotal, salaryCalc.currency)}</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Earnings breakdown */}
+            <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+                <h3 className="text-sm font-semibold">Earnings Breakdown</h3>
+              </div>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {/* Base salary row */}
+                  <div className="flex items-center justify-between px-5 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full bg-[#0F2041]" />
+                      <span className="text-sm font-semibold">Base Salary</span>
+                    </div>
+                    <span className="text-sm font-bold">{fmt(salaryCalc.base, salaryCalc.currency)}</span>
+                  </div>
+                  {/* Allowances */}
+                  {salaryCalc.allowances.map((a, i) => (
+                    <div key={i} className="flex items-center justify-between px-5 py-3 bg-emerald-50/50 dark:bg-emerald-950/10">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <div>
+                          <span className="text-sm">{a.name}</span>
+                          <span className="ml-2 text-[11px] text-muted-foreground">({a.type === 'percent' ? `${a.amount}% of base` : 'Fixed'})</span>
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-emerald-600">+{fmt(a.computed, salaryCalc.currency)}</span>
+                    </div>
+                  ))}
+                  {salaryCalc.allowances.length === 0 && (
+                    <p className="px-5 py-3 text-xs text-muted-foreground italic">No allowances configured</p>
+                  )}
+                  {/* Gross total */}
+                  <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-800/40">
+                    <span className="text-sm font-bold">Gross Salary</span>
+                    <span className="text-sm font-bold text-[#0F2041] dark:text-blue-300">{fmt(salaryCalc.gross, salaryCalc.currency)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Deductions breakdown */}
+            <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-red-500" />
+                <h3 className="text-sm font-semibold">Deductions</h3>
+              </div>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {salaryCalc.deductions.length === 0 && (
+                    <p className="px-5 py-6 text-xs text-muted-foreground italic">No deductions configured</p>
+                  )}
+                  {salaryCalc.deductions.map((d, i) => (
+                    <div key={i} className="flex items-center justify-between px-5 py-3 bg-red-50/50 dark:bg-red-950/10">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-red-400" />
+                        <div>
+                          <span className="text-sm">{d.name}</span>
+                          <span className="ml-2 text-[11px] text-muted-foreground">({d.type === 'percent' ? `${d.amount}% of gross` : 'Fixed'})</span>
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-red-600">−{fmt(d.computed, salaryCalc.currency)}</span>
+                    </div>
+                  ))}
+                  {salaryCalc.deductions.length > 0 && (
+                    <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50 dark:bg-slate-800/40">
+                      <span className="text-sm font-bold">Total Deductions</span>
+                      <span className="text-sm font-bold text-red-500">−{fmt(salaryCalc.dedTotal, salaryCalc.currency)}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Net pay summary bar */}
+          <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="grid grid-cols-3 divide-x">
+              <div className="py-4 px-5 text-center">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Gross Salary</p>
+                <p className="text-lg font-bold text-[#0F2041] dark:text-blue-300">{fmt(salaryCalc.gross, salaryCalc.currency)}</p>
+              </div>
+              <div className="py-4 px-5 text-center">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Total Deductions</p>
+                <p className="text-lg font-bold text-red-500">−{fmt(salaryCalc.dedTotal, salaryCalc.currency)}</p>
+              </div>
+              <div className="py-4 px-5 text-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/20">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Net Pay</p>
+                <p className="text-lg font-bold text-blue-600">{fmt(salaryCalc.net, salaryCalc.currency)}</p>
+              </div>
+            </div>
+          </Card>
+
+          {salaryConfig.notes && (
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 text-sm text-amber-800 dark:text-amber-200">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+              <p><strong>Note:</strong> {salaryConfig.notes}</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function EmpField({ icon, label, value, capitalize }: { icon: React.ReactNode; label: string; value: string; capitalize?: boolean }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{icon}{label}</div>
+      <p className={cn('text-sm font-semibold', capitalize && 'capitalize')}>{value}</p>
     </div>
   );
 }
