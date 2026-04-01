@@ -91,8 +91,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       locality,
       cp_name,
       activity_type,
-      mmp_file_id,
-      mmp_files ( id, name )
+      mmp_file_id
     )
   `);
 
@@ -147,28 +146,25 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   if (needsEnrichment.length > 0) {
     const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))] as string[];
     try {
+      // Use the existing FK (mmp_site_entries.mmp_file_id → mmp_files.id) to
+      // get state, locality AND mmp name in a single query.
       const { data: entries } = await supabase
         .from('mmp_site_entries')
-        .select('id, state, locality, mmp_file_id')
+        .select('id, state, locality, mmp_file_id, mmp_files(id, name)')
         .in('id', entryIds);
 
       if (entries && entries.length > 0) {
         const entryMap = new Map(entries.map(e => [e.id, e]));
-        const mmpFileIds = [...new Set(entries.map(e => (e as any).mmp_file_id).filter(Boolean))] as string[];
-
-        let mmpNameMap = new Map<string, string>();
-        if (mmpFileIds.length > 0) {
-          const { data: mmpFiles } = await supabase
-            .from('mmp_files').select('id, name').in('id', mmpFileIds);
-          if (mmpFiles) mmpNameMap = new Map(mmpFiles.map(f => [f.id, f.name]));
-        }
 
         transformed.forEach(r => {
           if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
             const e = entryMap.get(r.mmpSiteEntryId)!;
             if (!r.stateName && e.state) r.stateName = e.state;
             if (!r.localityName && e.locality) r.localityName = e.locality;
-            if (!r.mmpName && (e as any).mmp_file_id) r.mmpName = mmpNameMap.get((e as any).mmp_file_id);
+            if (!r.mmpName) {
+              const mmpName = (e as any).mmp_files?.name;
+              if (mmpName) r.mmpName = mmpName;
+            }
           }
         });
       }
