@@ -469,6 +469,10 @@
     if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'hr', title: "HR & Finance", url: "/hr", icon: Banknote, priority: 1.85, isPinned: isPinned('/hr') });
     }
+    // My Payroll — visible to all staff (shows own wallet/rewards only)
+    if (!isHidden('/hr') && !(isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      adminItems.push({ id: 'my-payroll', title: "My Payroll", url: "/hr?tab=payroll", icon: Banknote, priority: 1.85, isPinned: isPinned('/hr') });
+    }
     if (!isHidden('/task-admin') && (isSuperAdmin || isAdmin)) {
       adminItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: Banknote, priority: 1.9, isPinned: isPinned('/task-admin') });
     }

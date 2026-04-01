@@ -41,12 +41,12 @@ const PAGES = [
   },
   {
     id: "hr",
-    label: "HR & Finance",
+    label: "My Payroll",
     url: "/hr",
     icon: Banknote,
     color: "#D97706",
     light: "#FEF3C7",
-    roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin", "finance", "Finance"],
+    roles: [] as string[], // visible to all authenticated users
   },
 ];
 
