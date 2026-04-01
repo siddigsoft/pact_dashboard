@@ -2,9 +2,16 @@ import { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle } from 'lucide-react';
+import { Users, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+
+interface AdvanceInfo {
+  status: string;
+  requestedAmount: number;
+  approvedAmount: number;
+  totalPaid: number;
+}
 
 interface SiteStatusDetail {
   id: string;
@@ -44,7 +51,18 @@ interface CoordinatorSummaryCardProps {
   mmpId?: string;
 }
 
-function SiteDetailRow({ site, userNames }: { site: SiteStatusDetail; userNames: Record<string, string> }) {
+const ADVANCE_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  pending_supervisor: { label: 'Advance: Pending Supervisor', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  pending_admin:      { label: 'Advance: Pending Admin',      color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  approved:           { label: 'Advance: Approved',           color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  finance_processing: { label: 'Advance: Finance Processing', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  fully_paid:         { label: 'Advance: Fully Paid',         color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  partially_paid:     { label: 'Advance: Partially Paid',     color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+  cancelled:          { label: 'Advance: Cancelled',          color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  rejected:           { label: 'Advance: Rejected',           color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+};
+
+function SiteDetailRow({ site, userNames, advance }: { site: SiteStatusDetail; userNames: Record<string, string>; advance?: AdvanceInfo }) {
   const categoryColors: Record<string, string> = {
     verified: 'bg-green-50/80 dark:bg-green-900/15 border-green-100 dark:border-green-900/30',
     returned: 'bg-orange-50/80 dark:bg-orange-900/15 border-orange-100 dark:border-orange-900/30',
@@ -75,6 +93,8 @@ function SiteDetailRow({ site, userNames }: { site: SiteStatusDetail; userNames:
 
   const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
+  const advanceCfg = advance ? ADVANCE_STATUS_CONFIG[advance.status] : null;
+
   return (
     <div className={`flex items-start gap-2 p-1.5 rounded border text-xs ${categoryColors[site.statusCategory]}`}>
       <div className="min-w-0 flex-1">
@@ -84,6 +104,21 @@ function SiteDetailRow({ site, userNames }: { site: SiteStatusDetail; userNames:
           <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${badgeColors[site.statusCategory]}`}>
             {site.statusLabel}
           </Badge>
+          {advance && advanceCfg && (
+            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${advanceCfg.color}`}>
+              <Wallet className="h-2.5 w-2.5" />
+              {advanceCfg.label}
+              {advance.requestedAmount > 0 && (
+                <span className="ml-0.5 opacity-80">
+                  {advance.totalPaid > 0
+                    ? `(${advance.totalPaid.toLocaleString()} / ${advance.requestedAmount.toLocaleString()} SDG)`
+                    : advance.approvedAmount > 0
+                      ? `(${advance.approvedAmount.toLocaleString()} SDG)`
+                      : `(${advance.requestedAmount.toLocaleString()} SDG)`}
+                </span>
+              )}
+            </Badge>
+          )}
         </div>
         {site.reason && (
           <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
@@ -101,7 +136,7 @@ function SiteDetailRow({ site, userNames }: { site: SiteStatusDetail; userNames:
   );
 }
 
-function LocalityGroup({ locality, sites, userNames }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string> }) {
+function LocalityGroup({ locality, sites, userNames, advanceMap }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string>; advanceMap: Record<string, AdvanceInfo> }) {
   return (
     <div className="ml-2" data-testid={`locality-group-${locality}`}>
       <div className="flex items-center gap-1.5 mb-1">
@@ -111,7 +146,7 @@ function LocalityGroup({ locality, sites, userNames }: { locality: string; sites
       </div>
       <div className="space-y-1 ml-4">
         {sites.map((site) => (
-          <SiteDetailRow key={site.id} site={site} userNames={userNames} />
+          <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} />
         ))}
       </div>
     </div>
@@ -121,11 +156,13 @@ function LocalityGroup({ locality, sites, userNames }: { locality: string; sites
 function StatusCategorySection({ 
   category, 
   sites, 
-  userNames 
+  userNames,
+  advanceMap,
 }: { 
   category: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending'; 
   sites: SiteStatusDetail[]; 
   userNames: Record<string, string>;
+  advanceMap: Record<string, AdvanceInfo>;
 }) {
   if (sites.length === 0) return null;
 
@@ -156,7 +193,7 @@ function StatusCategorySection({
       </p>
       <div className="space-y-2">
         {sortedLocalities.map(([locality, locSites]) => (
-          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} />
+          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} advanceMap={advanceMap} />
         ))}
       </div>
     </div>
@@ -167,6 +204,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
   const [isOpen, setIsOpen] = useState(true);
   const [coordinatorNames, setCoordinatorNames] = useState<Record<string, string>>({});
   const [actionByNames, setActionByNames] = useState<Record<string, string>>({});
+  const [advanceMap, setAdvanceMap] = useState<Record<string, AdvanceInfo>>({});
 
   const coordinatorsByState = useMemo(() => {
     if (!siteEntries || siteEntries.length === 0) return [];
@@ -373,6 +411,50 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
 
     if (siteEntries.length > 0) {
       fetchNames();
+    }
+  }, [siteEntries]);
+
+  // Fetch advance/down-payment status for all site entries in this MMP
+  useEffect(() => {
+    const fetchAdvanceStatus = async () => {
+      const entryIds = siteEntries
+        .map((e: any) => e.id)
+        .filter((id: any) => typeof id === 'string' && id.length > 0);
+
+      if (entryIds.length === 0) return;
+
+      // Supabase .in() with many IDs is sent as POST (no URL limit issues for reasonable sizes)
+      const { data, error } = await supabase
+        .from('down_payment_requests')
+        .select('mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount')
+        .in('mmp_site_entry_id', entryIds);
+
+      if (error || !data) return;
+
+      // Build a map: site_entry_id → most-relevant advance record
+      // If there are multiple requests per site, prefer the one that is not cancelled/rejected
+      const map: Record<string, AdvanceInfo> = {};
+      data.forEach((row: any) => {
+        const eid = row.mmp_site_entry_id;
+        if (!eid) return;
+        const existing = map[eid];
+        // Prefer active/pending records over cancelled ones
+        const isCancelled = row.status === 'cancelled' || row.status === 'rejected';
+        if (!existing || (!isCancelled && (existing.status === 'cancelled' || existing.status === 'rejected'))) {
+          map[eid] = {
+            status: row.status || 'pending_supervisor',
+            requestedAmount: Number(row.requested_amount) || 0,
+            approvedAmount: Number(row.approved_amount) || 0,
+            totalPaid: Number(row.total_paid_amount) || 0,
+          };
+        }
+      });
+
+      setAdvanceMap(map);
+    };
+
+    if (siteEntries.length > 0) {
+      fetchAdvanceStatus();
     }
   }, [siteEntries]);
 
@@ -600,11 +682,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="px-2 pb-2 space-y-3 mt-2">
-                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} />
-                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} />
-                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} />
-                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} />
-                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} />
+                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} advanceMap={advanceMap} />
+                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} advanceMap={advanceMap} />
+                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} advanceMap={advanceMap} />
+                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} advanceMap={advanceMap} />
+                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} advanceMap={advanceMap} />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
