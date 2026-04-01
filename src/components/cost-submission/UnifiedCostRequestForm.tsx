@@ -483,11 +483,13 @@ export default function UnifiedCostRequestForm({
           });
         }
       } else {
+        const groupId = uuidv4();
+        const cleanRequestTitle = requestTitle.trim();
         const insertRows = lineItems.map(item => ({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100).toString(),
           currency: item.currency,
-          description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}${item.expenseCategory === 'other' && item.otherCategoryDetail ? `\n\nOther Category: ${item.otherCategoryDetail.trim()}` : ''}\n\n${item.description}\n\nJustification: ${item.justification}`,
+          description: `[${fundingType.toUpperCase()}] <<${cleanRequestTitle}>>\n${item.title}${item.expenseCategory === 'other' && item.otherCategoryDetail ? `\n\nOther Category: ${item.otherCategoryDetail.trim()}` : ''}\n\n${item.description}\n\nJustification: ${item.justification}`,
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
@@ -499,6 +501,8 @@ export default function UnifiedCostRequestForm({
           status: 'pending',
           tier1_status: 'pending',
           tier2_status: 'pending',
+          request_group_id: groupId,
+          request_title: cleanRequestTitle,
         }));
 
         const { error } = await supabase

@@ -149,6 +149,8 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
 
     try {
       const safeSupportingDocuments = sanitizeSupportingDocuments(supportingDocuments);
+      const groupId = uuidv4();
+      const groupTitle = lineItems[0]?.description?.split('\n')[0]?.substring(0, 120) || null;
       const rows = lineItems.map(item => ({
         expense_category: item.expenseCategory,
         amount_cents: item.amountCents,
@@ -165,7 +167,9 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
         status: 'pending',
         tier1_status: 'pending',
         tier2_status: 'pending',
-        ...(((currentUser.role || '').toLowerCase().includes('coordinator')) ? { tier3_status: 'pending' } : {})
+        ...(((currentUser.role || '').toLowerCase().includes('coordinator')) ? { tier3_status: 'pending' } : {}),
+        request_group_id: groupId,
+        request_title: groupTitle,
       }));
 
       const { error } = await supabase
