@@ -422,24 +422,61 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
   );
 }
 
+// ── Preset templates ─────────────────────────────────────────────────────────
+const ALLOWANCE_PRESETS: LineItem[] = [
+  { name: 'Housing Allowance',    amount: 25, type: 'percent' },
+  { name: 'Transport Allowance',  amount: 10, type: 'percent' },
+  { name: 'Food Allowance',       amount: 5,  type: 'percent' },
+  { name: 'Medical Allowance',    amount: 10, type: 'percent' },
+  { name: 'Communication Allow.', amount: 5,  type: 'percent' },
+  { name: 'Risk Allowance',       amount: 15, type: 'percent' },
+];
+const DEDUCTION_PRESETS: LineItem[] = [
+  { name: 'Income Tax',           amount: 10, type: 'percent' },
+  { name: 'Social Security',      amount: 8,  type: 'percent' },
+  { name: 'Pension',              amount: 5,  type: 'percent' },
+  { name: 'Advance Recovery',     amount: 0,  type: 'fixed'   },
+  { name: 'Absence Deduction',    amount: 0,  type: 'fixed'   },
+];
+
 // ── Salary Edit Dialog ────────────────────────────────────────────────────────
 function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const existing = emp.salary_config;
 
-  const [baseSalary, setBaseSalary] = useState(String(existing?.base_salary ?? ''));
-  const [currency, setCurrency] = useState(existing?.currency ?? 'SDG');
-  const [allowances, setAllowances] = useState<LineItem[]>(existing?.allowances ?? []);
-  const [deductions, setDeductions] = useState<LineItem[]>(existing?.deductions ?? []);
-  const [notes, setNotes]     = useState(existing?.notes ?? '');
-  const [saving, setSaving]   = useState(false);
+  const [baseSalary, setBaseSalary]   = useState(String(existing?.base_salary ?? ''));
+  const [currency, setCurrency]       = useState(existing?.currency ?? 'SDG');
+  const [allowances, setAllowances]   = useState<LineItem[]>(existing?.allowances ?? []);
+  const [deductions, setDeductions]   = useState<LineItem[]>(existing?.deductions ?? []);
+  const [effectiveDate, setEffDate]   = useState(existing?.effective_date ?? format(new Date(), 'yyyy-MM-dd'));
+  const [notes, setNotes]             = useState(existing?.notes ?? '');
+  const [saving, setSaving]           = useState(false);
 
-  const base    = parseFloat(baseSalary) || 0;
-  const preview = computePayroll({ base_salary: base, currency, allowances, deductions } as SalaryConfig);
+  const base = parseFloat(baseSalary) || 0;
 
-  const addLine = (list: LineItem[], setList: (l: LineItem[]) => void) =>
-    setList([...list, { name: '', amount: 0, type: 'fixed' }]);
+  // Computed line items with amounts
+  const computedAllowances = allowances.map(a => ({
+    ...a,
+    computed: a.type === 'fixed' ? a.amount : base * a.amount / 100,
+  }));
+  const allowTotal = computedAllowances.reduce((s, a) => s + a.computed, 0);
+  const gross = base + allowTotal;
+  const computedDeductions = deductions.map(d => ({
+    ...d,
+    computed: d.type === 'fixed' ? d.amount : gross * d.amount / 100,
+  }));
+  const dedTotal = computedDeductions.reduce((s, d) => s + d.computed, 0);
+  const net = Math.max(0, gross - dedTotal);
+
+  const addLine = (list: LineItem[], setList: (l: LineItem[]) => void, preset?: LineItem) =>
+    setList([...list, preset ? { ...preset } : { name: '', amount: 0, type: 'fixed' }]);
+
+  const addPreset = (list: LineItem[], setList: (l: LineItem[]) => void, preset: LineItem) => {
+    if (list.some(i => i.name === preset.name)) return;
+    setList([...list, { ...preset }]);
+  };
+
   const updateLine = (list: LineItem[], setList: (l: LineItem[]) => void, idx: number, field: keyof LineItem, value: any) =>
     setList(list.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   const removeLine = (list: LineItem[], setList: (l: LineItem[]) => void, idx: number) =>
@@ -448,7 +485,10 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
   const save = async () => {
     if (!base || base <= 0) { toast({ title: 'Enter a valid base salary', variant: 'destructive' }); return; }
     setSaving(true);
-    const payload = { user_id: emp.id, base_salary: base, currency, allowances, deductions, notes: notes || null, effective_date: format(new Date(), 'yyyy-MM-dd'), updated_at: new Date().toISOString() };
+    const payload = {
+      user_id: emp.id, base_salary: base, currency, allowances, deductions,
+      notes: notes || null, effective_date: effectiveDate, updated_at: new Date().toISOString(),
+    };
     const { error } = existing
       ? await supabase.from('employee_salary_config').update(payload).eq('id', existing.id)
       : await supabase.from('employee_salary_config').insert({ ...payload, created_by: (await supabase.auth.getUser()).data.user?.id });
@@ -459,10 +499,16 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
     onClose();
   };
 
+  // Visual bar widths (cap allowances bar at gross, show deductions as portion of gross)
+  const barBase      = gross > 0 ? (base / gross) * 100 : 0;
+  const barAllow     = gross > 0 ? (allowTotal / gross) * 100 : 0;
+  const barDed       = gross > 0 ? (dedTotal / gross) * 100 : 0;
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
-        {/* Dialog header */}
+
+        {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b bg-slate-50 dark:bg-slate-900 rounded-t-2xl">
           <div className="flex items-center gap-3">
             <div className={cn('w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold', avatarColor(emp.id))}>
@@ -470,65 +516,212 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
             </div>
             <div>
               <DialogTitle className="text-base font-bold leading-tight">{emp.full_name}</DialogTitle>
-              <DialogDescription className="text-xs mt-0.5 capitalize">{emp.role?.replace(/_/g, ' ')} · {emp.department_name ?? 'No dept'}</DialogDescription>
+              <DialogDescription className="text-xs mt-0.5 capitalize">{emp.role?.replace(/_/g, ' ')} · {emp.department_name ?? 'No dept'} · {emp.employment_type?.replace(/_/g, ' ') ?? 'Employment type not set'}</DialogDescription>
             </div>
+            {/* Net pay badge in header */}
+            {base > 0 && (
+              <div className="ml-auto text-right shrink-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Est. Net</p>
+                <p className="text-base font-bold text-[#0F2041] dark:text-blue-300">{fmt(net, currency)}</p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-6">
-          {/* Base + currency */}
-          <div>
-            <SectionLabel icon={<Banknote className="h-3.5 w-3.5 text-indigo-500" />} label="Base Salary" />
-            <div className="grid grid-cols-2 gap-3 mt-2">
-              <Input type="number" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} placeholder="0" className="text-sm h-10" />
+        <div className="px-6 py-5 space-y-5">
+
+          {/* Base salary + currency + effective date */}
+          <div className="grid grid-cols-5 gap-3">
+            <div className="col-span-2">
+              <SectionLabel icon={<Banknote className="h-3.5 w-3.5 text-indigo-500" />} label="Base Salary" />
+              <Input type="number" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} placeholder="0" className="text-sm h-10 mt-1.5 font-medium" />
+            </div>
+            <div>
+              <SectionLabel icon={null} label="Currency" />
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 text-sm mt-1.5"><SelectValue /></SelectTrigger>
                 <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <div className="col-span-2">
+              <SectionLabel icon={<CalendarRange className="h-3.5 w-3.5 text-violet-500" />} label="Effective Date" />
+              <Input type="date" value={effectiveDate} onChange={e => setEffDate(e.target.value)} className="text-sm h-10 mt-1.5" />
+            </div>
           </div>
 
+          {/* Visual salary bar */}
+          {base > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex rounded-lg overflow-hidden h-3 gap-px">
+                <div className="bg-[#0F2041] transition-all duration-300" style={{ width: `${barBase}%` }} title={`Base: ${fmt(base, currency)}`} />
+                {allowTotal > 0 && <div className="bg-emerald-400 transition-all duration-300" style={{ width: `${barAllow}%` }} title={`Allowances: ${fmt(allowTotal, currency)}`} />}
+              </div>
+              <div className="flex rounded-lg overflow-hidden h-1.5 gap-px">
+                <div className="bg-blue-500 transition-all duration-300" style={{ width: `${Math.max(0, 100 - barDed)}%` }} />
+                {dedTotal > 0 && <div className="bg-red-400 transition-all duration-300" style={{ width: `${barDed}%` }} />}
+              </div>
+              <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#0F2041] inline-block" />Base</span>
+                {allowTotal > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />Allowances</span>}
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Net</span>
+                {dedTotal > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Deductions</span>}
+              </div>
+            </div>
+          )}
+
           {/* Allowances */}
-          <div>
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <SectionLabel icon={<TrendingUp className="h-3.5 w-3.5 text-emerald-500" />} label="Allowances" />
               <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={() => addLine(allowances, setAllowances)}>
-                <PlusCircle className="h-3.5 w-3.5" />Add
+                <PlusCircle className="h-3.5 w-3.5" />Custom
               </Button>
             </div>
+
+            {/* Preset chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {ALLOWANCE_PRESETS.map(p => {
+                const active = allowances.some(a => a.name === p.name);
+                return (
+                  <button
+                    key={p.name}
+                    onClick={() => active
+                      ? setAllowances(allowances.filter(a => a.name !== p.name))
+                      : addPreset(allowances, setAllowances, p)
+                    }
+                    className={cn(
+                      'text-[11px] px-2.5 py-1 rounded-full border transition-all font-medium',
+                      active
+                        ? 'bg-emerald-500 text-white border-emerald-500'
+                        : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400',
+                    )}
+                  >
+                    {active ? '✓ ' : '+ '}{p.name} ({p.amount}{p.type === 'percent' ? '%' : ''})
+                  </button>
+                );
+              })}
+            </div>
+
             {allowances.length === 0
-              ? <p className="text-xs text-muted-foreground italic mt-2 pl-1">No allowances added. Click Add to include housing, transport, etc.</p>
-              : <div className="space-y-2 mt-2">{allowances.map((a, i) => <LineRow key={i} item={a} onUpdate={(f, v) => updateLine(allowances, setAllowances, i, f, v)} onRemove={() => removeLine(allowances, setAllowances, i)} typeSuffix="of base" />)}</div>
+              ? <p className="text-xs text-muted-foreground italic pl-1">No allowances yet. Select a preset above or click Custom.</p>
+              : (
+                <div className="rounded-xl border overflow-hidden">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-slate-50 px-3 py-1.5 border-b">
+                    <span>Name</span><span className="w-20 text-right">Amount</span><span className="w-20 text-center">Type</span><span className="w-24 text-right text-emerald-600">= Value</span><span className="w-6" />
+                  </div>
+                  <div className="divide-y">
+                    {computedAllowances.map((a, i) => (
+                      <EnhancedLineRow
+                        key={i} item={a} computed={a.computed} currency={currency}
+                        onUpdate={(f, v) => updateLine(allowances, setAllowances, i, f, v)}
+                        onRemove={() => removeLine(allowances, setAllowances, i)}
+                        typeSuffix="of base" valueColor="text-emerald-600"
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 bg-emerald-50/60 border-t">
+                    <span className="text-xs font-semibold text-emerald-700">Total Allowances</span>
+                    <span className="text-sm font-bold text-emerald-600">+ {fmt(allowTotal, currency)}</span>
+                  </div>
+                </div>
+              )
             }
           </div>
 
+          {/* Gross subtotal indicator */}
+          {base > 0 && allowTotal > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800">
+              <span className="text-xs text-muted-foreground">Gross Salary (before deductions):</span>
+              <span className="text-sm font-bold text-[#0F2041] dark:text-blue-300 ml-auto">{fmt(gross, currency)}</span>
+            </div>
+          )}
+
           {/* Deductions */}
-          <div>
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <SectionLabel icon={<TrendingDown className="h-3.5 w-3.5 text-red-500" />} label="Deductions" />
               <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => addLine(deductions, setDeductions)}>
-                <PlusCircle className="h-3.5 w-3.5" />Add
+                <PlusCircle className="h-3.5 w-3.5" />Custom
               </Button>
             </div>
+
+            {/* Preset chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {DEDUCTION_PRESETS.map(p => {
+                const active = deductions.some(d => d.name === p.name);
+                return (
+                  <button
+                    key={p.name}
+                    onClick={() => active
+                      ? setDeductions(deductions.filter(d => d.name !== p.name))
+                      : addPreset(deductions, setDeductions, p)
+                    }
+                    className={cn(
+                      'text-[11px] px-2.5 py-1 rounded-full border transition-all font-medium',
+                      active
+                        ? 'bg-red-500 text-white border-red-500'
+                        : 'bg-white text-red-700 border-red-200 hover:bg-red-50 hover:border-red-400',
+                    )}
+                  >
+                    {active ? '✓ ' : '− '}{p.name}{p.type === 'percent' ? ` (${p.amount}%)` : ''}
+                  </button>
+                );
+              })}
+            </div>
+
             {deductions.length === 0
-              ? <p className="text-xs text-muted-foreground italic mt-2 pl-1">No deductions added. Click Add for income tax, social security, etc.</p>
-              : <div className="space-y-2 mt-2">{deductions.map((d, i) => <LineRow key={i} item={d} onUpdate={(f, v) => updateLine(deductions, setDeductions, i, f, v)} onRemove={() => removeLine(deductions, setDeductions, i)} typeSuffix="of gross" />)}</div>
+              ? <p className="text-xs text-muted-foreground italic pl-1">No deductions yet. Select a preset above or click Custom.</p>
+              : (
+                <div className="rounded-xl border overflow-hidden">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-slate-50 px-3 py-1.5 border-b">
+                    <span>Name</span><span className="w-20 text-right">Amount</span><span className="w-20 text-center">Type</span><span className="w-24 text-right text-red-500">= Value</span><span className="w-6" />
+                  </div>
+                  <div className="divide-y">
+                    {computedDeductions.map((d, i) => (
+                      <EnhancedLineRow
+                        key={i} item={d} computed={d.computed} currency={currency}
+                        onUpdate={(f, v) => updateLine(deductions, setDeductions, i, f, v)}
+                        onRemove={() => removeLine(deductions, setDeductions, i)}
+                        typeSuffix="of gross" valueColor="text-red-500"
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 bg-red-50/60 border-t">
+                    <span className="text-xs font-semibold text-red-700">Total Deductions</span>
+                    <span className="text-sm font-bold text-red-500">− {fmt(dedTotal, currency)}</span>
+                  </div>
+                </div>
+              )
             }
           </div>
 
-          {/* Live preview */}
+          {/* Net pay summary */}
           {base > 0 && (
-            <div className="rounded-xl border bg-gradient-to-br from-[#0F2041]/5 to-blue-50 dark:from-[#0F2041]/30 dark:to-blue-950/20 overflow-hidden">
-              <div className="px-4 py-2.5 border-b bg-[#0F2041]/5 dark:bg-[#0F2041]/40">
-                <p className="text-xs font-semibold text-[#0F2041] dark:text-blue-200 uppercase tracking-wide">Live Calculation Preview</p>
-              </div>
-              <div className="px-4 py-3 space-y-1.5">
-                <PreviewRow label="Base Salary"    value={fmt(preview.base, currency)} />
-                <PreviewRow label="+ Allowances"   value={fmt(preview.allowTotal, currency)} color="text-emerald-600" />
-                <PreviewRow label="= Gross Salary" value={fmt(preview.gross, currency)} bold />
-                <PreviewRow label="− Deductions"   value={fmt(preview.dedTotal, currency)} color="text-red-500" />
-                <div className="border-t pt-2 mt-1">
-                  <PreviewRow label="NET SALARY" value={fmt(preview.net, currency)} bold color="text-blue-600 text-base" />
+            <div
+              className="rounded-2xl p-4 text-white"
+              style={{ background: 'linear-gradient(135deg, #0F2041 0%, #1D3461 100%)' }}
+            >
+              <p className="text-blue-200/70 text-[10px] font-medium uppercase tracking-wide mb-3">Salary Calculation Summary</p>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between"><span className="text-blue-200/80">Base Salary</span><span className="font-medium">{fmt(base, currency)}</span></div>
+                {computedAllowances.map((a, i) => (
+                  <div key={i} className="flex justify-between text-emerald-300">
+                    <span className="truncate max-w-[200px]">+ {a.name || 'Allowance'}</span>
+                    <span className="font-medium shrink-0 ml-2">+{fmt(a.computed, currency)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-white/20 pt-1.5 font-semibold">
+                  <span>= Gross Salary</span><span>{fmt(gross, currency)}</span>
+                </div>
+                {computedDeductions.map((d, i) => (
+                  <div key={i} className="flex justify-between text-red-300">
+                    <span className="truncate max-w-[200px]">− {d.name || 'Deduction'}</span>
+                    <span className="font-medium shrink-0 ml-2">−{fmt(d.computed, currency)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-white/20 pt-2 mt-1">
+                  <span className="text-base font-bold">NET SALARY</span>
+                  <span className="text-xl font-bold text-cyan-300">{fmt(net, currency)}</span>
                 </div>
               </div>
             </div>
@@ -537,13 +730,13 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
           {/* Notes */}
           <div>
             <SectionLabel icon={<MoreVertical className="h-3.5 w-3.5 text-slate-400" />} label="Notes (optional)" />
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes about this salary package…" className="text-sm mt-2 h-20 resize-none" />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes about this salary package…" className="text-sm mt-2 h-16 resize-none" />
           </div>
         </div>
 
         <div className="px-6 pb-5 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={saving} className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 min-w-[140px]">
+          <Button onClick={save} disabled={saving} className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 min-w-[160px]">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save Configuration
           </Button>
@@ -562,32 +755,38 @@ function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string })
   );
 }
 
-function LineRow({ item, onUpdate, onRemove, typeSuffix }: {
-  item: LineItem; onUpdate: (f: keyof LineItem, v: any) => void; onRemove: () => void; typeSuffix: string;
+function EnhancedLineRow({ item, computed, currency, onUpdate, onRemove, typeSuffix, valueColor }: {
+  item: LineItem & { computed?: number }; computed: number; currency: string;
+  onUpdate: (f: keyof LineItem, v: any) => void; onRemove: () => void;
+  typeSuffix: string; valueColor: string;
 }) {
   return (
-    <div className="flex items-center gap-2 group">
-      <Input placeholder="Name (e.g. Housing Allowance)" value={item.name} onChange={e => onUpdate('name', e.target.value)} className="text-xs h-9 flex-1" />
-      <Input type="number" placeholder="0" value={item.amount || ''} onChange={e => onUpdate('amount', parseFloat(e.target.value) || 0)} className="text-xs h-9 w-24 text-right" />
+    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center px-3 py-2 group hover:bg-slate-50/60 transition-colors">
+      <Input
+        placeholder="e.g. Housing Allowance"
+        value={item.name}
+        onChange={e => onUpdate('name', e.target.value)}
+        className="text-xs h-8 border-dashed focus:border-solid"
+      />
+      <Input
+        type="number" placeholder="0"
+        value={item.amount || ''}
+        onChange={e => onUpdate('amount', parseFloat(e.target.value) || 0)}
+        className="text-xs h-8 w-20 text-right"
+      />
       <Select value={item.type} onValueChange={v => onUpdate('type', v)}>
-        <SelectTrigger className="h-9 w-28 text-xs"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="fixed">Fixed</SelectItem>
           <SelectItem value="percent">% {typeSuffix}</SelectItem>
         </SelectContent>
       </Select>
-      <button onClick={onRemove} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all">
+      <span className={cn('text-xs font-semibold w-24 text-right tabular-nums', valueColor)}>
+        = {fmt(computed, currency)}
+      </span>
+      <button onClick={onRemove} className="p-1 rounded text-red-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all ml-1">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
-    </div>
-  );
-}
-
-function PreviewRow({ label, value, bold, color }: { label: string; value: string; bold?: boolean; color?: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className={cn('text-sm text-muted-foreground', bold && 'font-semibold text-foreground')}>{label}</span>
-      <span className={cn('text-sm font-medium', bold && 'font-bold', color)}>{value}</span>
     </div>
   );
 }
