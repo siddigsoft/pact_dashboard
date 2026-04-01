@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { FolderKanban, CheckSquare, Building2, Banknote, BarChart3 } from "lucide-react";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 const PAGES = [
   {
@@ -9,6 +10,7 @@ const PAGES = [
     icon: FolderKanban,
     color: "#2563EB",
     light: "#DBEAFE",
+    adminOnly: true,
   },
   {
     id: "analytics",
@@ -17,6 +19,7 @@ const PAGES = [
     icon: BarChart3,
     color: "#7C3AED",
     light: "#EDE9FE",
+    adminOnly: true,
   },
   {
     id: "my-tasks",
@@ -25,6 +28,7 @@ const PAGES = [
     icon: CheckSquare,
     color: "#059669",
     light: "#D1FAE5",
+    adminOnly: false,
   },
   {
     id: "departments",
@@ -33,6 +37,7 @@ const PAGES = [
     icon: Building2,
     color: "#0F2041",
     light: "#E8ECF3",
+    adminOnly: true,
   },
   {
     id: "task-admin",
@@ -41,12 +46,20 @@ const PAGES = [
     icon: Banknote,
     color: "#D97706",
     light: "#FEF3C7",
+    adminOnly: true,
   },
 ];
 
 export function ConnectedPagesBar({ exclude }: { exclude?: string }) {
   const { pathname } = useLocation();
-  const visible = PAGES.filter(p => p.id !== exclude);
+  const { isSuperAdmin } = useAuthorization();
+  const superAdmin = isSuperAdmin();
+
+  const visible = PAGES.filter(p => {
+    if (p.id === exclude) return false;
+    if (p.adminOnly && !superAdmin) return false;
+    return true;
+  });
 
   return (
     <div className="flex flex-wrap gap-2 px-0 py-1">
