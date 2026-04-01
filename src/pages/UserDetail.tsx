@@ -61,7 +61,7 @@ const UserDetail: React.FC = () => {
   // Employment record state
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [empDepartmentId, setEmpDepartmentId] = useState<string>("");
-  const [empType, setEmpType] = useState<string>("full-time");
+  const [empType, setEmpType] = useState<string>("");
   const [empContractStart, setEmpContractStart] = useState<string>("");
   const [empContractEnd, setEmpContractEnd] = useState<string>("");
   const [empReportsTo, setEmpReportsTo] = useState<string>("");
@@ -198,7 +198,7 @@ const UserDetail: React.FC = () => {
     if (user) {
       const deptId = user.departmentId ?? "";
       setEmpDepartmentId(deptId);
-      setEmpType(user.employmentType ?? "full-time");
+      setEmpType(user.employmentType ?? "");
       setEmpContractStart(user.contractStartDate ?? "");
       setEmpContractEnd(user.contractEndDate ?? "");
       setEmpReportsTo(user.reportsTo ?? "");
@@ -225,7 +225,7 @@ const UserDetail: React.FC = () => {
 
       const { error } = await supabase.from("profiles").update({
         department_id: empDepartmentId || null,
-        employment_type: empType || "full-time",
+        employment_type: empType || null,
         contract_start_date: empContractStart || null,
         contract_end_date: empContractEnd || null,
         reports_to: empReportsTo || null,
@@ -1122,7 +1122,7 @@ const UserDetail: React.FC = () => {
                     {isAdmin ? (
                       <Select value={empType} onValueChange={setEmpType}>
                         <SelectTrigger className="h-11" data-testid="select-emp-type">
-                          <SelectValue />
+                          <SelectValue placeholder="Select contract type" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="full-time">Full-Time</SelectItem>
