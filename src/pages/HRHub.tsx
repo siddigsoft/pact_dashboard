@@ -1,20 +1,18 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Banknote, Users, FileText, Loader2, Settings2 } from 'lucide-react';
+import { Banknote, FileText, Loader2, Settings2 } from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
 
 const PayrollPanel      = lazy(() => import('./Payroll'));
-const StaffPanel        = lazy(() => import('./StaffDirectory'));
 const RetainerPanel     = lazy(() => import('./RetainerManagement'));
 const PayrollAdminPanel = lazy(() => import('./PayrollAdmin'));
 
-type HRTab = 'payroll' | 'staff' | 'retainer' | 'payroll-admin';
+type HRTab = 'payroll' | 'retainer' | 'payroll-admin';
 
 const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: string; bg: string; adminOnly: boolean }[] = [
   { id: 'payroll',       label: 'My Payroll',      icon: Banknote,   accent: '#D97706', bg: 'rgba(217,119,6,0.12)',   adminOnly: false },
-  { id: 'staff',         label: 'Staff Directory',  icon: Users,      accent: '#ffffff', bg: 'rgba(255,255,255,0.12)', adminOnly: true  },
   { id: 'retainer',      label: 'Retainer',         icon: FileText,   accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: true  },
   { id: 'payroll-admin', label: 'Payroll Admin',    icon: Settings2,  accent: '#67e8f9', bg: 'rgba(103,232,249,0.12)', adminOnly: true  },
 ];
@@ -123,11 +121,6 @@ export default function HRHub() {
         {tab === 'payroll' && (
           <Suspense fallback={<PanelLoader />}>
             <PayrollPanel embedded />
-          </Suspense>
-        )}
-        {tab === 'staff' && isAdmin && (
-          <Suspense fallback={<PanelLoader />}>
-            <StaffPanel />
           </Suspense>
         )}
         {tab === 'retainer' && isAdmin && (
