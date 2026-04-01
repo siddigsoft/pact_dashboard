@@ -1554,6 +1554,34 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
   const filteredIds = new Set(filteredProfiles.map(p => p.id));
   const roots = filteredProfiles.filter(p => !p.reports_to || !filteredIds.has(p.reports_to));
 
+  // Auto-infer reporting chain from department structure when reports_to not configured
+  const hasExplicitReporting = filteredProfiles.some(p => p.reports_to && filteredIds.has(p.reports_to));
+
+  // Build dept manager + parent maps from flat dept list
+  const deptManagerMap: Record<string, string> = {};
+  const deptParentMap: Record<string, string | null> = {};
+  flat.forEach(d => {
+    if (d.manager_user_id) deptManagerMap[d.id] = d.manager_user_id;
+    deptParentMap[d.id] = d.parent_department_id ?? null;
+  });
+
+  function findAncestorManager(deptId: string | null, selfId: string): string | null {
+    if (!deptId) return null;
+    const mgr = deptManagerMap[deptId];
+    if (mgr && mgr !== selfId) return mgr;
+    return findAncestorManager(deptParentMap[deptId] ?? null, selfId);
+  }
+
+  // Build effective profiles: use explicit reports_to if available, else infer from dept
+  const effectiveProfiles: Profile[] = filteredProfiles.map(p => {
+    if (hasExplicitReporting) {
+      return { ...p, reports_to: (p.reports_to && filteredIds.has(p.reports_to)) ? p.reports_to : null };
+    }
+    const inferred = p.department_id ? findAncestorManager(p.department_id, p.id) : null;
+    return { ...p, reports_to: inferred };
+  });
+  const effectiveRoots = effectiveProfiles.filter(p => !p.reports_to || !new Set(effectiveProfiles.map(x => x.id)).has(p.reports_to));
+
   const totalDepts = departments.length;
   const topLevel = tree.length;
 
@@ -1623,7 +1651,7 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
 
         <p className="text-xs text-muted-foreground ml-auto">
           {mode === "reporting"
-            ? `${filteredProfiles.length} people · ${roots.length} top-level`
+            ? `${filteredProfiles.length} people · ${effectiveRoots.length} top-level`
             : mode === "photo" || mode === "functional"
             ? `${allProfiles.length} people`
             : `${totalDepts} dept${totalDepts !== 1 ? "s" : ""} · ${topLevel} top-level`}
@@ -1691,15 +1719,30 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
 
       {/* Reporting Chain */}
       {mode === "reporting" && (
-        roots.length === 0 ? (
-          <EmptyOrgState icon={<Network className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No reporting relationships configured" sub={'Set "Reports To" in each employee\'s profile to build the reporting chain.'} />
-        ) : (
-          <div className="bg-muted/10 rounded-xl border p-4">
-            {roots.map(r => (
-              <OrgNode key={r.id} profile={r} allProfiles={filteredProfiles} depth={0} navigate={navigate} />
-            ))}
+        <div className="space-y-3">
+          {/* Source banner */}
+          <div className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-xs ${hasExplicitReporting ? "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300" : "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300"}`}>
+            <span className="text-base leading-none mt-0.5">{hasExplicitReporting ? "✅" : "🔶"}</span>
+            <div>
+              {hasExplicitReporting ? (
+                <><strong>Explicit reporting chain</strong> — hierarchy sourced from the "Reports To" field set on each employee's profile.</>
+              ) : (
+                <><strong>Auto-inferred from department structure</strong> — each person is shown under their department manager.{" "}
+                To use individual reporting lines, set <strong>"Reports To"</strong> in each employee's profile (User Detail → Employment Record tab).</>
+              )}
+            </div>
           </div>
-        )
+
+          {effectiveRoots.length === 0 ? (
+            <EmptyOrgState icon={<Network className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No reporting relationships found" sub="No department managers are configured. Set a manager on each department to build an auto-inferred chain." />
+          ) : (
+            <div className="bg-muted/10 rounded-xl border p-4">
+              {effectiveRoots.map(r => (
+                <OrgNode key={r.id} profile={r} allProfiles={effectiveProfiles} depth={0} navigate={navigate} />
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── 10 New Views ── */}
