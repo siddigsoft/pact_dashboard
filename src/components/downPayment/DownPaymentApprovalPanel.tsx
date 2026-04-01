@@ -284,7 +284,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
   const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))], [requests]);
-  const uniqueLocalities = useMemo(() => [...new Set(requests.map(r => r.localityName).filter(Boolean))], [requests]);
+  const uniqueLocalities = useMemo(() => {
+    const base = filters.stateName
+      ? requests.filter(r => r.stateName === filters.stateName)
+      : requests;
+    return [...new Set(base.map(r => r.localityName).filter(Boolean))].sort() as string[];
+  }, [requests, filters.stateName]);
   const uniqueMMPs = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort(), [requests]);
   const uniqueSites = useMemo(() => [...new Set(requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
 
@@ -2464,7 +2469,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             <Label className="text-xs">State</Label>
             <Select
               value={filters.stateName || 'all'}
-              onValueChange={v => setFilters(f => ({ ...f, stateName: v === 'all' ? undefined : v }))}
+              onValueChange={v => setFilters(f => ({ ...f, stateName: v === 'all' ? undefined : v, localityName: undefined }))}
             >
               <SelectTrigger data-testid="select-filter-state">
                 <SelectValue placeholder="All States" />
@@ -2799,7 +2804,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   <Select
                     value={filters.stateName || 'all'}
                     onValueChange={(val) => {
-                      setFilters(f => ({ ...f, stateName: val === 'all' ? undefined : val }));
+                      setFilters(f => ({ ...f, stateName: val === 'all' ? undefined : val, localityName: undefined }));
                     }}
                   >
                     <SelectTrigger data-testid="select-bulk-state">
