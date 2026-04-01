@@ -286,7 +286,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   }>({ open: false, request: null, requestedAmount: 0, approvedAmount: 0, justification: '', siteName: '', reason: '', processing: false });
 
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
-  const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))], [requests]);
+  const uniqueStates = useMemo(() => {
+    const base = filters.hubId
+      ? requests.filter(r => r.hubId === filters.hubId || r.hubName?.toLowerCase() === filters.hubId!.toLowerCase())
+      : requests;
+    return [...new Set(base.map(r => r.stateName).filter(Boolean))].sort() as string[];
+  }, [requests, filters.hubId]);
   const uniqueLocalities = useMemo(() => {
     const base = filters.stateName
       ? requests.filter(r => r.stateName?.toLowerCase() === filters.stateName!.toLowerCase())
@@ -2495,7 +2500,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             <Label className="text-xs">Hub</Label>
             <Select
               value={filters.hubId || 'all'}
-              onValueChange={v => setFilters(f => ({ ...f, hubId: v === 'all' ? undefined : v }))}
+              onValueChange={v => setFilters(f => ({ ...f, hubId: v === 'all' ? undefined : v, stateName: undefined, localityName: undefined }))}
             >
               <SelectTrigger data-testid="select-filter-hub">
                 <SelectValue placeholder="All Hubs" />
@@ -2955,7 +2960,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   <Select
                     value={filters.hubId || 'all'}
                     onValueChange={(val) => {
-                      setFilters(f => ({ ...f, hubId: val === 'all' ? undefined : val }));
+                      setFilters(f => ({ ...f, hubId: val === 'all' ? undefined : val, stateName: undefined, localityName: undefined }));
                     }}
                   >
                     <SelectTrigger data-testid="select-bulk-hub">
