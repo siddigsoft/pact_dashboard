@@ -350,9 +350,16 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     return filteredRequests.filter(req => req.status === 'pending_admin');
   }, [filteredRequests, userRole]);
 
+  const approvedRequests = useMemo(() => {
+    if (userRole === 'admin') {
+      return filteredRequests.filter(req => req.status === 'approved');
+    }
+    return [];
+  }, [filteredRequests, userRole]);
+
   const processingRequests = useMemo(() => {
     if (userRole === 'admin') {
-      return filteredRequests.filter(req => req.status === 'approved' || req.status === 'partially_paid');
+      return filteredRequests.filter(req => req.status === 'partially_paid');
     }
     return filteredRequests.filter(req => req.status === 'pending_admin');
   }, [filteredRequests, userRole]);
@@ -710,6 +717,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     switch (activeTab) {
       case 'pending':
         return { data: pendingRequests, tabLabel: 'Pending' };
+      case 'approved':
+        return { data: approvedRequests, tabLabel: 'Approved' };
       case 'processing':
         return { data: processingRequests, tabLabel: 'Processing' };
       case 'completed':
@@ -2665,11 +2674,20 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       {!hideFiltersBar && showFilters && <FilterPanel />}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 mb-4">
+        <TabsList className={`grid w-full ${userRole === 'admin' ? 'grid-cols-6' : 'grid-cols-5'} mb-4`}>
           <TabsTrigger value="pending" data-testid="tab-pending">
             Pending
             <Badge variant="secondary" className="ml-2">{pendingRequests.length}</Badge>
           </TabsTrigger>
+          {userRole === 'admin' && (
+            <TabsTrigger value="approved" data-testid="tab-approved">
+              Approved
+              {approvedRequests.length > 0
+                ? <Badge className="ml-2 bg-emerald-600 text-white hover:bg-emerald-600">{approvedRequests.length}</Badge>
+                : <Badge variant="secondary" className="ml-2">0</Badge>
+              }
+            </TabsTrigger>
+          )}
           <TabsTrigger value="processing" data-testid="tab-processing">
             Processing
             <Badge variant="secondary" className="ml-2">{processingRequests.length}</Badge>
@@ -2785,6 +2803,88 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 </Button>
               </div>
               <VirtualizedRequestList requests={pendingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="approved">
+          {selectedIds.size > 0 && approvedRequests.length > 0 && (() => {
+            const selectedApproved = approvedRequests.filter(r => selectedIds.has(r.id));
+            const totalAmount = selectedApproved.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+            return (
+              <Card className="mb-4 border-emerald-500">
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <CheckSquare className="h-5 w-5 text-emerald-600" />
+                      <span className="font-medium">{selectedIds.size} selected</span>
+                      <span className="text-xs text-muted-foreground">SDG {totalAmount.toLocaleString()}</span>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={clearSelection}>
+                      <X className="h-4 w-4 mr-1" /> Clear
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button size="sm" onClick={() => {
+                      if (selectedApproved.length > 0) openBulkPaymentRequestDialog(selectedApproved, '', `${selectedApproved.length} Selected`);
+                    }} disabled={processing} data-testid="button-approved-request-payment">
+                      <Mail className="h-4 w-4 mr-1" /> Request Payment ({selectedApproved.length})
+                    </Button>
+                    <Button size="sm" variant="default" onClick={() => {
+                      if (selectedApproved.length > 0) openActionDialog(selectedApproved[0], 'pay');
+                    }} disabled={processing} data-testid="button-approved-process-payment">
+                      <DollarSign className="h-4 w-4 mr-1" /> Process Payment
+                    </Button>
+                    {selectedApproved.length > 1 && (
+                      <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleOpenBatchPay(selectedApproved)} disabled={processing} data-testid="button-approved-batch-pay">
+                        <Wallet className="h-4 w-4 mr-1" /> Batch Pay ({selectedApproved.length})
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => {
+                      if (selectedApproved.length > 0) handleDownloadBulkPdf(selectedApproved, `${selectedApproved.length} Selected`);
+                    }} disabled={processing} data-testid="button-approved-bulk-pdf">
+                      <FileText className="h-4 w-4 mr-1" /> PDF ({selectedIds.size})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      if (selectedApproved.length > 0) openBulkExcelRequestDialog(selectedApproved, '', `${selectedApproved.length} Selected`);
+                    }} disabled={processing} data-testid="button-approved-bulk-excel">
+                      <FileSpreadsheet className="h-4 w-4 mr-1" /> Excel ({selectedIds.size})
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_admin')} disabled={processing} data-testid="button-approved-revert-admin">
+                      <Undo2 className="h-4 w-4 mr-1" /> Revert to Pending Admin
+                    </Button>
+                    {isSuperAdmin && (
+                      <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={handleBulkDelete} disabled={processing} data-testid="button-approved-delete">
+                        <Trash2 className="h-4 w-4 mr-1" /> Delete ({selectedIds.size})
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+          {approvedRequests.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No requests in approved status — all clear!
+              </CardContent>
+            </Card>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Checkbox
+                  checked={approvedRequests.length > 0 && approvedRequests.every(r => selectedIds.has(r.id))}
+                  onCheckedChange={(checked) => {
+                    if (checked) selectAll(approvedRequests);
+                    else clearSelection();
+                  }}
+                  data-testid="checkbox-select-all-approved"
+                />
+                <Button variant="ghost" size="sm" onClick={() => selectAll(approvedRequests)} data-testid="button-select-all-approved">
+                  Select All ({approvedRequests.length})
+                </Button>
+              </div>
+              <VirtualizedRequestList requests={approvedRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
             </div>
           )}
         </TabsContent>
