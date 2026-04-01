@@ -191,7 +191,7 @@ const CostSubmission = () => {
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approvalProcessing, setApprovalProcessing] = useState(false);
   const [approvalAttachments, setApprovalAttachments] = useState<File[]>([]);
-  const pendingApprovalDocsRef = React.useRef<Array<{ url: string; filename: string }>>([]);
+  const pendingApprovalDocsRef = useRef<Array<{ url: string; filename: string }>>([]);
 
   const [groupApprovalDialog, setGroupApprovalDialog] = useState<{
     open: boolean;
