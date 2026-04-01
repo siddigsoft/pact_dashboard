@@ -2393,12 +2393,12 @@ export default function Departments() {
 
       {/* ── Gradient Hero Header ── */}
       <div
-        className="relative overflow-hidden px-4 sm:px-8 pt-6 pb-8"
+        className="relative px-4 sm:px-8 pt-6 pb-8"
         style={{ background: "linear-gradient(135deg, #0F2041 0%, #1D3461 55%, #2563EB 100%)" }}
       >
         {/* Decorative circles */}
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "#fff", transform: "translate(30%, -40%)" }} />
-        <div className="absolute bottom-0 left-16 w-40 h-40 rounded-full opacity-5" style={{ background: "#fff", transform: "translateY(50%)" }} />
+        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10 pointer-events-none" style={{ background: "#fff", transform: "translate(30%, -40%)" }} />
+        <div className="absolute bottom-0 left-16 w-40 h-40 rounded-full opacity-5 pointer-events-none" style={{ background: "#fff", transform: "translateY(50%)" }} />
 
         <div className="relative flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
