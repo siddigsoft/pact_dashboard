@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   format, isToday, isThisWeek, isBefore, parseISO, isValid,
   startOfDay, addDays, eachDayOfInterval, startOfToday, isAfter,
@@ -1045,7 +1045,8 @@ const PLANNING_TIPS = [
     icon: '🐸', vizType: 'frog',
     title: 'Eat the Frog First',
     text: 'Tackle your hardest or most important task first thing each day. Once it\'s done, everything else feels easier.',
-    tag: 'Productivity',
+    tag: 'Productivity', difficulty: 'Easy', timeToTry: '2 min',
+    keyTakeaway: 'Start hard, end easy — a done frog beats ten pending ones.',
     from: '#f59e0b', to: '#ea580c',
     tagBg: 'bg-amber-100 dark:bg-amber-900/40',
     tagColor: 'text-amber-700 dark:text-amber-300',
@@ -1054,7 +1055,8 @@ const PLANNING_TIPS = [
     icon: '⏱', vizType: 'twomin',
     title: '2-Minute Rule',
     text: 'If a task takes less than 2 minutes to complete, do it immediately instead of adding it to your list.',
-    tag: 'GTD',
+    tag: 'GTD', difficulty: 'Easy', timeToTry: '< 2 min',
+    keyTakeaway: 'Every tiny task cleared is mental bandwidth reclaimed.',
     from: '#10b981', to: '#0891b2',
     tagBg: 'bg-emerald-100 dark:bg-emerald-900/40',
     tagColor: 'text-emerald-700 dark:text-emerald-300',
@@ -1063,7 +1065,8 @@ const PLANNING_TIPS = [
     icon: '📊', vizType: 'matrix',
     title: 'Eisenhower Matrix',
     text: 'Sort tasks by Urgency and Importance. Do urgent+important now, schedule important tasks, delegate urgent ones, drop the rest.',
-    tag: 'Prioritisation',
+    tag: 'Prioritisation', difficulty: 'Medium', timeToTry: '10 min',
+    keyTakeaway: 'Busyness ≠ importance. Protect your Important-not-Urgent quadrant.',
     from: '#3b82f6', to: '#1D3461',
     tagBg: 'bg-blue-100 dark:bg-blue-900/40',
     tagColor: 'text-blue-700 dark:text-blue-300',
@@ -1072,7 +1075,8 @@ const PLANNING_TIPS = [
     icon: '⏰', vizType: 'blocks',
     title: 'Time Blocking',
     text: 'Reserve fixed slots in your calendar for focused work on specific tasks. Protect those blocks from meetings and interruptions.',
-    tag: 'Focus',
+    tag: 'Focus', difficulty: 'Medium', timeToTry: '15 min',
+    keyTakeaway: 'Unplanned time evaporates. Blocked time gets work done.',
     from: '#7c3aed', to: '#4f46e5',
     tagBg: 'bg-violet-100 dark:bg-violet-900/40',
     tagColor: 'text-violet-700 dark:text-violet-300',
@@ -1081,7 +1085,8 @@ const PLANNING_TIPS = [
     icon: '🔁', vizType: 'review',
     title: 'Weekly Review',
     text: 'Set aside 30 minutes every Friday to review what got done, reschedule anything overdue, and plan the following week.',
-    tag: 'Habit',
+    tag: 'Habit', difficulty: 'Medium', timeToTry: '30 min',
+    keyTakeaway: '30 minutes of review saves 5 hours of confusion next week.',
     from: '#0ea5e9', to: '#6366f1',
     tagBg: 'bg-sky-100 dark:bg-sky-900/40',
     tagColor: 'text-sky-700 dark:text-sky-300',
@@ -1090,7 +1095,8 @@ const PLANNING_TIPS = [
     icon: '🎯', vizType: 'mit',
     title: 'MIT — Most Important Tasks',
     text: 'Every morning, identify your 3 Most Important Tasks. Complete those first before touching anything else.',
-    tag: 'Focus',
+    tag: 'Focus', difficulty: 'Easy', timeToTry: '5 min',
+    keyTakeaway: 'Three tasks done well beats ten tasks done poorly.',
     from: '#e11d48', to: '#9333ea',
     tagBg: 'bg-rose-100 dark:bg-rose-900/40',
     tagColor: 'text-rose-700 dark:text-rose-300',
@@ -1414,6 +1420,52 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
     return dayOfYear % PLANNING_TIPS.length;
   }, []);
   const [tipIdx, setTipIdx] = useState(dailyIdx);
+  const [transitioning, setTransitioning] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(true);
+  const [progress, setProgress] = useState(0);
+
+  // Navigate with fade-slide animation
+  const navigate = useCallback((newIdx: number) => {
+    setTransitioning(true);
+    setProgress(0);
+    setTimeout(() => {
+      setTipIdx(newIdx);
+      setTransitioning(false);
+    }, 180);
+  }, []);
+
+  // Auto-advance every 10 seconds with smooth progress bar
+  useEffect(() => {
+    if (!autoPlay || !open) { setProgress(0); return; }
+    const DURATION = 10000;
+    const TICK = 80;
+    let elapsed = 0;
+    const id = setInterval(() => {
+      elapsed += TICK;
+      setProgress(Math.min((elapsed / DURATION) * 100, 100));
+      if (elapsed >= DURATION) {
+        elapsed = 0;
+        setTransitioning(true);
+        setTimeout(() => {
+          setTipIdx(i => (i + 1) % PLANNING_TIPS.length);
+          setProgress(0);
+          setTransitioning(false);
+        }, 180);
+      }
+    }, TICK);
+    return () => clearInterval(id);
+  }, [autoPlay, open, tipIdx]);
+
+  // Keyboard ← → navigation
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') navigate((tipIdx - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length);
+      if (e.key === 'ArrowRight') navigate((tipIdx + 1) % PLANNING_TIPS.length);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, tipIdx, navigate]);
 
   // ── Workload chart data (next 7 days + past overdue bucket) ──────────────
   const workloadData = useMemo(() => {
@@ -1476,6 +1528,34 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
 
   const tip = PLANNING_TIPS[tipIdx];
   const total = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length;
+
+  // Smart CTA — contextual message from the user's real task data
+  const smartCta = useMemo(() => {
+    const today = startOfToday();
+    const active = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
+    const overdue = active.filter(t => {
+      if (!t.dueDate) return false;
+      try { return isBefore(startOfDay(parseISO(t.dueDate)), today); } catch { return false; }
+    }).length;
+    const critical = active.filter(t => t.priority === 'critical').length;
+    const noDate = active.filter(t => !t.dueDate).length;
+    const vz = tip.vizType;
+    if (vz === 'frog' && active.length > 0)
+      return `💡 Apply now: You have ${active.length} active task${active.length !== 1 ? 's' : ''} — pick the hardest one and put it first tomorrow.`;
+    if (vz === 'twomin' && noDate > 0)
+      return `💡 Apply now: ${noDate} task${noDate !== 1 ? 's have' : ' has'} no due date — check which ones take under 2 minutes and clear them now.`;
+    if (vz === 'matrix' && critical > 0)
+      return `💡 Apply now: ${critical} critical task${critical !== 1 ? 's are' : ' is'} flagged — map them to the Matrix and decide what to do right now.`;
+    if (vz === 'blocks')
+      return '💡 Apply now: Open your calendar and block one 2-hour deep-work slot for tomorrow morning.';
+    if (vz === 'review')
+      return '💡 Apply now: Spend 5 minutes right now reviewing your overdue and this-week tasks above.';
+    if (vz === 'mit' && active.length > 0)
+      return `💡 Apply now: From your ${active.length} active tasks, pick your top 3 for tomorrow and write them down.`;
+    if (overdue > 0)
+      return `💡 You have ${overdue} overdue task${overdue !== 1 ? 's' : ''} — this method can help you tackle them today.`;
+    return null;
+  }, [tip.vizType, allTasks]);
 
   return (
     <div className="rounded-xl border bg-gradient-to-br from-violet-50/60 to-indigo-50/40 dark:from-violet-950/20 dark:to-indigo-950/20 border-violet-200/50 dark:border-violet-800/30">
@@ -1651,51 +1731,78 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
 
           {/* ── Planning Methodology Tips ─────────────────────────────── */}
           <div className="border-t border-violet-200/40 dark:border-violet-800/30 pt-4">
-            {/* Section label row */}
+
+            {/* Section label + controls row */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
                 <span className="text-xs font-bold tracking-wide uppercase text-foreground/70">Planning Methodology</span>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline">· ← → keys to navigate</span>
               </div>
-              {/* Dot navigation */}
+
+              {/* Controls: play/pause + dot nav + arrows */}
               <div className="flex items-center gap-1.5">
+                {/* Play / Pause */}
                 <button
                   type="button"
-                  onClick={() => setTipIdx(i => (i - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length)}
+                  onClick={() => { setAutoPlay(v => !v); setProgress(0); }}
+                  className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors text-xs"
+                  aria-label={autoPlay ? 'Pause auto-play' : 'Resume auto-play'}
+                  title={autoPlay ? 'Pause' : 'Play'}
+                >
+                  {autoPlay ? '⏸' : '▶'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate((tipIdx - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length)}
                   className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
                   aria-label="Previous tip"
                 >‹</button>
-                {PLANNING_TIPS.map((_, i) => (
+                {PLANNING_TIPS.map((_t, i) => (
                   <button
                     key={i}
                     type="button"
-                    onClick={() => setTipIdx(i)}
+                    onClick={() => navigate(i)}
                     className="h-1.5 rounded-full transition-all duration-300"
                     style={{
                       width: i === tipIdx ? '20px' : '6px',
                       background: i === tipIdx ? tip.from : '#d1d5db',
                     }}
-                    aria-label={`Tip ${i + 1}`}
+                    aria-label={`Tip ${i + 1}: ${PLANNING_TIPS[i].title}`}
+                    title={PLANNING_TIPS[i].title}
                   />
                 ))}
                 <button
                   type="button"
-                  onClick={() => setTipIdx(i => (i + 1) % PLANNING_TIPS.length)}
+                  onClick={() => navigate((tipIdx + 1) % PLANNING_TIPS.length)}
                   className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
                   aria-label="Next tip"
                 >›</button>
               </div>
             </div>
 
-            {/* Main tip card */}
+            {/* Auto-advance progress bar */}
+            {autoPlay && (
+              <div className="h-0.5 rounded-full bg-black/5 dark:bg-white/10 mb-3 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-none"
+                  style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${tip.from}, ${tip.to})` }}
+                />
+              </div>
+            )}
+
+            {/* Main tip card — fades and slides on change */}
             <div
               className="relative rounded-2xl overflow-hidden p-px"
               style={{ background: `linear-gradient(135deg, ${tip.from}, ${tip.to})` }}
             >
-              <div className="relative rounded-2xl bg-white dark:bg-[#0f1117] p-5">
-                {/* Top row — icon + title + badges */}
+              <div
+                className="relative rounded-2xl bg-white dark:bg-[#0f1117] p-5 transition-all duration-180"
+                style={{ opacity: transitioning ? 0 : 1, transform: transitioning ? 'translateX(8px)' : 'translateX(0)' }}
+              >
+                {/* Top row — icon + meta */}
                 <div className="flex gap-4 items-start">
-                  {/* Coloured icon blob */}
+                  {/* Large icon blob */}
                   <div
                     className="flex-shrink-0 h-16 w-16 rounded-2xl flex items-center justify-center text-4xl shadow-md"
                     style={{ background: `linear-gradient(135deg, ${tip.from}28, ${tip.to}3a)` }}
@@ -1704,10 +1811,24 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    {/* Badges */}
-                    <div className="flex items-center gap-2 mb-2">
+                    {/* Badge row */}
+                    <div className="flex items-center flex-wrap gap-1.5 mb-2">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase ${tip.tagBg} ${tip.tagColor}`}>
                         {tip.tag}
+                      </span>
+                      {/* Difficulty badge */}
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        tip.difficulty === 'Easy'
+                          ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                          : tip.difficulty === 'Medium'
+                          ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                          : 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                      }`}>
+                        {tip.difficulty === 'Easy' ? '🟢' : tip.difficulty === 'Medium' ? '🟡' : '🔴'} {tip.difficulty}
+                      </span>
+                      {/* Time badge */}
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                        ⏱ {tip.timeToTry}
                       </span>
                       {tipIdx === dailyIdx && (
                         <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
@@ -1728,10 +1849,32 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
                   </div>
                 </div>
 
-                {/* Interactive chart / visual for this tip */}
+                {/* Smart CTA — personalised to the user's task data */}
+                {smartCta && (
+                  <div
+                    className="mt-4 rounded-xl px-4 py-3 text-sm font-semibold"
+                    style={{ background: `${tip.from}14`, borderLeft: `3px solid ${tip.from}` }}
+                  >
+                    <span style={{ color: tip.from }}>{smartCta}</span>
+                  </div>
+                )}
+
+                {/* Interactive chart / visual */}
                 <TipVisual vizType={tip.vizType} from={tip.from} to={tip.to} />
 
-                {/* Decorative blurred orb in corner */}
+                {/* Key Takeaway callout */}
+                <div
+                  className="mt-4 rounded-2xl p-4 flex gap-3 items-start"
+                  style={{ background: `linear-gradient(135deg, ${tip.from}18, ${tip.to}10)`, border: `1px solid ${tip.from}30` }}
+                >
+                  <span className="text-xl flex-shrink-0">💡</span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest mb-0.5" style={{ color: tip.from }}>Key Takeaway</p>
+                    <p className="text-sm font-bold text-foreground leading-snug">{tip.keyTakeaway}</p>
+                  </div>
+                </div>
+
+                {/* Decorative orb */}
                 <div
                   className="pointer-events-none absolute right-0 top-0 h-24 w-24 rounded-bl-3xl opacity-10"
                   style={{ background: `radial-gradient(circle at top right, ${tip.from}, transparent 70%)` }}
