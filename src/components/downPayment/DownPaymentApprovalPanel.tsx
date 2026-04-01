@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -287,26 +287,25 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
 
-  // Reusable matchers — mirror the logic in filterDownPayments exactly
-  const matchesHubFilter = useCallback((r: DownPaymentRequest) => {
-    if (!filters.hubId) return true;
-    return r.hubId === filters.hubId || r.hubName?.toLowerCase() === filters.hubId.toLowerCase();
-  }, [filters.hubId]);
+  const uniqueStates = useMemo(() => {
+    const hubId = filters.hubId;
+    const base = hubId
+      ? requests.filter(r => r.hubId === hubId || r.hubName?.toLowerCase() === hubId.toLowerCase())
+      : requests;
+    return [...new Set(base.map(r => r.stateName).filter(Boolean))].sort() as string[];
+  }, [requests, filters.hubId]);
 
-  const matchesStateFilter = useCallback((r: DownPaymentRequest) => {
-    if (!filters.stateName) return true;
-    return r.stateName?.toLowerCase() === filters.stateName.toLowerCase();
-  }, [filters.stateName]);
-
-  const uniqueStates = useMemo(() =>
-    [...new Set(requests.filter(matchesHubFilter).map(r => r.stateName).filter(Boolean))].sort() as string[],
-    [requests, matchesHubFilter]
-  );
-
-  const uniqueLocalities = useMemo(() =>
-    [...new Set(requests.filter(matchesHubFilter).filter(matchesStateFilter).map(r => r.localityName).filter(Boolean))].sort() as string[],
-    [requests, matchesHubFilter, matchesStateFilter]
-  );
+  const uniqueLocalities = useMemo(() => {
+    const hubId = filters.hubId;
+    const stateName = filters.stateName;
+    let base = hubId
+      ? requests.filter(r => r.hubId === hubId || r.hubName?.toLowerCase() === hubId.toLowerCase())
+      : requests;
+    if (stateName) {
+      base = base.filter(r => r.stateName?.toLowerCase() === stateName.toLowerCase());
+    }
+    return [...new Set(base.map(r => r.localityName).filter(Boolean))].sort() as string[];
+  }, [requests, filters.hubId, filters.stateName]);
   const uniqueMMPs = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort(), [requests]);
   const uniqueSites = useMemo(() => [...new Set(requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
 
