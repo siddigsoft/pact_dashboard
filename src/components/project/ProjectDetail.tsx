@@ -33,6 +33,9 @@ import {
   Activity,
   AlertTriangle,
   CheckSquare,
+  LayoutGrid,
+  LayoutList,
+  Table2,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -249,6 +252,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const projectBudget = getProjectBudget(project.id);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   const [isArchiving, setIsArchiving] = useState(false);
+  const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list' | 'table'>('grid');
 
   // Stalled detection: find days since last stage advance
   const stalledDays = (() => {
@@ -1085,21 +1089,134 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </Badge>
               )}
             </h2>
-            <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
-              <Plus className="h-4 w-4 mr-1.5" /> Add Members
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* View toggle */}
+              {project.team?.teamComposition && project.team.teamComposition.length > 0 && (
+                <div className="flex items-center border rounded-md overflow-hidden">
+                  <button
+                    onClick={() => setTeamViewMode('grid')}
+                    className={`p-1.5 transition-colors ${teamViewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}
+                    title="Grid view"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setTeamViewMode('list')}
+                    className={`p-1.5 transition-colors ${teamViewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}
+                    title="List view"
+                  >
+                    <LayoutList className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setTeamViewMode('table')}
+                    className={`p-1.5 transition-colors ${teamViewMode === 'table' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}
+                    title="Table view"
+                  >
+                    <Table2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
+                <Plus className="h-4 w-4 mr-1.5" /> Add Members
+              </Button>
+            </div>
           </div>
           
           {project.team?.teamComposition && project.team.teamComposition.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {project.team.teamComposition.map((member) => (
-                <TeamMemberCard 
-                  key={member.userId} 
-                  member={member} 
-                  calculatedWorkload={userWorkloads[member.userId]}
-                />
-              ))}
-            </div>
+            <>
+              {/* Grid view */}
+              {teamViewMode === 'grid' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {project.team.teamComposition.map((member) => (
+                    <TeamMemberCard
+                      key={member.userId}
+                      member={member}
+                      calculatedWorkload={userWorkloads[member.userId]}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* List view */}
+              {teamViewMode === 'list' && (
+                <div className="space-y-2">
+                  {project.team.teamComposition.map((member) => {
+                    const wl = userWorkloads[member.userId] ?? member.workload ?? 0;
+                    const wlColor = wl > 80 ? 'bg-red-500' : wl > 60 ? 'bg-amber-500' : 'bg-green-500';
+                    return (
+                      <div key={member.userId} className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-card hover:shadow-sm transition-shadow">
+                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <Users className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="min-w-[140px]">
+                          <p className="font-medium text-sm leading-tight">{member.name}</p>
+                          <Badge variant="outline" className="text-[11px] px-1.5 py-0 mt-0.5">
+                            {member.role}
+                          </Badge>
+                        </div>
+                        <div className="flex-1 flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className={`h-full ${wlColor} transition-all`} style={{ width: `${wl}%` }} />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8 shrink-0">{wl}%</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground shrink-0">
+                          Joined {format(parseISO(member.joinedAt), 'dd MMM yyyy')}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Table view */}
+              {teamViewMode === 'table' && (
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Member</th>
+                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Project Role</th>
+                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Workload</th>
+                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Joined</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {project.team.teamComposition.map((member) => {
+                        const wl = userWorkloads[member.userId] ?? member.workload ?? 0;
+                        const wlColor = wl > 80 ? 'bg-red-500' : wl > 60 ? 'bg-amber-500' : 'bg-green-500';
+                        return (
+                          <tr key={member.userId} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                  <Users className="h-4 w-4 text-primary" />
+                                </div>
+                                <span className="font-medium">{member.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge variant="outline" className="text-[11px]">{member.role}</Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div className={`h-full ${wlColor}`} style={{ width: `${wl}%` }} />
+                                </div>
+                                <span className="text-xs text-muted-foreground">{wl}%</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs">
+                              {format(parseISO(member.joinedAt), 'dd MMM yyyy')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-12 border border-dashed rounded-lg border-border">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-muted mb-4">
