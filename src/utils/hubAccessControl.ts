@@ -52,8 +52,10 @@ export function getHubAccessInfo(user: User | null): HubAccessInfo {
 
   const userRole = (user.role || '').toLowerCase();
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'hub_supervisor';
+  const isCoordinator = userRole === 'coordinator';
 
-  if (!isSupervisor || !user.hubId) return empty;
+  // Both supervisors and coordinators are scoped to their assigned hub(s).
+  if (!(isSupervisor || isCoordinator) || !user.hubId) return empty;
 
   const primaryHubId = user.hubId;
   const secondaryHubId = (user as any).secondaryHubId || null;
@@ -204,6 +206,7 @@ export function shouldApplyHubFilter(user: User | null, roles?: AppRole[]): bool
   
   const userRole = (user.role || '').toLowerCase();
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'hub_supervisor';
+  const isCoordinator = userRole === 'coordinator';
   
   const isAdmin = userRole === 'admin' || userRole === 'superadmin' || userRole === 'super_admin';
   const isFOM = userRole === 'fom' || userRole === 'field operation manager (fom)' || userRole === 'field operation manager';
@@ -214,7 +217,8 @@ export function shouldApplyHubFilter(user: User | null, roles?: AppRole[]): bool
     return false;
   }
   
-  return isSupervisor && !!user.hubId;
+  // Both supervisors and coordinators are scoped to their assigned hub(s).
+  return (isSupervisor || isCoordinator) && !!user.hubId;
 }
 
 export function getHubFilterQuery(hubId: string | null): { states: string[] } | null {

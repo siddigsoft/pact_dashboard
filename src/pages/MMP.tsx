@@ -2171,7 +2171,8 @@ const MMP = () => {
   const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser), [currentUser]);
   const applyHubFilter = shouldApplyHubFilter(currentUser);
 
-  // Pre-load the set of MMP IDs that have at least one site entry in the supervisor's hub.
+  // Pre-load the set of MMP IDs that have at least one site entry in the user's hub.
+  // Applies to both supervisors and coordinators who have a hub assignment.
   // This avoids relying on lazy-loaded siteEntries for the hub filter.
   const [supervisorHubMmpIds, setSupervisorHubMmpIds] = useState<Set<string> | null>(null);
   useEffect(() => {
@@ -2788,9 +2789,9 @@ const MMP = () => {
     // For FOMs and Supervisors, still honor project membership but also allow MMPs explicitly forwarded to them.
     if (!isAdminOrSuperUser && !isDataTeam) {
       if (userProjectIds.length > 0) {
-        // For supervisors, apply the project filter ON TOP of the already hub-filtered list
-        // so the hub filter is not overridden by starting from the full mmpFiles array.
-        const filterBase = isSupervisor ? filteredMMPs : mmpFiles;
+        // For hub-scoped roles (supervisors & coordinators), apply the project filter ON TOP of
+        // the already hub-filtered list so the hub filter is not overridden.
+        const filterBase = applyHubFilter ? filteredMMPs : mmpFiles;
         filteredMMPs = filterBase.filter(mmp => {
           const inProject = mmp.projectId ? userProjectIds.includes(mmp.projectId) : false;
           if (isFOM) {
@@ -2812,8 +2813,8 @@ const MMP = () => {
             const forwardedToFomIds = workflow?.forwardedToFomIds || [];
             return forwardedToFomIds.includes(currentUser?.id || '');
           });
-        } else if (isSupervisor) {
-          // Keep filteredMMPs as-is (already hub-filtered above).
+        } else if (applyHubFilter) {
+          // Keep filteredMMPs as-is (already hub-filtered above) for supervisors and coordinators.
           // Do NOT reset to mmpFiles here — that would undo the hub filter.
         } else if (!canClaimSites) {
           filteredMMPs = [];
@@ -2949,9 +2950,9 @@ const MMP = () => {
   }, [mmpFiles, isFOM, isSupervisor, isCoordinator, isDataTeam, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo, supervisorHubMmpIds]);
 
   // Hub-scoped MMP list for the MMP Tracker tab.
-  // Supervisors should only see their hub's MMPs in the tracker; for all other roles pass mmpFiles as-is.
+  // Supervisors and coordinators should only see their hub's MMPs in the tracker; for all other roles pass mmpFiles as-is.
   const trackerMMPs = useMemo(() => {
-    if (!isSupervisor || !applyHubFilter) return mmpFiles;
+    if (!applyHubFilter) return mmpFiles;
     const seen = new Set<string>();
     const combined: typeof mmpFiles = [];
     for (const arr of [categorizedMMPs.new, categorizedMMPs.forwarded, categorizedMMPs.verified]) {
