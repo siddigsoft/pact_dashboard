@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -4178,95 +4178,224 @@ const CostSubmission = () => {
           }
         }}
       >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {groupApprovalDialog.action === 'approve'
-                ? `Approve All Items — Tier ${groupApprovalDialog.tier}`
-                : `Reject All Items — Tier ${groupApprovalDialog.tier}`}
-              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">
-                {groupApprovalDialog.action === 'approve' ? 'الموافقة على جميع البنود' : 'رفض جميع البنود'}
-              </span>
-            </DialogTitle>
-            <DialogDescription>
-              {groupApprovalDialog.action === 'approve'
-                ? `You are about to approve all ${groupApprovalDialog.submissions.length} expense items in this request at Tier ${groupApprovalDialog.tier} in one action.`
-                : `You are about to reject all ${groupApprovalDialog.submissions.length} expense items in this request.`}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-xl p-0 overflow-hidden flex flex-col max-h-[90vh]">
+          {/* ── Colored header band ── */}
+          {(() => {
+            const isApprove = groupApprovalDialog.action === 'approve';
+            const totalCents = groupApprovalDialog.submissions.reduce((s, o) => s + o.amount_cents, 0);
+            const currency = groupApprovalDialog.submissions[0]?.currency ?? 'SDG';
+            const tierLabel: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' };
 
-          <div className="space-y-4 py-1">
-            <div className="rounded-lg bg-muted/50 p-3 space-y-2">
-              <p className="font-semibold text-sm">{groupApprovalDialog.groupTitle || 'Grouped Request'}</p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{groupApprovalDialog.submissions.length} expense items</span>
-                {groupApprovalDialog.submissions.length > 0 && (
-                  <span className="font-bold tabular-nums">
-                    {groupApprovalDialog.submissions[0]?.currency}{' '}
-                    {(groupApprovalDialog.submissions.reduce((s, o) => s + o.amount_cents, 0) / 100).toLocaleString()}
-                  </span>
-                )}
-              </div>
-              <div className="space-y-1 max-h-36 overflow-y-auto">
-                {groupApprovalDialog.submissions.map(s => {
-                  const catMeta = EXPENSE_CATEGORY_MAP[s.expense_category];
-                  const CatIcon = catMeta?.icon;
-                  return (
-                    <div key={s.id} className="flex items-center justify-between text-xs py-0.5 border-b last:border-0">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        {CatIcon && <CatIcon className="h-3 w-3" />}
-                        {catMeta?.label || s.expense_category}
-                      </span>
-                      <span className="tabular-nums font-medium">{s.currency} {(s.amount_cents / 100).toLocaleString()}</span>
+            /* group by category for summary chips */
+            const byCat: Record<string, { label: string; icon: any; total: number; count: number }> = {};
+            groupApprovalDialog.submissions.forEach(s => {
+              const cat = s.expense_category;
+              const meta = EXPENSE_CATEGORY_MAP[cat];
+              if (!byCat[cat]) byCat[cat] = { label: meta?.label || cat, icon: meta?.icon, total: 0, count: 0 };
+              byCat[cat].total += s.amount_cents;
+              byCat[cat].count += 1;
+            });
+            const catEntries = Object.entries(byCat);
+
+            return (
+              <>
+                {/* Header band */}
+                <div className={`px-5 py-4 ${isApprove
+                  ? 'bg-emerald-600 dark:bg-emerald-700'
+                  : 'bg-red-600 dark:bg-red-700'} text-white`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        {isApprove
+                          ? <CheckCircle2 className="h-4 w-4 shrink-0 opacity-90" />
+                          : <XCircle className="h-4 w-4 shrink-0 opacity-90" />}
+                        <span className="font-semibold text-base leading-tight">
+                          {isApprove ? `Approve All — Tier ${groupApprovalDialog.tier}` : 'Reject All Items'}
+                        </span>
+                      </div>
+                      <p dir="rtl" className="text-xs opacity-80 mt-0.5">
+                        {isApprove
+                          ? `الموافقة على جميع البنود — المرحلة ${tierLabel[groupApprovalDialog.tier] ?? groupApprovalDialog.tier}`
+                          : 'رفض جميع بنود هذا الطلب'}
+                      </p>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-2xl font-bold tabular-nums leading-none">
+                        {currency} {(totalCents / 100).toLocaleString()}
+                      </p>
+                      <p className="text-xs opacity-75 mt-0.5">{groupApprovalDialog.submissions.length} expense items</p>
+                    </div>
+                  </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="group-approval-notes">
-                {groupApprovalDialog.action === 'approve' ? 'Notes (optional)' : 'Reason for rejection'}
-                <span dir="rtl" className="text-xs font-normal text-muted-foreground ml-2">
-                  {groupApprovalDialog.action === 'approve' ? '/ ملاحظات' : '/ سبب الرفض'}
-                </span>
-              </Label>
-              <Textarea
-                id="group-approval-notes"
-                placeholder={groupApprovalDialog.action === 'approve'
-                  ? 'Optional notes for all items...'
-                  : 'Required: provide a reason for rejecting all items...'}
-                value={groupApprovalNotes}
-                onChange={e => setGroupApprovalNotes(e.target.value)}
-                className="min-h-[80px] resize-none"
-                data-testid="textarea-group-approval-notes"
-              />
-            </div>
-          </div>
+                  {/* Request title */}
+                  <div className="mt-3 rounded-md bg-white/10 px-3 py-2">
+                    <p className="text-xs opacity-75 uppercase tracking-wide font-semibold mb-0.5">Request</p>
+                    <p className="text-sm font-medium leading-snug">{groupApprovalDialog.groupTitle || 'Grouped Request'}</p>
+                  </div>
+                </div>
 
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => { setGroupApprovalDialog(prev => ({ ...prev, open: false })); setGroupApprovalNotes(''); }}
-              disabled={groupApprovalProcessing}
-              data-testid="button-group-approval-cancel"
-            >
-              Cancel / إلغاء
-            </Button>
-            <Button
-              variant={groupApprovalDialog.action === 'approve' ? 'default' : 'destructive'}
-              onClick={handleGroupApproval}
-              disabled={groupApprovalProcessing || (groupApprovalDialog.action === 'reject' && !groupApprovalNotes.trim())}
-              className={groupApprovalDialog.action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
-              data-testid="button-group-approval-confirm"
-            >
-              {groupApprovalProcessing
-                ? `Processing ${groupApprovalDialog.submissions.length} items... / جارٍ المعالجة...`
-                : groupApprovalDialog.action === 'approve'
-                  ? `Approve All (${groupApprovalDialog.submissions.length}) / الموافقة على الكل`
-                  : `Reject All (${groupApprovalDialog.submissions.length}) / رفض الكل`}
-            </Button>
-          </DialogFooter>
+                {/* ── Scrollable body ── */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+                  {/* Category summary chips */}
+                  {catEntries.length > 1 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">By Category</p>
+                      <div className="flex flex-wrap gap-2">
+                        {catEntries.map(([cat, data]) => {
+                          const CatIcon = data.icon;
+                          return (
+                            <div key={cat} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border
+                              ${isApprove
+                                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                                : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'}`}>
+                              {CatIcon && <CatIcon className="h-3 w-3" />}
+                              <span className="font-medium">{data.label}</span>
+                              <span className="opacity-70">× {data.count}</span>
+                              <span className="font-semibold tabular-nums">{currency} {(data.total / 100).toLocaleString()}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Line-item list with scroll */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">All Items</p>
+                      <p className="text-xs text-muted-foreground">{groupApprovalDialog.submissions.length} rows</p>
+                    </div>
+                    <div className="rounded-lg border overflow-hidden">
+                      {/* Sticky column headers */}
+                      <div className="grid grid-cols-[1fr_auto] gap-2 px-3 py-1.5 bg-muted/60 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Category / Description</span>
+                        <span className="text-right">Amount</span>
+                      </div>
+                      {/* Scrollable rows */}
+                      <div className="divide-y overflow-y-auto max-h-52 overscroll-contain">
+                        {groupApprovalDialog.submissions.map((s, idx) => {
+                          const catMeta = EXPENSE_CATEGORY_MAP[s.expense_category];
+                          const CatIcon = catMeta?.icon;
+                          const desc = s.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || '';
+                          return (
+                            <div key={s.id} className="grid grid-cols-[1fr_auto] gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-muted-foreground/60 tabular-nums w-4 shrink-0">{idx + 1}.</span>
+                                  {CatIcon && <CatIcon className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                                  <span className="text-xs font-medium">{catMeta?.label || s.expense_category}</span>
+                                </div>
+                                {desc && (
+                                  <p className="text-[10px] text-muted-foreground truncate ml-5 mt-0.5">{desc}</p>
+                                )}
+                              </div>
+                              <span className="text-xs font-semibold tabular-nums self-center text-right whitespace-nowrap">
+                                {s.currency} {(s.amount_cents / 100).toLocaleString()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Sticky total row */}
+                      <div className="grid grid-cols-[1fr_auto] gap-2 px-3 py-2 bg-muted/60 border-t">
+                        <span className="text-xs font-bold">Total ({groupApprovalDialog.submissions.length} items)</span>
+                        <span className={`text-sm font-bold tabular-nums ${isApprove ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                          {currency} {(totalCents / 100).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Warning banner for reject */}
+                  {!isApprove && (
+                    <div className="flex items-start gap-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2.5">
+                      <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                      <div className="text-xs text-red-700 dark:text-red-300">
+                        <p className="font-semibold mb-0.5">All {groupApprovalDialog.submissions.length} items will be rejected</p>
+                        <p className="opacity-80">The submitter will be notified and can revise and resubmit. This action cannot be undone.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Success-path info for approve */}
+                  {isApprove && (
+                    <div className="flex items-start gap-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-2.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="text-xs text-emerald-700 dark:text-emerald-300">
+                        <p className="font-semibold mb-0.5">
+                          {groupApprovalDialog.tier === 3
+                            ? `All items will be fully approved and cleared for payment`
+                            : `All items will advance to Tier ${groupApprovalDialog.tier + 1} review`}
+                        </p>
+                        <p className="opacity-80" dir="rtl">
+                          {groupApprovalDialog.tier === 3
+                            ? 'سيتم اعتماد جميع البنود نهائياً وتمهيدها للدفع'
+                            : `ستنتقل جميع البنود إلى المرحلة التالية للمراجعة`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notes / Reason */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="group-approval-notes">
+                      {isApprove ? 'Approval Notes' : 'Reason for Rejection'}
+                      {!isApprove && <span className="text-red-500 ml-0.5">*</span>}
+                      <span dir="rtl" className="text-xs font-normal text-muted-foreground ml-2">
+                        {isApprove ? '/ ملاحظات الموافقة' : '/ سبب الرفض *'}
+                      </span>
+                    </Label>
+                    <Textarea
+                      id="group-approval-notes"
+                      placeholder={isApprove
+                        ? 'Optional notes that will apply to all items...'
+                        : 'Required — provide a clear reason. This will be shown to the submitter for all rejected items.'}
+                      value={groupApprovalNotes}
+                      onChange={e => setGroupApprovalNotes(e.target.value)}
+                      className="min-h-[72px] resize-none"
+                      data-testid="textarea-group-approval-notes"
+                    />
+                    {!isApprove && !groupApprovalNotes.trim() && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        A rejection reason is required / سبب الرفض مطلوب
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Footer (outside scroll) ── */}
+                <div className="px-5 py-3 border-t bg-muted/30 flex items-center justify-between gap-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setGroupApprovalDialog(prev => ({ ...prev, open: false })); setGroupApprovalNotes(''); }}
+                    disabled={groupApprovalProcessing}
+                    data-testid="button-group-approval-cancel"
+                  >
+                    Cancel / إلغاء
+                  </Button>
+                  <Button
+                    variant={isApprove ? 'default' : 'destructive'}
+                    onClick={handleGroupApproval}
+                    disabled={groupApprovalProcessing || (!isApprove && !groupApprovalNotes.trim())}
+                    className={isApprove ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}
+                    data-testid="button-group-approval-confirm"
+                  >
+                    {isApprove
+                      ? <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                      : <XCircle className="h-4 w-4 mr-1.5" />}
+                    {groupApprovalProcessing
+                      ? `Processing... / جارٍ المعالجة...`
+                      : isApprove
+                        ? `Approve All ${groupApprovalDialog.submissions.length} Items`
+                        : `Reject All ${groupApprovalDialog.submissions.length} Items`}
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
