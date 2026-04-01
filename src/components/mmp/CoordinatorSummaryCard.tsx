@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet } from 'lucide-react';
+import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -24,6 +24,7 @@ interface SiteStatusDetail {
   reason: string;
   actionBy: string;
   actionAt: string;
+  claimedBy: string;
 }
 
 interface CoordinatorInfo {
@@ -134,6 +135,12 @@ function SiteDetailRow({ site, userNames, advance }: { site: SiteStatusDetail; u
           <p className="text-[10px] text-muted-foreground mt-0.5">
             {resolvedActionBy && !isUuid(resolvedActionBy) && <>By: {resolvedActionBy}</>}
             {site.actionAt && <>{resolvedActionBy ? ' ' : ''}{formatDate(site.actionAt)}</>}
+          </p>
+        )}
+        {site.claimedBy && (
+          <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+            <User className="h-2.5 w-2.5 shrink-0" />
+            DC: {userNames[site.claimedBy] || (isUuid(site.claimedBy) ? site.claimedBy.slice(0, 8) + '…' : site.claimedBy)}
           </p>
         )}
       </div>
@@ -329,6 +336,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           : isReturned
             ? (entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '')
             : (entry.dispatched_at || entry.forwarded_at || ''),
+        claimedBy: ad.claimed_by || entry.claimed_by || '',
       };
 
       if (coordId) {
@@ -384,6 +392,9 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           entry.additional_data?.rejected_by,
           entry.additionalData?.sent_back_by,
           entry.additionalData?.rejected_by,
+          entry.additional_data?.claimed_by,
+          entry.additionalData?.claimed_by,
+          entry.claimed_by,
         ];
         actionFields.forEach(id => {
           if (id && uuidRegex.test(id)) {
