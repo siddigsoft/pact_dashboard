@@ -289,7 +289,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))], [requests]);
   const uniqueLocalities = useMemo(() => {
     const base = filters.stateName
-      ? requests.filter(r => r.stateName === filters.stateName)
+      ? requests.filter(r => r.stateName?.toLowerCase() === filters.stateName!.toLowerCase())
       : requests;
     return [...new Set(base.map(r => r.localityName).filter(Boolean))].sort() as string[];
   }, [requests, filters.stateName]);
