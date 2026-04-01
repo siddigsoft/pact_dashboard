@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import {
   format, isToday, isThisWeek, isBefore, parseISO, isValid,
   startOfDay, addDays, eachDayOfInterval, startOfToday, isAfter,
@@ -589,50 +589,43 @@ function TaskDetailSheet({
   const pCfg = PRIORITY_CFG[priority] ?? PRIORITY_CFG.medium;
   const doneSubs = subtasks.filter(s => s.status === 'done').length;
 
+  // section label helper
+  const SectionLabel = ({ icon, children }: { icon: ReactNode; children: ReactNode }) => (
+    <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+        {icon}{children}
+      </div>
+      <div className="flex-1 h-px bg-border/60" />
+    </div>
+  );
+
   return (
     <Sheet open={!!task} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0 gap-0 overflow-hidden">
-        <SheetHeader className="px-4 pt-4 pb-3 border-b bg-card flex-shrink-0">
-          <div className="flex items-start gap-2">
-            <div className={cn('h-2 w-2 rounded-full mt-2 flex-shrink-0', pCfg.dot)} />
-            <div className="flex-1 min-w-0">
-              <SheetTitle asChild>
-                <input
-                  value={title}
-                  onChange={e => { setTitle(e.target.value); markDirty(); }}
-                  className="text-base font-semibold w-full bg-transparent border-0 outline-none focus:bg-muted/30 rounded px-1 -ml-1 transition-colors"
-                  data-testid="sheet-input-title"
-                />
-              </SheetTitle>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                <span className="text-[10px] text-muted-foreground">
-                  Created {format(parseISO(task.createdAt), 'dd MMM yyyy')}
-                </span>
-                {task.assignedToName && (
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                    <User className="h-2.5 w-2.5" />{task.assignedToName}
-                  </span>
-                )}
-                {task.recurrence && task.recurrence !== 'none' && (
-                  <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0 rounded-full capitalize">{task.recurrence}</span>
-                )}
-                {overdue && !dirty && (
-                  <span className="text-[10px] text-red-600 font-medium flex items-center gap-0.5">
-                    <AlertTriangle className="h-2.5 w-2.5" />Overdue
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
+      <SheetContent side="right" className="w-full sm:max-w-[480px] flex flex-col p-0 gap-0 overflow-hidden">
+
+        {/* ── Header ── */}
+        <SheetHeader className="flex-shrink-0 bg-gradient-to-br from-[#0F2041] to-[#1D3461] px-5 pt-5 pb-4">
+          {/* Top row: priority dot + title + actions */}
+          <div className="flex items-start gap-3">
+            <div className={cn('h-2.5 w-2.5 rounded-full mt-2 flex-shrink-0 ring-2 ring-white/20', pCfg.dot)} />
+            <SheetTitle asChild className="flex-1 min-w-0">
+              <input
+                value={title}
+                onChange={e => { setTitle(e.target.value); markDirty(); }}
+                className="text-[17px] font-bold leading-snug w-full bg-transparent border-0 outline-none text-white placeholder:text-white/40 focus:bg-white/5 rounded px-1 -ml-1 transition-colors"
+                data-testid="sheet-input-title"
+              />
+            </SheetTitle>
+            <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
               {dirty && (
                 <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSaving}
-                  className="h-7 px-2.5 text-xs bg-[#1D3461] hover:bg-[#0F2041] text-white">
+                  className="h-7 px-3 text-xs bg-white/15 hover:bg-white/25 text-white border border-white/20">
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Save
                 </Button>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground">
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/60 hover:text-white hover:bg-white/10">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -644,105 +637,133 @@ function TaskDetailSheet({
               </DropdownMenu>
             </div>
           </div>
-        </SheetHeader>
 
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-          {/* Status · Priority · Due */}
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="space-y-1">
-              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Circle className="h-2.5 w-2.5" />Status
-              </Label>
-              <Select value={status} onValueChange={v => { setStatus(v as PersonalTaskStatus); markDirty(); }}>
-                <SelectTrigger className="h-8 text-xs">
-                  <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_CFG[status]?.color)}>
+          {/* Meta badges row */}
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            <span className="text-[11px] text-white/50">
+              Created {format(parseISO(task.createdAt), 'dd MMM yyyy')}
+            </span>
+            {task.assignedToName && (
+              <span className="text-[11px] text-white/70 flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-full">
+                <User className="h-3 w-3" />{task.assignedToName}
+              </span>
+            )}
+            {task.recurrence && task.recurrence !== 'none' && (
+              <span className="text-[11px] bg-blue-400/20 text-blue-200 border border-blue-300/20 px-2 py-0.5 rounded-full capitalize">
+                {task.recurrence}
+              </span>
+            )}
+            {overdue && !dirty && (
+              <span className="text-[11px] text-red-300 font-semibold flex items-center gap-1 bg-red-500/20 px-2 py-0.5 rounded-full">
+                <AlertTriangle className="h-3 w-3" />Overdue
+              </span>
+            )}
+          </div>
+
+          {/* Status/Priority/Due pill row */}
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            {/* Status */}
+            <Select value={status} onValueChange={v => { setStatus(v as PersonalTaskStatus); markDirty(); }}>
+              <SelectTrigger className="h-9 bg-white/10 border-white/20 text-white text-xs hover:bg-white/15 focus:ring-white/20">
+                <div className="flex flex-col items-start gap-0.5">
+                  <span className="text-[9px] text-white/50 uppercase tracking-widest leading-none">Status</span>
+                  <span className={cn('text-[11px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_CFG[status]?.color)}>
                     {STATUS_CFG[status]?.label}
                   </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
-                    <SelectItem key={s} value={s} className="text-xs">
-                      <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Flag className="h-2.5 w-2.5" />Priority
-              </Label>
-              <Select value={priority} onValueChange={v => { setPriority(v as PersonalTaskPriority); markDirty(); }}>
-                <SelectTrigger className="h-8 text-xs">
-                  <span className={cn('text-[9px] font-semibold', pCfg.color.replace(/bg-\S+\s/, '').split(' ')[0])}>
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
+                  <SelectItem key={s} value={s} className="text-sm">
+                    <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Priority */}
+            <Select value={priority} onValueChange={v => { setPriority(v as PersonalTaskPriority); markDirty(); }}>
+              <SelectTrigger className="h-9 bg-white/10 border-white/20 text-white text-xs hover:bg-white/15 focus:ring-white/20">
+                <div className="flex flex-col items-start gap-0.5">
+                  <span className="text-[9px] text-white/50 uppercase tracking-widest leading-none">Priority</span>
+                  <span className={cn('text-[11px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
                     {pCfg.label}
                   </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {(['low', 'medium', 'high', 'critical'] as PersonalTaskPriority[]).map(p => (
-                    <SelectItem key={p} value={p} className="text-xs">
-                      <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', PRIORITY_CFG[p].color)}>{PRIORITY_CFG[p].label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Calendar className="h-2.5 w-2.5" />Due Date
-              </Label>
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {(['low', 'medium', 'high', 'critical'] as PersonalTaskPriority[]).map(p => (
+                  <SelectItem key={p} value={p} className="text-sm">
+                    <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', PRIORITY_CFG[p].color)}>{PRIORITY_CFG[p].label}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Due Date */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] text-white/50 uppercase tracking-widest leading-none pl-0.5 pt-1">Due Date</span>
               <Input
                 type="date"
                 value={dueDate}
                 onChange={e => { setDueDate(e.target.value); markDirty(); }}
-                className={cn('h-8 text-xs', overdue && !dueDate && 'border-red-300')}
+                className={cn(
+                  'h-7 text-xs bg-white/10 border-white/20 text-white [color-scheme:dark] focus:ring-white/20',
+                  overdue && !dueDate && 'border-red-400/60',
+                )}
               />
             </div>
           </div>
+        </SheetHeader>
+
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 bg-background">
 
           {/* Assignees */}
-          <div className="space-y-1.5">
-            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <Users className="h-2.5 w-2.5" />Assignees
-            </Label>
-            <div className="flex flex-wrap gap-1.5">
-              {/* Primary assignee chip (read-only label) */}
+          <div>
+            <SectionLabel icon={<Users className="h-3.5 w-3.5" />}>Assignees</SectionLabel>
+            <div className="flex flex-wrap gap-2">
               {task.assignedToName && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-[#1D3461] text-white">
-                  <span className="opacity-70 text-[9px]">primary</span>
-                  {task.assignedToName}
-                </span>
+                <div className="flex items-center gap-1.5 bg-[#1D3461]/10 border border-[#1D3461]/20 px-2.5 py-1.5 rounded-lg">
+                  <div className="h-6 w-6 rounded-full bg-[#1D3461] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                    {task.assignedToName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-foreground leading-none">{task.assignedToName}</p>
+                    <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Primary</p>
+                  </div>
+                </div>
               )}
-              {/* Co-assignee chips */}
               {coAssignees.map(a => (
-                <span key={a.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-muted border border-border text-muted-foreground">
-                  {a.name}
+                <div key={a.id} className="flex items-center gap-1.5 bg-muted/60 border border-border px-2.5 py-1.5 rounded-lg">
+                  <div className="h-6 w-6 rounded-full bg-muted-foreground/20 flex items-center justify-center text-muted-foreground text-[10px] font-bold flex-shrink-0">
+                    {a.name.charAt(0).toUpperCase()}
+                  </div>
+                  <p className="text-xs font-medium text-foreground">{a.name}</p>
                   {isAdmin && (
                     <button
                       type="button"
                       onClick={() => { setCoAssignees(prev => prev.filter(x => x.id !== a.id)); markDirty(); }}
-                      className="ml-0.5 opacity-60 hover:opacity-100"
+                      className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
                       data-testid={`remove-co-assignee-${a.id}`}
                     >
-                      <X className="h-2.5 w-2.5" />
+                      <X className="h-3 w-3" />
                     </button>
                   )}
-                </span>
+                </div>
               ))}
             </div>
-            {/* Add co-assignee (admin only) */}
             {isAdmin && (
-              <div className="space-y-1">
+              <div className="mt-2 space-y-1">
                 <Input
                   placeholder="Add co-assignee…"
                   value={coUserSearch}
                   onChange={e => setCoUserSearch(e.target.value)}
-                  className="h-7 text-xs"
+                  className="h-9 text-sm"
                   data-testid="sheet-input-co-assignee"
                 />
                 {coUserSearch && (
-                  <div className="rounded-lg border border-border bg-background max-h-36 overflow-y-auto shadow-sm">
+                  <div className="rounded-lg border border-border bg-background max-h-40 overflow-y-auto shadow-sm">
                     {allProfiles
                       .filter(p =>
                         p.id !== task.assignedTo &&
@@ -759,14 +780,17 @@ function TaskDetailSheet({
                             setCoUserSearch('');
                             markDirty();
                           }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/60 transition-colors text-left"
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
                           data-testid={`sheet-co-option-${p.id}`}
                         >
-                          <div className="h-5 w-5 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-[10px] font-bold flex-shrink-0">
+                          <div className="h-7 w-7 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-xs font-bold flex-shrink-0">
                             {(p.full_name ?? '?').charAt(0).toUpperCase()}
                           </div>
-                          <span className="font-medium truncate">{p.full_name ?? 'Unknown'}</span>
-                          <span className="text-muted-foreground capitalize text-[10px] ml-auto">{p.role}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{p.full_name ?? 'Unknown'}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{p.role}</p>
+                          </div>
+                          <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         </button>
                       ))}
                   </div>
@@ -776,168 +800,162 @@ function TaskDetailSheet({
           </div>
 
           {/* Description */}
-          <div className="space-y-1.5">
-            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <FileText className="h-2.5 w-2.5" />Description
-            </Label>
+          <div>
+            <SectionLabel icon={<FileText className="h-3.5 w-3.5" />}>Description</SectionLabel>
             <Textarea
               value={description}
               onChange={e => { setDescription(e.target.value); markDirty(); }}
               placeholder="Add a description…"
-              className="resize-none text-sm min-h-[72px]"
+              className="resize-none text-sm min-h-[80px] bg-muted/30 border-border/60 focus:border-[#1D3461]/40"
               data-testid="sheet-input-description"
             />
           </div>
 
           {/* Notes */}
-          <div className="space-y-1.5">
-            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <StickyNote className="h-2.5 w-2.5" />Notes
-            </Label>
+          <div>
+            <SectionLabel icon={<StickyNote className="h-3.5 w-3.5" />}>Notes</SectionLabel>
             <Textarea
               value={notes}
               onChange={e => { setNotes(e.target.value); markDirty(); }}
               placeholder="Add private notes, links, or context…"
-              className="resize-none text-sm min-h-[90px]"
+              className="resize-none text-sm min-h-[90px] bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/60 dark:border-amber-700/30 focus:border-amber-400/60"
               data-testid="sheet-input-notes"
             />
           </div>
 
           {/* Tags */}
-          <div className="space-y-1.5">
-            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <Tag className="h-2.5 w-2.5" />Tags
-            </Label>
+          <div>
+            <SectionLabel icon={<Tag className="h-3.5 w-3.5" />}>Tags</SectionLabel>
             {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-1.5">
+              <div className="flex flex-wrap gap-1.5 mb-2.5">
                 {tags.map(tag => (
-                  <span key={tag} className="flex items-center gap-1 text-[10px] bg-[#1D3461]/10 text-[#1D3461] border border-[#1D3461]/20 px-2 py-0.5 rounded-full font-medium">
-                    #{tag}
+                  <span key={tag} className="flex items-center gap-1 text-xs bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/20 px-2.5 py-1 rounded-full font-medium">
+                    <Hash className="h-3 w-3 opacity-60" />{tag}
                     <button type="button" onClick={() => handleRemoveTag(tag)} className="text-[#1D3461]/50 hover:text-[#1D3461] ml-0.5">
-                      <X className="h-2.5 w-2.5" />
+                      <X className="h-3 w-3" />
                     </button>
                   </span>
                 ))}
               </div>
             )}
-            <div className="flex gap-1.5">
+            <div className="flex gap-2">
               <Input
-                placeholder="Type tag and press Enter…"
+                placeholder="Type a tag and press Enter…"
                 value={tagInput}
                 onChange={e => setTagInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                className="h-8 text-xs flex-1"
+                className="h-9 text-sm flex-1"
                 data-testid="sheet-input-tag"
               />
-              <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-8 px-2.5 text-xs">
-                <Plus className="h-3 w-3 mr-1" />Add
+              <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-9 px-3 text-sm">
+                <Plus className="h-3.5 w-3.5 mr-1" />Add
               </Button>
             </div>
           </div>
 
           {/* Category */}
-          <div className="space-y-1.5">
-            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <Inbox className="h-2.5 w-2.5" />Category
-            </Label>
+          <div>
+            <SectionLabel icon={<Inbox className="h-3.5 w-3.5" />}>Category</SectionLabel>
             <Input
               value={category}
               onChange={e => { setCategory(e.target.value); markDirty(); }}
               placeholder="e.g. work, personal, follow-up"
-              className="h-8 text-xs"
+              className="h-9 text-sm"
             />
           </div>
 
           {/* Subtasks */}
-          <div className="space-y-1.5">
-            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <ListChecks className="h-2.5 w-2.5" />Subtasks
+          <div>
+            <SectionLabel icon={<ListChecks className="h-3.5 w-3.5" />}>
+              Subtasks
               {subtasks.length > 0 && (
-                <span className="ml-1 font-normal text-muted-foreground">{doneSubs}/{subtasks.length} done</span>
+                <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground">{doneSubs}/{subtasks.length} done</span>
               )}
-            </Label>
+            </SectionLabel>
             {subtasks.length > 0 && (
-              <div className="space-y-0.5 rounded-lg border bg-muted/20 p-2">
-                {subtasks.map(sub => {
-                  const subDone = sub.status === 'done';
-                  return (
-                    <div key={sub.id} className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/60 transition-colors" data-testid={`sheet-subtask-${sub.id}`}>
-                      <button
-                        type="button"
-                        onClick={() => onSubtaskStatusChange(sub.id, subDone ? 'todo' : 'done')}
-                        className={cn(
-                          'h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all',
-                          subDone ? 'bg-emerald-500 border-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
-                        )}
-                      >
-                        {subDone && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
-                      </button>
-                      <span className={cn('text-xs flex-1', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
-                      {sub.priority !== 'medium' && (
-                        <span className={cn('text-[9px] px-1 py-0.5 rounded-full', PRIORITY_CFG[sub.priority].color)}>{PRIORITY_CFG[sub.priority].label}</span>
-                      )}
-                    </div>
-                  );
-                })}
-                <div className="h-1 bg-muted rounded-full overflow-hidden mt-2">
+              <>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-2.5">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all"
                     style={{ width: `${subtasks.length > 0 ? Math.round((doneSubs / subtasks.length) * 100) : 0}%` }}
                   />
                 </div>
-              </div>
+                <div className="space-y-1 rounded-xl border bg-card p-2 mb-2">
+                  {subtasks.map((sub, idx) => {
+                    const subDone = sub.status === 'done';
+                    return (
+                      <div key={sub.id} className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors" data-testid={`sheet-subtask-${sub.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => onSubtaskStatusChange(sub.id, subDone ? 'todo' : 'done')}
+                          className={cn(
+                            'h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
+                            subDone ? 'bg-emerald-500 border-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
+                          )}
+                        >
+                          {subDone && <CheckCircle2 className="h-3 w-3 text-white" />}
+                        </button>
+                        <span className="text-[10px] text-muted-foreground w-4 flex-shrink-0 font-medium">{idx + 1}.</span>
+                        <span className={cn('text-sm flex-1', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
+                        {sub.priority !== 'medium' && (
+                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-semibold', PRIORITY_CFG[sub.priority].color)}>{PRIORITY_CFG[sub.priority].label}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
-            <div className="flex gap-1.5">
+            <div className="flex gap-2">
               <Input
-                placeholder="Add subtask…"
+                placeholder="Add a subtask…"
                 value={newSubtaskTitle}
                 onChange={e => setNewSubtaskTitle(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubtask(); } }}
-                className="h-8 text-xs flex-1"
+                className="h-9 text-sm flex-1"
                 data-testid="sheet-input-subtask"
               />
-              <Button size="sm" variant="outline" onClick={handleAddSubtask} disabled={!newSubtaskTitle.trim() || addingSubtask} className="h-8 px-2.5 text-xs">
-                {addingSubtask ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
-                {addingSubtask ? '' : 'Add'}
+              <Button size="sm" variant="outline" onClick={handleAddSubtask} disabled={!newSubtaskTitle.trim() || addingSubtask} className="h-9 px-3 text-sm">
+                {addingSubtask ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="h-3.5 w-3.5 mr-1" />Add</>}
               </Button>
             </div>
           </div>
 
           {/* Completion Reward */}
           {(task.completionRewardAmount || isAdmin) && (
-            <div className="space-y-1.5">
-              <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <DollarSign className="h-2.5 w-2.5" />Completion Reward
-              </Label>
+            <div>
+              <SectionLabel icon={<DollarSign className="h-3.5 w-3.5" />}>Completion Reward</SectionLabel>
               {isAdmin ? (
                 <div className="flex gap-2">
                   <Input
                     type="number" min="0" step="0.01" placeholder="Amount"
                     value={rewardAmount}
                     onChange={e => { setRewardAmount(e.target.value); markDirty(); }}
-                    className="h-8 text-xs flex-1"
+                    className="h-9 text-sm flex-1"
                   />
                   <Select value={rewardCurrency} onValueChange={v => { setRewardCurrency(v); markDirty(); }}>
-                    <SelectTrigger className="h-8 w-20 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-9 w-24 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
+                      {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c} className="text-sm">{c}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               ) : (
-                <p className="text-sm font-semibold text-emerald-600">{task.completionRewardCurrency} {task.completionRewardAmount?.toFixed(2)}</p>
+                <p className="text-base font-bold text-emerald-600">{task.completionRewardCurrency} {task.completionRewardAmount?.toFixed(2)}</p>
               )}
-              <p className="text-[10px] text-muted-foreground">Credited to wallet when task is marked done.</p>
+              <p className="text-xs text-muted-foreground mt-1">Credited to wallet when task is marked done.</p>
             </div>
           )}
         </div>
 
-        {/* Sticky footer */}
+        {/* ── Sticky footer ── */}
         {dirty && (
-          <div className="px-4 py-3 border-t flex items-center justify-end gap-2 flex-shrink-0 bg-card">
-            <Button variant="outline" size="sm" onClick={() => { setDirty(false); onClose(); }}>Discard</Button>
-            <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSaving} className="bg-[#1D3461] hover:bg-[#0F2041] text-white">
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+          <div className="px-5 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
+            <Button variant="ghost" size="sm" onClick={() => { setDirty(false); onClose(); }} className="text-muted-foreground">
+              Discard changes
+            </Button>
+            <Button onClick={handleSave} disabled={!title.trim() || isSaving} className="bg-[#1D3461] hover:bg-[#0F2041] text-white px-6">
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save Changes
             </Button>
           </div>
