@@ -290,9 +290,28 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles' },
-        (payload) => {
+        async (payload) => {
           const updated: any = (payload as any).new;
           if (!updated || !updated.id) return;
+
+          // If the updated profile belongs to the current user and their status
+          // changed to 'pending' or 'rejected', sign them out immediately so that
+          // admin approval changes take effect on active sessions.
+          const currentUserId = currentUserRef.current?.id;
+          if (updated.id === currentUserId) {
+            const newStatus = updated.status as string | undefined;
+            const currentRoleNorm = (currentUserRef.current?.role || '').toLowerCase().replace(/[\s_-]/g, '');
+            const isPrivileged = ['superadmin', 'admin', 'ict', 'fom', 'supervisor', 'hubsupervisor', 'datateam'].includes(currentRoleNorm);
+            if (!isPrivileged && (newStatus === 'pending' || newStatus === 'rejected')) {
+              toast({
+                title: i18n.t('notifications.auth.pendingApproval'),
+                description: i18n.t('notifications.auth.pendingApprovalDesc'),
+                variant: 'destructive',
+              });
+              await supabase.auth.signOut({ scope: 'local' });
+              return;
+            }
+          }
 
           let locationData: any | undefined = undefined;
           if (updated.location !== undefined) {
