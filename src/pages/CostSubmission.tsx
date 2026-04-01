@@ -190,7 +190,18 @@ const CostSubmission = () => {
   }>({ open: false, action: 'approve', tier: 1, submission: null });
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approvalProcessing, setApprovalProcessing] = useState(false);
-  
+
+  const [groupApprovalDialog, setGroupApprovalDialog] = useState<{
+    open: boolean;
+    action: 'approve' | 'reject';
+    tier: 1 | 2 | 3;
+    groupId: string;
+    groupTitle: string;
+    submissions: OperationalCostSubmission[];
+  }>({ open: false, action: 'approve', tier: 1, groupId: '', groupTitle: '', submissions: [] });
+  const [groupApprovalNotes, setGroupApprovalNotes] = useState('');
+  const [groupApprovalProcessing, setGroupApprovalProcessing] = useState(false);
+
   const [signatureModal, setSignatureModal] = useState<{
     open: boolean;
     submission: OperationalCostSubmission | null;
@@ -657,6 +668,81 @@ const CostSubmission = () => {
   const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3) => {
     setApprovalDialog({ open: true, action, tier, submission: oc });
     setApprovalNotes('');
+  };
+
+  const openGroupApprovalDialog = (
+    groupId: string,
+    groupTitle: string,
+    submissions: OperationalCostSubmission[],
+    action: 'approve' | 'reject',
+    tier: 1 | 2 | 3
+  ) => {
+    setGroupApprovalDialog({ open: true, action, tier, groupId, groupTitle, submissions });
+    setGroupApprovalNotes('');
+  };
+
+  const handleGroupApproval = async () => {
+    const { action, tier, groupId, submissions } = groupApprovalDialog;
+    if (!submissions.length || !currentUser?.id || !groupId) return;
+    setGroupApprovalProcessing(true);
+    try {
+      const now = new Date().toISOString();
+      const updates: Record<string, any> = {};
+
+      if (tier === 1) {
+        updates.tier1_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier1_approved_by = currentUser.id;
+        updates.tier1_approved_at = now;
+        updates.tier1_notes = groupApprovalNotes || null;
+        updates.status = action === 'approve' ? 'under_review' : 'rejected';
+        if (action === 'reject') updates.rejection_reason = groupApprovalNotes || 'Rejected at Tier 1';
+      } else if (tier === 2) {
+        updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier2_approved_by = currentUser.id;
+        updates.tier2_approved_at = now;
+        updates.tier2_notes = groupApprovalNotes || null;
+        const isFinal = !submissions.some(s => hasThreeTiers(s));
+        updates.status = action === 'approve' ? (isFinal ? 'approved' : 'under_review') : 'rejected';
+        if (action === 'reject') updates.rejection_reason = groupApprovalNotes || 'Rejected at Tier 2';
+        else if (action === 'approve' && !isFinal) { updates.tier3_status = 'pending'; }
+      } else if (tier === 3) {
+        updates.tier3_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier3_approved_by = currentUser.id;
+        updates.tier3_approved_at = now;
+        updates.tier3_notes = groupApprovalNotes || null;
+        updates.status = action === 'approve' ? 'approved' : 'rejected';
+        if (action === 'reject') updates.rejection_reason = groupApprovalNotes || 'Rejected at Tier 3';
+      }
+
+      const tierStatusKey = `tier${tier}_status` as const;
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update(updates)
+        .eq('request_group_id', groupId)
+        .eq(tierStatusKey, 'pending');
+
+      if (error) {
+        toast({ title: 'Group Approval Failed', description: error.message, variant: 'destructive', duration: 8000 });
+      } else {
+        const count = submissions.length;
+        toast({
+          title: action === 'approve'
+            ? `Group Approved (${count} items) / تمت الموافقة على المجموعة`
+            : `Group Rejected (${count} items) / تم رفض المجموعة`,
+          description: action === 'approve'
+            ? `All ${count} expense items have been approved at Tier ${tier}.`
+            : `All ${count} expense items have been rejected.`,
+          duration: 6000,
+        });
+        setGroupApprovalDialog(prev => ({ ...prev, open: false }));
+        setGroupApprovalNotes('');
+        await fetchOperationalCosts();
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setGroupApprovalProcessing(false);
+    }
   };
 
   const isFinalTier = (oc: OperationalCostSubmission, tier: 1 | 2 | 3): boolean => {
@@ -3067,21 +3153,58 @@ const CostSubmission = () => {
                         || 'Grouped Request';
                       const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
                       const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
+
+                      // Determine which tier the current user can approve for this group
+                      const groupApprovableTier: 1 | 2 | 3 | null =
+                        groupItems.some(o => canTier1Approve(o)) ? 1 :
+                        groupItems.some(o => canTier2Approve(o)) ? 2 :
+                        groupItems.some(o => canTier3Approve(o)) ? 3 : null;
+
                       return (
-                        <div className="px-4 py-3 bg-muted/40 border-b flex items-start justify-between gap-3 flex-wrap">
-                          <div className="flex-1 min-w-0 space-y-1">
-                            <p className="font-semibold text-[15px] leading-tight">{groupTitle}</p>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                              {linkedProjectName && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{linkedProjectName}</span>}
-                              {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{submitterName}</span>}
-                              <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
-                              <Badge variant="secondary" className="text-[11px] h-5">{groupItems.length} expense items</Badge>
+                        <div className="px-4 py-3 bg-muted/40 border-b space-y-2">
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <p className="font-semibold text-[15px] leading-tight">{groupTitle}</p>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                                {linkedProjectName && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{linkedProjectName}</span>}
+                                {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{submitterName}</span>}
+                                <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
+                                <Badge variant="secondary" className="text-[11px] h-5">{groupItems.length} expense items</Badge>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                              <span className="font-bold text-lg tabular-nums">{currency} {(totalCents / 100).toLocaleString()}</span>
+                              <span className="text-[11px] text-muted-foreground">Total</span>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            <span className="font-bold text-lg tabular-nums">{currency} {(totalCents / 100).toLocaleString()}</span>
-                            <span className="text-[11px] text-muted-foreground">Total</span>
-                          </div>
+
+                          {groupApprovableTier !== null && groupId && (
+                            <div className="flex items-center gap-2 pt-1 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, groupItems, 'approve', groupApprovableTier)}
+                                data-testid={`button-group-approve-all-${groupId}`}
+                              >
+                                <ThumbsUp className="h-3.5 w-3.5 mr-1.5" />
+                                Approve All ({groupItems.length} items) — T{groupApprovableTier}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-8 px-3 text-xs"
+                                onClick={() => openGroupApprovalDialog(groupId, groupTitle, groupItems, 'reject', groupApprovableTier)}
+                                data-testid={`button-group-reject-all-${groupId}`}
+                              >
+                                <ThumbsDown className="h-3.5 w-3.5 mr-1.5" />
+                                Reject All
+                              </Button>
+                              <span className="text-[11px] text-muted-foreground italic">
+                                or review items individually below
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })() : null;
@@ -3389,7 +3512,7 @@ const CostSubmission = () => {
                           )}
 
                           <div className="flex items-center gap-2 pt-1 border-t flex-wrap">
-                            {canTier1Approve(oc) && (
+                            {!isMultiItem && canTier1Approve(oc) && (
                               <>
                                 <Button
                                   size="sm"
@@ -3411,7 +3534,7 @@ const CostSubmission = () => {
                                 </Button>
                               </>
                             )}
-                            {canTier2Approve(oc) && (
+                            {!isMultiItem && canTier2Approve(oc) && (
                               <>
                                 <Button
                                   size="sm"
@@ -3433,7 +3556,7 @@ const CostSubmission = () => {
                                 </Button>
                               </>
                             )}
-                            {canTier3Approve(oc) && (
+                            {!isMultiItem && canTier3Approve(oc) && (
                               <>
                                 <Button
                                   size="sm"
@@ -3455,7 +3578,7 @@ const CostSubmission = () => {
                                 </Button>
                               </>
                             )}
-                            {canFOMBypass(oc) && (
+                            {!isMultiItem && canFOMBypass(oc) && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -4040,6 +4163,108 @@ const CostSubmission = () => {
               {approvalProcessing ? 'Processing... / جارٍ المعالجة...' : approvalDialog.action === 'approve' 
                 ? (approvalDialog.submission && shouldRequireSignature(approvalDialog.submission, approvalDialog.tier) ? 'Sign & Approve / توقيع وموافقة' : 'Confirm Approval / تأكيد الموافقة') 
                 : 'Confirm Rejection / تأكيد الرفض'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Group Approval Dialog ────────────────────────────────────────── */}
+      <Dialog
+        open={groupApprovalDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGroupApprovalDialog(prev => ({ ...prev, open: false }));
+            setGroupApprovalNotes('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {groupApprovalDialog.action === 'approve'
+                ? `Approve All Items — Tier ${groupApprovalDialog.tier}`
+                : `Reject All Items — Tier ${groupApprovalDialog.tier}`}
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">
+                {groupApprovalDialog.action === 'approve' ? 'الموافقة على جميع البنود' : 'رفض جميع البنود'}
+              </span>
+            </DialogTitle>
+            <DialogDescription>
+              {groupApprovalDialog.action === 'approve'
+                ? `You are about to approve all ${groupApprovalDialog.submissions.length} expense items in this request at Tier ${groupApprovalDialog.tier} in one action.`
+                : `You are about to reject all ${groupApprovalDialog.submissions.length} expense items in this request.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            <div className="rounded-lg bg-muted/50 p-3 space-y-2">
+              <p className="font-semibold text-sm">{groupApprovalDialog.groupTitle || 'Grouped Request'}</p>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{groupApprovalDialog.submissions.length} expense items</span>
+                {groupApprovalDialog.submissions.length > 0 && (
+                  <span className="font-bold tabular-nums">
+                    {groupApprovalDialog.submissions[0]?.currency}{' '}
+                    {(groupApprovalDialog.submissions.reduce((s, o) => s + o.amount_cents, 0) / 100).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1 max-h-36 overflow-y-auto">
+                {groupApprovalDialog.submissions.map(s => {
+                  const catMeta = EXPENSE_CATEGORY_MAP[s.expense_category];
+                  const CatIcon = catMeta?.icon;
+                  return (
+                    <div key={s.id} className="flex items-center justify-between text-xs py-0.5 border-b last:border-0">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        {CatIcon && <CatIcon className="h-3 w-3" />}
+                        {catMeta?.label || s.expense_category}
+                      </span>
+                      <span className="tabular-nums font-medium">{s.currency} {(s.amount_cents / 100).toLocaleString()}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="group-approval-notes">
+                {groupApprovalDialog.action === 'approve' ? 'Notes (optional)' : 'Reason for rejection'}
+                <span dir="rtl" className="text-xs font-normal text-muted-foreground ml-2">
+                  {groupApprovalDialog.action === 'approve' ? '/ ملاحظات' : '/ سبب الرفض'}
+                </span>
+              </Label>
+              <Textarea
+                id="group-approval-notes"
+                placeholder={groupApprovalDialog.action === 'approve'
+                  ? 'Optional notes for all items...'
+                  : 'Required: provide a reason for rejecting all items...'}
+                value={groupApprovalNotes}
+                onChange={e => setGroupApprovalNotes(e.target.value)}
+                className="min-h-[80px] resize-none"
+                data-testid="textarea-group-approval-notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setGroupApprovalDialog(prev => ({ ...prev, open: false })); setGroupApprovalNotes(''); }}
+              disabled={groupApprovalProcessing}
+              data-testid="button-group-approval-cancel"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              variant={groupApprovalDialog.action === 'approve' ? 'default' : 'destructive'}
+              onClick={handleGroupApproval}
+              disabled={groupApprovalProcessing || (groupApprovalDialog.action === 'reject' && !groupApprovalNotes.trim())}
+              className={groupApprovalDialog.action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+              data-testid="button-group-approval-confirm"
+            >
+              {groupApprovalProcessing
+                ? `Processing ${groupApprovalDialog.submissions.length} items... / جارٍ المعالجة...`
+                : groupApprovalDialog.action === 'approve'
+                  ? `Approve All (${groupApprovalDialog.submissions.length}) / الموافقة على الكل`
+                  : `Reject All (${groupApprovalDialog.submissions.length}) / رفض الكل`}
             </Button>
           </DialogFooter>
         </DialogContent>
