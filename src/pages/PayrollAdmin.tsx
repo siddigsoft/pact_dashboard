@@ -69,7 +69,7 @@ interface PayrollRun {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP'];
+const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'UGX', 'RWF'];
 const fmt = (n: number, c = 'SDG') =>
   `${c} ${(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 

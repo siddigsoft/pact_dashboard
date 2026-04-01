@@ -116,7 +116,7 @@ export interface WalletStats {
   weeklySiteVisits?: number;
 }
 
-export const SUPPORTED_CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'SAR', 'AED'] as const;
+export const SUPPORTED_CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'UGX', 'RWF'] as const;
 export type SupportedCurrency = typeof SUPPORTED_CURRENCIES[number];
 
 export const DEFAULT_CURRENCY = 'SDG';
