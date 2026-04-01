@@ -42,11 +42,11 @@ const PAGES = [
   {
     id: "task-admin",
     label: "Payroll",
-    url: "/task-admin",
+    url: "/payroll",
     icon: Banknote,
     color: "#D97706",
     light: "#FEF3C7",
-    adminOnly: true,
+    adminOnly: false,
   },
 ];
 

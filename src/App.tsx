@@ -66,6 +66,7 @@ const RoleManagement = lazy(() => import('./pages/RoleManagement'));
 const MonitoringPlanPage = lazy(() => import('./pages/MonitoringPlanPage'));
 const GlobalSearchPage = lazy(() => import('./pages/GlobalSearchPage'));
 const WalletPage = lazy(() => import('./pages/Wallet'));
+const PayrollPage = lazy(() => import('./pages/Payroll'));
 const AdminWallets = lazy(() => import('./pages/AdminWallets'));
 const AdminWalletDetail = lazy(() => import('./pages/AdminWalletDetail'));
 const WithdrawalApproval = lazy(() => import('./pages/WithdrawalApproval'));
@@ -319,6 +320,7 @@ const AppRoutes = () => {
         <Route path="/notification-analytics" element={<NotificationAnalytics />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
+        <Route path="/payroll" element={<PayrollPage />} />
         <Route path="/admin/wallets" element={<AdminWallets />} />
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
