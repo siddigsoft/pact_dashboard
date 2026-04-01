@@ -1042,66 +1042,364 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
 // Planning tip data — one per day, rotating by day-of-year
 const PLANNING_TIPS = [
   {
-    icon: '🐸',
+    icon: '🐸', vizType: 'frog',
     title: 'Eat the Frog First',
     text: 'Tackle your hardest or most important task first thing each day. Once it\'s done, everything else feels easier.',
     tag: 'Productivity',
-    from: '#f59e0b',
-    to: '#ea580c',
+    from: '#f59e0b', to: '#ea580c',
     tagBg: 'bg-amber-100 dark:bg-amber-900/40',
     tagColor: 'text-amber-700 dark:text-amber-300',
   },
   {
-    icon: '⏱',
+    icon: '⏱', vizType: 'twomin',
     title: '2-Minute Rule',
     text: 'If a task takes less than 2 minutes to complete, do it immediately instead of adding it to your list.',
     tag: 'GTD',
-    from: '#10b981',
-    to: '#0891b2',
+    from: '#10b981', to: '#0891b2',
     tagBg: 'bg-emerald-100 dark:bg-emerald-900/40',
     tagColor: 'text-emerald-700 dark:text-emerald-300',
   },
   {
-    icon: '📊',
+    icon: '📊', vizType: 'matrix',
     title: 'Eisenhower Matrix',
     text: 'Sort tasks by Urgency and Importance. Do urgent+important now, schedule important tasks, delegate urgent ones, drop the rest.',
     tag: 'Prioritisation',
-    from: '#3b82f6',
-    to: '#1D3461',
+    from: '#3b82f6', to: '#1D3461',
     tagBg: 'bg-blue-100 dark:bg-blue-900/40',
     tagColor: 'text-blue-700 dark:text-blue-300',
   },
   {
-    icon: '📦',
+    icon: '⏰', vizType: 'blocks',
     title: 'Time Blocking',
     text: 'Reserve fixed slots in your calendar for focused work on specific tasks. Protect those blocks from meetings and interruptions.',
     tag: 'Focus',
-    from: '#7c3aed',
-    to: '#4f46e5',
+    from: '#7c3aed', to: '#4f46e5',
     tagBg: 'bg-violet-100 dark:bg-violet-900/40',
     tagColor: 'text-violet-700 dark:text-violet-300',
   },
   {
-    icon: '🔁',
+    icon: '🔁', vizType: 'review',
     title: 'Weekly Review',
     text: 'Set aside 30 minutes every Friday to review what got done, reschedule anything overdue, and plan the following week.',
     tag: 'Habit',
-    from: '#0ea5e9',
-    to: '#6366f1',
+    from: '#0ea5e9', to: '#6366f1',
     tagBg: 'bg-sky-100 dark:bg-sky-900/40',
     tagColor: 'text-sky-700 dark:text-sky-300',
   },
   {
-    icon: '🎯',
+    icon: '🎯', vizType: 'mit',
     title: 'MIT — Most Important Tasks',
     text: 'Every morning, identify your 3 Most Important Tasks. Complete those first before touching anything else.',
     tag: 'Focus',
-    from: '#e11d48',
-    to: '#9333ea',
+    from: '#e11d48', to: '#9333ea',
     tagBg: 'bg-rose-100 dark:bg-rose-900/40',
     tagColor: 'text-rose-700 dark:text-rose-300',
   },
 ];
+
+// ── Per-tip interactive mini visualisations ───────────────────────────────────
+function TipVisual({ vizType, from, to }: { vizType: string; from: string; to: string }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [active, setActive] = useState<'yes' | 'no' | null>(null);
+  const [checked, setChecked] = useState<Set<number>>(new Set([0, 1]));
+  const [done, setDone] = useState<Set<number>>(new Set());
+
+  // 1. Eat the Frog — energy level bar chart across the day
+  if (vizType === 'frog') {
+    const bars = [
+      { label: '8 AM', energy: 92, note: 'Peak zone 🐸' },
+      { label: '10 AM', energy: 75, note: 'Still strong' },
+      { label: '12 PM', energy: 54, note: 'Fading fast' },
+      { label: '2 PM', energy: 35, note: 'Post-lunch dip' },
+      { label: '4 PM', energy: 48, note: 'Small recovery' },
+    ];
+    return (
+      <div className="mt-4 space-y-2">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+          <span>⚡</span> Mental Energy Through the Day
+        </p>
+        {bars.map((b, i) => (
+          <div
+            key={b.label}
+            className="flex items-center gap-3 cursor-default group"
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <span className="text-[11px] font-semibold w-10 text-right text-muted-foreground">{b.label}</span>
+            <div className="flex-1 h-5 rounded-full bg-black/6 dark:bg-white/10 overflow-hidden relative">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${b.energy}%`,
+                  background: `linear-gradient(90deg, ${from}, ${to})`,
+                  opacity: hovered === i ? 1 : 0.75,
+                }}
+              />
+              {hovered === i && (
+                <span className="absolute inset-0 flex items-center px-2.5 text-[10px] font-bold text-white">{b.note}</span>
+              )}
+            </div>
+            <span className="text-[11px] font-bold w-8" style={{ color: from }}>{b.energy}%</span>
+          </div>
+        ))}
+        <p className="text-[10px] text-muted-foreground mt-1">Hover a bar — tackle the 🐸 at 8 AM when energy peaks.</p>
+      </div>
+    );
+  }
+
+  // 2. 2-Minute Rule — decision flowchart
+  if (vizType === 'twomin') {
+    return (
+      <div className="mt-4">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+          <span>🔀</span> Decision Flow — New Task Arrives
+        </p>
+        <div className="flex flex-col items-center gap-2">
+          {/* Trigger node */}
+          <div
+            className="rounded-xl border-2 px-4 py-2 text-sm font-bold text-center w-full"
+            style={{ borderColor: from, color: from, background: `${from}12` }}
+          >
+            📥 New task lands on your plate
+          </div>
+          {/* Arrow */}
+          <div className="w-0.5 h-4" style={{ background: from }} />
+          {/* Decision diamond */}
+          <div
+            className="relative flex items-center justify-center rounded-xl border-2 px-4 py-2 text-sm font-bold w-full text-center"
+            style={{ borderColor: to, color: to, background: `${to}12` }}
+          >
+            ⏱ Does it take &lt; 2 minutes?
+          </div>
+          {/* Two branches */}
+          <div className="w-full flex gap-3 mt-1">
+            <button
+              type="button"
+              onMouseEnter={() => setActive('yes')}
+              onMouseLeave={() => setActive(null)}
+              className="flex-1 rounded-xl border-2 p-3 text-center transition-all duration-200 cursor-default"
+              style={{
+                borderColor: '#10b981',
+                background: active === 'yes' ? '#10b98122' : '#10b98108',
+              }}
+            >
+              <p className="text-base font-black text-emerald-600">✅ YES</p>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">Do it RIGHT NOW</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Don't add to list — just act.</p>
+            </button>
+            <button
+              type="button"
+              onMouseEnter={() => setActive('no')}
+              onMouseLeave={() => setActive(null)}
+              className="flex-1 rounded-xl border-2 p-3 text-center transition-all duration-200 cursor-default"
+              style={{
+                borderColor: '#f59e0b',
+                background: active === 'no' ? '#f59e0b22' : '#f59e0b08',
+              }}
+            >
+              <p className="text-base font-black text-amber-600">📋 NO</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold mt-0.5">Add to task list</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Schedule with priority & date.</p>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Eisenhower Matrix — 2×2 interactive grid
+  if (vizType === 'matrix') {
+    const quads = [
+      { label: 'DO NOW', sub: 'Urgent + Important', icon: '🔥', color: '#ef4444', bg: '#fef2f2', dark: '#450a0a', q: 0 },
+      { label: 'SCHEDULE', sub: 'Not Urgent + Important', icon: '📅', color: '#3b82f6', bg: '#eff6ff', dark: '#1e1b4b', q: 1 },
+      { label: 'DELEGATE', sub: 'Urgent + Not Important', icon: '🤝', color: '#f59e0b', bg: '#fffbeb', dark: '#451a03', q: 2 },
+      { label: 'ELIMINATE', sub: 'Not Urgent + Not Important', icon: '🗑️', color: '#6b7280', bg: '#f9fafb', dark: '#111827', q: 3 },
+    ];
+    return (
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><span>🧭</span> Task Quadrants</p>
+          <div className="flex gap-3 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">← Low Urgency <span className="font-bold">High →</span></span>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {quads.map((q) => (
+            <button
+              key={q.q}
+              type="button"
+              onMouseEnter={() => setHovered(q.q)}
+              onMouseLeave={() => setHovered(null)}
+              className="rounded-xl p-3 text-left border-2 transition-all duration-200 cursor-default"
+              style={{
+                borderColor: hovered === q.q ? q.color : `${q.color}40`,
+                background: hovered === q.q ? `${q.color}18` : `${q.color}08`,
+              }}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-base">{q.icon}</span>
+                <span className="text-xs font-black tracking-wide" style={{ color: q.color }}>{q.label}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-tight">{q.sub}</p>
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">Hover each quadrant to explore — aim for more blue, less red.</p>
+      </div>
+    );
+  }
+
+  // 4. Time Blocking — visual day schedule
+  if (vizType === 'blocks') {
+    const schedule = [
+      { time: '8–10', label: 'Deep Work', icon: '🧠', w: 2, color: '#7c3aed' },
+      { time: '10–11', label: 'Team Standup', icon: '🤝', w: 1, color: '#f59e0b' },
+      { time: '11–12', label: 'Deep Work', icon: '🧠', w: 1, color: '#7c3aed' },
+      { time: '12–1', label: 'Lunch Break', icon: '🥗', w: 1, color: '#10b981' },
+      { time: '1–3', label: 'Meetings', icon: '📞', w: 2, color: '#0ea5e9' },
+      { time: '3–5', label: 'Email & Admin', icon: '📧', w: 2, color: '#6366f1' },
+    ];
+    return (
+      <div className="mt-4">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+          <span>🗓️</span> Sample Blocked Day
+        </p>
+        <div className="space-y-2">
+          {schedule.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+              className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 border transition-all duration-200 cursor-default text-left"
+              style={{
+                borderColor: hovered === i ? s.color : `${s.color}40`,
+                background: hovered === i ? `${s.color}18` : `${s.color}08`,
+              }}
+            >
+              <span className="text-sm w-5">{s.icon}</span>
+              <span className="text-[11px] font-bold text-muted-foreground w-12 flex-shrink-0">{s.time}</span>
+              <div className="flex-1 h-4 rounded-full overflow-hidden bg-black/5 dark:bg-white/10">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{ width: `${(s.w / 2) * 100}%`, background: s.color, opacity: hovered === i ? 1 : 0.6 }}
+                />
+              </div>
+              <span className="text-[11px] font-semibold" style={{ color: s.color }}>{s.label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">Guard 🧠 blocks fiercely — they're your highest-value time.</p>
+      </div>
+    );
+  }
+
+  // 5. Weekly Review — checklist with progress
+  if (vizType === 'review') {
+    const items = [
+      { icon: '✅', label: 'Review all completed tasks' },
+      { icon: '📅', label: 'Reschedule overdue items' },
+      { icon: '🎯', label: 'Set next week\'s 3 MITs' },
+      { icon: '🗑️', label: 'Delete or delegate stale tasks' },
+      { icon: '📊', label: 'Check progress against goals' },
+    ];
+    const pct = Math.round((checked.size / items.length) * 100);
+    return (
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5"><span>📋</span> Friday Review Checklist</p>
+          <span className="text-xs font-black" style={{ color: from }}>{pct}% done</span>
+        </div>
+        {/* Progress bar */}
+        <div className="h-2 rounded-full bg-black/6 dark:bg-white/10 mb-3 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${from}, ${to})` }}
+          />
+        </div>
+        <div className="space-y-1.5">
+          {items.map((item, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setChecked(prev => {
+                const next = new Set(prev);
+                next.has(i) ? next.delete(i) : next.add(i);
+                return next;
+              })}
+              className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 border transition-all duration-200 text-left cursor-pointer"
+              style={{
+                borderColor: checked.has(i) ? from : '#e5e7eb',
+                background: checked.has(i) ? `${from}12` : 'transparent',
+              }}
+            >
+              <div
+                className="h-4 w-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all"
+                style={{
+                  borderColor: checked.has(i) ? from : '#9ca3af',
+                  background: checked.has(i) ? from : 'transparent',
+                }}
+              >
+                {checked.has(i) && <span className="text-white text-[9px] font-black">✓</span>}
+              </div>
+              <span className="text-xs font-semibold" style={{ color: checked.has(i) ? from : undefined, textDecoration: checked.has(i) ? 'line-through' : 'none', opacity: checked.has(i) ? 0.7 : 1 }}>
+                {item.icon} {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">Click items to check off — this is a live demo!</p>
+      </div>
+    );
+  }
+
+  // 6. MIT — Top 3 ranked tasks
+  if (vizType === 'mit') {
+    const tasks = [
+      { rank: 1, label: 'Finish field report for Khartoum site', impact: 'High' },
+      { rank: 2, label: 'Submit MMP update before 5 PM', impact: 'High' },
+      { rank: 3, label: 'Review coordinator feedback notes', impact: 'Medium' },
+    ];
+    const rankColors = ['#e11d48', '#f59e0b', '#3b82f6'];
+    return (
+      <div className="mt-4">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
+          <span>⭐</span> Your 3 Most Important Tasks Today
+        </p>
+        <div className="space-y-2">
+          {tasks.map((t, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setDone(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+              className="w-full flex items-center gap-3 rounded-xl p-3 border-2 transition-all duration-200 text-left cursor-pointer"
+              style={{
+                borderColor: done.has(i) ? '#10b981' : rankColors[i],
+                background: done.has(i) ? '#10b98112' : `${rankColors[i]}0e`,
+              }}
+            >
+              <div
+                className="h-7 w-7 rounded-lg flex items-center justify-center text-white font-black text-sm flex-shrink-0"
+                style={{ background: done.has(i) ? '#10b981' : rankColors[i] }}
+              >
+                {done.has(i) ? '✓' : `#${t.rank}`}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold leading-tight" style={{ textDecoration: done.has(i) ? 'line-through' : 'none', opacity: done.has(i) ? 0.5 : 1 }}>{t.label}</p>
+                <span className="text-[10px] font-bold" style={{ color: done.has(i) ? '#10b981' : rankColors[i] }}>
+                  {done.has(i) ? '✅ Done!' : `Impact: ${t.impact}`}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">Tap tasks to mark done — tackle #1 before anything else.</p>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 interface PlanningHubProps {
   allTasks: Array<{ dueDate?: string | null; status: string; priority?: string }>;
@@ -1394,40 +1692,48 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
               className="relative rounded-2xl overflow-hidden p-px"
               style={{ background: `linear-gradient(135deg, ${tip.from}, ${tip.to})` }}
             >
-              <div className="relative rounded-2xl bg-white dark:bg-[#0f1117] p-4 flex gap-4 items-start">
-                {/* Coloured icon blob */}
-                <div
-                  className="flex-shrink-0 h-14 w-14 rounded-xl flex items-center justify-center text-3xl shadow-sm"
-                  style={{ background: `linear-gradient(135deg, ${tip.from}22, ${tip.to}33)` }}
-                >
-                  {tip.icon}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  {/* Today's tip badge */}
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${tip.tagBg} ${tip.tagColor}`}>
-                      {tip.tag}
-                    </span>
-                    {tipIdx === dailyIdx && (
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-                        ✦ Today's Tip
-                      </span>
-                    )}
+              <div className="relative rounded-2xl bg-white dark:bg-[#0f1117] p-5">
+                {/* Top row — icon + title + badges */}
+                <div className="flex gap-4 items-start">
+                  {/* Coloured icon blob */}
+                  <div
+                    className="flex-shrink-0 h-16 w-16 rounded-2xl flex items-center justify-center text-4xl shadow-md"
+                    style={{ background: `linear-gradient(135deg, ${tip.from}28, ${tip.to}3a)` }}
+                  >
+                    {tip.icon}
                   </div>
 
-                  <p
-                    className="text-base font-extrabold leading-tight mb-1.5"
-                    style={{ background: `linear-gradient(135deg, ${tip.from}, ${tip.to})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
-                  >
-                    {tip.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{tip.text}</p>
+                  <div className="flex-1 min-w-0">
+                    {/* Badges */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase ${tip.tagBg} ${tip.tagColor}`}>
+                        {tip.tag}
+                      </span>
+                      {tipIdx === dailyIdx && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                          ✦ Today's Tip
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    <p
+                      className="text-xl font-black leading-tight mb-2"
+                      style={{ background: `linear-gradient(135deg, ${tip.from}, ${tip.to})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
+                    >
+                      {tip.title}
+                    </p>
+                    {/* Body text */}
+                    <p className="text-sm text-muted-foreground leading-relaxed">{tip.text}</p>
+                  </div>
                 </div>
+
+                {/* Interactive chart / visual for this tip */}
+                <TipVisual vizType={tip.vizType} from={tip.from} to={tip.to} />
 
                 {/* Decorative blurred orb in corner */}
                 <div
-                  className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-bl-3xl opacity-10"
+                  className="pointer-events-none absolute right-0 top-0 h-24 w-24 rounded-bl-3xl opacity-10"
                   style={{ background: `radial-gradient(circle at top right, ${tip.from}, transparent 70%)` }}
                 />
               </div>
