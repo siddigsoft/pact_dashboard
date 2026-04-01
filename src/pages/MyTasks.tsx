@@ -621,29 +621,29 @@ function TaskDetailSheet({
       <DialogContent className="max-w-4xl w-full flex flex-col p-0 gap-0 overflow-hidden max-h-[92vh] [&>button:last-child]:hidden">
 
         {/* ── Header ── */}
-        <div className="flex-shrink-0 bg-gradient-to-br from-[#0F2041] to-[#1D3461] px-6 pt-5 pb-4">
+        <div className="flex-shrink-0 bg-[#0a0a0a] px-6 pt-6 pb-5">
           {/* Top row: priority dot + title + actions */}
           <div className="flex items-start gap-3">
-            <div className={cn('h-2.5 w-2.5 rounded-full mt-2 flex-shrink-0 ring-2 ring-white/20', pCfg.dot)} />
+            <div className={cn('h-3 w-3 rounded-full mt-2.5 flex-shrink-0 ring-2 ring-white/20', pCfg.dot)} />
             <DialogTitle asChild className="flex-1 min-w-0">
               <input
                 value={title}
                 onChange={e => { setTitle(e.target.value); markDirty(); }}
-                className="text-[18px] font-bold leading-snug w-full bg-transparent border-0 outline-none text-white placeholder:text-white/40 focus:bg-white/5 rounded px-1 -ml-1 transition-colors"
+                className="text-[22px] font-bold leading-snug w-full bg-transparent border-0 outline-none text-white placeholder:text-white/40 focus:bg-white/5 rounded px-1 -ml-1 transition-colors"
                 data-testid="sheet-input-title"
               />
             </DialogTitle>
-            <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+            <div className="flex items-center gap-2 flex-shrink-0 mt-1">
               {dirty && (
                 <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSaving}
-                  className="h-7 px-3 text-xs bg-white/15 hover:bg-white/25 text-white border border-white/20">
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Save
+                  className="h-8 px-4 text-sm bg-white/15 hover:bg-white/25 text-white border border-white/20">
+                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}Save
                 </Button>
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-white/60 hover:text-white hover:bg-white/10">
-                    <MoreHorizontal className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-white/60 hover:text-white hover:bg-white/10">
+                    <MoreHorizontal className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -656,35 +656,35 @@ function TaskDetailSheet({
           </div>
 
           {/* Meta badges row */}
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-[11px] text-white/50">
+          <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            <span className="text-[12px] text-white/50">
               Created {format(parseISO(task.createdAt), 'dd MMM yyyy')}
             </span>
             {task.assignedToName && (
-              <span className="text-[11px] text-white/70 flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-full">
-                <User className="h-3 w-3" />{task.assignedToName}
+              <span className="text-[12px] text-white/70 flex items-center gap-1 bg-white/10 px-2.5 py-0.5 rounded-full">
+                <User className="h-3.5 w-3.5" />{task.assignedToName}
               </span>
             )}
             {task.recurrence && task.recurrence !== 'none' && (
-              <span className="text-[11px] bg-blue-400/20 text-blue-200 border border-blue-300/20 px-2 py-0.5 rounded-full capitalize">
+              <span className="text-[12px] bg-blue-400/20 text-blue-200 border border-blue-300/20 px-2.5 py-0.5 rounded-full capitalize">
                 {task.recurrence}
               </span>
             )}
             {overdue && !dirty && (
-              <span className="text-[11px] text-red-300 font-semibold flex items-center gap-1 bg-red-500/20 px-2 py-0.5 rounded-full">
-                <AlertTriangle className="h-3 w-3" />Overdue
+              <span className="text-[12px] text-red-300 font-semibold flex items-center gap-1 bg-red-500/20 px-2.5 py-0.5 rounded-full">
+                <AlertTriangle className="h-3.5 w-3.5" />Overdue
               </span>
             )}
           </div>
 
           {/* Status/Priority/Due pill row */}
-          <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className="grid grid-cols-3 gap-3 mt-4">
             {/* Status */}
             <Select value={status} onValueChange={v => { setStatus(v as PersonalTaskStatus); markDirty(); }}>
-              <SelectTrigger className="h-9 bg-white/10 border-white/20 text-white text-xs hover:bg-white/15 focus:ring-white/20">
-                <div className="flex flex-col items-start gap-0.5">
-                  <span className="text-[9px] text-white/50 uppercase tracking-widest leading-none">Status</span>
-                  <span className={cn('text-[11px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_CFG[status]?.color)}>
+              <SelectTrigger className="h-11 bg-white/10 border-white/20 text-white hover:bg-white/15 focus:ring-white/20">
+                <div className="flex flex-col items-start gap-1">
+                  <span className="text-[10px] text-white/50 uppercase tracking-widest leading-none">Status</span>
+                  <span className={cn('text-[13px] font-semibold px-2 py-0.5 rounded-full', STATUS_CFG[status]?.color)}>
                     {STATUS_CFG[status]?.label}
                   </span>
                 </div>
@@ -692,7 +692,7 @@ function TaskDetailSheet({
               <SelectContent>
                 {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
                   <SelectItem key={s} value={s} className="text-sm">
-                    <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
+                    <span className={cn('px-2 py-0.5 rounded-full text-[12px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -700,10 +700,10 @@ function TaskDetailSheet({
 
             {/* Priority */}
             <Select value={priority} onValueChange={v => { setPriority(v as PersonalTaskPriority); markDirty(); }}>
-              <SelectTrigger className="h-9 bg-white/10 border-white/20 text-white text-xs hover:bg-white/15 focus:ring-white/20">
-                <div className="flex flex-col items-start gap-0.5">
-                  <span className="text-[9px] text-white/50 uppercase tracking-widest leading-none">Priority</span>
-                  <span className={cn('text-[11px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
+              <SelectTrigger className="h-11 bg-white/10 border-white/20 text-white hover:bg-white/15 focus:ring-white/20">
+                <div className="flex flex-col items-start gap-1">
+                  <span className="text-[10px] text-white/50 uppercase tracking-widest leading-none">Priority</span>
+                  <span className={cn('text-[13px] font-semibold px-2 py-0.5 rounded-full', pCfg.color)}>
                     {pCfg.label}
                   </span>
                 </div>
@@ -711,21 +711,21 @@ function TaskDetailSheet({
               <SelectContent>
                 {(['low', 'medium', 'high', 'critical'] as PersonalTaskPriority[]).map(p => (
                   <SelectItem key={p} value={p} className="text-sm">
-                    <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', PRIORITY_CFG[p].color)}>{PRIORITY_CFG[p].label}</span>
+                    <span className={cn('px-2 py-0.5 rounded-full text-[12px] font-semibold', PRIORITY_CFG[p].color)}>{PRIORITY_CFG[p].label}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             {/* Due Date */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] text-white/50 uppercase tracking-widest leading-none pl-0.5 pt-1">Due Date</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-white/50 uppercase tracking-widest leading-none pl-0.5 pt-1">Due Date</span>
               <Input
                 type="date"
                 value={dueDate}
                 onChange={e => { setDueDate(e.target.value); markDirty(); }}
                 className={cn(
-                  'h-7 text-xs bg-white/10 border-white/20 text-white [color-scheme:dark] focus:ring-white/20',
+                  'h-9 text-sm bg-white/10 border-white/20 text-white [color-scheme:dark] focus:ring-white/20',
                   overdue && !dueDate && 'border-red-400/60',
                 )}
               />
