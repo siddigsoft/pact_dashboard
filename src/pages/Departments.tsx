@@ -1102,7 +1102,7 @@ function OrgChartTab({ profiles, departments }: { profiles: Profile[]; departmen
       {/* Reporting Chain */}
       {mode === "reporting" && (
         roots.length === 0 ? (
-          <EmptyOrgState icon={<Network className="h-10 w-10 mx-auto mb-3 opacity-30" />} message='No reporting relationships configured' sub='Set "Reports To" in each employee's profile to build the reporting chain.' />
+          <EmptyOrgState icon={<Network className="h-10 w-10 mx-auto mb-3 opacity-30" />} message="No reporting relationships configured" sub={'Set "Reports To" in each employee\'s profile to build the reporting chain.'} />
         ) : (
           <div className="bg-muted/10 rounded-xl border p-4">
             {roots.map(r => (
