@@ -313,7 +313,7 @@ function Kpi({ label, value, color }: { label: string; value: string; color: str
 // ══════════════════════════════════════════════════════════════════════════════
 function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; loading: boolean }) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'configured' | 'missing'>('all');
+  const [filter, setFilter] = useState<'all' | 'configured' | 'missing'>('configured');
   const [editEmp, setEditEmp] = useState<EmployeeRow | null>(null);
 
   const filtered = useMemo(() => {
@@ -326,10 +326,10 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
 
   return (
     <div className="space-y-4">
-      {/* Employment Record notice */}
+      {/* Notice */}
       <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/40 text-sm text-blue-800 dark:text-blue-200">
         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
-        <p>Only employees with an <strong>Employment Record</strong> (employment type set in their profile) appear here. To add an employee, set their Employment Type in their user profile first.</p>
+        <p>Showing only <strong>configured</strong> employees by default. Switch to <strong>Not configured</strong> or <strong>All employees</strong> using the filter to set up new salary packages.</p>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
