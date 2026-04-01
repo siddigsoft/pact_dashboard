@@ -466,8 +466,11 @@
     if (!isHidden('/departments') && (isSuperAdmin || isAdmin)) {
       adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 1.7, isPinned: isPinned('/departments') });
     }
+    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      adminItems.push({ id: 'hr', title: "HR & Finance", url: "/hr", icon: Banknote, priority: 1.85, isPinned: isPinned('/hr') });
+    }
     if (!isHidden('/task-admin') && (isSuperAdmin || isAdmin)) {
-      adminItems.push({ id: 'task-admin', title: "Task Admin & Payroll", url: "/task-admin", icon: Banknote, priority: 1.9, isPinned: isPinned('/task-admin') });
+      adminItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: Banknote, priority: 1.9, isPinned: isPinned('/task-admin') });
     }
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 2, isPinned: isPinned('/role-management') });

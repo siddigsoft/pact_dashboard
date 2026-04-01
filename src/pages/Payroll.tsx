@@ -83,7 +83,7 @@ function downloadCSV(rows: string[][], filename: string) {
 }
 
 // ── Main Page ────────────────────────────────────────────────────────────────
-export default function Payroll() {
+export default function Payroll({ embedded = false }: { embedded?: boolean }) {
   const { currentUser } = useUser();
   const userId = currentUser?.id;
 
@@ -280,7 +280,7 @@ export default function Payroll() {
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
 
-        <ConnectedPagesBar exclude="payroll" />
+        {!embedded && <ConnectedPagesBar exclude="hr" />}
 
         {/* Page header */}
         <div className="flex items-start justify-between flex-wrap gap-3">

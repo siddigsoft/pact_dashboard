@@ -10,7 +10,7 @@ const PAGES = [
     icon: FolderKanban,
     color: "#2563EB",
     light: "#DBEAFE",
-    adminOnly: true,
+    roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin"],
   },
   {
     id: "analytics",
@@ -19,7 +19,7 @@ const PAGES = [
     icon: BarChart3,
     color: "#7C3AED",
     light: "#EDE9FE",
-    adminOnly: true,
+    roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin"],
   },
   {
     id: "my-tasks",
@@ -28,7 +28,7 @@ const PAGES = [
     icon: CheckSquare,
     color: "#059669",
     light: "#D1FAE5",
-    adminOnly: false,
+    roles: [] as string[], // visible to everyone
   },
   {
     id: "departments",
@@ -37,34 +37,37 @@ const PAGES = [
     icon: Building2,
     color: "#0F2041",
     light: "#E8ECF3",
-    adminOnly: true,
+    roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin"],
   },
   {
-    id: "payroll",
-    label: "Payroll",
-    url: "/payroll",
+    id: "hr",
+    label: "HR & Finance",
+    url: "/hr",
     icon: Banknote,
     color: "#D97706",
     light: "#FEF3C7",
-    adminOnly: false,
+    roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin", "finance", "Finance"],
   },
 ];
 
 export function ConnectedPagesBar({ exclude }: { exclude?: string }) {
   const { pathname } = useLocation();
-  const { isSuperAdmin } = useAuthorization();
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const superAdmin = isSuperAdmin();
 
   const visible = PAGES.filter(p => {
     if (p.id === exclude) return false;
-    if (p.adminOnly && !superAdmin) return false;
-    return true;
+    if (p.roles.length === 0) return true; // public page
+    if (superAdmin) return true;
+    return hasAnyRole(p.roles);
   });
+
+  if (visible.length === 0) return null;
 
   return (
     <div className="flex flex-wrap gap-2 px-0 py-1">
       {visible.map(p => {
-        const isActive = pathname === p.url;
+        const isActive = pathname === p.url || pathname.startsWith(p.url + '?');
         return (
           <Link
             key={p.id}
