@@ -40,7 +40,7 @@ interface SalaryConfig {
 interface EmployeeRow {
   id: string; full_name: string | null; role: string | null;
   department_name: string | null; department_id: string | null; email: string | null;
-  employment_type: string | null; contract_start_date: string | null;
+  employment_type: string | null; contract_start_date: string | null; contract_end_date: string | null;
   salary_config: SalaryConfig | null;
 }
 interface RunItem {
@@ -215,7 +215,7 @@ export default function PayrollAdmin() {
     queryKey: ['payroll-admin-employees'],
     queryFn: async () => {
       const [{ data: profs }, { data: depts }, { data: configs }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date').order('full_name'),
+        supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date, contract_end_date').order('full_name'),
         supabase.from('departments').select('id, name'),
         supabase.from('employee_salary_config').select('*'),
       ]);
@@ -230,6 +230,7 @@ export default function PayrollAdmin() {
           id: p.id, full_name: p.full_name, role: p.role, email: p.email,
           department_id: p.department_id, department_name: deptMap[p.department_id] ?? null,
           employment_type: p.employment_type, contract_start_date: p.contract_start_date,
+          contract_end_date: p.contract_end_date ?? null,
           salary_config: cfgMap[p.id] ?? null,
         }));
     },
@@ -805,6 +806,43 @@ function deptBreakdown(items: RunItem[]): DeptSummary[] {
 }
 
 function PayrollReportsTab({ runs, employees }: { runs: PayrollRun[]; employees: EmployeeRow[] }) {
+  const [reportTab, setReportTab] = useState<'breakdown' | 'contracts' | 'headcount' | 'ytd' | 'compare'>('breakdown');
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tab navigation */}
+      <div className="flex gap-1.5 flex-wrap">
+        {([
+          { id: 'breakdown', label: 'Payroll Breakdown', icon: <BarChart3 className="h-3.5 w-3.5" /> },
+          { id: 'contracts', label: 'Contract Expiry',   icon: <CalendarRange className="h-3.5 w-3.5" /> },
+          { id: 'headcount', label: 'Headcount',         icon: <Users className="h-3.5 w-3.5" /> },
+          { id: 'ytd',       label: 'Year-to-Date',      icon: <TrendingUp className="h-3.5 w-3.5" /> },
+          { id: 'compare',   label: 'Month Comparison',  icon: <ChevronRight className="h-3.5 w-3.5" /> },
+        ] as const).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setReportTab(t.id)}
+            className={cn(
+              'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-all border',
+              reportTab === t.id
+                ? 'bg-[#0F2041] text-white border-[#0F2041]'
+                : 'bg-white dark:bg-slate-900 text-muted-foreground border-slate-200 hover:border-slate-300 hover:text-foreground',
+            )}
+          >{t.icon}{t.label}</button>
+        ))}
+      </div>
+
+      {reportTab === 'breakdown' && <PayrollBreakdownReport runs={runs} employees={employees} />}
+      {reportTab === 'contracts' && <ContractExpiryReport employees={employees} />}
+      {reportTab === 'headcount' && <HeadcountReport employees={employees} />}
+      {reportTab === 'ytd'       && <YTDReport runs={runs} employees={employees} />}
+      {reportTab === 'compare'   && <MonthComparisonReport runs={runs} />}
+    </div>
+  );
+}
+
+// ── Sub-report: Payroll Breakdown (original content) ─────────────────────────
+function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; employees: EmployeeRow[] }) {
   const [selectedRunId, setSelectedRunId] = useState<string>('projection');
 
   // Fetch run items for selected payroll run
@@ -1160,6 +1198,643 @@ function PayrollReportsTab({ runs, employees }: { runs: PayrollRun[]; employees:
                 <span className="text-base font-bold text-blue-600">{fmt(totalNet)}</span>
               </div>
             </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Sub-report: Contract Expiry ───────────────────────────────────────────────
+function ContractExpiryReport({ employees }: { employees: EmployeeRow[] }) {
+  const today = new Date();
+
+  const withExpiry = employees
+    .filter(e => e.contract_end_date)
+    .map(e => {
+      const end = parseISO(e.contract_end_date!);
+      const days = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return { ...e, end, days };
+    })
+    .sort((a, b) => a.days - b.days);
+
+  const expired   = withExpiry.filter(e => e.days < 0);
+  const soon30    = withExpiry.filter(e => e.days >= 0 && e.days <= 30);
+  const soon60    = withExpiry.filter(e => e.days > 30 && e.days <= 60);
+  const soon90    = withExpiry.filter(e => e.days > 60 && e.days <= 90);
+  const beyond    = withExpiry.filter(e => e.days > 90);
+  const openEnded = employees.filter(e => !e.contract_end_date);
+
+  const exportExcel = () => {
+    const rows = withExpiry.map(e => ({
+      'Employee': e.full_name ?? '—', 'Department': e.department_name ?? '—',
+      'Employment Type': e.employment_type ?? '—',
+      'Contract End': format(e.end, 'dd MMM yyyy'),
+      'Days Remaining': e.days,
+      'Status': e.days < 0 ? 'Expired' : e.days <= 30 ? 'Critical' : e.days <= 60 ? 'Urgent' : e.days <= 90 ? 'Warning' : 'OK',
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Contract Expiry');
+    XLSX.writeFile(wb, `pact-contract-expiry-${format(today, 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const ExpirySection = ({ title, items, color, bg, border }: {
+    title: string; items: typeof withExpiry; color: string; bg: string; border: string;
+  }) => items.length === 0 ? null : (
+    <div>
+      <div className={cn('flex items-center gap-2 px-4 py-2 rounded-t-xl border-b', bg, border)}>
+        <span className={cn('text-xs font-bold', color)}>{title}</span>
+        <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full', bg, border, color)}>{items.length}</span>
+      </div>
+      <div className="rounded-b-xl border border-t-0 divide-y overflow-hidden">
+        {items.map((e, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+            <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0', avatarColor(e.id))}>
+              {initials(e.full_name)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{e.full_name}</p>
+              <p className="text-[11px] text-muted-foreground">{e.department_name ?? '—'} · <span className="capitalize">{e.employment_type?.replace(/_/g, ' ')}</span></p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-semibold">{format(e.end, 'dd MMM yyyy')}</p>
+              <p className={cn('text-[11px] font-bold', color)}>
+                {e.days < 0 ? `${Math.abs(e.days)}d overdue` : `${e.days}d left`}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { label: 'Expired',    count: expired.length,   color: 'text-red-600',    bg: 'bg-red-50' },
+            { label: '≤ 30 days',  count: soon30.length,    color: 'text-orange-600', bg: 'bg-orange-50' },
+            { label: '≤ 60 days',  count: soon60.length,    color: 'text-amber-600',  bg: 'bg-amber-50' },
+            { label: '≤ 90 days',  count: soon90.length,    color: 'text-yellow-700', bg: 'bg-yellow-50' },
+          ].map(k => (
+            <div key={k.label} className={cn('rounded-xl px-4 py-2.5 text-center border', k.bg)}>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
+              <p className={cn('text-xl font-bold mt-0.5', k.color)}>{k.count}</p>
+            </div>
+          ))}
+        </div>
+        <Button onClick={exportExcel} size="sm" variant="outline" disabled={withExpiry.length === 0} className="h-9 gap-2 text-xs bg-white">
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+        </Button>
+      </div>
+
+      {withExpiry.length === 0 && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+          <CardContent className="py-16 text-center">
+            <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
+            <p className="text-sm font-semibold">No contracts with expiry dates found</p>
+            <p className="text-sm text-muted-foreground mt-1">Set contract end dates in employee profiles to track here.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-4">
+        <ExpirySection title="⚠ Expired Contracts" items={expired} color="text-red-700" bg="bg-red-50 dark:bg-red-950/20" border="border-red-200 dark:border-red-800/40" />
+        <ExpirySection title="🔴 Expiring within 30 days" items={soon30} color="text-orange-700" bg="bg-orange-50 dark:bg-orange-950/20" border="border-orange-200" />
+        <ExpirySection title="🟠 Expiring within 60 days" items={soon60} color="text-amber-700" bg="bg-amber-50 dark:bg-amber-950/20" border="border-amber-200" />
+        <ExpirySection title="🟡 Expiring within 90 days" items={soon90} color="text-yellow-700" bg="bg-yellow-50 dark:bg-yellow-950/20" border="border-yellow-200" />
+        {beyond.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 px-4 py-2 rounded-t-xl border-b bg-green-50 dark:bg-green-950/20 border-green-200">
+              <span className="text-xs font-bold text-green-700">✅ More than 90 days remaining ({beyond.length})</span>
+            </div>
+            <div className="rounded-b-xl border border-t-0 border-green-200 divide-y overflow-hidden">
+              {beyond.map((e, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors">
+                  <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0', avatarColor(e.id))}>{initials(e.full_name)}</div>
+                  <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{e.full_name}</p></div>
+                  <span className="text-xs text-muted-foreground">{format(e.end, 'dd MMM yyyy')} · {e.days}d left</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {openEnded.length > 0 && (
+          <p className="text-xs text-muted-foreground px-1">+ {openEnded.length} employees with open-ended contracts (no expiry date set)</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-report: Headcount & Workforce ─────────────────────────────────────────
+function HeadcountReport({ employees }: { employees: EmployeeRow[] }) {
+  const byDept = useMemo(() => {
+    const map: Record<string, { dept: string; count: number; types: Record<string, number>; withSalary: number }> = {};
+    for (const e of employees) {
+      const d = e.department_name ?? 'No Department';
+      if (!map[d]) map[d] = { dept: d, count: 0, types: {}, withSalary: 0 };
+      map[d].count++;
+      const t = e.employment_type ?? 'unknown';
+      map[d].types[t] = (map[d].types[t] ?? 0) + 1;
+      if (e.salary_config) map[d].withSalary++;
+    }
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [employees]);
+
+  const byType = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const e of employees) { const t = e.employment_type ?? 'unknown'; map[t] = (map[t] ?? 0) + 1; }
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [employees]);
+
+  const withSalary    = employees.filter(e => e.salary_config).length;
+  const withoutSalary = employees.length - withSalary;
+  const maxDept       = byDept[0]?.count || 1;
+
+  const TYPE_COLORS: Record<string, string> = {
+    'full-time': 'bg-blue-500', 'part-time': 'bg-violet-400',
+    'contract': 'bg-amber-400', 'intern': 'bg-emerald-400', 'unknown': 'bg-slate-300',
+  };
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      byDept.map(d => ({ Department: d.dept, Headcount: d.count, 'With Salary': d.withSalary, 'Without Salary': d.count - d.withSalary, ...d.types }))
+    ), 'By Department');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      employees.map(e => ({ Name: e.full_name ?? '—', Department: e.department_name ?? '—', 'Employment Type': e.employment_type ?? '—', 'Has Salary Config': e.salary_config ? 'Yes' : 'No', 'Contract Start': e.contract_start_date ?? '—', 'Contract End': e.contract_end_date ?? 'Open-ended' }))
+    ), 'All Staff');
+    XLSX.writeFile(wb, `pact-headcount-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* KPI row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Staff',       value: employees.length,  color: 'text-[#0F2041] dark:text-blue-300' },
+          { label: 'Departments',       value: byDept.filter(d => d.dept !== 'No Department').length, color: 'text-violet-600' },
+          { label: 'With Salary Config',value: withSalary,        color: 'text-emerald-600' },
+          { label: 'No Salary Config',  value: withoutSalary,     color: 'text-amber-600' },
+        ].map(k => (
+          <div key={k.label} className="bg-white dark:bg-slate-900 border rounded-xl px-4 py-3 text-center shadow-sm">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
+            <p className={cn('text-xl font-bold mt-0.5', k.color)}>{k.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Employment type breakdown */}
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-blue-500" />
+            <h3 className="text-sm font-semibold">By Employment Type</h3>
+          </div>
+          <CardContent className="pt-4 pb-5 space-y-3">
+            {byType.map(([type, count]) => (
+              <div key={type} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5 font-medium capitalize">
+                    <span className={cn('w-2 h-2 rounded-full', TYPE_COLORS[type] ?? 'bg-slate-400')} />
+                    {type.replace(/-/g, ' ')}
+                  </span>
+                  <span className="font-bold">{count} <span className="text-muted-foreground font-normal">({((count / employees.length) * 100).toFixed(0)}%)</span></span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full', TYPE_COLORS[type] ?? 'bg-slate-400')} style={{ width: `${(count / employees.length) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Department breakdown */}
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden md:col-span-2">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-violet-500" />
+              <h3 className="text-sm font-semibold">By Department</h3>
+            </div>
+            <Button onClick={exportExcel} size="sm" variant="outline" className="h-7 gap-1.5 text-xs">
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />Export
+            </Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/40 border-b">
+                  <th className="px-5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Department</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Staff</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-emerald-600">Salary ✓</th>
+                  <th className="px-5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Distribution</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {byDept.map((d, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                    <td className="px-5 py-2.5 font-medium">{d.dept}</td>
+                    <td className="px-3 py-2.5 text-center font-bold">{d.count}</td>
+                    <td className="px-3 py-2.5 text-center text-emerald-600 font-semibold">{d.withSalary}</td>
+                    <td className="px-5 py-2.5">
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden w-32">
+                        <div className="h-full bg-[#0F2041] rounded-full" style={{ width: `${(d.count / maxDept) * 100}%` }} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-report: Year-to-Date ───────────────────────────────────────────────────
+function YTDReport({ runs, employees }: { runs: PayrollRun[]; employees: EmployeeRow[] }) {
+  const thisYear = new Date().getFullYear();
+  const yearRuns = runs.filter(r => r.period_start.startsWith(String(thisYear)));
+
+  const { data: allItems = [], isLoading } = useQuery<RunItem[]>({
+    queryKey: ['ytd-report-items', thisYear],
+    enabled: yearRuns.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payroll_run_items')
+        .select('*')
+        .in('run_id', yearRuns.map(r => r.id));
+      if (error) throw error;
+      return (data ?? []) as RunItem[];
+    },
+  });
+
+  // Aggregate per employee across all runs
+  const empSummary = useMemo(() => {
+    const map: Record<string, { name: string; dept: string; gross: number; ded: number; net: number; months: number }> = {};
+    for (const item of allItems) {
+      if (!map[item.user_id]) map[item.user_id] = { name: item.user_name, dept: item.department_name, gross: 0, ded: 0, net: 0, months: 0 };
+      map[item.user_id].gross  += item.gross_salary;
+      map[item.user_id].ded   += item.deductions_total;
+      map[item.user_id].net   += item.net_salary;
+      map[item.user_id].months += 1;
+    }
+    return Object.values(map).sort((a, b) => b.gross - a.gross);
+  }, [allItems]);
+
+  // Monthly totals
+  const monthlyTotals = useMemo(() => {
+    return yearRuns.map(run => {
+      const runItems = allItems.filter(i => i.run_id === run.id);
+      return {
+        label: run.period_label,
+        status: run.status,
+        headcount: runItems.length,
+        gross: runItems.reduce((s, i) => s + i.gross_salary, 0),
+        net: runItems.reduce((s, i) => s + i.net_salary, 0),
+      };
+    }).reverse();
+  }, [yearRuns, allItems]);
+
+  const ytdGross = empSummary.reduce((s, e) => s + e.gross, 0);
+  const ytdDed   = empSummary.reduce((s, e) => s + e.ded, 0);
+  const ytdNet   = empSummary.reduce((s, e) => s + e.net, 0);
+  const maxMonthGross = Math.max(...monthlyTotals.map(m => m.gross), 1);
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+      { Label: 'YTD Gross', Value: ytdGross },
+      { Label: 'YTD Deductions', Value: ytdDed },
+      { Label: 'YTD Net Pay', Value: ytdNet },
+      { Label: 'Payroll Runs', Value: yearRuns.length },
+    ]), 'Summary');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      monthlyTotals.map(m => ({ Month: m.label, Status: m.status, Headcount: m.headcount, 'Total Gross': m.gross, 'Total Net': m.net }))
+    ), 'Monthly');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      empSummary.map(e => ({ Name: e.name, Department: e.dept, 'Months Paid': e.months, 'YTD Gross': e.gross, 'YTD Deductions': e.ded, 'YTD Net': e.net }))
+    ), 'By Employee');
+    XLSX.writeFile(wb, `pact-ytd-${thisYear}.xlsx`);
+  };
+
+  if (isLoading) return (
+    <div className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
+      <Loader2 className="h-7 w-7 animate-spin opacity-30" />
+      <span className="text-sm">Loading year-to-date data…</span>
+    </div>
+  );
+
+  if (yearRuns.length === 0) return (
+    <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+      <CardContent className="py-16 text-center space-y-3">
+        <BarChart3 className="h-10 w-10 text-slate-300 mx-auto" />
+        <p className="text-sm font-semibold">No payroll runs for {thisYear} yet</p>
+        <p className="text-sm text-muted-foreground">Run and save at least one payroll period to see year-to-date figures.</p>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-sm font-semibold text-muted-foreground">Year-to-Date {thisYear} · {yearRuns.length} payroll run{yearRuns.length !== 1 ? 's' : ''}</h3>
+        <Button onClick={exportExcel} size="sm" variant="outline" className="h-9 gap-2 text-xs bg-white">
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+        </Button>
+      </div>
+
+      {/* YTD KPIs */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'YTD Gross',    value: ytdGross, color: 'text-[#0F2041] dark:text-blue-300' },
+          { label: 'YTD Deductions', value: ytdDed, color: 'text-red-500' },
+          { label: 'YTD Net Pay',  value: ytdNet,   color: 'text-blue-600' },
+        ].map(k => (
+          <div key={k.label} className="bg-white dark:bg-slate-900 border rounded-xl px-4 py-3 text-center shadow-sm">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
+            <p className={cn('text-sm font-bold mt-0.5', k.color)}>{fmt(k.value)}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Monthly bar chart */}
+      <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+        <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-[#0F2041]" />
+          <h3 className="text-sm font-semibold">Monthly Payroll Trend</h3>
+        </div>
+        <CardContent className="pt-4 pb-5 space-y-3">
+          {monthlyTotals.map((m, i) => (
+            <div key={i} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium flex items-center gap-1.5">
+                  {m.label}
+                  <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-semibold',
+                    m.status === 'locked' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700')}>
+                    {m.status}
+                  </span>
+                </span>
+                <span className="text-muted-foreground">{m.headcount} staff · Net: <span className="font-bold text-blue-600">{fmt(m.net)}</span></span>
+              </div>
+              <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#0F2041] rounded-full flex overflow-hidden" style={{ width: `${(m.gross / maxMonthGross) * 100}%` }}>
+                  <div className="h-full bg-blue-500" style={{ width: `${m.gross > 0 ? (m.net / m.gross) * 100 : 0}%` }} />
+                </div>
+              </div>
+              <div className="flex gap-3 text-[10px] text-muted-foreground">
+                <span>Gross: {fmt(m.gross)}</span>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Per-employee YTD table */}
+      {empSummary.length > 0 && (
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+            <Users className="h-4 w-4 text-[#0F2041]" />
+            <h3 className="text-sm font-semibold">Per Employee YTD</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b">
+                  <th className="px-5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Employee</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Months</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-emerald-600">YTD Gross</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-red-500">YTD Ded.</th>
+                  <th className="px-5 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-blue-600">YTD Net</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {empSummary.slice(0, 50).map((e, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                    <td className="px-5 py-2.5">
+                      <p className="font-medium text-sm">{e.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{e.dept}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-xs font-semibold">{e.months}</td>
+                    <td className="px-3 py-2.5 text-right text-sm font-semibold text-emerald-600">{fmt(e.gross)}</td>
+                    <td className="px-3 py-2.5 text-right text-sm font-medium text-red-500">−{fmt(e.ded)}</td>
+                    <td className="px-5 py-2.5 text-right text-sm font-bold text-blue-600">{fmt(e.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 border-t-2 border-slate-200">
+                  <td className="px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Total</td>
+                  <td />
+                  <td className="px-3 py-2.5 text-right text-sm font-bold text-emerald-600">{fmt(ytdGross)}</td>
+                  <td className="px-3 py-2.5 text-right text-sm font-bold text-red-500">−{fmt(ytdDed)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm font-bold text-blue-600">{fmt(ytdNet)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Sub-report: Month Comparison ──────────────────────────────────────────────
+function MonthComparisonReport({ runs }: { runs: PayrollRun[] }) {
+  const [runAId, setRunAId] = useState<string>(runs[1]?.id ?? '');
+  const [runBId, setRunBId] = useState<string>(runs[0]?.id ?? '');
+
+  const fetchItems = async (runId: string): Promise<RunItem[]> => {
+    if (!runId) return [];
+    const { data, error } = await supabase.from('payroll_run_items').select('*').eq('run_id', runId);
+    if (error) throw error;
+    return (data ?? []) as RunItem[];
+  };
+
+  const { data: itemsA = [], isLoading: loadA } = useQuery<RunItem[]>({
+    queryKey: ['compare-items-a', runAId],
+    enabled: !!runAId,
+    queryFn: () => fetchItems(runAId),
+  });
+  const { data: itemsB = [], isLoading: loadB } = useQuery<RunItem[]>({
+    queryKey: ['compare-items-b', runBId],
+    enabled: !!runBId,
+    queryFn: () => fetchItems(runBId),
+  });
+
+  const runA = runs.find(r => r.id === runAId);
+  const runB = runs.find(r => r.id === runBId);
+
+  const totA = { gross: itemsA.reduce((s, i) => s + i.gross_salary, 0), ded: itemsA.reduce((s, i) => s + i.deductions_total, 0), net: itemsA.reduce((s, i) => s + i.net_salary, 0), count: itemsA.length };
+  const totB = { gross: itemsB.reduce((s, i) => s + i.gross_salary, 0), ded: itemsB.reduce((s, i) => s + i.deductions_total, 0), net: itemsB.reduce((s, i) => s + i.net_salary, 0), count: itemsB.length };
+
+  const diff = (b: number, a: number) => b - a;
+  const diffPct = (b: number, a: number) => a === 0 ? null : ((b - a) / a) * 100;
+
+  const Delta = ({ b, a, invert = false }: { b: number; a: number; invert?: boolean }) => {
+    const d = diff(b, a); const p = diffPct(b, a);
+    if (d === 0) return <span className="text-xs text-muted-foreground">No change</span>;
+    const isGood = invert ? d < 0 : d > 0;
+    return (
+      <span className={cn('text-xs font-semibold', isGood ? 'text-emerald-600' : 'text-red-500')}>
+        {d > 0 ? '+' : ''}{fmt(Math.abs(d))} {p !== null && `(${d > 0 ? '+' : ''}${p.toFixed(1)}%)`}
+      </span>
+    );
+  };
+
+  // Per-employee comparison
+  const empComparison = useMemo(() => {
+    const mapA: Record<string, RunItem> = {};
+    const mapB: Record<string, RunItem> = {};
+    itemsA.forEach(i => { mapA[i.user_id] = i; });
+    itemsB.forEach(i => { mapB[i.user_id] = i; });
+    const allIds = new Set([...Object.keys(mapA), ...Object.keys(mapB)]);
+    return Array.from(allIds).map(uid => ({
+      uid, name: (mapA[uid] ?? mapB[uid]).user_name, dept: (mapA[uid] ?? mapB[uid]).department_name,
+      a: mapA[uid] ?? null, b: mapB[uid] ?? null,
+    })).sort((x, y) => (x.name ?? '').localeCompare(y.name ?? ''));
+  }, [itemsA, itemsB]);
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+      { Metric: 'Headcount',   [runA?.period_label ?? 'A']: totA.count,  [runB?.period_label ?? 'B']: totB.count,  Change: totB.count - totA.count },
+      { Metric: 'Total Gross', [runA?.period_label ?? 'A']: totA.gross,  [runB?.period_label ?? 'B']: totB.gross,  Change: totB.gross - totA.gross },
+      { Metric: 'Total Deductions', [runA?.period_label ?? 'A']: totA.ded, [runB?.period_label ?? 'B']: totB.ded, Change: totB.ded - totA.ded },
+      { Metric: 'Total Net',   [runA?.period_label ?? 'A']: totA.net,    [runB?.period_label ?? 'B']: totB.net,    Change: totB.net - totA.net },
+    ]), 'Summary');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      empComparison.map(e => ({
+        Name: e.name, Department: e.dept,
+        [`Gross (${runA?.period_label})`]: e.a?.gross_salary ?? 0,
+        [`Gross (${runB?.period_label})`]: e.b?.gross_salary ?? 0,
+        'Gross Change': (e.b?.gross_salary ?? 0) - (e.a?.gross_salary ?? 0),
+        [`Net (${runA?.period_label})`]: e.a?.net_salary ?? 0,
+        [`Net (${runB?.period_label})`]: e.b?.net_salary ?? 0,
+        'Net Change': (e.b?.net_salary ?? 0) - (e.a?.net_salary ?? 0),
+        Note: !e.a ? 'New this month' : !e.b ? 'Left/removed' : '',
+      }))
+    ), 'Employee Detail');
+    XLSX.writeFile(wb, `pact-payroll-compare-${runA?.period_label?.replace(/\s/g, '-') ?? 'A'}-vs-${runB?.period_label?.replace(/\s/g, '-') ?? 'B'}.xlsx`);
+  };
+
+  if (runs.length < 2) return (
+    <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+      <CardContent className="py-16 text-center space-y-3">
+        <BarChart3 className="h-10 w-10 text-slate-300 mx-auto" />
+        <p className="text-sm font-semibold">Need at least 2 payroll runs to compare</p>
+        <p className="text-sm text-muted-foreground">Run and save payroll for multiple months first.</p>
+      </CardContent>
+    </Card>
+  );
+
+  const loading = loadA || loadB;
+
+  return (
+    <div className="space-y-4">
+      {/* Period selectors */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Base period:</span>
+          <Select value={runAId} onValueChange={setRunAId}>
+            <SelectTrigger className="h-9 w-[180px] text-sm bg-white dark:bg-slate-900"><SelectValue /></SelectTrigger>
+            <SelectContent>{runs.map(r => <SelectItem key={r.id} value={r.id}>{r.period_label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Compare to:</span>
+          <Select value={runBId} onValueChange={setRunBId}>
+            <SelectTrigger className="h-9 w-[180px] text-sm bg-white dark:bg-slate-900"><SelectValue /></SelectTrigger>
+            <SelectContent>{runs.map(r => <SelectItem key={r.id} value={r.id}>{r.period_label}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <Button onClick={exportExcel} size="sm" variant="outline" disabled={itemsA.length === 0 && itemsB.length === 0} className="ml-auto h-9 gap-2 text-xs bg-white">
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />Export Excel
+        </Button>
+      </div>
+
+      {loading && (
+        <div className="py-16 flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-7 w-7 animate-spin opacity-30" />
+        </div>
+      )}
+
+      {!loading && (
+        <>
+          {/* Summary comparison cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Headcount',   a: totA.count, b: totB.count, invert: false, fmt: (n: number) => String(n) },
+              { label: 'Gross',       a: totA.gross, b: totB.gross, invert: false, fmt: (n: number) => fmt(n) },
+              { label: 'Deductions',  a: totA.ded,   b: totB.ded,   invert: true,  fmt: (n: number) => fmt(n) },
+              { label: 'Net Pay',     a: totA.net,   b: totB.net,   invert: false, fmt: (n: number) => fmt(n) },
+            ].map(k => (
+              <div key={k.label} className="bg-white dark:bg-slate-900 border rounded-xl px-4 py-3 shadow-sm space-y-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
+                <div className="flex items-end justify-between gap-1">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">{runA?.period_label ?? '—'}</p>
+                    <p className="text-sm font-bold text-muted-foreground">{k.fmt(k.a)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-muted-foreground">{runB?.period_label ?? '—'}</p>
+                    <p className="text-sm font-bold text-foreground">{k.fmt(k.b)}</p>
+                  </div>
+                </div>
+                <Delta b={k.b} a={k.a} invert={k.invert} />
+              </div>
+            ))}
+          </div>
+
+          {/* Per-employee comparison table */}
+          <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b flex items-center gap-2">
+              <Users className="h-4 w-4 text-[#0F2041]" />
+              <h3 className="text-sm font-semibold">Employee-Level Changes</h3>
+              <span className="ml-auto text-xs text-muted-foreground">{empComparison.length} employees</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/40 border-b">
+                    <th className="px-5 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Employee</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{runA?.period_label ?? 'Base'}</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-foreground">{runB?.period_label ?? 'Compare'}</th>
+                    <th className="px-5 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Net Change</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {empComparison.map((e, i) => {
+                    const aNet = e.a?.net_salary ?? 0;
+                    const bNet = e.b?.net_salary ?? 0;
+                    const changed = bNet !== aNet;
+                    return (
+                      <tr key={i} className={cn('hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors', changed && 'bg-blue-50/30 dark:bg-blue-950/10')}>
+                        <td className="px-5 py-2.5">
+                          <p className="font-medium">{e.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{e.dept}</p>
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-sm text-muted-foreground">
+                          {e.a ? fmt(aNet) : <span className="italic text-xs">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-sm font-semibold">
+                          {e.b ? fmt(bNet) : <span className="italic text-xs text-red-400">Removed</span>}
+                        </td>
+                        <td className="px-5 py-2.5 text-right">
+                          {!e.a && <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">New</span>}
+                          {!e.b && <span className="text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Removed</span>}
+                          {e.a && e.b && <Delta b={bNet} a={aNet} />}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </Card>
         </>
       )}
