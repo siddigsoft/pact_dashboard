@@ -173,6 +173,30 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     }
   }
 
+  // Normalize hub names from the hubs table using hub_id.
+  // The hub_name stored in down_payment_requests can be stale or inconsistent
+  // (e.g. "Country Office (CO) KHT", "Read Sea (CO)") — always prefer the
+  // official name from the hubs master table.
+  try {
+    const hubIds = [...new Set(transformed.map(r => r.hubId).filter(Boolean))] as string[];
+    if (hubIds.length > 0) {
+      const { data: hubs } = await supabase
+        .from('hubs')
+        .select('id, name')
+        .in('id', hubIds);
+      if (hubs && hubs.length > 0) {
+        const hubMap = new Map(hubs.map(h => [h.id, h.name]));
+        transformed.forEach(r => {
+          if (r.hubId && hubMap.has(r.hubId)) {
+            r.hubName = hubMap.get(r.hubId) as string;
+          }
+        });
+      }
+    }
+  } catch (hubEnrichErr) {
+    console.warn('[DownPayment] Hub name enrichment failed (non-critical):', hubEnrichErr);
+  }
+
   return transformed;
 }
 
