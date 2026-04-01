@@ -40,7 +40,7 @@ const PAGES = [
     adminOnly: true,
   },
   {
-    id: "task-admin",
+    id: "payroll",
     label: "Payroll",
     url: "/payroll",
     icon: Banknote,
