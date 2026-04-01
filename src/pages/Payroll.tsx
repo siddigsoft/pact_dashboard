@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import {
   format, startOfMonth, endOfMonth, subMonths, parseISO, isValid, isWithinInterval,
 } from 'date-fns';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Wallet, TrendingUp, CheckCircle2, Clock, ChevronLeft, ChevronRight,
   Award, Banknote, BarChart2, AlertCircle, ListChecks,
@@ -11,6 +13,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useToast } from '@/hooks/use-toast';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -259,6 +262,7 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
         <Tabs defaultValue="salary">
           <TabsList className="w-full sm:w-auto h-10 bg-white dark:bg-slate-900 border shadow-sm rounded-xl p-1 flex-wrap gap-0">
             <TabsTrigger value="salary"        className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><Briefcase className="h-3.5 w-3.5" />My Salary</TabsTrigger>
+            <TabsTrigger value="payslips"      className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><Download className="h-3.5 w-3.5" />My Payslips</TabsTrigger>
             <TabsTrigger value="overview"      className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><BarChart2 className="h-3.5 w-3.5" />Task Rewards</TabsTrigger>
             <TabsTrigger value="annual"        className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><CalendarRange className="h-3.5 w-3.5" />Annual</TabsTrigger>
             <TabsTrigger value="category"      className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white"><Tag className="h-3.5 w-3.5" />By Category</TabsTrigger>
@@ -273,6 +277,11 @@ export default function Payroll({ embedded = false }: { embedded?: boolean }) {
               employmentRecord={employmentRecord ?? null}
               loading={loadingSalary || loadingEmp}
             />
+          </TabsContent>
+
+          {/* ── MY PAYSLIPS ── */}
+          <TabsContent value="payslips" className="mt-4">
+            <MyPayslipsTab userId={userId ?? ''} />
           </TabsContent>
 
           {/* ── OVERVIEW ── */}
@@ -844,6 +853,218 @@ function TxList({ txs }: { txs: WalletTx[] }) {
                 {tx.amount >= 0 ? '+' : ''}{fmtAmt(tx.amount, tx.currency)}
               </span>
             </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── My Payslips Tab ───────────────────────────────────────────────────────────
+interface PayslipRunItem {
+  id: string; run_id: string; user_id: string; user_name: string; department_name: string;
+  base_salary: number; allowances_total: number; gross_salary: number;
+  deductions_total: number; net_salary: number; currency: string;
+  allowances_snapshot: { name: string; amount: number; type: string }[];
+  deductions_snapshot: { name: string; amount: number; type: string }[];
+  adjustments: { name: string; amount: number; type: string }[];
+}
+interface PayslipRun {
+  id: string; period_label: string; period_start: string; status: string;
+}
+
+function MyPayslipsTab({ userId }: { userId: string }) {
+  const { toast } = useToast();
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const { data: myItems = [], isLoading } = useQuery<PayslipRunItem[]>({
+    queryKey: ['my-payslips', userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('payroll_run_items').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((d: any) => ({
+        ...d,
+        allowances_snapshot: Array.isArray(d.allowances_snapshot) ? d.allowances_snapshot : [],
+        deductions_snapshot: Array.isArray(d.deductions_snapshot) ? d.deductions_snapshot : [],
+        adjustments: Array.isArray(d.adjustments) ? d.adjustments : [],
+      })) as PayslipRunItem[];
+    },
+  });
+
+  const { data: runsMap = {} } = useQuery<Record<string, PayslipRun>>({
+    queryKey: ['my-payslips-runs', myItems.map(i => i.run_id).join(',')],
+    enabled: myItems.length > 0,
+    queryFn: async () => {
+      const runIds = [...new Set(myItems.map(i => i.run_id))];
+      const { data } = await supabase.from('payroll_runs').select('id, period_label, period_start, status').in('id', runIds);
+      const m: Record<string, PayslipRun> = {};
+      (data ?? []).forEach((r: any) => { m[r.id] = r; });
+      return m;
+    },
+  });
+
+  const downloadPDF = (item: PayslipRunItem, run: PayslipRun) => {
+    const doc = new jsPDF();
+    const gross = item.gross_salary;
+    const base  = item.base_salary;
+    const currency = item.currency;
+
+    // Header
+    doc.setFillColor(15, 32, 65);
+    doc.rect(0, 0, 210, 30, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PACT — PAYSLIP', 14, 18);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(run.period_label, 196, 18, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+
+    // Employee details
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(item.user_name, 14, 42);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Department: ${item.department_name}`, 14, 50);
+    doc.text(`Period: ${run.period_label}`, 14, 57);
+
+    // Earnings table
+    const earningsRows: (string | number)[][] = [
+      ['Base Salary', `${currency} ${base.toLocaleString()}`],
+      ...item.allowances_snapshot.map(a => {
+        const amt = a.type === 'fixed' ? a.amount : Math.round(base * a.amount / 100);
+        return [a.name, `+ ${currency} ${amt.toLocaleString()}`];
+      }),
+      ...item.adjustments.filter(a => a.type === 'bonus').map(a => [`${a.name} (Bonus)`, `+ ${currency} ${a.amount.toLocaleString()}`]),
+    ];
+    autoTable(doc, {
+      head: [['Earnings', 'Amount']], body: earningsRows,
+      startY: 66, theme: 'striped',
+      headStyles: { fillColor: [21, 128, 61] },
+      columnStyles: { 1: { halign: 'right' } },
+    });
+
+    const afterEarnings = (doc as any).lastAutoTable.finalY + 6;
+    const deductionRows: (string | number)[][] = [
+      ...item.deductions_snapshot.map(d => {
+        const amt = d.type === 'fixed' ? d.amount : Math.round(gross * d.amount / 100);
+        return [d.name, `- ${currency} ${amt.toLocaleString()}`];
+      }),
+      ...item.adjustments.filter(a => a.type === 'deduction').map(a => [`${a.name} (Deduction)`, `- ${currency} ${a.amount.toLocaleString()}`]),
+    ];
+    if (deductionRows.length) {
+      autoTable(doc, {
+        head: [['Deductions', 'Amount']], body: deductionRows,
+        startY: afterEarnings, theme: 'striped',
+        headStyles: { fillColor: [185, 28, 28] },
+        columnStyles: { 1: { halign: 'right' } },
+      });
+    }
+
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFillColor(15, 32, 65);
+    doc.roundedRect(14, finalY, 182, 16, 3, 3, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('NET SALARY', 20, finalY + 10);
+    doc.text(`${currency} ${item.net_salary.toLocaleString()}`, 196, finalY + 10, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+
+    const locked = runsMap[item.run_id]?.status === 'locked';
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(120, 120, 120);
+    doc.text(locked ? 'This payslip is official and locked.' : 'DRAFT — Not yet finalized', 14, finalY + 24);
+
+    doc.save(`payslip-${run.period_label.replace(/\s/g, '-')}-${item.user_name.replace(/\s/g, '-')}.pdf`);
+    toast({ title: `Payslip downloaded for ${run.period_label}` });
+  };
+
+  if (isLoading) return (
+    <div className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
+      <Loader2 className="h-7 w-7 animate-spin opacity-30" />
+      <span className="text-sm">Loading your payslips…</span>
+    </div>
+  );
+
+  if (myItems.length === 0) return (
+    <div className="py-20 text-center space-y-3">
+      <Download className="h-10 w-10 mx-auto text-slate-300" />
+      <p className="text-sm font-semibold text-slate-500">No payslips yet</p>
+      <p className="text-sm text-muted-foreground">Your payslips will appear here once payroll is processed for your account.</p>
+    </div>
+  );
+
+  // Group by run
+  const byRun = [...new Set(myItems.map(i => i.run_id))]
+    .map(runId => ({ run: runsMap[runId], item: myItems.find(i => i.run_id === runId)! }))
+    .filter(r => r.run && r.item)
+    .sort((a, b) => b.run.period_start.localeCompare(a.run.period_start));
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground px-1">{byRun.length} payslip{byRun.length !== 1 ? 's' : ''} available · click a row to expand details</p>
+      {byRun.map(({ run, item }) => {
+        const isOpen = expanded === run.id;
+        const isLocked = run.status === 'locked';
+        const bonusTotal = item.adjustments.filter(a => a.type === 'bonus').reduce((s, a) => s + a.amount, 0);
+        const adjDedTotal = item.adjustments.filter(a => a.type === 'deduction').reduce((s, a) => s + a.amount, 0);
+        return (
+          <div key={run.id} className={cn('rounded-xl border overflow-hidden shadow-sm transition-all', isLocked ? 'border-emerald-200' : 'border-slate-200')}>
+            {/* Row header */}
+            <button
+              onClick={() => setExpanded(isOpen ? null : run.id)}
+              className="w-full flex items-center gap-4 px-5 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors bg-white dark:bg-slate-900"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold">{run.period_label}</p>
+                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full',
+                    isLocked ? 'bg-emerald-100 text-emerald-700' :
+                    run.status === 'approved' ? 'bg-amber-100 text-amber-700' :
+                    run.status === 'submitted' ? 'bg-indigo-100 text-indigo-700' :
+                    'bg-slate-100 text-slate-600')}>
+                    {isLocked ? '🔒 Official' : run.status === 'approved' ? '✅ Approved' : run.status === 'submitted' ? '📤 Pending' : '📝 Draft'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{item.department_name}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-sm font-bold text-blue-600">{fmtAmt(item.net_salary, item.currency)}</p>
+                <p className="text-[11px] text-muted-foreground">net pay</p>
+              </div>
+              <Download className="h-4 w-4 text-muted-foreground shrink-0" />
+            </button>
+
+            {/* Expanded details */}
+            {isOpen && (
+              <div className="bg-slate-50 dark:bg-slate-800/30 border-t px-5 py-4 space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Base Salary', value: fmtAmt(item.base_salary, item.currency), color: 'text-foreground' },
+                    { label: 'Total Allowances', value: `+${fmtAmt(item.allowances_total, item.currency)}`, color: 'text-emerald-600' },
+                    { label: 'Gross Salary', value: fmtAmt(item.gross_salary, item.currency), color: 'text-[#0F2041] dark:text-blue-300 font-bold' },
+                    { label: 'Deductions', value: `-${fmtAmt(item.deductions_total, item.currency)}`, color: 'text-red-500' },
+                    { label: 'Adjustments', value: bonusTotal > 0 || adjDedTotal > 0 ? `${bonusTotal > 0 ? `+${fmtAmt(bonusTotal)}` : ''}${adjDedTotal > 0 ? ` -${fmtAmt(adjDedTotal)}` : ''}` : '—', color: 'text-violet-600' },
+                    { label: 'Net Pay', value: fmtAmt(item.net_salary, item.currency), color: 'text-blue-600 text-base font-bold' },
+                  ].map(k => (
+                    <div key={k.label} className="bg-white dark:bg-slate-900 rounded-xl px-3 py-2.5 border">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
+                      <p className={cn('text-sm font-semibold mt-0.5', k.color)}>{k.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" className="h-8 gap-2 text-xs bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={() => downloadPDF(item, run)}>
+                    <Download className="h-3.5 w-3.5" />Download PDF
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

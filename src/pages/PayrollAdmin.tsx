@@ -13,7 +13,8 @@ import {
   Loader2, Banknote, CalendarRange, PlusCircle, TrendingDown,
   TrendingUp, ReceiptText, PlayCircle, ChevronLeft, ChevronRight,
   Search, AlertCircle, UserCheck, FileDown, MoreVertical,
-  BarChart3, Building2, FileSpreadsheet,
+  BarChart3, Building2, FileSpreadsheet, Send, Plus, X, FileText,
+  History, Clock,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
@@ -36,6 +37,7 @@ interface SalaryConfig {
   id: string; user_id: string; base_salary: number; currency: string;
   allowances: LineItem[]; deductions: LineItem[];
   effective_date: string; notes: string | null;
+  salary_history: SalaryHistoryEntry[];
 }
 interface EmployeeRow {
   id: string; full_name: string | null; role: string | null;
@@ -43,15 +45,25 @@ interface EmployeeRow {
   employment_type: string | null; contract_start_date: string | null; contract_end_date: string | null;
   salary_config: SalaryConfig | null;
 }
+interface Adjustment { name: string; amount: number; type: 'bonus' | 'deduction'; }
 interface RunItem {
   id: string; run_id: string; user_id: string; user_name: string; department_name: string;
   base_salary: number; allowances_total: number; gross_salary: number;
   deductions_total: number; net_salary: number; task_rewards: number; retainer_amount: number;
   currency: string; allowances_snapshot: LineItem[]; deductions_snapshot: LineItem[];
+  adjustments: Adjustment[];
+}
+interface SalaryHistoryEntry {
+  changed_at: string; changed_by: string | null;
+  old_base: number; new_base: number; old_currency: string; new_currency: string;
+  old_allowances: LineItem[]; old_deductions: LineItem[];
+  note: string | null;
 }
 interface PayrollRun {
   id: string; period_label: string; period_start: string; period_end: string;
   status: string; notes: string | null; created_at: string; locked_at: string | null;
+  submitted_at: string | null; submitted_by: string | null;
+  approved_at: string | null; approved_by: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -293,7 +305,7 @@ export default function PayrollAdmin() {
             <SalarySetupTab employees={employees} loading={loadingEmp} />
           </TabsContent>
           <TabsContent value="run" className="mt-0">
-            <RunPayrollTab employees={employees} runs={runs} currentUserId={currentUser?.id ?? ''} />
+            <RunPayrollTab employees={employees} runs={runs} currentUserId={currentUser?.id ?? ''} currentUserRole={currentUser?.role ?? ''} />
           </TabsContent>
           <TabsContent value="history" className="mt-0">
             <PayslipsTab runs={runs} loading={loadingRuns} employees={employees} />
@@ -494,16 +506,32 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
   const save = async () => {
     if (!base || base <= 0) { toast({ title: 'Enter a valid base salary', variant: 'destructive' }); return; }
     setSaving(true);
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const now = new Date().toISOString();
+
+    // If editing an existing config, append a history entry with the OLD values
+    const historyEntry: SalaryHistoryEntry | null = existing ? {
+      changed_at: now, changed_by: authUser?.id ?? null,
+      old_base: existing.base_salary, new_base: base,
+      old_currency: existing.currency, new_currency: currency,
+      old_allowances: existing.allowances, old_deductions: existing.deductions,
+      note: notes || null,
+    } : null;
+
+    const prevHistory: SalaryHistoryEntry[] = Array.isArray(existing?.salary_history) ? existing!.salary_history : [];
+    const newHistory = historyEntry ? [historyEntry, ...prevHistory] : [];
+
     const payload = {
       user_id: emp.id, base_salary: base, currency, allowances, deductions,
-      notes: notes || null, effective_date: effectiveDate, updated_at: new Date().toISOString(),
+      notes: notes || null, effective_date: effectiveDate, updated_at: now,
+      salary_history: newHistory,
     };
     const { error } = existing
       ? await supabase.from('employee_salary_config').update(payload).eq('id', existing.id)
-      : await supabase.from('employee_salary_config').insert({ ...payload, created_by: (await supabase.auth.getUser()).data.user?.id });
+      : await supabase.from('employee_salary_config').insert({ ...payload, created_by: authUser?.id });
     setSaving(false);
     if (error) { toast({ title: 'Save failed', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Salary configuration saved' });
+    toast({ title: historyEntry ? 'Salary updated · change recorded in history' : 'Salary configuration saved' });
     qc.invalidateQueries({ queryKey: ['payroll-admin-employees'] });
     onClose();
   };
@@ -741,6 +769,40 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
             <SectionLabel icon={<MoreVertical className="h-3.5 w-3.5 text-slate-400" />} label="Notes (optional)" />
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes about this salary package…" className="text-sm mt-2 h-16 resize-none" />
           </div>
+
+          {/* Salary change history */}
+          {existing && Array.isArray(existing.salary_history) && existing.salary_history.length > 0 && (
+            <div>
+              <SectionLabel icon={<History className="h-3.5 w-3.5 text-slate-400" />} label="Change History" />
+              <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                {(existing.salary_history as SalaryHistoryEntry[]).map((h, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                    <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                      <Clock className="h-3.5 w-3.5 text-slate-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground">{format(parseISO(h.changed_at), 'dd MMM yyyy HH:mm')}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {h.old_base !== h.new_base && (
+                          <span className="text-xs">
+                            Base: <span className="line-through text-muted-foreground">{fmt(h.old_base, h.old_currency)}</span>
+                            {' → '}<span className="font-semibold text-[#0F2041] dark:text-blue-300">{fmt(h.new_base, h.new_currency)}</span>
+                          </span>
+                        )}
+                        {h.old_currency !== h.new_currency && (
+                          <span className="text-xs text-amber-600 font-medium">{h.old_currency} → {h.new_currency}</span>
+                        )}
+                        {h.old_allowances.length !== h.old_allowances.length && (
+                          <span className="text-xs text-emerald-600">Allowances updated</span>
+                        )}
+                      </div>
+                      {h.note && <p className="text-[11px] text-muted-foreground mt-0.5 italic truncate">"{h.note}"</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="px-6 pb-5 flex justify-end gap-2">
@@ -1880,27 +1942,98 @@ function EnhancedLineRow({ item, computed, currency, onUpdate, onRemove, typeSuf
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 2 — Run Payroll
+// ──────────────────────────────────────────────────────────────────────────────
+// ── Per-employee adjustment dialog ───────────────────────────────────────────
+function AdjustmentDialog({ empName, adjustments, onSave, onClose }: {
+  empName: string; adjustments: Adjustment[];
+  onSave: (adj: Adjustment[]) => void; onClose: () => void;
+}) {
+  const [lines, setLines] = useState<Adjustment[]>(adjustments.length ? [...adjustments] : [{ name: '', amount: 0, type: 'bonus' }]);
+
+  const update = (i: number, field: keyof Adjustment, val: any) =>
+    setLines(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: field === 'amount' ? parseFloat(val) || 0 : val } : l));
+  const remove = (i: number) => setLines(prev => prev.filter((_, idx) => idx !== i));
+  const add    = () => setLines(prev => [...prev, { name: '', amount: 0, type: 'bonus' }]);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md p-0">
+        <div className="px-5 pt-5 pb-4 border-b bg-slate-50 dark:bg-slate-900 rounded-t-2xl">
+          <DialogTitle className="text-base font-bold">Adjustments — {empName}</DialogTitle>
+          <DialogDescription className="text-xs mt-0.5">One-time bonuses or deductions for this payroll run only.</DialogDescription>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          {lines.map((l, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Input placeholder="Label (e.g. Ramadan Bonus)" value={l.name} onChange={e => update(i, 'name', e.target.value)} className="flex-1 h-9 text-sm" />
+              <Select value={l.type} onValueChange={v => update(i, 'type', v)}>
+                <SelectTrigger className="h-9 w-28 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bonus"><span className="text-emerald-600 font-semibold">+ Bonus</span></SelectItem>
+                  <SelectItem value="deduction"><span className="text-red-500 font-semibold">− Deduction</span></SelectItem>
+                </SelectContent>
+              </Select>
+              <Input type="number" placeholder="Amount" value={l.amount || ''} onChange={e => update(i, 'amount', e.target.value)} className="w-24 h-9 text-sm text-right" />
+              <button onClick={() => remove(i)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors shrink-0">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          <Button variant="outline" size="sm" onClick={add} className="gap-1.5 h-8 text-xs">
+            <Plus className="h-3.5 w-3.5" />Add line
+          </Button>
+        </div>
+        <DialogFooter className="px-5 py-4 border-t gap-2">
+          <Button variant="outline" onClick={onClose} className="h-9">Cancel</Button>
+          <Button onClick={() => { onSave(lines.filter(l => l.name && l.amount)); onClose(); }} className="h-9 bg-[#0F2041] hover:bg-[#1D3461] text-white">Apply</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
-function RunPayrollTab({ employees, runs, currentUserId }: {
-  employees: EmployeeRow[]; runs: PayrollRun[]; currentUserId: string;
+function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
+  employees: EmployeeRow[]; runs: PayrollRun[]; currentUserId: string; currentUserRole: string;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [monthOffset, setMonthOffset] = useState(0);
-  const [preview, setPreview]         = useState<RunItem[]>([]);
-  const [computing, setComputing]     = useState(false);
-  const [saving, setSaving]           = useState(false);
-  const [locking, setLocking]         = useState(false);
-  const [savedRunId, setSavedRunId]   = useState<string | null>(null);
+  const [monthOffset, setMonthOffset]   = useState(0);
+  const [preview, setPreview]           = useState<RunItem[]>([]);
+  const [computing, setComputing]       = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [locking, setLocking]           = useState(false);
+  const [submitting, setSubmitting]     = useState(false);
+  const [approving, setApproving]       = useState(false);
+  const [savedRunId, setSavedRunId]     = useState<string | null>(null);
+  const [adjustments, setAdjustments]  = useState<Record<string, Adjustment[]>>({});
+  const [adjEmp, setAdjEmp]            = useState<RunItem | null>(null);
 
   const periodStart = startOfMonth(subMonths(new Date(), -monthOffset));
   const periodEnd   = endOfMonth(subMonths(new Date(), -monthOffset));
   const periodLabel = format(periodStart, 'MMMM yyyy');
 
   const existingRun = runs.find(r => r.period_label === periodLabel);
-  const isLocked    = existingRun?.status === 'locked';
+  const runStatus   = existingRun?.status ?? null;
+  const isLocked    = runStatus === 'locked';
+  const isSubmitted = runStatus === 'submitted';
+  const isApproved  = runStatus === 'approved';
   const configured  = employees.filter(e => e.salary_config);
+
+  const isSuperAdmin = ['super_admin', 'superAdmin', 'SuperAdmin'].includes(currentUserRole);
+  const isFinance    = ['finance', 'Finance'].includes(currentUserRole);
+  const canApprove   = isSuperAdmin || isFinance;
+
+  // Compute adjusted net per employee
+  const adjNet = (row: RunItem) => {
+    const adjs = adjustments[row.user_id] ?? row.adjustments ?? [];
+    const bonus = adjs.filter(a => a.type === 'bonus').reduce((s, a) => s + a.amount, 0);
+    const ded   = adjs.filter(a => a.type === 'deduction').reduce((s, a) => s + a.amount, 0);
+    return { net: row.net_salary + bonus - ded, bonus, ded, adjs };
+  };
 
   const computePreview = useCallback(() => {
     if (!configured.length) { toast({ title: 'No employees have salary configured.', variant: 'destructive' }); return; }
@@ -1918,41 +2051,78 @@ function RunPayrollTab({ employees, runs, currentUserId }: {
           currency: emp.salary_config!.currency,
           allowances_snapshot: emp.salary_config!.allowances,
           deductions_snapshot: emp.salary_config!.deductions,
+          adjustments: [],
         };
       }));
       setComputing(false);
     }, 200);
   }, [configured, toast]);
 
-  const saveRun = async (lockIt = false) => {
+  const saveRun = async (newStatus: 'draft' | 'submitted' | 'approved' | 'locked') => {
     if (!preview.length) { toast({ title: 'Compute preview first', variant: 'destructive' }); return; }
-    lockIt ? setLocking(true) : setSaving(true);
+    newStatus === 'draft'     ? setSaving(true)    :
+    newStatus === 'submitted' ? setSubmitting(true) :
+    newStatus === 'approved'  ? setApproving(true)  : setLocking(true);
+
     try {
       let runId = savedRunId ?? existingRun?.id;
+      const now = new Date().toISOString();
+      const statusPayload: Record<string, any> = { status: newStatus };
+      if (newStatus === 'locked')    { statusPayload.locked_at   = now; }
+      if (newStatus === 'submitted') { statusPayload.submitted_at = now; statusPayload.submitted_by = currentUserId; }
+      if (newStatus === 'approved')  { statusPayload.approved_at  = now; statusPayload.approved_by  = currentUserId; }
+
       if (!runId) {
         const { data, error } = await supabase.from('payroll_runs').insert({
-          period_label: periodLabel,
-          period_start: format(periodStart, 'yyyy-MM-dd'),
-          period_end: format(periodEnd, 'yyyy-MM-dd'),
-          status: lockIt ? 'locked' : 'draft',
-          created_by: currentUserId,
-          locked_at: lockIt ? new Date().toISOString() : null,
+          period_label: periodLabel, period_start: format(periodStart, 'yyyy-MM-dd'),
+          period_end: format(periodEnd, 'yyyy-MM-dd'), created_by: currentUserId, ...statusPayload,
         }).select('id').single();
         if (error) throw error;
         runId = data.id; setSavedRunId(runId);
-      } else if (lockIt) {
-        await supabase.from('payroll_runs').update({ status: 'locked', locked_at: new Date().toISOString() }).eq('id', runId);
+      } else {
+        await supabase.from('payroll_runs').update(statusPayload).eq('id', runId);
       }
-      await supabase.from('payroll_run_items').delete().eq('run_id', runId!);
-      await supabase.from('payroll_run_items').insert(preview.map(r => ({ run_id: runId, user_id: r.user_id, user_name: r.user_name, department_name: r.department_name, base_salary: r.base_salary, allowances_total: r.allowances_total, gross_salary: r.gross_salary, deductions_total: r.deductions_total, net_salary: r.net_salary, task_rewards: r.task_rewards, retainer_amount: r.retainer_amount, currency: r.currency, allowances_snapshot: r.allowances_snapshot, deductions_snapshot: r.deductions_snapshot })));
-      toast({ title: lockIt ? `✓ ${periodLabel} payroll locked` : 'Draft saved' });
+
+      if (newStatus === 'draft' || newStatus === 'submitted') {
+        await supabase.from('payroll_run_items').delete().eq('run_id', runId!);
+        await supabase.from('payroll_run_items').insert(preview.map(r => {
+          const { adjs } = adjNet(r);
+          return {
+            run_id: runId, user_id: r.user_id, user_name: r.user_name,
+            department_name: r.department_name, base_salary: r.base_salary,
+            allowances_total: r.allowances_total, gross_salary: r.gross_salary,
+            deductions_total: r.deductions_total, net_salary: adjNet(r).net,
+            task_rewards: r.task_rewards, retainer_amount: r.retainer_amount,
+            currency: r.currency, allowances_snapshot: r.allowances_snapshot,
+            deductions_snapshot: r.deductions_snapshot, adjustments: adjs,
+          };
+        }));
+      }
+
+      const labels: Record<string, string> = {
+        draft: 'Draft saved', submitted: '📤 Submitted for approval',
+        approved: '✅ Payroll approved', locked: `🔒 ${periodLabel} locked`,
+      };
+      toast({ title: labels[newStatus] });
       qc.invalidateQueries({ queryKey: ['payroll-runs'] });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    } finally { setSaving(false); setLocking(false); }
+    } finally { setSaving(false); setSubmitting(false); setApproving(false); setLocking(false); }
   };
 
-  const totals = preview.reduce((s, r) => ({ gross: s.gross + r.gross_salary, ded: s.ded + r.deductions_total, net: s.net + r.net_salary }), { gross: 0, ded: 0, net: 0 });
+  const totals = preview.reduce((s, r) => {
+    const { net } = adjNet(r);
+    return { gross: s.gross + r.gross_salary, ded: s.ded + r.deductions_total, net: s.net + net };
+  }, { gross: 0, ded: 0, net: 0 });
+
+  const STATUS_STEPS = [
+    { key: 'draft',     label: 'Draft',     icon: <FileText className="h-3.5 w-3.5" /> },
+    { key: 'submitted', label: 'Submitted',  icon: <Send className="h-3.5 w-3.5" /> },
+    { key: 'approved',  label: 'Approved',   icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+    { key: 'locked',    label: 'Locked',     icon: <Lock className="h-3.5 w-3.5" /> },
+  ];
+  const statusOrder = ['draft', 'submitted', 'approved', 'locked'];
+  const currentStep = statusOrder.indexOf(runStatus ?? 'draft');
 
   return (
     <div className="space-y-5">
@@ -1966,46 +2136,105 @@ function RunPayrollTab({ employees, runs, currentUserId }: {
         <CardContent className="pt-4 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-1.5">
-              <button onClick={() => { setMonthOffset(o => o - 1); setPreview([]); }} className="p-1 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors">
+              <button onClick={() => { setMonthOffset(o => o - 1); setPreview([]); setAdjustments({}); }} className="p-1 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors">
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <span className="text-sm font-bold min-w-[130px] text-center">{periodLabel}</span>
-              <button onClick={() => { setMonthOffset(o => o + 1); setPreview([]); }} disabled={monthOffset >= 0} className="p-1 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors disabled:opacity-30">
+              <button onClick={() => { setMonthOffset(o => o + 1); setPreview([]); setAdjustments({}); }} disabled={monthOffset >= 0} className="p-1 rounded-lg hover:bg-white dark:hover:bg-slate-700 transition-colors disabled:opacity-30">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            {existingRun && (
-              <Badge className={cn('text-xs font-semibold px-3 py-1', isLocked ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200')}>
-                {isLocked ? '🔒 Locked' : '📝 Draft'}
-              </Badge>
-            )}
+
             <div className="ml-auto flex items-center gap-2 flex-wrap">
               <span className="text-xs text-muted-foreground">{configured.length}/{employees.length} configured</span>
-              <Button onClick={computePreview} disabled={computing || isLocked} className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 h-9">
+              <Button onClick={computePreview} disabled={computing || isLocked || isApproved} className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-2 h-9">
                 {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                 Compute
               </Button>
-              {preview.length > 0 && !isLocked && (
+              {preview.length > 0 && !isLocked && !isApproved && (
                 <>
-                  <Button variant="outline" onClick={() => saveRun(false)} disabled={saving} className="h-9 gap-2">
+                  <Button variant="outline" onClick={() => saveRun('draft')} disabled={saving} className="h-9 gap-2">
                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Save Draft
                   </Button>
-                  <Button onClick={() => saveRun(true)} disabled={locking} className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 gap-2">
-                    {locking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-                    Lock &amp; Finalize
-                  </Button>
+                  {!isSubmitted && (
+                    <Button onClick={() => saveRun('submitted')} disabled={submitting} variant="outline" className="h-9 gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+                      {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      Submit for Approval
+                    </Button>
+                  )}
+                </>
+              )}
+              {(isSubmitted || isApproved) && canApprove && !isLocked && (
+                <>
+                  {isSubmitted && (
+                    <Button onClick={() => saveRun('approved')} disabled={approving} variant="outline" className="h-9 gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                      {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      Approve
+                    </Button>
+                  )}
+                  {isApproved && (
+                    <Button onClick={() => saveRun('locked')} disabled={locking} className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 gap-2">
+                      {locking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+                      Lock &amp; Finalize
+                    </Button>
+                  )}
                 </>
               )}
             </div>
           </div>
+
+          {/* Approval workflow stepper */}
+          {existingRun && (
+            <div className="flex items-center gap-0 mt-2">
+              {STATUS_STEPS.map((step, i) => {
+                const done    = i < currentStep;
+                const current = i === currentStep;
+                return (
+                  <div key={step.key} className="flex items-center flex-1">
+                    <div className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
+                      done    ? 'bg-emerald-100 text-emerald-700' :
+                      current ? 'bg-[#0F2041] text-white' :
+                                'bg-slate-100 text-slate-400',
+                    )}>
+                      {step.icon}{step.label}
+                    </div>
+                    {i < STATUS_STEPS.length - 1 && (
+                      <div className={cn('flex-1 h-0.5 mx-1', done ? 'bg-emerald-300' : 'bg-slate-200')} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {isLocked && (
             <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-200">
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-emerald-800">Payroll Locked</p>
-                <p className="text-xs text-emerald-700 mt-0.5">This payroll period is finalized. Switch to <strong>Payslips &amp; History</strong> to download individual payslips.</p>
+                <p className="text-xs text-emerald-700 mt-0.5">This period is finalized. Switch to <strong>Payslips &amp; History</strong> to download individual payslips.</p>
+              </div>
+            </div>
+          )}
+          {isSubmitted && (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-50 border border-indigo-200">
+              <Send className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-indigo-800">Pending Approval</p>
+                <p className="text-xs text-indigo-700 mt-0.5">
+                  Submitted {existingRun.submitted_at ? format(parseISO(existingRun.submitted_at), 'dd MMM yyyy HH:mm') : ''}. Waiting for a Finance or Super Admin to approve.
+                </p>
+              </div>
+            </div>
+          )}
+          {isApproved && !isLocked && (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+              <CheckCircle2 className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Approved — Ready to Lock</p>
+                <p className="text-xs text-amber-700 mt-0.5">Approved {existingRun.approved_at ? format(parseISO(existingRun.approved_at), 'dd MMM yyyy HH:mm') : ''}. Click "Lock &amp; Finalize" to close this payroll period.</p>
               </div>
             </div>
           )}
@@ -2015,10 +2244,10 @@ function RunPayrollTab({ employees, runs, currentUserId }: {
       {/* Preview table */}
       {preview.length > 0 && (
         <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
-          <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div className="px-5 py-4 border-b flex items-center justify-between flex-wrap gap-2">
             <div>
               <h3 className="text-sm font-semibold">Preview — {periodLabel}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">{preview.length} employees · review before locking</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{preview.length} employees · click "Adjust" to add one-time bonuses or deductions</p>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>Gross: <strong className="text-emerald-600">{fmt(totals.gross)}</strong></span>
@@ -2032,40 +2261,61 @@ function RunPayrollTab({ employees, runs, currentUserId }: {
                 <tr className="bg-slate-50 dark:bg-slate-800/60 border-b">
                   <th className="text-left text-xs font-semibold text-muted-foreground px-5 py-3 uppercase tracking-wide">Employee</th>
                   <th className="text-right text-xs font-semibold text-muted-foreground px-3 py-3 uppercase tracking-wide">Base</th>
-                  <th className="text-right text-xs font-semibold text-emerald-600 px-3 py-3 uppercase tracking-wide">+Allowances</th>
+                  <th className="text-right text-xs font-semibold text-emerald-600 px-3 py-3 uppercase tracking-wide">+Allow.</th>
                   <th className="text-right text-xs font-semibold text-[#0F2041] dark:text-blue-300 px-3 py-3 uppercase tracking-wide">Gross</th>
-                  <th className="text-right text-xs font-semibold text-red-500 px-3 py-3 uppercase tracking-wide">−Deductions</th>
+                  <th className="text-right text-xs font-semibold text-red-500 px-3 py-3 uppercase tracking-wide">−Ded.</th>
+                  <th className="text-right text-xs font-semibold text-violet-600 px-3 py-3 uppercase tracking-wide">Adjustments</th>
                   <th className="text-right text-xs font-semibold text-blue-600 px-5 py-3 uppercase tracking-wide">Net Pay</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.map(row => (
-                  <tr key={row.user_id} className="border-b last:border-0 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors">
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0', avatarColor(row.user_id))}>
-                          {initials(row.user_name)}
+                {preview.map(row => {
+                  const { net, bonus, ded: adjDed, adjs } = adjNet(row);
+                  const hasAdj = adjs.length > 0;
+                  return (
+                    <tr key={row.user_id} className={cn('border-b last:border-0 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors', hasAdj && 'bg-violet-50/30 dark:bg-violet-950/10')}>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0', avatarColor(row.user_id))}>
+                            {initials(row.user_name)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{row.user_name}</p>
+                            <p className="text-[11px] text-muted-foreground">{row.department_name}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{row.user_name}</p>
-                          <p className="text-[11px] text-muted-foreground">{row.department_name}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3.5 text-right text-sm">{fmt(row.base_salary, row.currency)}</td>
-                    <td className="px-3 py-3.5 text-right text-sm text-emerald-600">+{fmt(row.allowances_total, row.currency)}</td>
-                    <td className="px-3 py-3.5 text-right text-sm font-semibold text-[#0F2041] dark:text-blue-300">{fmt(row.gross_salary, row.currency)}</td>
-                    <td className="px-3 py-3.5 text-right text-sm text-red-500">-{fmt(row.deductions_total, row.currency)}</td>
-                    <td className="px-5 py-3.5 text-right text-sm font-bold text-blue-600">{fmt(row.net_salary, row.currency)}</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-3 py-3.5 text-right text-sm">{fmt(row.base_salary, row.currency)}</td>
+                      <td className="px-3 py-3.5 text-right text-sm text-emerald-600">+{fmt(row.allowances_total, row.currency)}</td>
+                      <td className="px-3 py-3.5 text-right text-sm font-semibold text-[#0F2041] dark:text-blue-300">{fmt(row.gross_salary, row.currency)}</td>
+                      <td className="px-3 py-3.5 text-right text-sm text-red-500">-{fmt(row.deductions_total, row.currency)}</td>
+                      <td className="px-3 py-3.5 text-right">
+                        {!isLocked && !isApproved ? (
+                          <button onClick={() => setAdjEmp(row)} className={cn(
+                            'text-xs px-2 py-1 rounded-lg border transition-colors',
+                            hasAdj
+                              ? 'bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-200'
+                              : 'bg-white text-muted-foreground border-slate-200 hover:border-violet-300 hover:text-violet-600',
+                          )}>
+                            {hasAdj ? `${adjs.length} adj.` : '+ Adjust'}
+                          </button>
+                        ) : hasAdj ? (
+                          <span className="text-xs text-violet-600 font-medium">
+                            {bonus > 0 && `+${fmt(bonus)}`}{adjDed > 0 && ` -${fmt(adjDed)}`}
+                          </span>
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-5 py-3.5 text-right text-sm font-bold text-blue-600">{fmt(net, row.currency)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 dark:bg-slate-800/60 border-t-2">
                   <td className="px-5 py-3 text-sm font-bold text-muted-foreground">Totals</td>
-                  <td colSpan={2} />
-                  <td className="px-3 py-3 text-right text-sm font-bold text-[#0F2041] dark:text-blue-300">{fmt(totals.gross)}</td>
+                  <td colSpan={3} />
                   <td className="px-3 py-3 text-right text-sm font-bold text-red-500">-{fmt(totals.ded)}</td>
+                  <td />
                   <td className="px-5 py-3 text-right text-sm font-bold text-blue-600">{fmt(totals.net)}</td>
                 </tr>
               </tfoot>
@@ -2081,6 +2331,15 @@ function RunPayrollTab({ employees, runs, currentUserId }: {
           </div>
           <p className="text-sm text-muted-foreground">Select a period and click <strong className="text-foreground">Compute</strong> to preview payroll.</p>
         </div>
+      )}
+
+      {adjEmp && (
+        <AdjustmentDialog
+          empName={adjEmp.user_name}
+          adjustments={adjustments[adjEmp.user_id] ?? adjEmp.adjustments ?? []}
+          onSave={adjs => setAdjustments(prev => ({ ...prev, [adjEmp.user_id]: adjs }))}
+          onClose={() => setAdjEmp(null)}
+        />
       )}
     </div>
   );
