@@ -223,43 +223,43 @@ function PersonalTaskCard({
 
   return (
     <div className={cn(
-      'rounded-lg border border-l-4 bg-card hover:shadow-sm transition-all',
+      'rounded-xl border border-l-[3px] bg-card shadow-sm hover:shadow-md transition-all duration-150',
       sCfg.border,
-      isDone && 'opacity-60',
+      isDone && 'opacity-55',
     )}>
       {/* Main row */}
-      <div className="group flex items-start gap-3 px-3 py-2.5">
+      <div className="group flex items-start gap-3 px-4 py-3">
         {/* Status toggle circle */}
         <button
           type="button"
           className={cn(
-            'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+            'mt-0.5 h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110 active:scale-95',
             isDone
               ? 'border-emerald-500 bg-emerald-500'
               : isInProgress
-              ? 'border-[#1D3461] bg-[#1D3461]/10'
-              : 'border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50',
+              ? 'border-[#1D3461] bg-[#1D3461]/10 ring-2 ring-[#1D3461]/15'
+              : 'border-muted-foreground/30 hover:border-emerald-500 hover:bg-emerald-50',
           )}
           onClick={() => onStatusChange(isDone ? 'todo' : 'done', task.status)}
           title={isDone ? 'Click to reopen' : 'Click to mark as done'}
           data-testid={`task-toggle-${task.id}`}
         >
           {isDone
-            ? <CheckCircle2 className="h-3 w-3 text-white" />
+            ? <CheckCircle2 className="h-3.5 w-3.5 text-white" />
             : isInProgress
-            ? <div className="h-2 w-2 rounded-full bg-[#1D3461]" />
-            : <CheckCircle2 className="h-3 w-3 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
+            ? <div className="h-2.5 w-2.5 rounded-full bg-[#1D3461]" />
+            : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
           }
         </button>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-1">
+          <div className="flex items-start gap-1.5">
             <button
               type="button"
               onClick={onOpenDetail}
               className={cn(
-                'text-sm font-medium leading-snug text-left flex-1 hover:text-[#1D3461] transition-colors',
+                'text-[15px] font-semibold leading-snug text-left flex-1 hover:text-[#1D3461] transition-colors',
                 isDone && 'line-through text-muted-foreground hover:text-muted-foreground',
                 onOpenDetail && 'cursor-pointer',
               )}
@@ -269,59 +269,63 @@ function PersonalTaskCard({
               {task.title}
             </button>
             {task.notes && (
-              <StickyNote className="h-3 w-3 text-amber-400 flex-shrink-0 mt-0.5" title="Has notes" />
+              <StickyNote className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" title="Has notes" />
             )}
           </div>
           {task.description && (
-            <p className="text-xs text-muted-foreground mt-0.5 truncate">{task.description}</p>
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{task.description}</p>
           )}
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full', pCfg.color)}>
               {pCfg.label}
             </span>
             {task.dueDate && (
               <span className={cn(
-                'text-[10px] flex items-center gap-0.5',
-                overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+                'text-[11px] flex items-center gap-1 px-2 py-0.5 rounded-full font-medium',
+                overdue
+                  ? 'bg-red-50 text-red-600 border border-red-200'
+                  : (isValid(parseISO(task.dueDate)) && isToday(parseISO(task.dueDate)))
+                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                  : 'text-muted-foreground',
               )}>
-                <Calendar className="h-2.5 w-2.5" />
+                <Calendar className="h-3 w-3" />
                 {overdue && '⚠ '}{fmtDate(task.dueDate)}
               </span>
             )}
             {task.category && task.category !== 'personal' && (
-              <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{task.category}</span>
+              <span className="text-[11px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border/60">{task.category}</span>
             )}
             {task.completionRewardAmount && task.completionRewardAmount > 0 && (
-              <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                <span>+{task.completionRewardCurrency} {task.completionRewardAmount}</span>
+              <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-0.5 font-medium">
+                +{task.completionRewardCurrency} {task.completionRewardAmount}
               </span>
             )}
             {task.recurrence && task.recurrence !== 'none' && (
-              <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full capitalize">{task.recurrence}</span>
+              <span className="text-[11px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full capitalize">{task.recurrence}</span>
             )}
             {(task.tags ?? []).slice(0, 3).map(tag => (
-              <span key={tag} className="text-[9px] flex items-center gap-0.5 bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/15 px-1.5 py-0.5 rounded-full font-medium">
-                <Hash className="h-2 w-2" />{tag}
+              <span key={tag} className="text-[11px] flex items-center gap-0.5 bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/15 px-2 py-0.5 rounded-full font-medium">
+                <Hash className="h-2.5 w-2.5" />{tag}
               </span>
             ))}
             {(task.tags ?? []).length > 3 && (
-              <span className="text-[9px] text-muted-foreground">+{(task.tags ?? []).length - 3}</span>
+              <span className="text-[11px] text-muted-foreground">+{(task.tags ?? []).length - 3}</span>
             )}
           </div>
           {/* Co-assignees avatars */}
           {task.coAssignees && task.coAssignees.length > 0 && (
-            <div className="flex items-center gap-1 mt-1">
-              {task.coAssignees.slice(0, 3).map((a) => (
+            <div className="flex items-center gap-1 mt-1.5">
+              {task.coAssignees.slice(0, 4).map((a) => (
                 <span
                   key={a.id}
                   title={a.name}
-                  className="h-4 w-4 rounded-full bg-[#1D3461]/10 border border-[#1D3461]/20 flex items-center justify-center text-[8px] font-bold text-[#1D3461] flex-shrink-0"
+                  className="h-5 w-5 rounded-full bg-[#1D3461]/10 border border-[#1D3461]/20 flex items-center justify-center text-[9px] font-bold text-[#1D3461] flex-shrink-0"
                 >
                   {a.name.charAt(0).toUpperCase()}
                 </span>
               ))}
-              {task.coAssignees.length > 3 && (
-                <span className="text-[9px] text-muted-foreground">+{task.coAssignees.length - 3}</span>
+              {task.coAssignees.length > 4 && (
+                <span className="text-[10px] text-muted-foreground">+{task.coAssignees.length - 4}</span>
               )}
             </div>
           )}
@@ -331,100 +335,113 @@ function PersonalTaskCard({
             <button
               type="button"
               onClick={() => setSubtaskOpen(v => !v)}
-              className="mt-1.5 flex items-center gap-1.5 group/sub hover:opacity-80 transition-opacity"
+              className="mt-2 flex items-center gap-2 hover:opacity-80 transition-opacity w-full"
               data-testid={`subtask-toggle-${task.id}`}
             >
-              <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden w-24">
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-[#1D3461] rounded-full transition-all" style={{ width: `${subProgress}%` }} />
               </div>
-              <span className="text-[9px] text-muted-foreground">
-                {doneSubs}/{totalSubs} subtasks
+              <span className="text-[11px] text-muted-foreground font-medium flex-shrink-0">
+                {doneSubs}/{totalSubs}
               </span>
               {subtaskOpen
-                ? <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />
-                : <ChevronRight className="h-2.5 w-2.5 text-muted-foreground" />
+                ? <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                : <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               }
             </button>
           )}
         </div>
 
-        {/* "Mark Done" visible button (not done tasks only) */}
-        {!isDone && (
-          <button
-            type="button"
-            onClick={() => onStatusChange('done', task.status)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0"
-            data-testid={`task-mark-done-${task.id}`}
-          >
-            <CheckCircle2 className="h-3 w-3" /> Done
-          </button>
-        )}
-
-        {/* Subtask expand toggle (when no subtasks yet, show as icon) */}
-        {onCreateSubtask && (
-          <button
-            type="button"
-            onClick={() => setSubtaskOpen(v => !v)}
-            className={cn(
-              'opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[#1D3461] p-0.5 flex-shrink-0',
-              subtaskOpen && 'opacity-100 text-[#1D3461]',
-            )}
-            title={subtaskOpen ? 'Hide subtasks' : 'Show subtasks'}
-            data-testid={`subtask-expand-${task.id}`}
-          >
-            <ListChecks className="h-3.5 w-3.5" />
-          </button>
-        )}
-
-        {/* Status dropdown */}
-        <Select
-          value={task.status}
-          onValueChange={v => onStatusChange(v as PersonalTaskStatus, task.status)}
-        >
-          <SelectTrigger className="h-6 w-6 border-0 bg-transparent p-0 focus:ring-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Change status">
-            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-          </SelectTrigger>
-          <SelectContent>
-            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Change Status</div>
-            {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
-              <SelectItem key={s} value={s} className="text-xs">
-                <span className={cn('px-1.5 py-0.5 rounded-full text-[9px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* More actions */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-0.5 flex-shrink-0">
-              <Edit2 className="h-3.5 w-3.5" />
+        {/* Right-side action buttons */}
+        <div className="flex items-center gap-1 flex-shrink-0 self-start mt-0.5">
+          {/* Mark Done */}
+          {!isDone && (
+            <button
+              type="button"
+              onClick={() => onStatusChange('done', task.status)}
+              className="opacity-0 group-hover:opacity-100 transition-all text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1 flex-shrink-0"
+              data-testid={`task-mark-done-${task.id}`}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Done
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="text-sm">
-            <DropdownMenuItem onClick={onEdit}><Edit2 className="h-3.5 w-3.5 mr-2" />Edit Task</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-              <Trash2 className="h-3.5 w-3.5 mr-2" />Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          )}
+
+          {/* Subtask toggle */}
+          {onCreateSubtask && (
+            <button
+              type="button"
+              onClick={() => setSubtaskOpen(v => !v)}
+              className={cn(
+                'opacity-0 group-hover:opacity-100 transition-all rounded-lg p-1.5 flex-shrink-0',
+                subtaskOpen
+                  ? 'opacity-100 bg-[#1D3461]/10 text-[#1D3461]'
+                  : 'text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5',
+              )}
+              title={subtaskOpen ? 'Hide subtasks' : 'Add / view subtasks'}
+              data-testid={`subtask-expand-${task.id}`}
+            >
+              <ListChecks className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Status dropdown */}
+          <Select
+            value={task.status}
+            onValueChange={v => onStatusChange(v as PersonalTaskStatus, task.status)}
+          >
+            <SelectTrigger
+              className="h-8 w-8 border-0 bg-transparent p-0 focus:ring-0 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 rounded-lg hover:bg-muted"
+              title="Change status"
+            >
+              <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+            </SelectTrigger>
+            <SelectContent>
+              <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Change Status</div>
+              {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
+                <SelectItem key={s} value={s} className="text-xs">
+                  <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', STATUS_CFG[s].color)}>{STATUS_CFG[s].label}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* More actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="opacity-0 group-hover:opacity-100 transition-all text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg p-1.5 flex-shrink-0"
+              >
+                <Edit2 className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="text-sm">
+              <DropdownMenuItem onClick={onEdit} className="gap-2">
+                <Edit2 className="h-3.5 w-3.5" />Edit Task
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive gap-2">
+                <Trash2 className="h-3.5 w-3.5" />Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Subtask panel */}
       {subtaskOpen && (
-        <div className="px-3 pb-2.5 pt-0 ml-8 border-t border-dashed border-muted space-y-1" data-testid={`subtask-panel-${task.id}`}>
+        <div className="px-4 pb-3 pt-0 ml-9 border-t border-dashed border-muted/70 space-y-1.5" data-testid={`subtask-panel-${task.id}`}>
           {subtasks.length === 0 && (
-            <p className="text-[10px] text-muted-foreground py-1">No subtasks yet.</p>
+            <p className="text-xs text-muted-foreground py-1.5">No subtasks yet — type below to add one.</p>
           )}
           {subtasks.map(sub => {
             const subDone = sub.status === 'done';
             return (
-              <div key={sub.id} className="flex items-center gap-2 py-0.5 group/sub" data-testid={`subtask-item-${sub.id}`}>
+              <div key={sub.id} className="flex items-center gap-2 py-1 group/sub" data-testid={`subtask-item-${sub.id}`}>
                 <button
                   type="button"
                   className={cn(
-                    'h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+                    'h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
                     subDone ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
                   )}
                   onClick={() => onSubtaskStatusChange?.(sub.id, subDone ? 'todo' : 'done', sub.status)}
@@ -432,24 +449,24 @@ function PersonalTaskCard({
                 >
                   {subDone && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
                 </button>
-                <span className={cn('text-xs flex-1', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
+                <span className={cn('text-xs flex-1 leading-snug', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
                 {sub.dueDate && (
-                  <span className="text-[9px] text-muted-foreground">{fmtDate(sub.dueDate)}</span>
+                  <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtDate(sub.dueDate)}</span>
                 )}
               </div>
             );
           })}
           {/* Quick-add subtask */}
           {onCreateSubtask && (
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <Plus className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-dashed border-muted/50">
+              <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Add subtask…"
+                placeholder="Add subtask… press Enter"
                 value={newSubtaskTitle}
                 onChange={e => setNewSubtaskTitle(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleAddSubtask(); }}
-                className="flex-1 text-xs bg-muted/40 border border-muted rounded px-2 py-0.5 outline-none focus:border-[#1D3461]/40"
+                className="flex-1 text-xs bg-muted/40 border border-muted rounded-lg px-2.5 py-1 outline-none focus:border-[#1D3461]/50 focus:bg-background transition-colors"
                 disabled={addingSubtask}
                 data-testid={`subtask-input-${task.id}`}
               />
@@ -3412,17 +3429,17 @@ export default function MyTasks() {
       <Separator />
 
       {/* ── Personal Tasks Section ── */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
-            <h2 className="text-sm font-semibold flex items-center gap-2">
-              <Star className="h-4 w-4 text-amber-500" />
+            <h2 className="text-base font-bold flex items-center gap-2">
+              <Star className="h-5 w-5 text-amber-500 fill-amber-400" />
               My Personal Tasks
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredPersonal.length}</Badge>
+              <span className="text-sm font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{filteredPersonal.length}</span>
               <TooltipProvider>
                 <UITooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-xs leading-relaxed">
                     Personal tasks are private to you and not visible to anyone else.
@@ -3431,13 +3448,16 @@ export default function MyTasks() {
                 </UITooltip>
               </TooltipProvider>
             </h2>
-            <p className="text-[11px] text-muted-foreground ml-6">Private to you only — click a task title to open details · toggle ☰ List or ⊞ Board view</p>
+            <p className="text-xs text-muted-foreground ml-6 mt-0.5">Private to you only — click a task title to open details · toggle List or Board view</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {/* Sort */}
             <Select value={sortBy} onValueChange={v => setSortBy(v as SortBy)}>
-              <SelectTrigger className="h-7 w-auto text-xs gap-1 border-muted bg-card" data-testid="select-sort-by">
-                <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+              <SelectTrigger
+                className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 font-medium shadow-sm"
+                data-testid="select-sort-by"
+              >
+                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -3449,8 +3469,11 @@ export default function MyTasks() {
             </Select>
             {/* Group */}
             <Select value={groupBy} onValueChange={v => setGroupBy(v as GroupBy)}>
-              <SelectTrigger className="h-7 w-auto text-xs gap-1 border-muted bg-card" data-testid="select-group-by">
-                <Layers className="h-3 w-3 text-muted-foreground" />
+              <SelectTrigger
+                className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 font-medium shadow-sm"
+                data-testid="select-group-by"
+              >
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -3459,23 +3482,35 @@ export default function MyTasks() {
                 <SelectItem value="status" className="text-xs">Group by Status</SelectItem>
               </SelectContent>
             </Select>
-            {/* View toggle */}
-            <div className="flex items-center border rounded-lg overflow-hidden h-7">
+            {/* View toggle pill */}
+            <div className="flex items-center bg-muted rounded-lg p-0.5 gap-0 h-8 shadow-sm border border-border/50">
               <button
                 type="button"
                 onClick={() => setPersonalView('list')}
-                className={cn('flex items-center gap-1 px-2.5 h-full text-[11px] font-medium transition-colors', personalView === 'list' ? 'bg-[#1D3461] text-white' : 'bg-card text-muted-foreground hover:bg-muted')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 h-full text-xs font-semibold rounded-md transition-all',
+                  personalView === 'list'
+                    ? 'bg-[#1D3461] text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
                 title="List view"
               >
                 <LayoutList className="h-3.5 w-3.5" />
+                <span>List</span>
               </button>
               <button
                 type="button"
                 onClick={() => setPersonalView('board')}
-                className={cn('flex items-center gap-1 px-2.5 h-full text-[11px] font-medium transition-colors', personalView === 'board' ? 'bg-[#1D3461] text-white' : 'bg-card text-muted-foreground hover:bg-muted')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 h-full text-xs font-semibold rounded-md transition-all',
+                  personalView === 'board'
+                    ? 'bg-[#1D3461] text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
                 title="Kanban board view"
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
+                <span>Board</span>
               </button>
             </div>
           </div>
@@ -3526,7 +3561,7 @@ export default function MyTasks() {
                     <div className="flex-1 h-px bg-border" />
                   </div>
                 )}
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {group.tasks.map(task => (
                     <PersonalTaskCard
                       key={task.id}
@@ -3556,12 +3591,14 @@ export default function MyTasks() {
           <button
             type="button"
             onClick={() => setShowTeam(v => !v)}
-            className="flex items-center gap-2 text-sm font-semibold text-foreground w-full group"
+            className="flex items-center gap-2 w-full group rounded-xl border border-border/60 bg-card hover:bg-muted/50 px-4 py-2.5 transition-colors shadow-sm"
           >
-            <Users className="h-4 w-4 text-[#1D3461]" />
-            Team Task Health
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Admin View</Badge>
-            <span className="ml-auto text-muted-foreground group-hover:text-foreground">
+            <div className="h-7 w-7 rounded-lg bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
+              <Users className="h-4 w-4 text-[#1D3461]" />
+            </div>
+            <span className="text-sm font-semibold text-foreground">Team Task Health</span>
+            <span className="text-[11px] font-semibold text-[#1D3461] bg-[#1D3461]/10 border border-[#1D3461]/20 px-2 py-0.5 rounded-full">Admin</span>
+            <span className="ml-auto text-muted-foreground group-hover:text-foreground transition-colors">
               {showTeam ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </span>
           </button>
@@ -3571,13 +3608,15 @@ export default function MyTasks() {
           <button
             type="button"
             onClick={() => { setShowDeptOverview(v => !v); if (!showDeptOverview) refetchDeptOverview(); }}
-            className="flex items-center gap-2 text-sm font-semibold text-foreground w-full group mt-2"
+            className="flex items-center gap-2 w-full group rounded-xl border border-border/60 bg-card hover:bg-muted/50 px-4 py-2.5 transition-colors shadow-sm"
             data-testid="button-toggle-dept-overview"
           >
-            <Building2 className="h-4 w-4 text-[#1D3461]" />
-            Task Overview by Department
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Admin View</Badge>
-            <span className="ml-auto text-muted-foreground group-hover:text-foreground">
+            <div className="h-7 w-7 rounded-lg bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
+              <Building2 className="h-4 w-4 text-[#1D3461]" />
+            </div>
+            <span className="text-sm font-semibold text-foreground">Task Overview by Department</span>
+            <span className="text-[11px] font-semibold text-[#1D3461] bg-[#1D3461]/10 border border-[#1D3461]/20 px-2 py-0.5 rounded-full">Admin</span>
+            <span className="ml-auto text-muted-foreground group-hover:text-foreground transition-colors">
               {showDeptOverview ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </span>
           </button>
@@ -3624,7 +3663,7 @@ export default function MyTasks() {
           <button
             type="button"
             onClick={() => navigate('/task-admin')}
-            className="flex items-center gap-1.5 text-xs text-[#1D3461] hover:underline font-medium mt-1"
+            className="flex items-center gap-2 text-xs font-semibold text-[#1D3461] bg-[#1D3461]/6 hover:bg-[#1D3461]/12 border border-[#1D3461]/20 px-3 py-2 rounded-lg transition-colors mt-1"
             data-testid="link-task-admin"
           >
             <DollarSign className="h-3.5 w-3.5" />
