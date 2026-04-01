@@ -27,13 +27,15 @@ interface RequestDownPaymentButtonProps {
   variant?: 'default' | 'outline' | 'ghost' | 'secondary';
   size?: 'default' | 'sm' | 'lg' | 'icon';
   className?: string;
+  onBehalfOf?: { id: string; name: string };
 }
 
 export function RequestDownPaymentButton({
   site,
   variant = 'outline',
   size = 'sm',
-  className = ''
+  className = '',
+  onBehalfOf,
 }: RequestDownPaymentButtonProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { requests } = useDownPayment();
@@ -97,6 +99,7 @@ export function RequestDownPaymentButton({
         hubName={hubName}
         stateName={stateName}
         localityName={localityName}
+        onBehalfOf={onBehalfOf}
       />
     </>
   );

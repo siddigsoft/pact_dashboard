@@ -905,19 +905,42 @@ const MMPSiteEntriesTable = ({
                           />
                         )}
                         {/* Show Request Advance button for claimed/accepted/ongoing/in-progress sites with transport budget */}
-                        {(site.status?.toLowerCase() === 'claimed' || 
-                          site.status?.toLowerCase() === 'accepted' || 
-                          site.status?.toLowerCase() === 'ongoing' || 
-                          site.status?.toLowerCase() === 'in progress' || 
-                          site.status?.toLowerCase() === 'in_progress') && 
-                         (site.accepted_by === currentUserId || site.acceptedBy === currentUserId) && 
-                         ((site.transport_fee && site.transport_fee > 0) || (site.transportFee && site.transportFee > 0)) && (
-                          <RequestDownPaymentButton
-                            site={site}
-                            size="sm"
-                            className="w-full min-h-[44px]"
-                          />
-                        )}
+                        {(() => {
+                          const statusOk = ['claimed','accepted','ongoing','in progress','in_progress'].includes(site.status?.toLowerCase() ?? '');
+                          const hasBudget = (site.transport_fee && site.transport_fee > 0) || (site.transportFee && site.transportFee > 0);
+                          if (!statusOk || !hasBudget) return null;
+
+                          const isOwnSite = site.accepted_by === currentUserId || site.acceptedBy === currentUserId;
+                          const adminRoles = ['super_admin','superadmin','admin','fom','field operation manager','countrydirector','country_director'];
+                          const isAdmin = adminRoles.includes((currentUser?.role ?? '').toLowerCase());
+
+                          if (isOwnSite) {
+                            return (
+                              <RequestDownPaymentButton
+                                site={site}
+                                size="sm"
+                                className="w-full min-h-[44px]"
+                              />
+                            );
+                          }
+
+                          if (isAdmin) {
+                            const dcId = site.accepted_by || site.acceptedBy;
+                            if (!dcId) return null;
+                            const dcUser = users.find(u => u.id === dcId);
+                            const dcName = dcUser ? (dcUser.fullName || dcUser.email || 'Data Collector') : 'Data Collector';
+                            return (
+                              <RequestDownPaymentButton
+                                site={site}
+                                size="sm"
+                                className="w-full min-h-[44px]"
+                                onBehalfOf={{ id: dcId, name: dcName }}
+                              />
+                            );
+                          }
+
+                          return null;
+                        })()}
                         {showVisitActions ? (
                           <>
                             {['claimed', 'accepted', 'assigned', 'verified', 'approved', 'dispatched'].includes(site.status?.toLowerCase()) && onStartVisit && (
