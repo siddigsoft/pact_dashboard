@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -286,18 +286,27 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   }>({ open: false, request: null, requestedAmount: 0, approvedAmount: 0, justification: '', siteName: '', reason: '', processing: false });
 
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
-  const uniqueStates = useMemo(() => {
-    const base = filters.hubId
-      ? requests.filter(r => r.hubId === filters.hubId || r.hubName?.toLowerCase() === filters.hubId!.toLowerCase())
-      : requests;
-    return [...new Set(base.map(r => r.stateName).filter(Boolean))].sort() as string[];
-  }, [requests, filters.hubId]);
-  const uniqueLocalities = useMemo(() => {
-    const base = filters.stateName
-      ? requests.filter(r => r.stateName?.toLowerCase() === filters.stateName!.toLowerCase())
-      : requests;
-    return [...new Set(base.map(r => r.localityName).filter(Boolean))].sort() as string[];
-  }, [requests, filters.stateName]);
+
+  // Reusable matchers — mirror the logic in filterDownPayments exactly
+  const matchesHubFilter = useCallback((r: DownPaymentRequest) => {
+    if (!filters.hubId) return true;
+    return r.hubId === filters.hubId || r.hubName?.toLowerCase() === filters.hubId.toLowerCase();
+  }, [filters.hubId]);
+
+  const matchesStateFilter = useCallback((r: DownPaymentRequest) => {
+    if (!filters.stateName) return true;
+    return r.stateName?.toLowerCase() === filters.stateName.toLowerCase();
+  }, [filters.stateName]);
+
+  const uniqueStates = useMemo(() =>
+    [...new Set(requests.filter(matchesHubFilter).map(r => r.stateName).filter(Boolean))].sort() as string[],
+    [requests, matchesHubFilter]
+  );
+
+  const uniqueLocalities = useMemo(() =>
+    [...new Set(requests.filter(matchesHubFilter).filter(matchesStateFilter).map(r => r.localityName).filter(Boolean))].sort() as string[],
+    [requests, matchesHubFilter, matchesStateFilter]
+  );
   const uniqueMMPs = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort(), [requests]);
   const uniqueSites = useMemo(() => [...new Set(requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).map(r => r.siteName).filter(Boolean))].sort(), [requests]);
 
