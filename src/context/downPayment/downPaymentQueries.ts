@@ -146,35 +146,20 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   if (needsEnrichment.length > 0) {
     const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))] as string[];
     try {
-      // Fetch mmp_site_entries in chunks of 50 to avoid URL-length limits that
-      // cause silent 414 failures when sending hundreds of IDs as a query param.
-      const CHUNK = 50;
-      const allEntries: any[] = [];
-      for (let i = 0; i < entryIds.length; i += CHUNK) {
-        const { data: chunk } = await supabase
-          .from('mmp_site_entries')
-          .select('id, state, locality, mmp_file_id')
-          .in('id', entryIds.slice(i, i + CHUNK));
-        if (chunk) allEntries.push(...chunk);
-      }
+      // Use an RPC function that does a server-side SQL JOIN — avoids GET
+      // URL-length limits that silently fail when passing 600+ UUIDs as query params.
+      const { data: entries } = await (supabase as any).rpc('get_entry_enrichment', { entry_ids: entryIds });
 
-      if (allEntries.length > 0) {
-        const entryMap = new Map(allEntries.map(e => [e.id, e]));
-
-        // Fetch all MMP files (only ~3 rows total) to build the name map.
-        const { data: mmpFiles } = await supabase
-          .from('mmp_files')
-          .select('id, name');
-        const mmpNameMap = new Map<string, string>(
-          (mmpFiles || []).map(f => [f.id, f.name] as [string, string])
+      if (entries && entries.length > 0) {
+        const entryMap = new Map<string, { state: string; locality: string; mmp_name: string }>(
+          (entries as any[]).map(e => [e.id, e])
         );
-
         transformed.forEach(r => {
           if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
             const e = entryMap.get(r.mmpSiteEntryId)!;
             if (!r.stateName && e.state) r.stateName = e.state;
             if (!r.localityName && e.locality) r.localityName = e.locality;
-            if (!r.mmpName && e.mmp_file_id) r.mmpName = mmpNameMap.get(e.mmp_file_id);
+            if (!r.mmpName && e.mmp_name) r.mmpName = e.mmp_name;
           }
         });
       }
