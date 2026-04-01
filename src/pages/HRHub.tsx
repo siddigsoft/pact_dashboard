@@ -1,19 +1,21 @@
 import { Suspense, lazy } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Banknote, Users, FileText, Loader2 } from 'lucide-react';
+import { Banknote, Users, FileText, Loader2, Settings2 } from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
 
 const PayrollPanel      = lazy(() => import('./Payroll'));
 const StaffPanel        = lazy(() => import('./StaffDirectory'));
 const RetainerPanel     = lazy(() => import('./RetainerManagement'));
+const PayrollAdminPanel = lazy(() => import('./PayrollAdmin'));
 
-type HRTab = 'payroll' | 'staff' | 'retainer';
+type HRTab = 'payroll' | 'staff' | 'retainer' | 'payroll-admin';
 
 const TABS: { id: HRTab; label: string; icon: typeof Banknote; color: string }[] = [
-  { id: 'payroll',  label: 'Payroll',         icon: Banknote,  color: '#D97706' },
-  { id: 'staff',    label: 'Staff Directory',  icon: Users,     color: '#0F2041' },
-  { id: 'retainer', label: 'Retainer',         icon: FileText,  color: '#7C3AED' },
+  { id: 'payroll',       label: 'My Payroll',      icon: Banknote,   color: '#D97706' },
+  { id: 'staff',         label: 'Staff Directory',  icon: Users,      color: '#0F2041' },
+  { id: 'retainer',      label: 'Retainer',         icon: FileText,   color: '#7C3AED' },
+  { id: 'payroll-admin', label: 'Payroll Admin',    icon: Settings2,  color: '#0891B2' },
 ];
 
 function PanelLoader() {
@@ -60,7 +62,7 @@ export default function HRHub() {
           </div>
 
           {/* Tab strip */}
-          <div className="flex gap-0 -mb-px">
+          <div className="flex gap-0 -mb-px overflow-x-auto">
             {TABS.map(t => {
               const Icon = t.icon;
               const isActive = tab === t.id;
@@ -70,7 +72,7 @@ export default function HRHub() {
                   onClick={() => setTab(t.id)}
                   data-testid={`hr-tab-${t.id}`}
                   className={cn(
-                    'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap',
+                    'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap shrink-0',
                     isActive
                       ? 'border-b-2 text-foreground'
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
@@ -101,6 +103,11 @@ export default function HRHub() {
         {tab === 'retainer' && (
           <Suspense fallback={<PanelLoader />}>
             <RetainerPanel />
+          </Suspense>
+        )}
+        {tab === 'payroll-admin' && (
+          <Suspense fallback={<PanelLoader />}>
+            <PayrollAdminPanel />
           </Suspense>
         )}
       </div>
