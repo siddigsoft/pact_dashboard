@@ -1077,12 +1077,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         
         <TabsContent value="team" className="space-y-4 mt-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">
+            <h2 className="text-base font-semibold flex items-center gap-2">
               Team Members
               {project.team?.teamComposition && project.team.teamComposition.length > 0 && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  ({project.team.teamComposition.length})
-                </span>
+                <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                  {project.team.teamComposition.length}
+                </Badge>
               )}
             </h2>
             <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
