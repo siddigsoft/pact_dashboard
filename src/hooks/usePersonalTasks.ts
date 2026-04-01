@@ -5,11 +5,18 @@ import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-f
 export type PersonalTaskPriority = 'low' | 'medium' | 'high' | 'critical';
 export type PersonalTaskStatus = 'todo' | 'inprogress' | 'done' | 'cancelled';
 
+export interface TaskAssignee {
+  id: string;
+  name: string;
+  email?: string | null;
+}
+
 export interface PersonalTask {
   id: string;
   userId: string;
   assignedTo: string | null;
   assignedToName: string | null;
+  coAssignees: TaskAssignee[];
   title: string;
   description: string | null;
   priority: PersonalTaskPriority;
@@ -43,6 +50,7 @@ export interface CreatePersonalTask {
   assignedTo?: string | null;
   assignedToName?: string | null;
   assignedToEmail?: string | null;
+  coAssignees?: TaskAssignee[];
   // Task #10 additions
   parentTaskId?: string | null;
   targetDepartmentId?: string | null;
@@ -75,6 +83,7 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     userId: r.user_id as string,
     assignedTo: (r.assigned_to as string) ?? null,
     assignedToName: (r.assigned_to_name as string) ?? null,
+    coAssignees: Array.isArray(r.co_assignees) ? (r.co_assignees as TaskAssignee[]) : [],
     title: r.title as string,
     description: (r.description as string) ?? null,
     priority: r.priority as PersonalTaskPriority,
@@ -305,13 +314,28 @@ export function usePersonalTasks(userId: string | undefined) {
     queryKey: KEY,
     queryFn: async (): Promise<PersonalTask[]> => {
       if (!userId) return [];
-      const { data, error } = await supabase
+      // Primary query: tasks owned by or assigned to the user
+      const { data: primary, error } = await supabase
         .from('personal_tasks')
         .select('*')
         .or(`assigned_to.eq.${userId},and(user_id.eq.${userId},assigned_to.is.null)`)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map(r => mapRow(r as Record<string, unknown>));
+
+      // Secondary query: tasks where user is a co-assignee
+      const { data: coData } = await supabase
+        .from('personal_tasks')
+        .select('*')
+        .filter('co_assignees', 'cs', JSON.stringify([{ id: userId }]))
+        .order('created_at', { ascending: false });
+
+      // Merge and deduplicate
+      const primaryMapped = (primary ?? []).map(r => mapRow(r as Record<string, unknown>));
+      const coMapped = (coData ?? []).map(r => mapRow(r as Record<string, unknown>));
+      const seen = new Set(primaryMapped.map(t => t.id));
+      const merged = [...primaryMapped, ...coMapped.filter(t => !seen.has(t.id))];
+      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return merged;
     },
     enabled: !!userId,
     staleTime: 30_000,
@@ -342,6 +366,7 @@ export function usePersonalTasks(userId: string | undefined) {
           recurrence: task.recurrence ?? 'none',
           template_id: task.templateId ?? null,
           daily_task_date: task.dailyTaskDate ?? null,
+          co_assignees: task.coAssignees ?? [],
         })
         .select('id')
         .single();
@@ -410,6 +435,7 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.notes !== undefined)       patch.notes = updates.notes;
       if (updates.completionRewardAmount !== undefined) patch.completion_reward_amount = updates.completionRewardAmount;
       if (updates.completionRewardCurrency !== undefined) patch.completion_reward_currency = updates.completionRewardCurrency;
+      if (updates.coAssignees !== undefined)  patch.co_assignees = updates.coAssignees;
 
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;

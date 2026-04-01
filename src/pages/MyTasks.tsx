@@ -58,7 +58,7 @@ import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
   materialiseDailyTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type CreatePersonalTask,
-  type AssignedProjectTask,
+  type TaskAssignee, type AssignedProjectTask,
 } from '@/hooks/usePersonalTasks';
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -308,6 +308,24 @@ function PersonalTaskCard({
               <span className="text-[9px] text-muted-foreground">+{(task.tags ?? []).length - 3}</span>
             )}
           </div>
+          {/* Co-assignees avatars */}
+          {task.coAssignees && task.coAssignees.length > 0 && (
+            <div className="flex items-center gap-1 mt-1">
+              {task.coAssignees.slice(0, 3).map((a) => (
+                <span
+                  key={a.id}
+                  title={a.name}
+                  className="h-4 w-4 rounded-full bg-[#1D3461]/10 border border-[#1D3461]/20 flex items-center justify-center text-[8px] font-bold text-[#1D3461] flex-shrink-0"
+                >
+                  {a.name.charAt(0).toUpperCase()}
+                </span>
+              ))}
+              {task.coAssignees.length > 3 && (
+                <span className="text-[9px] text-muted-foreground">+{task.coAssignees.length - 3}</span>
+              )}
+            </div>
+          )}
+
           {/* Subtask progress bar */}
           {totalSubs > 0 && (
             <button
@@ -483,6 +501,18 @@ function TaskDetailSheet({
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardCurrency, setRewardCurrency] = useState('USD');
   const [dirty, setDirty] = useState(false);
+  const [coAssignees, setCoAssignees] = useState<TaskAssignee[]>([]);
+  const [coUserSearch, setCoUserSearch] = useState('');
+
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['profiles-for-task-assign'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      return (data ?? []) as { id: string; full_name: string; role: string }[];
+    },
+    enabled: isAdmin && !!task,
+    staleTime: 5 * 60_000,
+  });
 
   useEffect(() => {
     if (task) {
@@ -496,9 +526,11 @@ function TaskDetailSheet({
       setCategory(task.category ?? '');
       setRewardAmount(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
       setRewardCurrency(task.completionRewardCurrency ?? 'USD');
+      setCoAssignees(task.coAssignees ?? []);
       setDirty(false);
       setTagInput('');
       setNewSubtaskTitle('');
+      setCoUserSearch('');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task?.id]);
@@ -520,6 +552,7 @@ function TaskDetailSheet({
       category: category.trim() || 'personal',
       completionRewardAmount: reward,
       completionRewardCurrency: currency,
+      coAssignees,
     });
     setDirty(false);
   };
@@ -666,6 +699,80 @@ function TaskDetailSheet({
                 className={cn('h-8 text-xs', overdue && !dueDate && 'border-red-300')}
               />
             </div>
+          </div>
+
+          {/* Assignees */}
+          <div className="space-y-1.5">
+            <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Users className="h-2.5 w-2.5" />Assignees
+            </Label>
+            <div className="flex flex-wrap gap-1.5">
+              {/* Primary assignee chip (read-only label) */}
+              {task.assignedToName && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-[#1D3461] text-white">
+                  <span className="opacity-70 text-[9px]">primary</span>
+                  {task.assignedToName}
+                </span>
+              )}
+              {/* Co-assignee chips */}
+              {coAssignees.map(a => (
+                <span key={a.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-muted border border-border text-muted-foreground">
+                  {a.name}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => { setCoAssignees(prev => prev.filter(x => x.id !== a.id)); markDirty(); }}
+                      className="ml-0.5 opacity-60 hover:opacity-100"
+                      data-testid={`remove-co-assignee-${a.id}`}
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+            {/* Add co-assignee (admin only) */}
+            {isAdmin && (
+              <div className="space-y-1">
+                <Input
+                  placeholder="Add co-assignee…"
+                  value={coUserSearch}
+                  onChange={e => setCoUserSearch(e.target.value)}
+                  className="h-7 text-xs"
+                  data-testid="sheet-input-co-assignee"
+                />
+                {coUserSearch && (
+                  <div className="rounded-lg border border-border bg-background max-h-36 overflow-y-auto shadow-sm">
+                    {allProfiles
+                      .filter(p =>
+                        p.id !== task.assignedTo &&
+                        !coAssignees.some(a => a.id === p.id) &&
+                        (p.full_name ?? '').toLowerCase().includes(coUserSearch.toLowerCase())
+                      )
+                      .slice(0, 8)
+                      .map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setCoAssignees(prev => [...prev, { id: p.id, name: p.full_name ?? 'Unknown' }]);
+                            setCoUserSearch('');
+                            markDirty();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted/60 transition-colors text-left"
+                          data-testid={`sheet-co-option-${p.id}`}
+                        >
+                          <div className="h-5 w-5 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-[10px] font-bold flex-shrink-0">
+                            {(p.full_name ?? '?').charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-medium truncate">{p.full_name ?? 'Unknown'}</span>
+                          <span className="text-muted-foreground capitalize text-[10px] ml-auto">{p.role}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Description */}
@@ -1117,7 +1224,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
   const [assignMode, setAssignMode] = useState<'self' | 'other' | 'dept'>('self');
-  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null);
+  const [selectedUsers, setSelectedUsers] = useState<{ id: string; name: string }[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [rewardAmount, setRewardAmount] = useState('');
@@ -1144,13 +1251,24 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
   });
 
   const filteredUsers = users.filter(u =>
-    u.id !== currentUserId && (!userSearch || (u.full_name ?? '').toLowerCase().includes(userSearch.toLowerCase()))
+    u.id !== currentUserId &&
+    !selectedUsers.some(s => s.id === u.id) &&
+    (!userSearch || (u.full_name ?? '').toLowerCase().includes(userSearch.toLowerCase()))
   );
+
+  const addUser = (u: { id: string; full_name: string }) => {
+    setSelectedUsers(prev => [...prev, { id: u.id, name: u.full_name ?? 'Unknown' }]);
+    setUserSearch('');
+  };
+
+  const removeUser = (id: string) => {
+    setSelectedUsers(prev => prev.filter(u => u.id !== id));
+  };
 
   const reset = () => {
     setTitle(''); setDescription(''); setPriority('medium');
     setDueDate(''); setNotes(''); setAssignMode('self');
-    setSelectedUser(null); setUserSearch(''); setSelectedDeptId('');
+    setSelectedUsers([]); setUserSearch(''); setSelectedDeptId('');
     setRewardAmount(''); setRewardCurrency('USD');
   };
 
@@ -1158,11 +1276,13 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
-    const assignTo = assignMode === 'other' && selectedUser ? selectedUser : null;
+    const primaryUser = assignMode === 'other' && selectedUsers.length > 0 ? selectedUsers[0] : null;
+    const coAssignees = assignMode === 'other' && selectedUsers.length > 1
+      ? selectedUsers.slice(1).map(u => ({ id: u.id, name: u.name }))
+      : [];
     const reward = rewardAmount ? parseFloat(rewardAmount) : null;
 
     if (assignMode === 'dept' && selectedDeptId) {
-      // Fetch department members (including email for notification)
       const { data: members } = await supabase
         .from('profiles')
         .select('id, full_name, email')
@@ -1189,8 +1309,9 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
         priority,
         dueDate: dueDate || null,
         notes: notes.trim() || null,
-        assignedTo: assignTo?.id ?? null,
-        assignedToName: assignTo?.name ?? null,
+        assignedTo: primaryUser?.id ?? null,
+        assignedToName: primaryUser?.name ?? null,
+        coAssignees: coAssignees.length > 0 ? coAssignees : [],
         completionRewardAmount: reward,
         completionRewardCurrency: reward ? rewardCurrency : null,
       });
@@ -1343,29 +1464,45 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
               </div>
             )}
 
-            {/* Someone else: user search */}
+            {/* Someone else: multi-user search */}
             {assignMode === 'other' && isAdmin && (
               <div className="space-y-2">
+                {/* Selected user chips */}
+                {selectedUsers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedUsers.map((u, idx) => (
+                      <span
+                        key={u.id}
+                        className={cn(
+                          'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
+                          idx === 0
+                            ? 'bg-[#1D3461] text-white'
+                            : 'bg-muted text-muted-foreground border border-border',
+                        )}
+                      >
+                        {idx === 0 && <span className="opacity-70 text-[9px] mr-0.5">primary</span>}
+                        {u.name}
+                        <button
+                          type="button"
+                          onClick={() => removeUser(u.id)}
+                          className="ml-0.5 opacity-70 hover:opacity-100"
+                          data-testid={`remove-assignee-${u.id}`}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <Input
-                  placeholder="Search team member…"
+                  placeholder={selectedUsers.length === 0 ? 'Search team member…' : 'Add another assignee…'}
                   value={userSearch}
                   onChange={e => setUserSearch(e.target.value)}
                   className="h-8 text-sm"
                   data-testid="input-user-search"
                 />
-                {selectedUser && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-sm">
-                    <div className="h-6 w-6 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                      {selectedUser.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-emerald-800 dark:text-emerald-200 font-medium truncate">{selectedUser.name}</span>
-                    <button onClick={() => setSelectedUser(null)} className="ml-auto text-emerald-600 hover:text-emerald-800">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-                {!selectedUser && (
-                  <div className="rounded-lg border border-border bg-background max-h-60 overflow-y-auto">
+                {(userSearch || selectedUsers.length === 0) && (
+                  <div className="rounded-lg border border-border bg-background max-h-48 overflow-y-auto">
                     {loadingUsers ? (
                       <div className="p-3 text-sm text-muted-foreground text-center">Loading…</div>
                     ) : filteredUsers.length === 0 ? (
@@ -1374,7 +1511,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
                       filteredUsers.map(u => (
                         <button
                           key={u.id}
-                          onClick={() => { setSelectedUser({ id: u.id, name: u.full_name ?? 'Unknown' }); setUserSearch(''); }}
+                          onClick={() => addUser(u)}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
                           data-testid={`option-user-${u.id}`}
                         >
@@ -1385,10 +1522,16 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
                             <p className="font-medium truncate">{u.full_name ?? 'Unknown'}</p>
                             <p className="text-xs text-muted-foreground capitalize">{u.role}</p>
                           </div>
+                          <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         </button>
                       ))
                     )}
                   </div>
+                )}
+                {selectedUsers.length > 1 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    First person is the primary assignee. Others are co-assignees and will also see this task.
+                  </p>
                 )}
               </div>
             )}
