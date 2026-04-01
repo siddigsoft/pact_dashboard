@@ -45,9 +45,6 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
-} from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -620,22 +617,22 @@ function TaskDetailSheet({
   );
 
   return (
-    <Sheet open={!!task} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-full sm:max-w-[480px] flex flex-col p-0 gap-0 overflow-hidden">
+    <Dialog open={!!task} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl w-full flex flex-col p-0 gap-0 overflow-hidden max-h-[92vh] [&>button:last-child]:hidden">
 
         {/* ── Header ── */}
-        <SheetHeader className="flex-shrink-0 bg-gradient-to-br from-[#0F2041] to-[#1D3461] px-5 pt-5 pb-4">
+        <div className="flex-shrink-0 bg-gradient-to-br from-[#0F2041] to-[#1D3461] px-6 pt-5 pb-4">
           {/* Top row: priority dot + title + actions */}
           <div className="flex items-start gap-3">
             <div className={cn('h-2.5 w-2.5 rounded-full mt-2 flex-shrink-0 ring-2 ring-white/20', pCfg.dot)} />
-            <SheetTitle asChild className="flex-1 min-w-0">
+            <DialogTitle asChild className="flex-1 min-w-0">
               <input
                 value={title}
                 onChange={e => { setTitle(e.target.value); markDirty(); }}
-                className="text-[17px] font-bold leading-snug w-full bg-transparent border-0 outline-none text-white placeholder:text-white/40 focus:bg-white/5 rounded px-1 -ml-1 transition-colors"
+                className="text-[18px] font-bold leading-snug w-full bg-transparent border-0 outline-none text-white placeholder:text-white/40 focus:bg-white/5 rounded px-1 -ml-1 transition-colors"
                 data-testid="sheet-input-title"
               />
-            </SheetTitle>
+            </DialogTitle>
             <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
               {dirty && (
                 <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSaving}
@@ -734,90 +731,13 @@ function TaskDetailSheet({
               />
             </div>
           </div>
-        </SheetHeader>
+        </div>{/* end header */}
 
-        {/* ── Scrollable body ── */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 bg-background">
+        {/* ── Two-column body ── */}
+        <div className="flex-1 overflow-hidden flex min-h-0">
 
-          {/* Assignees */}
-          <div>
-            <SectionLabel icon={<Users className="h-3.5 w-3.5" />}>Assignees</SectionLabel>
-            <div className="flex flex-wrap gap-2">
-              {task.assignedToName && (
-                <div className="flex items-center gap-1.5 bg-[#1D3461]/10 border border-[#1D3461]/20 px-2.5 py-1.5 rounded-lg">
-                  <div className="h-6 w-6 rounded-full bg-[#1D3461] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                    {task.assignedToName.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-foreground leading-none">{task.assignedToName}</p>
-                    <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Primary</p>
-                  </div>
-                </div>
-              )}
-              {coAssignees.map(a => (
-                <div key={a.id} className="flex items-center gap-1.5 bg-muted/60 border border-border px-2.5 py-1.5 rounded-lg">
-                  <div className="h-6 w-6 rounded-full bg-muted-foreground/20 flex items-center justify-center text-muted-foreground text-[10px] font-bold flex-shrink-0">
-                    {a.name.charAt(0).toUpperCase()}
-                  </div>
-                  <p className="text-xs font-medium text-foreground">{a.name}</p>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => { setCoAssignees(prev => prev.filter(x => x.id !== a.id)); markDirty(); }}
-                      className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
-                      data-testid={`remove-co-assignee-${a.id}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {isAdmin && (
-              <div className="mt-2 space-y-1">
-                <Input
-                  placeholder="Add co-assignee…"
-                  value={coUserSearch}
-                  onChange={e => setCoUserSearch(e.target.value)}
-                  className="h-9 text-sm"
-                  data-testid="sheet-input-co-assignee"
-                />
-                {coUserSearch && (
-                  <div className="rounded-lg border border-border bg-background max-h-40 overflow-y-auto shadow-sm">
-                    {allProfiles
-                      .filter(p =>
-                        p.id !== task.assignedTo &&
-                        !coAssignees.some(a => a.id === p.id) &&
-                        (p.full_name ?? '').toLowerCase().includes(coUserSearch.toLowerCase())
-                      )
-                      .slice(0, 8)
-                      .map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setCoAssignees(prev => [...prev, { id: p.id, name: p.full_name ?? 'Unknown' }]);
-                            setCoUserSearch('');
-                            markDirty();
-                          }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-                          data-testid={`sheet-co-option-${p.id}`}
-                        >
-                          <div className="h-7 w-7 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-xs font-bold flex-shrink-0">
-                            {(p.full_name ?? '?').charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{p.full_name ?? 'Unknown'}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{p.role}</p>
-                          </div>
-                          <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                        </button>
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* ── LEFT: writing fields ── */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-background border-r border-border/30 min-w-0">
 
           {/* Description */}
           <div>
@@ -937,6 +857,91 @@ function TaskDetailSheet({
             <p className="text-[12px] text-muted-foreground mt-1.5">List tasks, approvals, or conditions that must be completed before this task can start.</p>
           </div>
 
+          </div>{/* ── end LEFT column ── */}
+
+          {/* ── RIGHT: people + execution ── */}
+          <div className="w-[300px] flex-shrink-0 overflow-y-auto px-5 py-5 space-y-5 bg-muted/20">
+
+          {/* Assignees */}
+          <div>
+            <SectionLabel icon={<Users className="h-3.5 w-3.5" />}>Assignees</SectionLabel>
+            <div className="flex flex-wrap gap-2">
+              {task.assignedToName && (
+                <div className="flex items-center gap-1.5 bg-[#1D3461]/10 border border-[#1D3461]/20 px-2.5 py-1.5 rounded-lg">
+                  <div className="h-6 w-6 rounded-full bg-[#1D3461] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+                    {task.assignedToName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-foreground leading-none">{task.assignedToName}</p>
+                    <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Primary</p>
+                  </div>
+                </div>
+              )}
+              {coAssignees.map(a => (
+                <div key={a.id} className="flex items-center gap-1.5 bg-muted/60 border border-border px-2.5 py-1.5 rounded-lg">
+                  <div className="h-6 w-6 rounded-full bg-muted-foreground/20 flex items-center justify-center text-muted-foreground text-[10px] font-bold flex-shrink-0">
+                    {a.name.charAt(0).toUpperCase()}
+                  </div>
+                  <p className="text-xs font-medium text-foreground">{a.name}</p>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => { setCoAssignees(prev => prev.filter(x => x.id !== a.id)); markDirty(); }}
+                      className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
+                      data-testid={`remove-co-assignee-${a.id}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {isAdmin && (
+              <div className="mt-2 space-y-1">
+                <Input
+                  placeholder="Add co-assignee…"
+                  value={coUserSearch}
+                  onChange={e => setCoUserSearch(e.target.value)}
+                  className="h-9 text-sm"
+                  data-testid="sheet-input-co-assignee"
+                />
+                {coUserSearch && (
+                  <div className="rounded-lg border border-border bg-background max-h-40 overflow-y-auto shadow-sm">
+                    {allProfiles
+                      .filter(p =>
+                        p.id !== task.assignedTo &&
+                        !coAssignees.some(a => a.id === p.id) &&
+                        (p.full_name ?? '').toLowerCase().includes(coUserSearch.toLowerCase())
+                      )
+                      .slice(0, 8)
+                      .map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setCoAssignees(prev => [...prev, { id: p.id, name: p.full_name ?? 'Unknown' }]);
+                            setCoUserSearch('');
+                            markDirty();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                          data-testid={`sheet-co-option-${p.id}`}
+                        >
+                          <div className="h-7 w-7 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-xs font-bold flex-shrink-0">
+                            {(p.full_name ?? '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{p.full_name ?? 'Unknown'}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{p.role}</p>
+                          </div>
+                          <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Tools & Resources */}
           <div>
             <SectionLabel icon={<Wrench className="h-3.5 w-3.5" />}>Tools &amp; Resources</SectionLabel>
@@ -1032,10 +1037,13 @@ function TaskDetailSheet({
               <p className="text-xs text-muted-foreground mt-1">Credited to wallet when task is marked done.</p>
             </div>
           )}
-        </div>
+
+          </div>{/* ── end RIGHT column ── */}
+
+        </div>{/* ── end two-column body ── */}
 
         {/* ── Sticky footer — always visible ── */}
-        <div className="px-5 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
+        <div className="px-6 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
           <Button
             variant="ghost" size="sm"
             onClick={() => { setDirty(false); onClose(); }}
@@ -1055,8 +1063,8 @@ function TaskDetailSheet({
             {dirty ? 'Save Changes' : 'No Changes'}
           </Button>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
