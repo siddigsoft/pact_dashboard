@@ -1732,64 +1732,111 @@ function PlanningHub({ allTasks }: PlanningHubProps) {
           {/* ── Planning Methodology Tips ─────────────────────────────── */}
           <div className="border-t border-violet-200/40 dark:border-violet-800/30 pt-4">
 
-            {/* Section label + controls row */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-                <span className="text-xs font-bold tracking-wide uppercase text-foreground/70">Planning Methodology</span>
-                <span className="text-[10px] text-muted-foreground hidden sm:inline">· ← → keys to navigate</span>
+            {/* ── DYNAMIC HEADER BANNER ── */}
+            <div
+              className="relative rounded-2xl overflow-hidden mb-4 transition-all duration-500"
+              style={{ background: `linear-gradient(135deg, ${tip.from}ee, ${tip.to}cc)` }}
+            >
+              {/* Decorative background orbs */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full opacity-20" style={{ background: tip.from, filter: 'blur(24px)' }} />
+                <div className="absolute -bottom-4 -left-4 h-24 w-24 rounded-full opacity-15" style={{ background: tip.to, filter: 'blur(20px)' }} />
               </div>
 
-              {/* Controls: play/pause + dot nav + arrows */}
-              <div className="flex items-center gap-1.5">
-                {/* Play / Pause */}
-                <button
-                  type="button"
-                  onClick={() => { setAutoPlay(v => !v); setProgress(0); }}
-                  className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors text-xs"
-                  aria-label={autoPlay ? 'Pause auto-play' : 'Resume auto-play'}
-                  title={autoPlay ? 'Pause' : 'Play'}
-                >
-                  {autoPlay ? '⏸' : '▶'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate((tipIdx - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length)}
-                  className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
-                  aria-label="Previous tip"
-                >‹</button>
-                {PLANNING_TIPS.map((_t, i) => (
+              <div className="relative p-4 pb-3">
+                {/* Top row: section icon + title + play/pause */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2.5">
+                    {/* Pulsing brain/methodology icon */}
+                    <div className="h-9 w-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl shadow-sm border border-white/30">
+                      🧠
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black tracking-[0.18em] uppercase text-white/70">Daily Method</p>
+                      <p className="text-lg font-black text-white leading-tight tracking-tight">Planning Methodology</p>
+                    </div>
+                  </div>
+
+                  {/* Play/Pause + keyboard hint */}
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { setAutoPlay(v => !v); setProgress(0); }}
+                      className="h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center text-white transition-all border border-white/30 text-sm"
+                      aria-label={autoPlay ? 'Pause auto-play' : 'Resume auto-play'}
+                      title={autoPlay ? 'Pause' : 'Play'}
+                    >
+                      {autoPlay ? '⏸' : '▶'}
+                    </button>
+                    <span className="text-[9px] text-white/60 hidden sm:block">← → keys</span>
+                  </div>
+                </div>
+
+                {/* Current tip subtitle */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-2xl">{tip.icon}</span>
+                  <div>
+                    <p className="text-sm font-extrabold text-white leading-tight">{tip.title}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] font-bold text-white/80 uppercase tracking-wide">{tip.tag}</span>
+                      <span className="text-white/40">·</span>
+                      <span className="text-[10px] text-white/70">{tip.difficulty}</span>
+                      <span className="text-white/40">·</span>
+                      <span className="text-[10px] text-white/70">⏱ {tip.timeToTry}</span>
+                      {tipIdx === dailyIdx && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-black text-white tracking-wide">✦ TODAY</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Icon tab strip — each tip gets a clickable icon pill */}
+                <div className="flex items-center gap-1.5">
                   <button
-                    key={i}
                     type="button"
-                    onClick={() => navigate(i)}
-                    className="h-1.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: i === tipIdx ? '20px' : '6px',
-                      background: i === tipIdx ? tip.from : '#d1d5db',
-                    }}
-                    aria-label={`Tip ${i + 1}: ${PLANNING_TIPS[i].title}`}
-                    title={PLANNING_TIPS[i].title}
-                  />
-                ))}
-                <button
-                  type="button"
-                  onClick={() => navigate((tipIdx + 1) % PLANNING_TIPS.length)}
-                  className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
-                  aria-label="Next tip"
-                >›</button>
-              </div>
-            </div>
+                    onClick={() => navigate((tipIdx - 1 + PLANNING_TIPS.length) % PLANNING_TIPS.length)}
+                    className="h-7 w-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white text-xs transition-all flex-shrink-0"
+                  >‹</button>
 
-            {/* Auto-advance progress bar */}
-            {autoPlay && (
-              <div className="h-0.5 rounded-full bg-black/5 dark:bg-white/10 mb-3 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-none"
-                  style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${tip.from}, ${tip.to})` }}
-                />
+                  <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    {PLANNING_TIPS.map((t, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => navigate(i)}
+                        className="flex-shrink-0 flex flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 transition-all duration-200 border"
+                        style={{
+                          background: i === tipIdx ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
+                          borderColor: i === tipIdx ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.15)',
+                          transform: i === tipIdx ? 'scale(1.08)' : 'scale(1)',
+                        }}
+                        title={t.title}
+                        aria-label={t.title}
+                      >
+                        <span className="text-base leading-none">{t.icon}</span>
+                        <span className="text-[8px] font-bold text-white/80 leading-none whitespace-nowrap hidden sm:block">{t.tag}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate((tipIdx + 1) % PLANNING_TIPS.length)}
+                    className="h-7 w-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white text-xs transition-all flex-shrink-0"
+                  >›</button>
+                </div>
               </div>
-            )}
+
+              {/* Auto-advance progress bar at bottom of banner */}
+              {autoPlay && (
+                <div className="h-1 w-full bg-white/15">
+                  <div
+                    className="h-full bg-white/70 transition-none"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              )}
+            </div>
 
             {/* Main tip card — fades and slides on change */}
             <div
