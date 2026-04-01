@@ -733,314 +733,352 @@ function TaskDetailSheet({
           </div>
         </div>{/* end header */}
 
-        {/* ── Two-column body ── */}
-        <div className="flex-1 overflow-hidden flex min-h-0">
+        {/* ── Tabbed body ── */}
+        <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0 overflow-hidden">
 
-          {/* ── LEFT: writing fields ── */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-background border-r border-border/30 min-w-0">
-
-          {/* Description */}
-          <div>
-            <SectionLabel icon={<FileText className="h-3.5 w-3.5" />}>Description</SectionLabel>
-            <Textarea
-              value={description}
-              onChange={e => { setDescription(e.target.value); markDirty(); }}
-              placeholder="What needs to be done? Provide context, goals, or background that helps clarify this task…"
-              className="resize-none text-[14px] leading-relaxed min-h-[90px] bg-muted/30 border-border/60 focus:border-[#1D3461]/40"
-              data-testid="sheet-input-description"
-            />
+          {/* Tab bar */}
+          <div className="flex-shrink-0 border-b bg-muted/30 px-6">
+            <TabsList className="h-11 bg-transparent p-0 gap-0 rounded-none">
+              <TabsTrigger value="details" className="h-11 rounded-none px-4 text-sm font-medium border-b-2 border-transparent data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all">
+                <FileText className="h-3.5 w-3.5 mr-1.5" />Details
+              </TabsTrigger>
+              <TabsTrigger value="subtasks" className="h-11 rounded-none px-4 text-sm font-medium border-b-2 border-transparent data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all">
+                <ListChecks className="h-3.5 w-3.5 mr-1.5" />Subtasks
+                {subtasks.length > 0 && (
+                  <span className="ml-1.5 bg-[#1D3461]/15 text-[#1D3461] text-[11px] font-bold px-1.5 py-0.5 rounded-full">{doneSubs}/{subtasks.length}</span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="people" className="h-11 rounded-none px-4 text-sm font-medium border-b-2 border-transparent data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all">
+                <Users className="h-3.5 w-3.5 mr-1.5" />People &amp; Tools
+              </TabsTrigger>
+              {(task.completionRewardAmount || isAdmin) && (
+                <TabsTrigger value="reward" className="h-11 rounded-none px-4 text-sm font-medium border-b-2 border-transparent data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all">
+                  <DollarSign className="h-3.5 w-3.5 mr-1.5" />Reward
+                </TabsTrigger>
+              )}
+            </TabsList>
           </div>
 
-          {/* Notes */}
-          <div>
-            <SectionLabel icon={<StickyNote className="h-3.5 w-3.5" />}>Notes</SectionLabel>
-            <Textarea
-              value={notes}
-              onChange={e => { setNotes(e.target.value); markDirty(); }}
-              placeholder="Private notes, reminders, or links — visible only to you and admins…"
-              className="resize-none text-[14px] leading-relaxed min-h-[90px] bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/60 dark:border-amber-700/30 focus:border-amber-400/60"
-              data-testid="sheet-input-notes"
-            />
-          </div>
+          {/* ── Tab: Details ── */}
+          <TabsContent value="details" className="flex-1 overflow-y-auto m-0 px-6 py-6 space-y-6 bg-background">
 
-          {/* Tags */}
-          <div>
-            <SectionLabel icon={<Tag className="h-3.5 w-3.5" />}>Tags</SectionLabel>
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-2.5">
-                {tags.map(tag => (
-                  <span key={tag} className="flex items-center gap-1 text-[13px] bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/20 px-2.5 py-1 rounded-full font-medium">
-                    <Hash className="h-3 w-3 opacity-60" />{tag}
-                    <button type="button" onClick={() => handleRemoveTag(tag)} className="text-[#1D3461]/50 hover:text-[#1D3461] ml-0.5">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Type a tag and press Enter — e.g. urgent, review, field"
-                value={tagInput}
-                onChange={e => setTagInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                className="h-10 text-[14px] flex-1"
-                data-testid="sheet-input-tag"
+            {/* Description */}
+            <div>
+              <SectionLabel icon={<FileText className="h-3.5 w-3.5" />}>Description</SectionLabel>
+              <Textarea
+                value={description}
+                onChange={e => { setDescription(e.target.value); markDirty(); }}
+                placeholder="What needs to be done? Provide context, goals, or background that helps clarify this task…"
+                className="resize-none text-[14px] leading-relaxed min-h-[110px] bg-muted/30 border-border/60 focus:border-[#1D3461]/40"
+                data-testid="sheet-input-description"
               />
-              <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-10 px-3 text-sm">
-                <Plus className="h-3.5 w-3.5 mr-1" />Add
-              </Button>
             </div>
-          </div>
 
-          {/* Category */}
-          <div>
-            <SectionLabel icon={<Inbox className="h-3.5 w-3.5" />}>Category</SectionLabel>
-            <Input
-              value={category}
-              onChange={e => { setCategory(e.target.value); markDirty(); }}
-              placeholder="Group this task — e.g. field-ops, admin, finance, reporting"
-              className="h-10 text-[14px]"
-            />
-          </div>
+            {/* Notes */}
+            <div>
+              <SectionLabel icon={<StickyNote className="h-3.5 w-3.5" />}>Notes</SectionLabel>
+              <Textarea
+                value={notes}
+                onChange={e => { setNotes(e.target.value); markDirty(); }}
+                placeholder="Private notes, reminders, or links — visible only to you and admins…"
+                className="resize-none text-[14px] leading-relaxed min-h-[90px] bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/60 dark:border-amber-700/30 focus:border-amber-400/60"
+                data-testid="sheet-input-notes"
+              />
+            </div>
 
-          {/* Dependencies */}
-          <div>
-            <SectionLabel icon={<Link2 className="h-3.5 w-3.5" />}>Dependencies</SectionLabel>
-            {dependencies.length > 0 && (
-              <div className="space-y-1.5 mb-2.5 rounded-xl border bg-muted/20 p-2">
-                {dependencies.map((dep, i) => (
-                  <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors">
-                    <div className="h-1.5 w-1.5 rounded-full bg-[#1D3461]/60 flex-shrink-0" />
-                    <span className="text-[14px] flex-1 text-foreground leading-snug">{dep}</span>
-                    <button
-                      type="button"
-                      onClick={() => { setDependencies(prev => prev.filter((_, idx) => idx !== i)); markDirty(); }}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                      data-testid={`remove-dep-${i}`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+            {/* Tags */}
+            <div>
+              <SectionLabel icon={<Tag className="h-3.5 w-3.5" />}>Tags</SectionLabel>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {tags.map(tag => (
+                    <span key={tag} className="flex items-center gap-1 text-[13px] bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/20 px-2.5 py-1 rounded-full font-medium">
+                      <Hash className="h-3 w-3 opacity-60" />{tag}
+                      <button type="button" onClick={() => handleRemoveTag(tag)} className="text-[#1D3461]/50 hover:text-[#1D3461] ml-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Type a tag and press Enter — e.g. urgent, review, field"
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
+                  className="h-10 text-[14px] flex-1"
+                  data-testid="sheet-input-tag"
+                />
+                <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-10 px-4 text-sm">
+                  <Plus className="h-3.5 w-3.5 mr-1" />Add
+                </Button>
               </div>
-            )}
-            <div className="flex gap-2">
+            </div>
+
+            {/* Category */}
+            <div>
+              <SectionLabel icon={<Inbox className="h-3.5 w-3.5" />}>Category</SectionLabel>
               <Input
-                placeholder="Blocked by or depends on — e.g. 'Site survey complete' or another task name"
-                value={depInput}
-                onChange={e => setDepInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
+                value={category}
+                onChange={e => { setCategory(e.target.value); markDirty(); }}
+                placeholder="Group this task — e.g. field-ops, admin, finance, reporting"
+                className="h-10 text-[14px]"
+              />
+            </div>
+
+            {/* Dependencies */}
+            <div>
+              <SectionLabel icon={<Link2 className="h-3.5 w-3.5" />}>Dependencies</SectionLabel>
+              {dependencies.length > 0 && (
+                <div className="space-y-1.5 mb-3 rounded-xl border bg-muted/20 p-2">
+                  {dependencies.map((dep, i) => (
+                    <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors">
+                      <div className="h-1.5 w-1.5 rounded-full bg-[#1D3461]/60 flex-shrink-0" />
+                      <span className="text-[14px] flex-1 text-foreground leading-snug">{dep}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setDependencies(prev => prev.filter((_, idx) => idx !== i)); markDirty(); }}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        data-testid={`remove-dep-${i}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Blocked by or depends on — e.g. 'Site survey complete'"
+                  value={depInput}
+                  onChange={e => setDepInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const d = depInput.trim();
+                      if (d && !dependencies.includes(d)) { setDependencies(prev => [...prev, d]); markDirty(); }
+                      setDepInput('');
+                    }
+                  }}
+                  className="h-10 text-[14px] flex-1"
+                  data-testid="sheet-input-dependency"
+                />
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => {
                     const d = depInput.trim();
                     if (d && !dependencies.includes(d)) { setDependencies(prev => [...prev, d]); markDirty(); }
                     setDepInput('');
-                  }
-                }}
-                className="h-10 text-[14px] flex-1"
-                data-testid="sheet-input-dependency"
-              />
-              <Button
-                size="sm" variant="outline"
-                onClick={() => {
-                  const d = depInput.trim();
-                  if (d && !dependencies.includes(d)) { setDependencies(prev => [...prev, d]); markDirty(); }
-                  setDepInput('');
-                }}
-                disabled={!depInput.trim()}
-                className="h-10 px-3 text-sm"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />Add
-              </Button>
-            </div>
-            <p className="text-[12px] text-muted-foreground mt-1.5">List tasks, approvals, or conditions that must be completed before this task can start.</p>
-          </div>
-
-          </div>{/* ── end LEFT column ── */}
-
-          {/* ── RIGHT: people + execution ── */}
-          <div className="w-[300px] flex-shrink-0 overflow-y-auto px-5 py-5 space-y-5 bg-muted/20">
-
-          {/* Assignees */}
-          <div>
-            <SectionLabel icon={<Users className="h-3.5 w-3.5" />}>Assignees</SectionLabel>
-            <div className="flex flex-wrap gap-2">
-              {task.assignedToName && (
-                <div className="flex items-center gap-1.5 bg-[#1D3461]/10 border border-[#1D3461]/20 px-2.5 py-1.5 rounded-lg">
-                  <div className="h-6 w-6 rounded-full bg-[#1D3461] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                    {task.assignedToName.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-foreground leading-none">{task.assignedToName}</p>
-                    <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Primary</p>
-                  </div>
-                </div>
-              )}
-              {coAssignees.map(a => (
-                <div key={a.id} className="flex items-center gap-1.5 bg-muted/60 border border-border px-2.5 py-1.5 rounded-lg">
-                  <div className="h-6 w-6 rounded-full bg-muted-foreground/20 flex items-center justify-center text-muted-foreground text-[10px] font-bold flex-shrink-0">
-                    {a.name.charAt(0).toUpperCase()}
-                  </div>
-                  <p className="text-xs font-medium text-foreground">{a.name}</p>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => { setCoAssignees(prev => prev.filter(x => x.id !== a.id)); markDirty(); }}
-                      className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
-                      data-testid={`remove-co-assignee-${a.id}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {isAdmin && (
-              <div className="mt-2 space-y-1">
-                <Input
-                  placeholder="Add co-assignee…"
-                  value={coUserSearch}
-                  onChange={e => setCoUserSearch(e.target.value)}
-                  className="h-9 text-sm"
-                  data-testid="sheet-input-co-assignee"
-                />
-                {coUserSearch && (
-                  <div className="rounded-lg border border-border bg-background max-h-40 overflow-y-auto shadow-sm">
-                    {allProfiles
-                      .filter(p =>
-                        p.id !== task.assignedTo &&
-                        !coAssignees.some(a => a.id === p.id) &&
-                        (p.full_name ?? '').toLowerCase().includes(coUserSearch.toLowerCase())
-                      )
-                      .slice(0, 8)
-                      .map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setCoAssignees(prev => [...prev, { id: p.id, name: p.full_name ?? 'Unknown' }]);
-                            setCoUserSearch('');
-                            markDirty();
-                          }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-                          data-testid={`sheet-co-option-${p.id}`}
-                        >
-                          <div className="h-7 w-7 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-xs font-bold flex-shrink-0">
-                            {(p.full_name ?? '?').charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{p.full_name ?? 'Unknown'}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{p.role}</p>
-                          </div>
-                          <Plus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                        </button>
-                      ))}
-                  </div>
-                )}
+                  }}
+                  disabled={!depInput.trim()}
+                  className="h-10 px-4 text-sm"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />Add
+                </Button>
               </div>
-            )}
-          </div>
+              <p className="text-[12px] text-muted-foreground mt-1.5">List tasks, approvals, or conditions that must be completed before this task can start.</p>
+            </div>
 
-          {/* Tools & Resources */}
-          <div>
-            <SectionLabel icon={<Wrench className="h-3.5 w-3.5" />}>Tools &amp; Resources</SectionLabel>
-            <Textarea
-              value={tools}
-              onChange={e => { setTools(e.target.value); markDirty(); }}
-              placeholder={`List tools, software, links, or resources needed — e.g.\n• KoboToolbox form: https://...\n• Vehicle request form\n• Field supervisor contact: +249...`}
-              className="resize-none text-[14px] leading-relaxed min-h-[100px] bg-sky-50/40 dark:bg-sky-900/10 border-sky-200/60 dark:border-sky-700/30 focus:border-sky-400/60"
-              data-testid="sheet-input-tools"
-            />
-            <p className="text-[12px] text-muted-foreground mt-1.5">Any links, system access, equipment, or contacts required to complete this task.</p>
-          </div>
+          </TabsContent>
 
-          {/* Subtasks */}
-          <div>
-            <SectionLabel icon={<ListChecks className="h-3.5 w-3.5" />}>
-              Subtasks
-              {subtasks.length > 0 && (
-                <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground">{doneSubs}/{subtasks.length} done</span>
-              )}
-            </SectionLabel>
+          {/* ── Tab: Subtasks ── */}
+          <TabsContent value="subtasks" className="flex-1 overflow-y-auto m-0 px-6 py-6 bg-background">
             {subtasks.length > 0 && (
-              <>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-2.5">
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-medium text-foreground">{doneSubs} of {subtasks.length} completed</span>
+                  <span className="text-sm font-bold text-[#1D3461]">{subtasks.length > 0 ? Math.round((doneSubs / subtasks.length) * 100) : 0}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all"
                     style={{ width: `${subtasks.length > 0 ? Math.round((doneSubs / subtasks.length) * 100) : 0}%` }}
                   />
                 </div>
-                <div className="space-y-1 rounded-xl border bg-card p-2 mb-2">
-                  {subtasks.map((sub, idx) => {
-                    const subDone = sub.status === 'done';
-                    return (
-                      <div key={sub.id} className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition-colors" data-testid={`sheet-subtask-${sub.id}`}>
-                        <button
-                          type="button"
-                          onClick={() => onSubtaskStatusChange(sub.id, subDone ? 'todo' : 'done')}
-                          className={cn(
-                            'h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
-                            subDone ? 'bg-emerald-500 border-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
-                          )}
-                        >
-                          {subDone && <CheckCircle2 className="h-3 w-3 text-white" />}
-                        </button>
-                        <span className="text-[10px] text-muted-foreground w-4 flex-shrink-0 font-medium">{idx + 1}.</span>
-                        <span className={cn('text-sm flex-1', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
-                        {sub.priority !== 'medium' && (
-                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-semibold', PRIORITY_CFG[sub.priority].color)}>{PRIORITY_CFG[sub.priority].label}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
+              </div>
             )}
-            <div className="flex gap-2">
+            {subtasks.length > 0 && (
+              <div className="space-y-1 rounded-xl border bg-card p-2 mb-4">
+                {subtasks.map((sub, idx) => {
+                  const subDone = sub.status === 'done';
+                  return (
+                    <div key={sub.id} className="flex items-center gap-3 py-2 px-2.5 rounded-lg hover:bg-muted/50 transition-colors" data-testid={`sheet-subtask-${sub.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => onSubtaskStatusChange(sub.id, subDone ? 'todo' : 'done')}
+                        className={cn(
+                          'h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
+                          subDone ? 'bg-emerald-500 border-emerald-500' : 'border-muted-foreground/40 hover:border-emerald-500',
+                        )}
+                      >
+                        {subDone && <CheckCircle2 className="h-3 w-3 text-white" />}
+                      </button>
+                      <span className="text-[11px] text-muted-foreground w-5 flex-shrink-0 font-medium">{idx + 1}.</span>
+                      <span className={cn('text-[14px] flex-1', subDone && 'line-through text-muted-foreground')}>{sub.title}</span>
+                      {sub.priority !== 'medium' && (
+                        <span className={cn('text-[11px] px-1.5 py-0.5 rounded-full font-semibold', PRIORITY_CFG[sub.priority].color)}>{PRIORITY_CFG[sub.priority].label}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {subtasks.length === 0 && (
+              <div className="text-center py-10 text-muted-foreground">
+                <ListChecks className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No subtasks yet. Add one below to break this task into steps.</p>
+              </div>
+            )}
+            <div className="flex gap-2 mt-2">
               <Input
                 placeholder="Add a subtask…"
                 value={newSubtaskTitle}
                 onChange={e => setNewSubtaskTitle(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubtask(); } }}
-                className="h-9 text-sm flex-1"
+                className="h-10 text-[14px] flex-1"
                 data-testid="sheet-input-subtask"
               />
-              <Button size="sm" variant="outline" onClick={handleAddSubtask} disabled={!newSubtaskTitle.trim() || addingSubtask} className="h-9 px-3 text-sm">
+              <Button size="sm" variant="outline" onClick={handleAddSubtask} disabled={!newSubtaskTitle.trim() || addingSubtask} className="h-10 px-4 text-sm">
                 {addingSubtask ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="h-3.5 w-3.5 mr-1" />Add</>}
               </Button>
             </div>
-          </div>
+          </TabsContent>
 
-          {/* Completion Reward */}
-          {(task.completionRewardAmount || isAdmin) && (
+          {/* ── Tab: People & Tools ── */}
+          <TabsContent value="people" className="flex-1 overflow-y-auto m-0 px-6 py-6 space-y-6 bg-background">
+
+            {/* Assignees */}
             <div>
-              <SectionLabel icon={<DollarSign className="h-3.5 w-3.5" />}>Completion Reward</SectionLabel>
-              {isAdmin ? (
-                <div className="flex gap-2">
+              <SectionLabel icon={<Users className="h-3.5 w-3.5" />}>Assignees</SectionLabel>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {task.assignedToName && (
+                  <div className="flex items-center gap-2 bg-[#1D3461]/10 border border-[#1D3461]/20 px-3 py-2 rounded-xl">
+                    <div className="h-7 w-7 rounded-full bg-[#1D3461] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                      {task.assignedToName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground leading-none">{task.assignedToName}</p>
+                      <p className="text-[11px] text-muted-foreground leading-none mt-0.5">Primary</p>
+                    </div>
+                  </div>
+                )}
+                {coAssignees.map(a => (
+                  <div key={a.id} className="flex items-center gap-2 bg-muted/60 border border-border px-3 py-2 rounded-xl">
+                    <div className="h-7 w-7 rounded-full bg-muted-foreground/20 flex items-center justify-center text-muted-foreground text-[11px] font-bold flex-shrink-0">
+                      {a.name.charAt(0).toUpperCase()}
+                    </div>
+                    <p className="text-sm font-medium text-foreground">{a.name}</p>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => { setCoAssignees(prev => prev.filter(x => x.id !== a.id)); markDirty(); }}
+                        className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
+                        data-testid={`remove-co-assignee-${a.id}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {isAdmin && (
+                <div className="space-y-1">
                   <Input
-                    type="number" min="0" step="0.01" placeholder="Amount"
-                    value={rewardAmount}
-                    onChange={e => { setRewardAmount(e.target.value); markDirty(); }}
-                    className="h-9 text-sm flex-1"
+                    placeholder="Search and add co-assignee…"
+                    value={coUserSearch}
+                    onChange={e => setCoUserSearch(e.target.value)}
+                    className="h-10 text-sm"
+                    data-testid="sheet-input-co-assignee"
                   />
-                  <Select value={rewardCurrency} onValueChange={v => { setRewardCurrency(v); markDirty(); }}>
-                    <SelectTrigger className="h-9 w-24 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c} className="text-sm">{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  {coUserSearch && (
+                    <div className="rounded-xl border border-border bg-background max-h-48 overflow-y-auto shadow-md">
+                      {allProfiles
+                        .filter(p =>
+                          p.id !== task.assignedTo &&
+                          !coAssignees.some(a => a.id === p.id) &&
+                          (p.full_name ?? '').toLowerCase().includes(coUserSearch.toLowerCase())
+                        )
+                        .slice(0, 8)
+                        .map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setCoAssignees(prev => [...prev, { id: p.id, name: p.full_name ?? 'Unknown' }]);
+                              setCoUserSearch('');
+                              markDirty();
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                            data-testid={`sheet-co-option-${p.id}`}
+                          >
+                            <div className="h-8 w-8 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] text-xs font-bold flex-shrink-0">
+                              {(p.full_name ?? '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{p.full_name ?? 'Unknown'}</p>
+                              <p className="text-xs text-muted-foreground capitalize">{p.role}</p>
+                            </div>
+                            <Plus className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <p className="text-base font-bold text-emerald-600">{task.completionRewardCurrency} {task.completionRewardAmount?.toFixed(2)}</p>
               )}
-              <p className="text-xs text-muted-foreground mt-1">Credited to wallet when task is marked done.</p>
             </div>
+
+            {/* Tools & Resources */}
+            <div>
+              <SectionLabel icon={<Wrench className="h-3.5 w-3.5" />}>Tools &amp; Resources</SectionLabel>
+              <Textarea
+                value={tools}
+                onChange={e => { setTools(e.target.value); markDirty(); }}
+                placeholder={`List tools, software, links, or resources needed — e.g.\n• KoboToolbox form: https://...\n• Vehicle request form\n• Field supervisor contact: +249...`}
+                className="resize-none text-[14px] leading-relaxed min-h-[130px] bg-sky-50/40 dark:bg-sky-900/10 border-sky-200/60 dark:border-sky-700/30 focus:border-sky-400/60"
+                data-testid="sheet-input-tools"
+              />
+              <p className="text-[12px] text-muted-foreground mt-1.5">Any links, system access, equipment, or contacts required to complete this task.</p>
+            </div>
+
+          </TabsContent>
+
+          {/* ── Tab: Reward ── */}
+          {(task.completionRewardAmount || isAdmin) && (
+            <TabsContent value="reward" className="flex-1 overflow-y-auto m-0 px-6 py-6 bg-background">
+              <div className="max-w-sm mx-auto mt-4">
+                <div className="rounded-2xl border bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/60 dark:border-emerald-700/30 p-6 text-center mb-6">
+                  <DollarSign className="h-10 w-10 mx-auto text-emerald-500 mb-2" />
+                  {isAdmin ? (
+                    <>
+                      <p className="text-sm font-medium text-foreground mb-4">Set the reward amount credited to the assignee's wallet when this task is marked done.</p>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number" min="0" step="0.01" placeholder="Amount"
+                          value={rewardAmount}
+                          onChange={e => { setRewardAmount(e.target.value); markDirty(); }}
+                          className="h-10 text-sm flex-1"
+                        />
+                        <Select value={rewardCurrency} onValueChange={v => { setRewardCurrency(v); markDirty(); }}>
+                          <SelectTrigger className="h-10 w-24 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {['USD', 'SDG', 'EUR', 'GBP'].map(c => <SelectItem key={c} value={c} className="text-sm">{c}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-3xl font-bold text-emerald-600 mt-1">{task.completionRewardCurrency} {task.completionRewardAmount?.toFixed(2)}</p>
+                      <p className="text-sm text-muted-foreground mt-2">Credited to your wallet when task is marked done.</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
           )}
 
-          </div>{/* ── end RIGHT column ── */}
-
-        </div>{/* ── end two-column body ── */}
+        </Tabs>{/* ── end tabbed body ── */}
 
         {/* ── Sticky footer — always visible ── */}
         <div className="px-6 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
