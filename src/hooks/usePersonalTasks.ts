@@ -36,6 +36,9 @@ export interface PersonalTask {
   recurrence: string;
   templateId: string | null;
   dailyTaskDate: string | null;
+  // Extra fields
+  dependencies: string[];
+  tools: string | null;
 }
 
 export interface CreatePersonalTask {
@@ -59,6 +62,9 @@ export interface CreatePersonalTask {
   recurrence?: string;
   templateId?: string | null;
   dailyTaskDate?: string | null;
+  // Extra fields
+  dependencies?: string[];
+  tools?: string | null;
 }
 
 export interface DailyTaskDefinition {
@@ -102,6 +108,8 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     recurrence: (r.recurrence as string) ?? 'none',
     templateId: (r.template_id as string) ?? null,
     dailyTaskDate: (r.daily_task_date as string) ?? null,
+    dependencies: Array.isArray(r.dependencies) ? (r.dependencies as string[]) : [],
+    tools: (r.tools as string) ?? null,
   };
 }
 
@@ -367,6 +375,8 @@ export function usePersonalTasks(userId: string | undefined) {
           template_id: task.templateId ?? null,
           daily_task_date: task.dailyTaskDate ?? null,
           co_assignees: task.coAssignees ?? [],
+          dependencies: task.dependencies ?? [],
+          tools: task.tools ?? null,
         })
         .select('id')
         .single();
@@ -435,7 +445,9 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.notes !== undefined)       patch.notes = updates.notes;
       if (updates.completionRewardAmount !== undefined) patch.completion_reward_amount = updates.completionRewardAmount;
       if (updates.completionRewardCurrency !== undefined) patch.completion_reward_currency = updates.completionRewardCurrency;
-      if (updates.coAssignees !== undefined)  patch.co_assignees = updates.coAssignees;
+      if (updates.coAssignees !== undefined)   patch.co_assignees = updates.coAssignees;
+      if (updates.dependencies !== undefined)  patch.dependencies = updates.dependencies;
+      if (updates.tools !== undefined)         patch.tools = updates.tools;
 
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;

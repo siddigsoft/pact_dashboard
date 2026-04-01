@@ -13,6 +13,7 @@ import {
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
   GanttChartSquare, HelpCircle, Info, Building2, ListChecks, DollarSign,
   Tag, FileText, StickyNote, ArrowUpDown, Layers, Hash, ExternalLink,
+  Link2, Wrench,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -520,6 +521,9 @@ function TaskDetailSheet({
   const [dirty, setDirty] = useState(false);
   const [coAssignees, setCoAssignees] = useState<TaskAssignee[]>([]);
   const [coUserSearch, setCoUserSearch] = useState('');
+  const [dependencies, setDependencies] = useState<string[]>([]);
+  const [depInput, setDepInput] = useState('');
+  const [tools, setTools] = useState('');
 
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-task-assign'],
@@ -544,8 +548,11 @@ function TaskDetailSheet({
       setRewardAmount(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
       setRewardCurrency(task.completionRewardCurrency ?? 'USD');
       setCoAssignees(task.coAssignees ?? []);
+      setDependencies(task.dependencies ?? []);
+      setTools(task.tools ?? '');
       setDirty(false);
       setTagInput('');
+      setDepInput('');
       setNewSubtaskTitle('');
       setCoUserSearch('');
     }
@@ -570,6 +577,8 @@ function TaskDetailSheet({
       completionRewardAmount: reward,
       completionRewardCurrency: currency,
       coAssignees,
+      dependencies,
+      tools: tools.trim() || null,
     });
     setDirty(false);
   };
@@ -608,8 +617,8 @@ function TaskDetailSheet({
 
   // section label helper
   const SectionLabel = ({ icon, children }: { icon: ReactNode; children: ReactNode }) => (
-    <div className="flex items-center gap-2 mb-2">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+    <div className="flex items-center gap-2 mb-2.5">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-widest">
         {icon}{children}
       </div>
       <div className="flex-1 h-px bg-border/60" />
@@ -822,8 +831,8 @@ function TaskDetailSheet({
             <Textarea
               value={description}
               onChange={e => { setDescription(e.target.value); markDirty(); }}
-              placeholder="Add a description…"
-              className="resize-none text-sm min-h-[80px] bg-muted/30 border-border/60 focus:border-[#1D3461]/40"
+              placeholder="What needs to be done? Provide context, goals, or background that helps clarify this task…"
+              className="resize-none text-[14px] leading-relaxed min-h-[90px] bg-muted/30 border-border/60 focus:border-[#1D3461]/40"
               data-testid="sheet-input-description"
             />
           </div>
@@ -834,8 +843,8 @@ function TaskDetailSheet({
             <Textarea
               value={notes}
               onChange={e => { setNotes(e.target.value); markDirty(); }}
-              placeholder="Add private notes, links, or context…"
-              className="resize-none text-sm min-h-[90px] bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/60 dark:border-amber-700/30 focus:border-amber-400/60"
+              placeholder="Private notes, reminders, or links — visible only to you and admins…"
+              className="resize-none text-[14px] leading-relaxed min-h-[90px] bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/60 dark:border-amber-700/30 focus:border-amber-400/60"
               data-testid="sheet-input-notes"
             />
           </div>
@@ -846,7 +855,7 @@ function TaskDetailSheet({
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2.5">
                 {tags.map(tag => (
-                  <span key={tag} className="flex items-center gap-1 text-xs bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/20 px-2.5 py-1 rounded-full font-medium">
+                  <span key={tag} className="flex items-center gap-1 text-[13px] bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/20 px-2.5 py-1 rounded-full font-medium">
                     <Hash className="h-3 w-3 opacity-60" />{tag}
                     <button type="button" onClick={() => handleRemoveTag(tag)} className="text-[#1D3461]/50 hover:text-[#1D3461] ml-0.5">
                       <X className="h-3 w-3" />
@@ -857,14 +866,14 @@ function TaskDetailSheet({
             )}
             <div className="flex gap-2">
               <Input
-                placeholder="Type a tag and press Enter…"
+                placeholder="Type a tag and press Enter — e.g. urgent, review, field"
                 value={tagInput}
                 onChange={e => setTagInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                className="h-9 text-sm flex-1"
+                className="h-10 text-[14px] flex-1"
                 data-testid="sheet-input-tag"
               />
-              <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-9 px-3 text-sm">
+              <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-10 px-3 text-sm">
                 <Plus className="h-3.5 w-3.5 mr-1" />Add
               </Button>
             </div>
@@ -876,9 +885,75 @@ function TaskDetailSheet({
             <Input
               value={category}
               onChange={e => { setCategory(e.target.value); markDirty(); }}
-              placeholder="e.g. work, personal, follow-up"
-              className="h-9 text-sm"
+              placeholder="Group this task — e.g. field-ops, admin, finance, reporting"
+              className="h-10 text-[14px]"
             />
+          </div>
+
+          {/* Dependencies */}
+          <div>
+            <SectionLabel icon={<Link2 className="h-3.5 w-3.5" />}>Dependencies</SectionLabel>
+            {dependencies.length > 0 && (
+              <div className="space-y-1.5 mb-2.5 rounded-xl border bg-muted/20 p-2">
+                {dependencies.map((dep, i) => (
+                  <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors">
+                    <div className="h-1.5 w-1.5 rounded-full bg-[#1D3461]/60 flex-shrink-0" />
+                    <span className="text-[14px] flex-1 text-foreground leading-snug">{dep}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setDependencies(prev => prev.filter((_, idx) => idx !== i)); markDirty(); }}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      data-testid={`remove-dep-${i}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Blocked by or depends on — e.g. 'Site survey complete' or another task name"
+                value={depInput}
+                onChange={e => setDepInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const d = depInput.trim();
+                    if (d && !dependencies.includes(d)) { setDependencies(prev => [...prev, d]); markDirty(); }
+                    setDepInput('');
+                  }
+                }}
+                className="h-10 text-[14px] flex-1"
+                data-testid="sheet-input-dependency"
+              />
+              <Button
+                size="sm" variant="outline"
+                onClick={() => {
+                  const d = depInput.trim();
+                  if (d && !dependencies.includes(d)) { setDependencies(prev => [...prev, d]); markDirty(); }
+                  setDepInput('');
+                }}
+                disabled={!depInput.trim()}
+                className="h-10 px-3 text-sm"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />Add
+              </Button>
+            </div>
+            <p className="text-[12px] text-muted-foreground mt-1.5">List tasks, approvals, or conditions that must be completed before this task can start.</p>
+          </div>
+
+          {/* Tools & Resources */}
+          <div>
+            <SectionLabel icon={<Wrench className="h-3.5 w-3.5" />}>Tools &amp; Resources</SectionLabel>
+            <Textarea
+              value={tools}
+              onChange={e => { setTools(e.target.value); markDirty(); }}
+              placeholder={`List tools, software, links, or resources needed — e.g.\n• KoboToolbox form: https://...\n• Vehicle request form\n• Field supervisor contact: +249...`}
+              className="resize-none text-[14px] leading-relaxed min-h-[100px] bg-sky-50/40 dark:bg-sky-900/10 border-sky-200/60 dark:border-sky-700/30 focus:border-sky-400/60"
+              data-testid="sheet-input-tools"
+            />
+            <p className="text-[12px] text-muted-foreground mt-1.5">Any links, system access, equipment, or contacts required to complete this task.</p>
           </div>
 
           {/* Subtasks */}
@@ -965,18 +1040,27 @@ function TaskDetailSheet({
           )}
         </div>
 
-        {/* ── Sticky footer ── */}
-        {dirty && (
-          <div className="px-5 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
-            <Button variant="ghost" size="sm" onClick={() => { setDirty(false); onClose(); }} className="text-muted-foreground">
-              Discard changes
-            </Button>
-            <Button onClick={handleSave} disabled={!title.trim() || isSaving} className="bg-[#1D3461] hover:bg-[#0F2041] text-white px-6">
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Save Changes
-            </Button>
-          </div>
-        )}
+        {/* ── Sticky footer — always visible ── */}
+        <div className="px-5 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
+          <Button
+            variant="ghost" size="sm"
+            onClick={() => { setDirty(false); onClose(); }}
+            className={cn('text-sm', dirty ? 'text-muted-foreground' : 'text-muted-foreground/50')}
+          >
+            {dirty ? 'Discard changes' : 'Close'}
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!title.trim() || isSaving || !dirty}
+            className={cn(
+              'text-white px-6 text-sm transition-all',
+              dirty ? 'bg-[#1D3461] hover:bg-[#0F2041]' : 'bg-[#1D3461]/30 cursor-not-allowed',
+            )}
+          >
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {dirty ? 'Save Changes' : 'No Changes'}
+          </Button>
+        </div>
       </SheetContent>
     </Sheet>
   );
