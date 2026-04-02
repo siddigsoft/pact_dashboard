@@ -37,6 +37,16 @@ interface UserLookup {
   email?: string;
 }
 
+interface ProjectLookup {
+  id: string;
+  name: string;
+}
+
+function getProjectName(projectId: string | null, projects: ProjectLookup[]): string {
+  if (!projectId) return 'N/A';
+  return projects.find(p => p.id === projectId)?.name || 'N/A';
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   permits: 'Permits & Licenses',
   incentives: 'Incentives & Allowances',
@@ -90,7 +100,8 @@ export function exportSubmissionsToExcel(
   submissions: ExportableSubmission[],
   users: UserLookup[],
   tabLabel: string,
-  filename: string = 'cost-submissions'
+  filename: string = 'cost-submissions',
+  projects: ProjectLookup[] = []
 ): void {
   if (submissions.length === 0) return;
 
@@ -98,6 +109,7 @@ export function exportSubmissionsToExcel(
     'Reference #': oc.reference_number || oc.id.slice(0, 8),
     'Title': cleanDescription(oc.description),
     'Category': CATEGORY_LABELS[oc.expense_category] || oc.expense_category,
+    'Project': getProjectName(oc.project_id, projects),
     'Amount': (oc.amount_cents / 100).toFixed(2),
     'Currency': oc.currency || 'SDG',
     'Vendor': oc.vendor || 'N/A',
@@ -136,7 +148,8 @@ export function exportSubmissionsToPDF(
   users: UserLookup[],
   tabLabel: string,
   statusFilter?: string,
-  filename: string = 'cost-submissions'
+  filename: string = 'cost-submissions',
+  projects: ProjectLookup[] = []
 ): void {
   if (submissions.length === 0) return;
 
@@ -177,21 +190,22 @@ export function exportSubmissionsToPDF(
 
   const tableData = submissions.map(oc => [
     oc.reference_number || oc.id.slice(0, 8),
-    cleanDescription(oc.description).slice(0, 30),
+    cleanDescription(oc.description).slice(0, 28),
     CATEGORY_LABELS[oc.expense_category] || oc.expense_category,
+    getProjectName(oc.project_id, projects).slice(0, 22),
     `${oc.currency || 'SDG'} ${(oc.amount_cents / 100).toLocaleString()}`,
     oc.vendor || '-',
     safeDateShort(oc.expense_date),
-    getUserName(oc.submitted_by, users).slice(0, 20),
+    getUserName(oc.submitted_by, users).slice(0, 18),
     getDerivedStatus(oc),
-    getUserName(oc.tier1_approved_by, users).slice(0, 15),
-    getUserName(oc.tier2_approved_by, users).slice(0, 15),
+    getUserName(oc.tier1_approved_by, users).slice(0, 14),
+    getUserName(oc.tier2_approved_by, users).slice(0, 14),
   ]);
 
   autoTable(doc, {
     startY: summaryY + 20,
     head: [[
-      'Ref #', 'Title', 'Category', 'Amount', 'Vendor',
+      'Ref #', 'Title', 'Category', 'Project', 'Amount', 'Vendor',
       'Expense Date', 'Submitted By', 'Status', 'T1 Approver', 'T2 Approver',
     ]],
     body: tableData,
@@ -199,9 +213,10 @@ export function exportSubmissionsToPDF(
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7 },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     columnStyles: {
-      0: { cellWidth: 20 },
-      1: { cellWidth: 35 },
-      3: { halign: 'right' },
+      0: { cellWidth: 18 },
+      1: { cellWidth: 30 },
+      3: { cellWidth: 22 },
+      4: { halign: 'right' },
     },
     margin: { left: 14, right: 14 },
   });

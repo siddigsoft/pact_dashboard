@@ -3145,7 +3145,7 @@ const CostSubmission = () => {
                       toast({ title: "No Data / لا توجد بيانات", description: "No submissions to export.", variant: "destructive" });
                       return;
                     }
-                    exportSubmissionsToExcel(statusFiltered, users, `Cost Submissions (${statusFilter})`, `cost-submissions-${statusFilter}`);
+                    exportSubmissionsToExcel(statusFiltered, users, `Cost Submissions (${statusFilter})`, `cost-submissions-${statusFilter}`, allProjects);
                     toast({ title: "Excel Exported / تم التصدير", description: `${statusFiltered.length} submission(s) exported to Excel.` });
                   }}
                 >
@@ -3162,7 +3162,7 @@ const CostSubmission = () => {
                       toast({ title: "No Data / لا توجد بيانات", description: "No submissions to export.", variant: "destructive" });
                       return;
                     }
-                    exportSubmissionsToPDF(statusFiltered, users, `Cost Submissions (${statusFilter})`, statusFilter, `cost-submissions-${statusFilter}`);
+                    exportSubmissionsToPDF(statusFiltered, users, `Cost Submissions (${statusFilter})`, statusFilter, `cost-submissions-${statusFilter}`, allProjects);
                     toast({ title: "PDF Exported / تم التصدير", description: `${statusFiltered.length} submission(s) exported to PDF.` });
                   }}
                 >
