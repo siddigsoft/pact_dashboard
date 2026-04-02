@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck, MessageSquare, CornerUpLeft } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -264,6 +264,12 @@ const CostSubmission = () => {
   }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
 
   const [viewAdvanceDetails, setViewAdvanceDetails] = useState<OperationalCostSubmission | null>(null);
+  const [editingItem, setEditingItem] = useState<OperationalCostSubmission | null>(null);
+  const [editItemFields, setEditItemFields] = useState({ expense_category: '', amount_str: '', description: '', expense_date: '', vendor: '', reference_number: '', reason: '' });
+  const [itemEditSubmitting, setItemEditSubmitting] = useState(false);
+  const [sendBackDialog, setSendBackDialog] = useState<{ open: boolean; item: OperationalCostSubmission | null }>({ open: false, item: null });
+  const [sendBackComment, setSendBackComment] = useState('');
+  const [sendBackSubmitting, setSendBackSubmitting] = useState(false);
   const [activeReconciliation, setActiveReconciliation] = useState<OperationalCostSubmission | null>(null);
   const [reconcileNotes, setReconcileNotes] = useState('');
   const [reconcileActualAmount, setReconcileActualAmount] = useState('');
@@ -1144,6 +1150,82 @@ const CostSubmission = () => {
     if (derivedStatus !== 'pending') return false;
     if (isAdmin) return true;
     return oc.submitted_by === currentUser?.id;
+  };
+
+  const openEditItem = (item: OperationalCostSubmission) => {
+    setEditingItem(item);
+    setEditItemFields({
+      expense_category: item.expense_category,
+      amount_str: (item.amount_cents / 100).toString(),
+      description: item.description || '',
+      expense_date: item.expense_date ? item.expense_date.slice(0, 10) : '',
+      vendor: item.vendor || '',
+      reference_number: item.reference_number || '',
+      reason: '',
+    });
+  };
+
+  const handleSaveItemEdit = async () => {
+    if (!editingItem || !editItemFields.reason.trim()) return;
+    setItemEditSubmitting(true);
+    try {
+      const amountCents = Math.round(parseFloat(editItemFields.amount_str.replace(/,/g, '')) * 100);
+      if (isNaN(amountCents) || amountCents <= 0) {
+        toast({ title: 'Invalid amount', variant: 'destructive' }); return;
+      }
+      const changeNote = `[Admin edit by ${currentUser?.full_name || currentUser?.email || 'Admin'} on ${format(new Date(), 'dd MMM yyyy HH:mm')}: ${editItemFields.reason}]`;
+      const prevNotes = editingItem.tier1_notes || '';
+      const { error } = await supabase.from('operational_cost_submissions').update({
+        expense_category: editItemFields.expense_category,
+        amount_cents: amountCents,
+        description: editItemFields.description || null,
+        expense_date: editItemFields.expense_date || null,
+        vendor: editItemFields.vendor || null,
+        reference_number: editItemFields.reference_number || null,
+        tier1_notes: prevNotes ? prevNotes + '\n' + changeNote : changeNote,
+      }).eq('id', editingItem.id);
+      if (error) throw error;
+      toast({ title: 'Item updated', description: 'The line item has been saved.' });
+      setEditingItem(null);
+      await fetchOperationalCosts();
+    } catch (err: any) {
+      toast({ title: 'Update failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setItemEditSubmitting(false);
+    }
+  };
+
+  const handleSendBack = async () => {
+    if (!sendBackDialog.item || !sendBackComment.trim()) return;
+    setSendBackSubmitting(true);
+    try {
+      const oc = sendBackDialog.item;
+      const commentNote = `[Sent back by ${currentUser?.full_name || currentUser?.email || 'Approver'} on ${format(new Date(), 'dd MMM yyyy HH:mm')}: ${sendBackComment}]`;
+      const allGroupIds = oc.request_group_id
+        ? operationalCosts.filter(o => o.request_group_id === oc.request_group_id).map(o => o.id)
+        : [oc.id];
+      const { error } = await supabase.from('operational_cost_submissions').update({
+        status: 'pending',
+        tier1_status: 'pending',
+        tier1_approved_by: null,
+        tier1_approved_at: null,
+        tier1_notes: commentNote,
+        tier2_status: 'pending',
+        tier2_approved_by: null,
+        tier2_approved_at: null,
+        tier2_notes: null,
+      }).in('id', allGroupIds);
+      if (error) throw error;
+      toast({ title: 'Sent back for revision', description: `${allGroupIds.length > 1 ? `${allGroupIds.length} items` : 'Request'} returned to the submitter.` });
+      setSendBackDialog({ open: false, item: null });
+      setSendBackComment('');
+      setViewingSubmission(null);
+      await fetchOperationalCosts();
+    } catch (err: any) {
+      toast({ title: 'Send back failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSendBackSubmitting(false);
+    }
   };
 
   const canResubmitSubmission = (oc: OperationalCostSubmission): boolean => {
@@ -4077,40 +4159,104 @@ const CostSubmission = () => {
                     const groupItems = operationalCosts.filter(o => o.request_group_id === oc.request_group_id);
                     if (groupItems.length <= 1) return null;
                     const groupTotal = groupItems.reduce((s, o) => s + o.amount_cents, 0);
+                    const canAdminEdit = isSuperAdmin || isAdmin;
                     return (
                       <section>
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
-                          Line Items / بنود الطلب ({groupItems.length})
-                        </p>
-                        <div className="rounded-lg border overflow-hidden text-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                            Line Items / بنود الطلب ({groupItems.length})
+                          </p>
+                          <span className="text-[11px] font-semibold text-foreground tabular-nums">
+                            Total: {groupItems[0]?.currency} {(groupTotal / 100).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="space-y-2">
                           {groupItems.map((item, idx) => {
                             const itemCat = EXPENSE_CATEGORY_MAP[item.expense_category];
                             const ItemIcon = itemCat?.icon;
-                            const itemDesc = item.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || item.expense_category;
+                            const rawDesc = item.description || '';
+                            const cleanDesc = rawDesc.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || item.expense_category;
+                            const adminNotes = rawDesc.match(/\[Admin edit[^\]]*\]/g) || [];
                             const itemDerivedStatus = item.paid_at ? 'paid' : item.reconciled_at ? 'reconciled' : item.status;
                             const isCurrentItem = item.id === oc.id;
                             return (
-                              <div key={item.id} className={`flex items-center gap-2 px-3 py-2 ${idx !== 0 ? 'border-t' : ''} ${isCurrentItem ? 'bg-primary/5' : ''}`}>
-                                <div className="flex-none text-muted-foreground">
-                                  {ItemIcon ? <ItemIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="truncate font-medium text-[13px]">{itemDesc}</p>
-                                  <p className="text-xs text-muted-foreground">{itemCat?.label || item.expense_category}</p>
-                                </div>
-                                <div className="flex-none text-right">
-                                  <p className="font-semibold tabular-nums text-[13px]">{item.currency} {(item.amount_cents / 100).toLocaleString()}</p>
-                                  <p className={`text-[10px] ${itemDerivedStatus === 'approved' || itemDerivedStatus === 'paid' ? 'text-green-600' : itemDerivedStatus === 'rejected' ? 'text-red-500' : 'text-amber-600'}`}>
+                              <div key={item.id} className={`rounded-lg border text-sm overflow-hidden ${isCurrentItem ? 'border-primary/40 ring-1 ring-primary/20' : ''}`}>
+                                {/* Item header */}
+                                <div className={`flex items-center gap-2 px-3 py-2 ${isCurrentItem ? 'bg-primary/5' : 'bg-muted/30'}`}>
+                                  <div className="flex-none w-6 h-6 rounded-full bg-background border flex items-center justify-center text-xs font-semibold text-muted-foreground">{idx + 1}</div>
+                                  <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                                    {ItemIcon ? <ItemIcon className="h-3.5 w-3.5 text-muted-foreground flex-none" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground flex-none" />}
+                                    <span className="font-medium truncate">{itemCat?.label || item.expense_category}</span>
+                                  </div>
+                                  <Badge variant="outline" className={`text-[10px] flex-none border-0 ${
+                                    itemDerivedStatus === 'paid' || itemDerivedStatus === 'approved' ? 'bg-green-100 text-green-700' :
+                                    itemDerivedStatus === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    itemDerivedStatus === 'reconciled' ? 'bg-purple-100 text-purple-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
                                     {statusLabels[itemDerivedStatus] || itemDerivedStatus}
-                                  </p>
+                                  </Badge>
+                                </div>
+                                {/* Item fields */}
+                                <div className="px-3 py-2.5 space-y-1.5 border-t">
+                                  {/* Description */}
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Description / الوصف</p>
+                                    <p className="text-[13px] font-medium leading-snug">{cleanDesc || <span className="text-muted-foreground italic">—</span>}</p>
+                                  </div>
+                                  {/* Amount */}
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Amount / المبلغ</p>
+                                      <p className="text-[15px] font-bold tabular-nums">{item.currency} {(item.amount_cents / 100).toLocaleString()}</p>
+                                    </div>
+                                    {item.expense_date && (
+                                      <div className="text-right">
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Date / التاريخ</p>
+                                        <p className="text-[13px]">{format(new Date(item.expense_date), 'dd MMM yyyy')}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {/* Vendor & Reference */}
+                                  {(item.vendor || item.reference_number) && (
+                                    <div className="flex gap-4">
+                                      {item.vendor && (
+                                        <div>
+                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Vendor / المورد</p>
+                                          <p className="text-[12px]">{item.vendor}</p>
+                                        </div>
+                                      )}
+                                      {item.reference_number && (
+                                        <div>
+                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Ref # / المرجع</p>
+                                          <p className="text-[12px] font-mono">{item.reference_number}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  {/* Admin change notes */}
+                                  {adminNotes.length > 0 && (
+                                    <div className="mt-1 space-y-1">
+                                      {adminNotes.map((note, ni) => (
+                                        <div key={ni} className="flex gap-1.5 items-start rounded bg-amber-50 dark:bg-amber-900/20 px-2 py-1">
+                                          <PencilLine className="h-3 w-3 text-amber-600 mt-0.5 flex-none" />
+                                          <p className="text-[11px] text-amber-800 dark:text-amber-300">{note.replace(/^\[|\]$/g, '')}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {/* Admin edit button */}
+                                  {canAdminEdit && (
+                                    <div className="pt-1">
+                                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => openEditItem(item)}>
+                                        <Pencil className="h-3 w-3" /> Edit Item
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
                           })}
-                          <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-t font-semibold text-[13px]">
-                            <span>Total / المجموع</span>
-                            <span className="tabular-nums">{groupItems[0]?.currency} {(groupTotal / 100).toLocaleString()}</span>
-                          </div>
                         </div>
                       </section>
                     );
@@ -4282,7 +4428,14 @@ const CostSubmission = () => {
                   <Button variant="ghost" size="sm" onClick={() => setViewingSubmission(null)} data-testid="button-detail-close">
                     Close
                   </Button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {(isSuperAdmin || isAdmin || canTier1Approve(oc) || canTier2Approve(oc) || canTier3Approve(oc)) && !oc.paid_at && !oc.reconciled_at && (
+                      <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-900/20 gap-1"
+                        onClick={() => { setSendBackDialog({ open: true, item: oc }); setSendBackComment(''); }}
+                        data-testid={`button-detail-sendback-${oc.id}`}>
+                        <CornerUpLeft className="h-3.5 w-3.5" /> Send Back
+                      </Button>
+                    )}
                     {canTier1Approve(oc) && (
                       <Button size="sm" onClick={() => { setViewingSubmission(null); openApprovalDialog(oc, 'approve', 1); }}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid={`button-detail-approve-${oc.id}`}>
@@ -4314,6 +4467,111 @@ const CostSubmission = () => {
           })()}
         </SheetContent>
       </Sheet>
+
+      {/* ── Edit Line Item Dialog ── */}
+      <Dialog open={!!editingItem} onOpenChange={(open) => { if (!open) setEditingItem(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PencilLine className="h-4 w-4 text-amber-600" /> Edit Line Item
+            </DialogTitle>
+            <DialogDescription>Adjust this item's details. A reason is required and will be logged.</DialogDescription>
+          </DialogHeader>
+          {editingItem && (
+            <div className="space-y-3 py-1">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Category / الفئة</label>
+                <select className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={editItemFields.expense_category}
+                  onChange={e => setEditItemFields(f => ({ ...f, expense_category: e.target.value }))}>
+                  {Object.entries(EXPENSE_CATEGORY_MAP).map(([key, val]) => (
+                    <option key={key} value={key}>{val.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description / الوصف</label>
+                <Textarea rows={2} className="text-sm" value={editItemFields.description}
+                  onChange={e => setEditItemFields(f => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Amount ({editingItem.currency})</label>
+                  <input type="number" min="0" step="0.01" className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={editItemFields.amount_str}
+                    onChange={e => setEditItemFields(f => ({ ...f, amount_str: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Date / التاريخ</label>
+                  <input type="date" className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={editItemFields.expense_date}
+                    onChange={e => setEditItemFields(f => ({ ...f, expense_date: e.target.value }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Vendor / المورد</label>
+                  <input type="text" className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={editItemFields.vendor}
+                    onChange={e => setEditItemFields(f => ({ ...f, vendor: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ref # / المرجع</label>
+                  <input type="text" className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={editItemFields.reference_number}
+                    onChange={e => setEditItemFields(f => ({ ...f, reference_number: e.target.value }))} />
+                </div>
+              </div>
+              <div className="space-y-1 border-t pt-3">
+                <label className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" /> Reason for Change * / سبب التعديل
+                </label>
+                <Textarea rows={2} className="text-sm border-amber-300 focus:border-amber-500"
+                  placeholder="Explain what was changed and why…"
+                  value={editItemFields.reason}
+                  onChange={e => setEditItemFields(f => ({ ...f, reason: e.target.value }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingItem(null)}>Cancel</Button>
+            <Button onClick={handleSaveItemEdit} disabled={itemEditSubmitting || !editItemFields.reason.trim()} className="bg-amber-600 hover:bg-amber-700 text-white">
+              {itemEditSubmitting ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Send Back Dialog ── */}
+      <Dialog open={sendBackDialog.open} onOpenChange={(open) => { if (!open) { setSendBackDialog({ open: false, item: null }); setSendBackComment(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CornerUpLeft className="h-4 w-4 text-amber-600" /> Send Back for Revision / إعادة للمراجعة
+            </DialogTitle>
+            <DialogDescription>
+              {sendBackDialog.item?.request_group_id
+                ? `All ${operationalCosts.filter(o => o.request_group_id === sendBackDialog.item?.request_group_id).length} items in this group will be reset to Pending.`
+                : 'This request will be reset to Pending and the submitter will be notified to revise.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1 py-1">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+              <MessageSquare className="h-3 w-3" /> Comment / تعليق *
+            </label>
+            <Textarea rows={3} className="text-sm"
+              placeholder="Explain what needs to be corrected…"
+              value={sendBackComment}
+              onChange={e => setSendBackComment(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSendBackDialog({ open: false, item: null }); setSendBackComment(''); }}>Cancel</Button>
+            <Button onClick={handleSendBack} disabled={sendBackSubmitting || !sendBackComment.trim()} className="bg-amber-600 hover:bg-amber-700 text-white">
+              {sendBackSubmitting ? 'Sending…' : 'Send Back'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={approvalDialog.open} onOpenChange={(open) => {
         if (!open) {
