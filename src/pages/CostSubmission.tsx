@@ -1560,7 +1560,7 @@ const CostSubmission = () => {
     setBulkCostEmailDialog(prev => ({ ...prev, step: 'recipients', loading: true }));
     try {
       const cached = cachedRecipientsRef.current;
-      if (cached.length > 0) {
+      if (cached && cached.length > 0) {
         setBulkCostEmailDialog(prev => ({ ...prev, availableRecipients: cached, selectedRecipientIds: cached.map(r => r.id), loading: false }));
         return;
       }
@@ -5545,20 +5545,27 @@ const CostSubmission = () => {
                             const rate = parseFloat(bulkCostEmailDialog.usdRate);
                             const amtUsd = !isNaN(rate) && rate > 0 ? amtSdg / rate : null;
                             const submitterUser = users.find(u => u.id === sub.submitted_by);
-                            const tier1User = (sub as any).tier1_approved_by ? users.find(u => u.id === (sub as any).tier1_approved_by) : null;
-                            const tier2User = (sub as any).tier2_approved_by ? users.find(u => u.id === (sub as any).tier2_approved_by) : null;
+                            const submitterName = (submitterUser as any)?.fullName || (submitterUser as any)?.full_name || (submitterUser as any)?.name || (submitterUser as any)?.email || sub.submitted_by?.slice(0, 8) || '—';
+                            const tier1User = sub.tier1_approved_by ? users.find(u => u.id === sub.tier1_approved_by) : null;
+                            const tier2User = sub.tier2_approved_by ? users.find(u => u.id === sub.tier2_approved_by) : null;
+                            const categoryLabel = (sub.expense_category || (sub as any).request_title || '').replace(/_/g, ' ') || 'N/A';
+                            const displayDate = sub.expense_date
+                              ? format(parseISO(sub.expense_date), 'dd MMM yy')
+                              : sub.created_at
+                                ? format(parseISO(sub.created_at), 'dd MMM yy')
+                                : '—';
                             return (
                               <tr key={sub.id || idx} className={`border-b last:border-0 ${idx % 2 === 0 ? '' : 'bg-slate-50/50 dark:bg-slate-900/30'}`}>
                                 <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
                                 <td className="px-3 py-2">
-                                  <span className="font-medium text-[#0F2041] dark:text-blue-300 capitalize">{(sub.expense_category || 'N/A').replace(/_/g, ' ')}</span>
+                                  <span className="font-medium text-[#0F2041] dark:text-blue-300 capitalize">{categoryLabel}</span>
                                   {sub.reference_number && <span className="block text-[10px] text-muted-foreground">{sub.reference_number}</span>}
                                 </td>
                                 <td className="px-3 py-2 text-muted-foreground">
-                                  {(submitterUser as any)?.fullName || (submitterUser as any)?.full_name || (submitterUser as any)?.name || '—'}
+                                  {submitterName}
                                 </td>
                                 <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                  {sub.expense_date ? format(parseISO(sub.expense_date), 'dd MMM yy') : (sub.submitted_at ? format(parseISO(sub.submitted_at), 'dd MMM yy') : '—')}
+                                  {displayDate}
                                 </td>
                                 <td className="px-3 py-2">
                                   {tier1User ? (
