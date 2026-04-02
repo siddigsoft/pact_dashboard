@@ -131,29 +131,46 @@ function BulkSummaryTable({ requests, users }: {
 }) {
   const [activeTab, setActiveTab] = useState<'state' | 'hub' | 'locality' | 'requester'>('state');
 
-  const buildGroups = (keyFn: (r: typeof requests[0]) => string): [string, BulkSummaryEntry][] => {
-    const m = new Map<string, BulkSummaryEntry>();
-    requests.forEach(r => {
-      const k = keyFn(r) || 'Unknown';
-      const e = m.get(k) || { count: 0, requested: 0, approved: 0 };
-      m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + (r.approvedAmount || r.requestedAmount) });
+  // Pre-build O(1) user lookup map — avoids O(n×m) find() on every render
+  const userMap = useMemo(() => {
+    const m = new Map<string, string>();
+    (users || []).forEach(u => {
+      m.set(u.id, (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown');
     });
-    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
-  };
+    return m;
+  }, [users]);
+
+  // Memoize group computations — only recalculate when `requests` or `userMap` actually change
+  const buildGroups = useMemo(() => {
+    const build = (keyFn: (r: typeof requests[0]) => string): [string, BulkSummaryEntry][] => {
+      const m = new Map<string, BulkSummaryEntry>();
+      requests.forEach(r => {
+        const k = keyFn(r) || 'Unknown';
+        const e = m.get(k) || { count: 0, requested: 0, approved: 0 };
+        m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + (r.approvedAmount || r.requestedAmount) });
+      });
+      return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+    };
+    return {
+      state:     build(r => (r.stateName as string)    || '-'),
+      hub:       build(r => (r.hubName as string)       || '-'),
+      locality:  build(r => (r.localityName as string)  || '-'),
+      requester: build(r => userMap.get(r.requestedBy as string) || 'Unknown'),
+    };
+  }, [requests, userMap]);
 
   const tabs = [
-    { key: 'state'     as const, label: 'By State',     groups: buildGroups(r => (r.stateName as string) || '-') },
-    { key: 'hub'       as const, label: 'By Hub',       groups: buildGroups(r => (r.hubName as string) || '-') },
-    { key: 'locality'  as const, label: 'By Locality',  groups: buildGroups(r => (r.localityName as string) || '-') },
-    { key: 'requester' as const, label: 'By Requester', groups: buildGroups(r => {
-      const u = users?.find(u => u.id === r.requestedBy);
-      return (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown';
-    }) },
+    { key: 'state'     as const, label: 'By State',     groups: buildGroups.state },
+    { key: 'hub'       as const, label: 'By Hub',       groups: buildGroups.hub },
+    { key: 'locality'  as const, label: 'By Locality',  groups: buildGroups.locality },
+    { key: 'requester' as const, label: 'By Requester', groups: buildGroups.requester },
   ];
 
   const active = tabs.find(t => t.key === activeTab)!;
-  const totalReq = requests.reduce((s, r) => s + r.requestedAmount, 0);
-  const totalApp = requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+  const { totalReq, totalApp } = useMemo(() => ({
+    totalReq: requests.reduce((s, r) => s + r.requestedAmount, 0),
+    totalApp: requests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0),
+  }), [requests]);
 
   return (
     <div className="border rounded-md overflow-hidden text-xs">
@@ -169,32 +186,31 @@ function BulkSummaryTable({ requests, users }: {
             </TabsTrigger>
           ))}
         </TabsList>
-        {tabs.map(t => (
-          <TabsContent key={t.key} value={t.key} className="mt-0">
-            <ScrollArea className="h-[180px]">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/30">
-                    <TableHead className="text-[11px] py-1.5 font-semibold">{t.label.replace('By ', '')}</TableHead>
-                    <TableHead className="text-[11px] py-1.5 text-center font-semibold w-10">#</TableHead>
-                    <TableHead className="text-[11px] py-1.5 text-right font-semibold">Requested</TableHead>
-                    <TableHead className="text-[11px] py-1.5 text-right font-semibold">Approved</TableHead>
+        {/* Render only the active tab's table — avoids mounting all 4 heavy tables at once */}
+        <TabsContent value={activeTab} className="mt-0">
+          <ScrollArea className="h-[180px]">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="text-[11px] py-1.5 font-semibold">{active.label.replace('By ', '')}</TableHead>
+                  <TableHead className="text-[11px] py-1.5 text-center font-semibold w-10">#</TableHead>
+                  <TableHead className="text-[11px] py-1.5 text-right font-semibold">Requested</TableHead>
+                  <TableHead className="text-[11px] py-1.5 text-right font-semibold">Approved</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {active.groups.map(([name, g], i) => (
+                  <TableRow key={name} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
+                    <TableCell className="py-1 font-medium truncate max-w-[160px]">{name}</TableCell>
+                    <TableCell className="py-1 text-center text-muted-foreground">{g.count}</TableCell>
+                    <TableCell className="py-1 text-right font-mono text-muted-foreground">SDG {g.requested.toLocaleString()}</TableCell>
+                    <TableCell className="py-1 text-right font-mono font-semibold text-green-700 dark:text-green-400">SDG {g.approved.toLocaleString()}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {t.groups.map(([name, g], i) => (
-                    <TableRow key={name} className={i % 2 === 1 ? 'bg-muted/20' : ''}>
-                      <TableCell className="py-1 font-medium truncate max-w-[160px]">{name}</TableCell>
-                      <TableCell className="py-1 text-center text-muted-foreground">{g.count}</TableCell>
-                      <TableCell className="py-1 text-right font-mono text-muted-foreground">SDG {g.requested.toLocaleString()}</TableCell>
-                      <TableCell className="py-1 text-right font-mono font-semibold text-green-700 dark:text-green-400">SDG {g.approved.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </TabsContent>
-        ))}
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </TabsContent>
       </Tabs>
       <div className="flex items-center justify-between bg-muted/40 border-t px-3 py-1.5 text-[11px] font-semibold">
         <span className="text-muted-foreground">Grand Total — {requests.length} requests</span>
