@@ -2030,7 +2030,7 @@ const CostSubmission = () => {
               </p>
             </div>
             </div>
-            {canViewTeamSubmissions && !isFOM && (
+            {(isAdmin || isSuperAdmin) && !isFOM && (
               <Button
                 size="default"
                 onClick={openBulkCostEmailDialog}
