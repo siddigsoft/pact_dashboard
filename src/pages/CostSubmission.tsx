@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck, MessageSquare, CornerUpLeft } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck, MessageSquare, CornerUpLeft, Layers } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -264,6 +264,12 @@ const CostSubmission = () => {
   }>({ open: false, submissions: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
 
   const [viewAdvanceDetails, setViewAdvanceDetails] = useState<OperationalCostSubmission | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (groupId: string) => setExpandedGroups(prev => {
+    const next = new Set(prev);
+    if (next.has(groupId)) next.delete(groupId); else next.add(groupId);
+    return next;
+  });
   const [editingItem, setEditingItem] = useState<OperationalCostSubmission | null>(null);
   const [editItemFields, setEditItemFields] = useState({ expense_category: '', amount_str: '', description: '', expense_date: '', vendor: '', reference_number: '', reason: '' });
   const [itemEditSubmitting, setItemEditSubmitting] = useState(false);
@@ -3289,7 +3295,7 @@ const CostSubmission = () => {
                   {ocGroups.map(({ groupId, items: groupItems }) => {
                     const isMultiItem = groupItems.length > 1;
 
-                    // GROUP HEADER (only for multi-item groups)
+                    // GROUP HEADER (only for multi-item groups) — navy gradient with collapse/expand
                     const GroupHeader = isMultiItem ? (() => {
                       const totalCents = groupItems.reduce((s, o) => s + o.amount_cents, 0);
                       const currency = groupItems[0].currency;
@@ -3298,56 +3304,90 @@ const CostSubmission = () => {
                         || 'Grouped Request';
                       const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
                       const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
-
-                      // Determine which tier the current user can approve for this group
                       const groupApprovableTier: 1 | 2 | 3 | null =
                         groupItems.some(o => canTier1Approve(o)) ? 1 :
                         groupItems.some(o => canTier2Approve(o)) ? 2 :
                         groupItems.some(o => canTier3Approve(o)) ? 3 : null;
+                      const approvedCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'approved' || getOperationalDerivedStatus(o) === 'paid').length;
+                      const rejectedCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'rejected').length;
+                      const pendingCnt = groupItems.length - approvedCnt - rejectedCnt;
+                      const isExpanded = expandedGroups.has(groupId!);
 
                       return (
-                        <div className="px-4 py-3 bg-muted/40 border-b space-y-2">
-                          <div className="flex items-start justify-between gap-3 flex-wrap">
-                            <div className="flex-1 min-w-0 space-y-1">
-                              <p className="font-semibold text-[15px] leading-tight">{groupTitle}</p>
-                              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                                {linkedProjectName && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{linkedProjectName}</span>}
-                                {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{submitterName}</span>}
-                                <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
-                                <Badge variant="secondary" className="text-[11px] h-5">{groupItems.length} expense items</Badge>
+                        <div>
+                          {/* Clickable navy header */}
+                          <button
+                            className="w-full text-left focus:outline-none"
+                            onClick={() => toggleGroup(groupId!)}
+                            data-testid={`button-group-toggle-${groupId}`}
+                          >
+                            <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3">
+                              <div className="flex items-start gap-3">
+                                <div className="flex-none mt-0.5">
+                                  <Layers className="h-4 w-4 text-white/70" />
+                                </div>
+                                <div className="flex-1 min-w-0 space-y-1.5">
+                                  <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{groupTitle}</p>
+                                  <div className="flex items-center gap-2 flex-wrap text-[11px] text-white/60">
+                                    {linkedProjectName && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{linkedProjectName}</span>}
+                                    {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{submitterName}</span>}
+                                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white">
+                                      <Layers className="h-2.5 w-2.5" /> {groupItems.length} expense items
+                                    </span>
+                                    {approvedCnt > 0 && (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-green-500/25 px-2 py-0.5 text-[10px] font-semibold text-green-300">
+                                        <CheckCircle2 className="h-2.5 w-2.5" /> {approvedCnt} approved
+                                      </span>
+                                    )}
+                                    {pendingCnt > 0 && (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/25 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                                        <Clock className="h-2.5 w-2.5" /> {pendingCnt} pending
+                                      </span>
+                                    )}
+                                    {rejectedCnt > 0 && (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/25 px-2 py-0.5 text-[10px] font-semibold text-red-300">
+                                        <AlertCircle className="h-2.5 w-2.5" /> {rejectedCnt} rejected
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex-none text-right space-y-1">
+                                  <p className="font-bold text-base tabular-nums text-white">{currency} {(totalCents / 100).toLocaleString()}</p>
+                                  <p className="text-[10px] text-white/50">Total</p>
+                                  <div className="flex items-center justify-end gap-1 text-white/60 text-[11px] mt-1">
+                                    {isExpanded
+                                      ? <><ChevronDown className="h-4 w-4" /><span>Collapse</span></>
+                                      : <><ChevronRight className="h-4 w-4" /><span>Expand</span></>
+                                    }
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <span className="font-bold text-lg tabular-nums">{currency} {(totalCents / 100).toLocaleString()}</span>
-                              <span className="text-[11px] text-muted-foreground">Total</span>
+                            {/* Progress bar */}
+                            <div className="h-1 bg-[#0F2041] flex">
+                              <div className="bg-green-400 transition-all duration-300" style={{ width: `${(approvedCnt / groupItems.length) * 100}%` }} />
+                              <div className="bg-amber-400 transition-all duration-300" style={{ width: `${(pendingCnt / groupItems.length) * 100}%` }} />
+                              <div className="bg-red-400 transition-all duration-300" style={{ width: `${(rejectedCnt / groupItems.length) * 100}%` }} />
                             </div>
-                          </div>
+                          </button>
 
-                          {groupApprovableTier !== null && groupId && (
-                            <div className="flex items-center gap-2 pt-1 flex-wrap">
-                              <Button
-                                size="sm"
-                                variant="default"
-                                className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                          {/* Approve All / Reject All — shown when expanded */}
+                          {isExpanded && groupApprovableTier !== null && groupId && (
+                            <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0F2041]/5 border-b border-[#1D3461]/10 flex-wrap">
+                              <span className="text-[11px] text-muted-foreground italic flex-1">Review items individually below, or:</span>
+                              <Button size="sm" className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
                                 onClick={() => openGroupApprovalDialog(groupId, groupTitle, groupItems, 'approve', groupApprovableTier)}
-                                data-testid={`button-group-approve-all-${groupId}`}
-                              >
-                                <ThumbsUp className="h-3.5 w-3.5 mr-1.5" />
-                                Approve All ({groupItems.length} items) — T{groupApprovableTier}
+                                data-testid={`button-group-approve-all-${groupId}`}>
+                                <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Approve All T{groupApprovableTier}
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                className="h-8 px-3 text-xs"
+                              <Button size="sm" variant="destructive" className="h-7 px-3 text-xs"
                                 onClick={() => openGroupApprovalDialog(groupId, groupTitle, groupItems, 'reject', groupApprovableTier)}
-                                data-testid={`button-group-reject-all-${groupId}`}
-                              >
-                                <ThumbsDown className="h-3.5 w-3.5 mr-1.5" />
-                                Reject All
+                                data-testid={`button-group-reject-all-${groupId}`}>
+                                <ThumbsDown className="h-3.5 w-3.5 mr-1" /> Reject All
                               </Button>
-                              <span className="text-[11px] text-muted-foreground italic">
-                                or review items individually below
-                              </span>
                             </div>
                           )}
                         </div>
@@ -3667,7 +3707,7 @@ const CostSubmission = () => {
                               <Eye className="h-3.5 w-3.5 mr-1" />
                               View Details
                             </Button>
-                            {!isMultiItem && canTier1Approve(oc) && (
+                            {canTier1Approve(oc) && (
                               <>
                                 <Button
                                   size="sm"
@@ -3689,7 +3729,7 @@ const CostSubmission = () => {
                                 </Button>
                               </>
                             )}
-                            {!isMultiItem && canTier2Approve(oc) && (
+                            {canTier2Approve(oc) && (
                               <>
                                 <Button
                                   size="sm"
@@ -3711,7 +3751,7 @@ const CostSubmission = () => {
                                 </Button>
                               </>
                             )}
-                            {!isMultiItem && canTier3Approve(oc) && (
+                            {canTier3Approve(oc) && (
                               <>
                                 <Button
                                   size="sm"
@@ -3733,7 +3773,7 @@ const CostSubmission = () => {
                                 </Button>
                               </>
                             )}
-                            {!isMultiItem && canFOMBypass(oc) && (
+                            {canFOMBypass(oc) && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -3859,9 +3899,11 @@ const CostSubmission = () => {
                     }); // end itemElements map
 
                     return isMultiItem ? (
-                      <div key={groupId} className="rounded-md border bg-background overflow-hidden">
+                      <div key={groupId} className="rounded-xl border border-[#1D3461]/20 shadow-sm overflow-hidden">
                         {GroupHeader}
-                        <div className="divide-y space-y-0">{itemElements}</div>
+                        {expandedGroups.has(groupId!) && (
+                          <div className="divide-y">{itemElements}</div>
+                        )}
                       </div>
                     ) : (
                       itemElements[0]
