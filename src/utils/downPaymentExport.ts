@@ -459,8 +459,9 @@ export function getDownPaymentStats(requests: DownPaymentRequest[]) {
 
   const totalRequested = requests.reduce((sum, r) => sum + r.requestedAmount, 0);
   const totalApproved = requests.reduce((sum, r) => sum + (r.approvedAmount || (r.status !== 'rejected' ? r.requestedAmount : 0)), 0);
-  const totalPaid = requests.reduce((sum, r) => sum + r.totalPaidAmount, 0);
-  const totalRemaining = requests.reduce((sum, r) => sum + r.remainingAmount, 0);
+  const paidStatuses = ['partially_paid', 'fully_paid', 'completed'];
+  const totalPaid = requests.filter(r => paidStatuses.includes(r.status)).reduce((sum, r) => sum + r.totalPaidAmount, 0);
+  const totalRemaining = requests.filter(r => paidStatuses.includes(r.status)).reduce((sum, r) => sum + r.remainingAmount, 0);
 
   return {
     counts: {
