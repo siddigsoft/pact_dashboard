@@ -424,7 +424,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           : isReturned
             ? (entry.verified_at || entry.rejected_at || ad.rejected_at || ad.sent_back_at || '')
             : (entry.dispatched_at || entry.forwarded_at || ''),
-        claimedBy: ad.claimed_by || entry.claimed_by || '',
+        claimedBy: ad.claimed_by || entry.claimed_by || entry.accepted_by || '',
       };
 
       if (coordId) {
@@ -483,6 +483,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           entry.additional_data?.claimed_by,
           entry.additionalData?.claimed_by,
           entry.claimed_by,
+          entry.accepted_by,
         ];
         actionFields.forEach(id => {
           if (id && uuidRegex.test(id)) {
