@@ -1457,7 +1457,7 @@ const CostSubmission = () => {
   const canRequestPayment = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'approved') return false;
-    return isSuperAdmin || isAdmin || isFinanceAdmin;
+    return isSuperAdmin || isAdmin;
   };
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
@@ -1542,9 +1542,12 @@ const CostSubmission = () => {
   };
 
   const openBulkCostEmailDialog = (forceSubmission?: OperationalCostSubmission) => {
+    const allApproved = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
     const approvedSubs = forceSubmission
       ? [forceSubmission]
-      : operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+      : selectedCostIds.size > 0
+        ? allApproved.filter(o => selectedCostIds.has(o.id))
+        : allApproved;
     const totalSdg = approvedSubs.reduce((sum, oc) => {
       const cents = (oc as any).amount_cents || 0;
       const direct = (oc as any).total_amount || (oc as any).amount || 0;
@@ -3052,10 +3055,14 @@ const CostSubmission = () => {
 
         {/* Submissions History Tab */}
         <TabsContent value="history" className="space-y-4">
-          {/* ── Finance Email Action Bar — only in All Submissions tab ── */}
-          {canViewTeamSubmissions && !isFOM && (() => {
-            const approvedCount = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length;
-            const approvedTotal = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').reduce((sum, o) => sum + (o.amount_cents || 0) / 100, 0);
+          {/* ── Finance Email Action Bar — admin / super_admin only ── */}
+          {(isSuperAdmin || isAdmin) && (() => {
+            const allApprovedOcs = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+            const effectiveOcs = selectedCostIds.size > 0
+              ? allApprovedOcs.filter(o => selectedCostIds.has(o.id))
+              : allApprovedOcs;
+            const approvedCount = effectiveOcs.length;
+            const approvedTotal = effectiveOcs.reduce((sum, o) => sum + (o.amount_cents || 0) / 100, 0);
             return (
               <div className={`rounded-xl border-2 px-5 py-3.5 flex items-center justify-between gap-4 transition-all ${approvedCount > 0 ? 'bg-gradient-to-r from-[#0F2041] to-[#1D3461] border-[#0F2041]' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
                 <div className="flex items-center gap-3 min-w-0">
@@ -3069,7 +3076,7 @@ const CostSubmission = () => {
                     </p>
                     <p className={`text-xs leading-tight mt-0.5 ${approvedCount > 0 ? 'text-white/75' : 'text-muted-foreground'}`}>
                       {approvedCount > 0
-                        ? `${approvedCount} approved submission${approvedCount !== 1 ? 's' : ''} · SDG ${approvedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} ready to send`
+                        ? `${approvedCount} ${selectedCostIds.size > 0 ? 'selected' : 'approved'} submission${approvedCount !== 1 ? 's' : ''} · SDG ${approvedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} ready to send`
                         : 'No approved submissions — check back after tier approvals are complete'}
                     </p>
                   </div>
@@ -3860,7 +3867,7 @@ const CostSubmission = () => {
                                 Reconcile
                               </Button>
                             )}
-                            {(isSuperAdmin || isAdmin || isFinanceAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
+                            {(isSuperAdmin || isAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
                               <Button
                                 size="sm"
                                 variant="outline"
