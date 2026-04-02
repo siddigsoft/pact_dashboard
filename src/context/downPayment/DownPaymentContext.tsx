@@ -63,6 +63,7 @@ interface DownPaymentContextType {
   bulkApprove: (data: BulkApprovalRequest) => Promise<{ success: number; failed: number }>;
   addAuditEntry: (requestId: string, entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>) => Promise<boolean>;
   revertToPending: (data: RevertToPendingData) => Promise<boolean>;
+  bulkRevertToPending: (data: { requestIds: string[]; revertedBy: string; revertedByName: string; reason?: string; targetStatus: 'pending_supervisor' | 'pending_admin' | 'approved' }) => Promise<{ success: number; failed: number }>;
   confirmReceipt: (data: { requestId: string; userId: string; userName: string; signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string }) => Promise<boolean>;
   reportNotReceived: (requestId: string, userId: string, userName: string) => Promise<boolean>;
   resendPaymentNotification: (requestId: string) => Promise<boolean>;
@@ -1323,6 +1324,104 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const bulkRevertToPending = async (data: {
+    requestIds: string[];
+    revertedBy: string;
+    revertedByName: string;
+    reason?: string;
+    targetStatus: 'pending_supervisor' | 'pending_admin' | 'approved';
+  }): Promise<{ success: number; failed: number }> => {
+    if (data.requestIds.length === 0) return { success: 0, failed: 0 };
+    const session = await ensureValidSession();
+    if (!session.success) {
+      toastRef.current({ title: 'Session may have expired', description: session.error || 'Please refresh and try again.', variant: 'destructive' });
+      return { success: 0, failed: data.requestIds.length };
+    }
+    try {
+      const now = new Date().toISOString();
+      let commonFields: Record<string, any> = { updated_at: now };
+
+      if (data.targetStatus === 'pending_supervisor') {
+        commonFields = {
+          ...commonFields,
+          status: 'pending_supervisor',
+          supervisor_status: 'pending',
+          supervisor_approved_by: null,
+          supervisor_approved_at: null,
+          supervisor_notes: null,
+          supervisor_rejection_reason: null,
+          admin_status: 'pending',
+          admin_processed_by: null,
+          admin_processed_at: null,
+          admin_notes: null,
+          admin_rejection_reason: null,
+          total_paid_amount: 0,
+          payment_proof_url: null,
+        };
+      } else if (data.targetStatus === 'pending_admin') {
+        commonFields = {
+          ...commonFields,
+          status: 'pending_admin',
+          admin_status: 'pending',
+          admin_processed_by: null,
+          admin_processed_at: null,
+          admin_notes: null,
+          admin_rejection_reason: null,
+          total_paid_amount: 0,
+          payment_proof_url: null,
+        };
+      } else {
+        commonFields = {
+          ...commonFields,
+          status: 'approved',
+          total_paid_amount: 0,
+          payment_proof_url: null,
+          payment_proof_uploaded_at: null,
+        };
+      }
+
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update(commonFields)
+        .in('id', data.requestIds);
+
+      if (error) throw error;
+
+      if (data.targetStatus === 'approved') {
+        const relevant = requests.filter(r => data.requestIds.includes(r.id));
+        await Promise.all(
+          relevant.map(req =>
+            supabase
+              .from('down_payment_requests')
+              .update({ remaining_amount: req.approvedAmount || req.requestedAmount })
+              .eq('id', req.id)
+          )
+        );
+      }
+
+      const targetLabel =
+        data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor Approval' :
+        data.targetStatus === 'pending_admin'       ? 'Pending Admin Approval' :
+                                                      'Approved (Ready for Payment)';
+
+      toastRef.current({
+        title: 'Bulk Revert Complete / اكتمال الإرجاع الجماعي',
+        description: `${data.requestIds.length} request(s) reverted to ${targetLabel}`,
+      });
+
+      await refreshRequests();
+      return { success: data.requestIds.length, failed: 0 };
+    } catch (error: any) {
+      console.error('Bulk revert failed:', error);
+      toastRef.current({
+        title: 'Bulk Revert Failed / فشل الإرجاع الجماعي',
+        description: error.message || 'Failed to revert requests. Please try again.',
+        variant: 'destructive',
+      });
+      return { success: 0, failed: data.requestIds.length };
+    }
+  };
+
   const revertToPending = async (data: RevertToPendingData): Promise<boolean> => {
     const session = await ensureValidSession();
     if (!session.success) {
@@ -1816,6 +1915,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     bulkApprove,
     addAuditEntry,
     revertToPending,
+    bulkRevertToPending,
     confirmReceipt,
     reportNotReceived,
     resendPaymentNotification,

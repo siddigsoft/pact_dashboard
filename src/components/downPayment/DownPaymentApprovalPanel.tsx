@@ -210,7 +210,7 @@ function BulkSummaryTable({ requests, users }: {
 export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFiltersBar }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
+  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
   const { toast } = useToast();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
@@ -599,27 +599,13 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     if (revertIds.length === 0) return;
     setProcessing(true);
     try {
-      let successCount = 0;
-      let failCount = 0;
-      const targetLabel =
-        targetStatus === 'pending_supervisor' ? 'Pending Supervisor' :
-        targetStatus === 'pending_admin'       ? 'Pending Admin' :
-                                                'Approved (Ready for Payment)';
-      for (const id of revertIds) {
-        const success = await revertToPending({
-          requestId: id,
-          revertedBy: currentUser.id,
-          revertedByName: currentUser.fullName || currentUser.email,
-          reason: `Bulk revert to ${targetLabel}`,
-          targetStatus,
-        });
-        if (success) successCount++; else failCount++;
-      }
-      setSelectedIds(new Set());
-      toast({
-        title: `Bulk Revert Complete / اكتمال الإرجاع الجماعي`,
-        description: `${successCount} reverted${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      await bulkRevertToPending({
+        requestIds: revertIds,
+        revertedBy: currentUser.id,
+        revertedByName: currentUser.fullName || currentUser.email,
+        targetStatus,
       });
+      setSelectedIds(new Set());
     } finally {
       setProcessing(false);
     }
