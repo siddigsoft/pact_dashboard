@@ -1541,7 +1541,7 @@ const CostSubmission = () => {
     }));
   };
 
-  const openBulkCostEmailDialog = async (forceSubmission?: OperationalCostSubmission) => {
+  const openBulkCostEmailDialog = async (forceSubmission?: OperationalCostSubmission, groupItems?: OperationalCostSubmission[]) => {
     console.log('[BulkEmail] OPEN called | forceSubmission id:', forceSubmission?.id ?? 'none', '| expense_category:', forceSubmission?.expense_category ?? 'N/A', '| amount_cents:', forceSubmission?.amount_cents ?? 'N/A', '| selectedCostIds.size:', selectedCostIds.size, '| operationalCosts.length:', operationalCosts.length);
 
     // Open dialog immediately in loading state so the user sees instant feedback
@@ -1582,6 +1582,15 @@ const CostSubmission = () => {
       const freshVersion = freshCosts.find(o => o.id === forceSubmission.id);
       console.log('[BulkEmail] forceSubmission freshVersion:', freshVersion ? 'found' : 'not found (using original)', '| amount_cents:', (freshVersion || forceSubmission).amount_cents, '| category:', (freshVersion || forceSubmission).expense_category);
       approvedSubs = [freshVersion || forceSubmission];
+    } else if (groupItems && groupItems.length > 0) {
+      // Group-level "Send to Finance": use approved items from that specific group
+      const groupIds = new Set(groupItems.map(i => i.id));
+      const freshGroup = freshCosts.filter(o => groupIds.has(o.id));
+      const pool = freshGroup.length > 0 ? freshGroup : groupItems;
+      approvedSubs = pool.filter(o => getOperationalDerivedStatus(o) === 'approved');
+      // If none are approved yet, include all from the group so the dialog opens with context
+      if (approvedSubs.length === 0) approvedSubs = pool;
+      console.log('[BulkEmail] groupItems mode: pool=', pool.length, '→ approvedSubs=', approvedSubs.length);
     } else if (selectedCostIds.size > 0) {
       const filtered = allApproved.filter(o => selectedCostIds.has(o.id));
       // If selection doesn't overlap with approved records (e.g., user selected pending ones), fall back to ALL approved
@@ -3480,6 +3489,25 @@ const CostSubmission = () => {
                               <div className="bg-red-400 transition-all duration-300" style={{ width: `${(rejectedCnt / groupItems.length) * 100}%` }} />
                             </div>
                           </button>
+
+                          {/* Send to Finance — visible when approved items exist in this group */}
+                          {(isSuperAdmin || isAdmin) && !isFOM && approvedCnt > 0 && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628]/60 border-b border-blue-900/30">
+                              <Mail className="h-3.5 w-3.5 text-blue-400 flex-none" />
+                              <span className="text-[11px] text-blue-300 flex-1">
+                                {approvedCnt} approved item{approvedCnt !== 1 ? 's' : ''} ready to send to Finance
+                              </span>
+                              <Button
+                                size="sm"
+                                className="h-7 px-3 text-xs bg-blue-900 hover:bg-blue-800 text-blue-100 border border-blue-700/50"
+                                onClick={(e) => { e.stopPropagation(); openBulkCostEmailDialog(undefined, groupItems); }}
+                                data-testid={`button-group-send-finance-${groupId}`}
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                Send to Finance
+                              </Button>
+                            </div>
+                          )}
 
                           {/* Approve All / Reject All — shown when expanded */}
                           {isExpanded && groupApprovableTier !== null && groupId && (
