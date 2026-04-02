@@ -1915,11 +1915,13 @@ const CostSubmission = () => {
         const t2User = oc.tier2_approved_by ? users?.find(u => u.id === oc.tier2_approved_by) : null;
         const ds = getOperationalDerivedStatus(oc);
         const catLabel = EXPENSE_CATEGORY_MAP[oc.expense_category]?.label || oc.expense_category;
+        const projectName = oc.project_id ? (allProjects.find(p => p.id === oc.project_id)?.name || '') : '';
         return {
           refId: (oc.reference_number || oc.id.slice(0, 8)).toUpperCase(),
           date: oc.submitted_at ? format(new Date(oc.submitted_at), 'yyyy-MM-dd') : format(new Date(oc.created_at), 'yyyy-MM-dd'),
           description: oc.description || catLabel,
           requester: submitter ? `${submitter.fullName || submitter.email}` : oc.submitted_by.slice(0, 8),
+          project: projectName,
           category: catLabel,
           status: ds,
           statusAr: STATUS_AR_MAP_OC[ds] || ds,

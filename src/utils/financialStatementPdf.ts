@@ -7,6 +7,7 @@ export interface StatementRow {
   date: string;
   description: string;
   requester: string;
+  project?: string;
   category?: string;
   site?: string;
   hub?: string;
@@ -259,7 +260,7 @@ export async function generateFinancialStatementPdf(
 
   const tableHead = isTransport
     ? [['#', 'Ref ID', 'Date', 'Requester', 'Site', 'Requested', 'Approved', 'Paid', 'T1', 'T2', 'Status']]
-    : [['#', 'Ref ID', 'Date', 'Requester', 'Category', 'Amount', 'Approved', 'T1', 'T2', 'Status']];
+    : [['#', 'Ref ID', 'Date', 'Requester', 'Project', 'Category', 'Amount', 'Approved', 'T1', 'T2', 'Status']];
 
   const tableBody = rows.map((r, idx) => {
     const row: string[] = [
@@ -277,6 +278,7 @@ export async function generateFinancialStatementPdf(
       );
     } else {
       row.push(
+        (r.project || '').slice(0, 18),
         (r.category || r.description || '').slice(0, 18),
         fmtCurrency(r.requestedAmount, cur),
         fmtCurrency(r.approvedAmount, cur),
@@ -292,7 +294,7 @@ export async function generateFinancialStatementPdf(
 
   const totalsRow = isTransport
     ? ['', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
-    : ['', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
+    : ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
 
   tableBody.push(totalsRow);
 
@@ -323,16 +325,17 @@ export async function generateFinancialStatementPdf(
           10: { cellWidth: 16 },
         }
       : {
-          0: { cellWidth: 8, halign: 'center' },
-          1: { cellWidth: 18 },
-          2: { cellWidth: 20 },
-          3: { cellWidth: 24 },
-          4: { cellWidth: 22 },
-          5: { halign: 'right', cellWidth: 22 },
-          6: { halign: 'right', cellWidth: 22 },
-          7: { cellWidth: 18 },
-          8: { cellWidth: 18 },
-          9: { cellWidth: 18 },
+          0: { cellWidth: 7, halign: 'center' },
+          1: { cellWidth: 16 },
+          2: { cellWidth: 18 },
+          3: { cellWidth: 20 },
+          4: { cellWidth: 20 },
+          5: { cellWidth: 18 },
+          6: { halign: 'right', cellWidth: 18 },
+          7: { halign: 'right', cellWidth: 18 },
+          8: { cellWidth: 14 },
+          9: { cellWidth: 14 },
+          10: { cellWidth: 15 },
         },
     didParseCell: (data: any) => {
       if (data.row.index === tableBody.length - 1) {

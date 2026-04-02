@@ -54,10 +54,10 @@ function sectionFill(): ExcelJS.Fill {
 const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 16, 15, 15, 11, 26, 18, 12];
 // Explicit column widths for transport Full Details sheet (19 cols)
 const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 16, 14, 13, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 18];
-// Explicit column widths for operational cost (Financial Statement sheet, 10 cols)
-const OPCOST_WIDTHS_SUMMARY = [5, 22, 13, 26, 16, 15, 15, 26, 18, 12];
-// Explicit column widths for operational cost Full Details (17 cols)
-const OPCOST_WIDTHS_DETAIL = [5, 22, 13, 26, 16, 22, 14, 14, 12, 26, 13, 13, 18, 13, 13, 20, 18];
+// Explicit column widths for operational cost (Financial Statement sheet, 11 cols — inc. Project)
+const OPCOST_WIDTHS_SUMMARY = [5, 22, 13, 26, 22, 16, 15, 15, 26, 18, 12];
+// Explicit column widths for operational cost Full Details (18 cols — inc. Project)
+const OPCOST_WIDTHS_DETAIL = [5, 22, 13, 26, 22, 16, 22, 14, 14, 12, 26, 13, 13, 18, 13, 13, 20, 18];
 
 function applyColWidths(ws: ExcelJS.Worksheet, widths: number[]) {
   widths.forEach((w, i) => {
@@ -106,7 +106,7 @@ function buildStatementWorkbook(
 
   const statusLabel = fmtStatus(config.statusFilter);
   const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';
-  const totalCols = isTransport ? 11 : 10;
+  const totalCols = 11; // transport: 11 cols, operational: 11 cols (with Project)
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -205,14 +205,14 @@ function buildStatementWorkbook(
 
   const tableHead = isTransport
     ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
-    : ['#', 'Ref ID', 'Date', 'Requester', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
+    : ['#', 'Ref ID', 'Date', 'Requester', 'Project', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
 
   const hdrRow = ws.addRow(tableHead);
   hdrRow.eachCell((cell, ci) => {
     cell.fill = subHeaderFill();
     cell.font = headerFont(10);
     cell.border = thinBorder();
-    cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+    cell.alignment = { horizontal: ci <= (isTransport ? 4 : 5) ? 'left' : 'center', vertical: 'middle', wrapText: false };
   });
   hdrRow.height = 22;
 
@@ -221,14 +221,15 @@ function buildStatementWorkbook(
     if (isTransport) {
       rowData.push(r.site || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
     } else {
-      rowData.push(r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
+      rowData.push(r.project || '', r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
     }
     rowData.push(r.t1Approver || 'N/A', r.t2Approver || 'N/A', fmtStatus(r.status));
 
     const dataRow = ws.addRow(rowData);
+    const leftCols = isTransport ? 4 : 5;
     dataRow.eachCell((cell, ci) => {
       cell.border = thinBorder();
-      cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+      cell.alignment = { horizontal: ci <= leftCols ? 'left' : 'center', vertical: 'middle', wrapText: false };
       cell.font = bodyFont(10);
       if (idx % 2 === 1) cell.fill = altFill();
     });
@@ -243,7 +244,7 @@ function buildStatementWorkbook(
 
   const totalsData: (string | number)[] = isTransport
     ? ['', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
-    : ['', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
+    : ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
 
   const totRow = ws.addRow(totalsData);
   totRow.eachCell((cell, ci) => {
@@ -307,14 +308,15 @@ function buildStatementWorkbook(
 
     const detailHeaders = isTransport
       ? ['#', 'Reference ID', 'Date', 'Requester', 'Site', 'Hub', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Notes']
-      : ['#', 'Reference ID', 'Date', 'Requester', 'Category', 'Description', `Amount (${cur})`, `Approved (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Notes'];
+      : ['#', 'Reference ID', 'Date', 'Requester', 'Project', 'Category', 'Description', `Amount (${cur})`, `Approved (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Notes'];
 
     const detHdrRow = ws2.addRow(detailHeaders);
+    const detLeftCols = isTransport ? 4 : 5;
     detHdrRow.eachCell((cell, ci) => {
       cell.fill = headerFill();
       cell.font = headerFont(10);
       cell.border = thinBorder();
-      cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+      cell.alignment = { horizontal: ci <= detLeftCols ? 'left' : 'center', vertical: 'middle', wrapText: false };
     });
     detHdrRow.height = 22;
 
@@ -323,7 +325,7 @@ function buildStatementWorkbook(
       if (isTransport) {
         rowData.push(r.site || r.description || '', r.hub || '', r.state || '', r.requestedAmount, r.approvedAmount, r.paidAmount);
       } else {
-        rowData.push(r.category || '', r.description || '', r.requestedAmount, r.approvedAmount);
+        rowData.push(r.project || '', r.category || '', r.description || '', r.requestedAmount, r.approvedAmount);
       }
       rowData.push(fmtStatus(r.status));
       rowData.push(r.t1Approver || 'N/A', r.t1Date ? fmtDate(r.t1Date) : 'N/A', r.t1Status ? fmtStatus(r.t1Status) : 'N/A');
@@ -333,7 +335,7 @@ function buildStatementWorkbook(
       const dataRow = ws2.addRow(rowData);
       dataRow.eachCell((cell, ci) => {
         cell.border = thinBorder();
-        cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+        cell.alignment = { horizontal: ci <= detLeftCols ? 'left' : 'center', vertical: 'middle', wrapText: false };
         cell.font = bodyFont(10);
         if (idx % 2 === 1) cell.fill = altFill();
       });
