@@ -751,14 +751,9 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     if (type === 'csv') {
       exportToCSV(data, suffix);
     } else if (type === 'excel') {
-      exportToExcel(data, suffix, tabLabel);
+      handleStatementExport('excel');
     } else {
-      exportToPDF(data, {
-        filters,
-        includeAuditLog: true,
-        includeSignature: false,
-        reportTitle: `Down-Payment Requests Report - ${tabLabel}`,
-      });
+      handleStatementExport('pdf');
     }
   };
 
@@ -779,6 +774,9 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     const reqUser = users?.find(u => u.id === req.requestedBy);
     const t1User = req.supervisorApprovedBy ? users?.find(u => u.id === req.supervisorApprovedBy) : null;
     const t2User = req.adminProcessedBy ? users?.find(u => u.id === req.adminProcessedBy) : null;
+    const approvalTypeLabel = req.approvalType
+      ? ({ full: 'Full (100%)', half: 'Half (50%)', percentage: `${req.approvalPercentage ?? ''}%`, custom: 'Custom Amount' }[req.approvalType] ?? req.approvalType)
+      : undefined;
     return {
       refId: `PACT-TA-${req.id.substring(0, 8).toUpperCase()}`,
       date: req.requestedAt,
@@ -787,6 +785,13 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       site: req.siteName,
       hub: req.hubName || '',
       state: req.stateName || '',
+      locality: req.localityName || '',
+      mmpName: req.mmpName || '',
+      activityType: req.activityType || '',
+      transportationBudget: req.totalTransportationBudget,
+      approvalType: approvalTypeLabel,
+      paymentType: req.paymentType === 'full_advance' ? 'Full Advance' : req.paymentType === 'installments' ? 'Installments' : req.paymentType,
+      justification: req.justification || '',
       status: req.status,
       statusAr: STATUS_AR_MAP[req.status] || '',
       requestedAmount: req.requestedAmount,

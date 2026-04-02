@@ -12,6 +12,13 @@ export interface StatementRow {
   site?: string;
   hub?: string;
   state?: string;
+  locality?: string;
+  mmpName?: string;
+  activityType?: string;
+  transportationBudget?: number;
+  approvalType?: string;
+  paymentType?: string;
+  justification?: string;
   status: string;
   statusAr?: string;
   requestedAmount: number;

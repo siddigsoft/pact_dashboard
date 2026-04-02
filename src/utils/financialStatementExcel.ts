@@ -52,8 +52,8 @@ function sectionFill(): ExcelJS.Fill {
 
 // Explicit column widths for transport statement (Financial Statement sheet, 12 cols — incl. State)
 const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 16, 14, 15, 15, 11, 26, 18, 12];
-// Explicit column widths for transport Full Details sheet (19 cols)
-const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 16, 14, 13, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 18];
+// Explicit column widths for transport Full Details sheet (26 cols — incl. MMP, Locality, Activity, Budget, Approval Type, Payment Type, Justification)
+const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 16, 14, 13, 22, 14, 16, 14, 16, 13, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 26, 18];
 // Explicit column widths for operational cost (Financial Statement sheet, 11 cols — inc. Project)
 const OPCOST_WIDTHS_SUMMARY = [5, 22, 13, 26, 22, 16, 15, 15, 26, 18, 12];
 // Explicit column widths for operational cost Full Details (18 cols — inc. Project)
@@ -359,11 +359,11 @@ function buildStatementWorkbook(
     ws2.addRow([]).height = 6;
 
     const detailHeaders = isTransport
-      ? ['#', 'Reference ID', 'Date', 'Requester', 'Site', 'Hub', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Notes']
+      ? ['#', 'Reference ID', 'Date', 'Requester', 'Site', 'Hub', 'State', 'MMP', 'Locality', 'Activity Type', `Budget (${cur})`, 'Approval Type', 'Payment Type', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Justification', 'Notes']
       : ['#', 'Reference ID', 'Date', 'Requester', 'Project', 'Category', 'Description', `Amount (${cur})`, `Approved (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Notes'];
 
     const detHdrRow = ws2.addRow(detailHeaders);
-    const detLeftCols = isTransport ? 4 : 5;
+    const detLeftCols = isTransport ? 7 : 5;
     detHdrRow.eachCell((cell, ci) => {
       cell.fill = headerFill();
       cell.font = headerFont(10);
@@ -375,14 +375,31 @@ function buildStatementWorkbook(
     rows.forEach((r, idx) => {
       const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
       if (isTransport) {
-        rowData.push(r.site || r.description || '', r.hub || '', r.state || '', r.requestedAmount, r.approvedAmount, r.paidAmount);
+        rowData.push(
+          r.site || r.description || '',
+          r.hub || '',
+          r.state || '',
+          r.mmpName || '',
+          r.locality || '',
+          r.activityType || '',
+          r.transportationBudget != null ? r.transportationBudget : '',
+          r.approvalType || '',
+          r.paymentType || '',
+          r.requestedAmount,
+          r.approvedAmount,
+          r.paidAmount,
+        );
       } else {
         rowData.push(r.project || '', r.category || '', r.description || '', r.requestedAmount, r.approvedAmount);
       }
       rowData.push(fmtStatus(r.status));
       rowData.push(r.t1Approver || 'N/A', r.t1Date ? fmtDate(r.t1Date) : 'N/A', r.t1Status ? fmtStatus(r.t1Status) : 'N/A');
       rowData.push(r.t2Approver || 'N/A', r.t2Date ? fmtDate(r.t2Date) : 'N/A', r.t2Status ? fmtStatus(r.t2Status) : 'N/A');
-      rowData.push(r.rejectionReason || '', r.notes || '');
+      if (isTransport) {
+        rowData.push(r.rejectionReason || '', r.justification || '', r.notes || '');
+      } else {
+        rowData.push(r.rejectionReason || '', r.notes || '');
+      }
 
       const dataRow = ws2.addRow(rowData);
       dataRow.eachCell((cell, ci) => {
