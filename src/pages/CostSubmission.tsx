@@ -1717,12 +1717,16 @@ const CostSubmission = () => {
     if (!deleteConfirm) return;
     setActionProcessing(true);
     try {
-      const { error } = await supabase
+      let query = supabase
         .from('operational_cost_submissions')
         .delete()
-        .eq('id', deleteConfirm.id)
-        .eq('tier1_status', 'pending')
-        .eq('tier2_status', 'pending');
+        .eq('id', deleteConfirm.id);
+
+      if (!isSuperAdmin) {
+        query = query.eq('tier1_status', 'pending').eq('tier2_status', 'pending');
+      }
+
+      const { error } = await query;
 
       if (error) {
         toast({ title: "Delete Failed / فشل الحذف", description: error.message, variant: "destructive" });
