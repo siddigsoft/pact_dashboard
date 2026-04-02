@@ -1877,9 +1877,12 @@ const CostSubmission = () => {
 
   const handleOperationalStatementExport = (type: 'pdf' | 'excel') => {
     try {
-      const statusFiltered = statusFilter === 'all'
+      const baseFiltered = statusFilter === 'all'
         ? filteredOperationalCosts
         : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+      const statusFiltered = selectedCostIds.size > 0
+        ? baseFiltered.filter(oc => selectedCostIds.has(oc.id))
+        : baseFiltered;
       if (statusFiltered.length === 0) {
         toast({ title: "No Data / لا توجد بيانات", description: "No submissions match the current filter.", variant: "destructive" });
         return;
@@ -3138,14 +3141,18 @@ const CostSubmission = () => {
                 <DropdownMenuItem
                   data-testid="button-export-history-excel"
                   onClick={() => {
-                    const statusFiltered = statusFilter === 'all'
+                    const baseFiltered = statusFilter === 'all'
                       ? filteredOperationalCosts
                       : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+                    const statusFiltered = selectedCostIds.size > 0
+                      ? baseFiltered.filter(oc => selectedCostIds.has(oc.id))
+                      : baseFiltered;
                     if (statusFiltered.length === 0) {
                       toast({ title: "No Data / لا توجد بيانات", description: "No submissions to export.", variant: "destructive" });
                       return;
                     }
-                    exportSubmissionsToExcel(statusFiltered, users, `Cost Submissions (${statusFilter})`, `cost-submissions-${statusFilter}`, allProjects);
+                    const label = selectedCostIds.size > 0 ? `Cost Submissions (${statusFilter} - selected)` : `Cost Submissions (${statusFilter})`;
+                    exportSubmissionsToExcel(statusFiltered, users, label, `cost-submissions-${statusFilter}`, allProjects);
                     toast({ title: "Excel Exported / تم التصدير", description: `${statusFiltered.length} submission(s) exported to Excel.` });
                   }}
                 >
@@ -3155,14 +3162,18 @@ const CostSubmission = () => {
                 <DropdownMenuItem
                   data-testid="button-export-history-pdf"
                   onClick={() => {
-                    const statusFiltered = statusFilter === 'all'
+                    const baseFiltered = statusFilter === 'all'
                       ? filteredOperationalCosts
                       : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+                    const statusFiltered = selectedCostIds.size > 0
+                      ? baseFiltered.filter(oc => selectedCostIds.has(oc.id))
+                      : baseFiltered;
                     if (statusFiltered.length === 0) {
                       toast({ title: "No Data / لا توجد بيانات", description: "No submissions to export.", variant: "destructive" });
                       return;
                     }
-                    exportSubmissionsToPDF(statusFiltered, users, `Cost Submissions (${statusFilter})`, statusFilter, `cost-submissions-${statusFilter}`, allProjects);
+                    const label = selectedCostIds.size > 0 ? `Cost Submissions (${statusFilter} - selected)` : `Cost Submissions (${statusFilter})`;
+                    exportSubmissionsToPDF(statusFiltered, users, label, statusFilter, `cost-submissions-${statusFilter}`, allProjects);
                     toast({ title: "PDF Exported / تم التصدير", description: `${statusFiltered.length} submission(s) exported to PDF.` });
                   }}
                 >
