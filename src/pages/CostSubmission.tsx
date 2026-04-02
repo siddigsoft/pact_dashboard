@@ -1566,11 +1566,19 @@ const CostSubmission = () => {
     }
 
     const allApproved = freshCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
-    const approvedSubs = forceSubmission
-      ? [forceSubmission]
-      : selectedCostIds.size > 0
-        ? allApproved.filter(o => selectedCostIds.has(o.id))
-        : allApproved;
+
+    let approvedSubs: OperationalCostSubmission[];
+    if (forceSubmission) {
+      // Prefer the freshly-fetched version of the record so the dialog always shows current data
+      const freshVersion = freshCosts.find(o => o.id === forceSubmission.id);
+      approvedSubs = [freshVersion || forceSubmission];
+    } else if (selectedCostIds.size > 0) {
+      const filtered = allApproved.filter(o => selectedCostIds.has(o.id));
+      // If selection doesn't overlap with approved records (e.g., user selected pending ones), fall back to ALL approved
+      approvedSubs = filtered.length > 0 ? filtered : allApproved;
+    } else {
+      approvedSubs = allApproved;
+    }
     const totalSdg = approvedSubs.reduce((sum, oc) => {
       const cents = Number((oc as any).amount_cents) || 0;
       const direct = (oc as any).total_amount || (oc as any).amount || 0;
@@ -1643,6 +1651,8 @@ const CostSubmission = () => {
 
       let pdfAttachment: { base64: string; filename: string } | undefined;
       let excelAttachment: { base64: string; filename: string; mimeType: string } | undefined;
+      let pdfFailed = false;
+      let excelFailed = false;
 
       try {
         const pdfBase64 = generateBulkCostPDFBase64(bulkSubs, approverName, totalSdg, effectiveRate, userMap, projectMap);
@@ -1651,7 +1661,8 @@ const CostSubmission = () => {
           filename: `PACT_Approved_Costs_${new Date().toISOString().slice(0, 10)}.pdf`,
         };
       } catch (pdfErr) {
-        console.warn('[BulkEmail] PDF generation failed:', pdfErr);
+        pdfFailed = true;
+        console.error('[BulkEmail] PDF generation failed:', pdfErr);
       }
 
       try {
@@ -1662,7 +1673,16 @@ const CostSubmission = () => {
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         };
       } catch (xlErr) {
-        console.warn('[BulkEmail] Excel generation failed:', xlErr);
+        excelFailed = true;
+        console.error('[BulkEmail] Excel generation failed:', xlErr);
+      }
+
+      if (pdfFailed && excelFailed) {
+        toast({ title: "Attachment Warning / تحذير المرفق", description: "Both PDF and Excel generation failed. The email will be sent without attachments. / فشل إنشاء كلا الملفين. سيُرسل البريد بدون مرفقات.", variant: "destructive" });
+      } else if (pdfFailed) {
+        toast({ title: "PDF Warning / تحذير PDF", description: "PDF generation failed; only the Excel workbook will be attached. / فشل إنشاء PDF؛ سيُرفق ملف Excel فقط." });
+      } else if (excelFailed) {
+        toast({ title: "Excel Warning / تحذير Excel", description: "Excel generation failed; only the PDF report will be attached. / فشل إنشاء Excel؛ سيُرفق تقرير PDF فقط." });
       }
 
       const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => {

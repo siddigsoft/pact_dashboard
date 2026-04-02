@@ -311,7 +311,7 @@ export async function generateBulkCostExcelBase64(
 
   const dateStr = format(new Date(), 'MMM d, yyyy | HH:mm');
   const refNo = `BULK-${submissions.length}-${format(new Date(), 'yyyyMMdd')}`;
-  const totalAmtCents = submissions.reduce((s, r) => s + r.amount_cents, 0);
+  const totalAmtCents = submissions.reduce((s, r) => s + (Number(r.amount_cents) || 0), 0);
   const totalSdg = totalAmtCents / 100;
   const totalUsd = usdRate && usdRate > 0 ? totalSdg / usdRate : null;
 
@@ -655,10 +655,13 @@ export async function generateBulkCostExcelBase64(
     [28, 32, 14, 18, ...(hasUsd ? [16] : [])].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
   }
 
-  // Write to buffer and return base64
+  // Write to buffer and return base64 (chunked to avoid O(n²) string concat)
   const buffer = await wb.xlsx.writeBuffer();
   const bytes = new Uint8Array(buffer as ArrayBuffer);
+  const CHUNK = 65536;
   let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+  }
   return btoa(binary);
 }
