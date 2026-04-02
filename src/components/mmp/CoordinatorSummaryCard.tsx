@@ -249,18 +249,44 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
   const [fundAmount, setFundAmount] = useState('');
   const [fundJustification, setFundJustification] = useState('');
   const [fundSubmitting, setFundSubmitting] = useState(false);
+  const [fundFetchedBudget, setFundFetchedBudget] = useState<number | null>(null);
+  const [fundBudgetLoading, setFundBudgetLoading] = useState(false);
 
   const handleOpenRequestFund = (site: SiteStatusDetail) => {
     setFundDialog({ open: true, site });
     setFundAmount('');
     setFundJustification('');
+    // Seed from what we already know; live fetch will update
+    setFundFetchedBudget(site.transportBudget && site.transportBudget > 0 ? site.transportBudget : null);
   };
+
+  // Live-fetch transport_budget_total from mmp_site_entries when dialog opens
+  useEffect(() => {
+    const site = fundDialog.site;
+    if (!fundDialog.open || !site?.id) return;
+    let cancelled = false;
+    const fetchBudget = async () => {
+      setFundBudgetLoading(true);
+      const { data } = await supabase
+        .from('mmp_site_entries')
+        .select('transport_budget_total')
+        .eq('id', site.id)
+        .maybeSingle();
+      if (!cancelled) {
+        const val = data?.transport_budget_total != null ? Number(data.transport_budget_total) : null;
+        if (val && val > 0) setFundFetchedBudget(val);
+        setFundBudgetLoading(false);
+      }
+    };
+    fetchBudget();
+    return () => { cancelled = true; };
+  }, [fundDialog.open, fundDialog.site?.id]);
 
   const handleSubmitFundRequest = async () => {
     const site = fundDialog.site;
     if (!site || !currentUser) return;
     const amount = parseFloat(fundAmount);
-    const budget = site.transportBudget && site.transportBudget > 0 ? site.transportBudget : amount;
+    const budget = (fundFetchedBudget && fundFetchedBudget > 0) ? fundFetchedBudget : amount;
     if (!amount || amount <= 0) return;
     if (!fundJustification.trim()) return;
     setFundSubmitting(true);
@@ -829,14 +855,18 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                 )}
               </div>
 
-              {fundDialog.site.transportBudget != null && fundDialog.site.transportBudget > 0 && (
-                <div className="flex items-center justify-between rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2 text-sm">
-                  <span className="text-muted-foreground font-medium">Transportation Budget</span>
+              <div className="flex items-center justify-between rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2 text-sm">
+                <span className="text-muted-foreground font-medium">Approved Transportation Budget</span>
+                {fundBudgetLoading ? (
+                  <span className="text-muted-foreground italic text-xs">Loading…</span>
+                ) : fundFetchedBudget && fundFetchedBudget > 0 ? (
                   <span className="font-semibold text-blue-700 dark:text-blue-300">
-                    {fundDialog.site.transportBudget.toLocaleString()} SDG
+                    {fundFetchedBudget.toLocaleString()} SDG
                   </span>
-                </div>
-              )}
+                ) : (
+                  <span className="text-muted-foreground italic text-xs">Not set</span>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="fund-amount">Requested Amount (SDG) <span className="text-destructive">*</span></Label>
