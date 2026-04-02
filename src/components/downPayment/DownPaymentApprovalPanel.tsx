@@ -2498,7 +2498,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const StatsCards = () => (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4" data-testid="stats-cards-container">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4" data-testid="stats-cards-container">
       <Card data-testid="card-stats-total">
         <CardContent className="p-4">
           <div className="text-2xl font-bold" data-testid="text-stats-total-count">{stats.counts.total}</div>
@@ -2516,12 +2516,19 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           )}
         </CardContent>
       </Card>
+      <Card data-testid="card-stats-total-requested">
+        <CardContent className="p-4">
+          <div className="text-2xl font-bold text-blue-600" data-testid="text-stats-total-requested">{stats.amounts.totalRequested.toLocaleString()}</div>
+          <div className="text-sm text-muted-foreground">Total Requested (SDG)</div>
+        </CardContent>
+      </Card>
       <Card data-testid="card-stats-pending">
         <CardContent className="p-4">
           <div className="text-2xl font-bold text-yellow-600" data-testid="text-stats-pending-count">{stats.counts.pendingSupervisor + stats.counts.pendingAdmin}</div>
           <div className="text-sm text-muted-foreground">Pending</div>
+          <div className="text-xs font-medium text-yellow-700 dark:text-yellow-400 mt-0.5" data-testid="text-stats-pending-amount">{stats.amounts.totalPendingAmount.toLocaleString()} SDG</div>
           {stats.counts.pendingSupervisor > 0 && stats.counts.pendingAdmin > 0 && (
-            <div className="text-xs text-muted-foreground mt-1">
+            <div className="text-xs text-muted-foreground mt-0.5">
               {stats.counts.pendingSupervisor} supervisor · {stats.counts.pendingAdmin} admin
             </div>
           )}
