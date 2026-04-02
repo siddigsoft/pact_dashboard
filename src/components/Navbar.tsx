@@ -86,8 +86,8 @@ const Navbar = () => {
         };
 
         return (
-                <div className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-                        <div className="grid h-16 grid-cols-[auto,1fr,auto] items-center px-4 gap-4">
+                <div className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
+                        <div className="grid h-16 grid-cols-[auto,1fr,auto] items-center px-4 lg:px-6 gap-4">
                                 {/* Brand */}
                                 <div className="flex items-center shrink-0">
                                         <NavBrand />
@@ -101,7 +101,7 @@ const Navbar = () => {
                                 </div>
 
                                 {/* Right actions — grouped with dividers */}
-                                <div className="flex items-center gap-1 justify-self-end">
+                                <div className="flex items-center gap-1.5 justify-self-end">
                                         {/* Realtime status dot */}
                                         <RealtimeActivityIndicator variant="pulse" size="sm" showTooltip={true} />
 

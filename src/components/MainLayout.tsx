@@ -87,9 +87,9 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
       <NotificationInitializer />
       <NavBadgeCountsProvider>
       <SidebarProvider>
-        <div className={`min-h-screen max-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
+        <div className={`min-h-screen max-h-screen flex w-full bg-[#f3f5f8] dark:bg-gray-950 ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
           {!isMobile && !isTablet && <AppSidebar />}
-          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 h-screen max-h-screen`}>
+          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : 'bg-transparent'} relative z-0 flex flex-col min-w-0 h-screen max-h-screen`}>
             {/* Realtime Connection Banner - Shows when offline/reconnecting */}
             <RealtimeBanner 
               onRefresh={handleGlobalRefresh}
@@ -109,10 +109,10 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             )}
             {/* Global Refresh Bar - Mobile only (desktop has per-page refresh controls) */}
             {isMobile && <GlobalRefreshBar />}
-            <div
-              className={`global-scrollable flex-1 flex flex-col relative z-0 min-w-0 min-h-0 ${isMobile ? 'px-1 pb-12 pt-0.5 bg-gray-50 dark:bg-gray-900' : 'bg-slate-50/70 dark:bg-gray-900/70'}`}
-            >
-              {children || <Outlet />}
+            <div className={`global-scrollable flex-1 flex flex-col relative z-0 min-w-0 min-h-0 ${isMobile ? 'px-1 pb-12 pt-0.5 bg-gray-50 dark:bg-gray-900' : 'bg-transparent px-3 py-3 lg:px-5 lg:py-4'}`}>
+              <div className="w-full rounded-2xl border border-slate-200/70 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
+                {children || <Outlet />}
+              </div>
             </div>
             {isMobile && <MobileBottomNav />}
             <OnlineOfflineToggle variant="floating" />

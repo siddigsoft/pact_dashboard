@@ -291,7 +291,7 @@ export const OperationsZone: React.FC = () => {
         : [];
       const filtered = allSiteVisits.filter(visit => {
         // Primary: state-based matching
-        const visitState = (visit.state || visit.stateName || (visit as any).state_name || '');
+        const visitState = (visit.state || (visit as any).stateName || (visit as any).state_name || '');
         if (visitState && isStateInAnyHub(visitState, hubAccessInfo.hubIds)) return true;
         // Secondary: hub name matching (for visits with hub field)
         const visitHub = (visit.hub || '').toLowerCase().trim();
@@ -453,16 +453,16 @@ export const OperationsZone: React.FC = () => {
   };
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 pb-12 sm:pb-14 lg:pb-16 space-y-5 sm:space-y-7">
+    <div className="p-4 sm:p-5 md:p-6 lg:p-7 pb-10 sm:pb-12 lg:pb-14 space-y-5 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-xl border border-slate-200/80 bg-white px-4 py-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0 shadow-sm">
-            <ClipboardList className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg bg-blue-600/10 flex items-center justify-center flex-shrink-0 border border-blue-100 dark:border-blue-900/40">
+            <ClipboardList className="h-5 w-5 sm:h-6 sm:w-6 text-blue-700 dark:text-blue-300" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight truncate">Operations Center</h1>
-            <p className="text-sm sm:text-base text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold leading-tight truncate">Operations Center</h1>
+            <p className="text-sm text-muted-foreground">
               Field operations command and control
             </p>
           </div>
@@ -485,7 +485,7 @@ export const OperationsZone: React.FC = () => {
       </div>
 
       {/* Users Management Style Gradient Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <GradientStatCard
           title="Total Operations"
           value={totalVisits}
@@ -548,7 +548,7 @@ export const OperationsZone: React.FC = () => {
       </div>
 
       {pendingReclaimCount > 0 && (
-        <Card className="border-orange-300 dark:border-orange-700 bg-orange-50/50 dark:bg-orange-950/20" data-testid="card-pending-reconciliation">
+        <Card className="border-orange-200 dark:border-orange-800 bg-orange-50/70 dark:bg-orange-950/20 shadow-sm" data-testid="card-pending-reconciliation">
           <CardContent className="p-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3">
@@ -583,7 +583,7 @@ export const OperationsZone: React.FC = () => {
       )}
 
       {(cycleSummary.active > 0 || cycleSummary.closing > 0 || cycleSummary.pending_approval > 0 || cycleSummary.closed > 0) && (
-        <Card data-testid="card-cycle-summary">
+        <Card className="border-slate-200/90 dark:border-gray-800 shadow-sm" data-testid="card-cycle-summary">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -653,13 +653,13 @@ export const OperationsZone: React.FC = () => {
       )}
 
       {/* IT-Style Tab Navigation */}
-      <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
-        <CardContent className="p-2 sm:p-3">
+      <Card className="border-slate-200/90 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <CardContent className="p-3">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5 h-auto p-0.5 bg-transparent border border-border/30 gap-1">
+            <TabsList className="grid w-full grid-cols-5 h-auto p-1 bg-slate-100/80 border border-slate-200/80 gap-1 dark:bg-gray-800/70 dark:border-gray-700">
               <TabsTrigger 
                 value="overview" 
-                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-900 data-[state=active]:border-slate-200 dark:data-[state=active]:border-gray-700 data-[state=active]:shadow-sm border border-transparent min-h-[56px] sm:min-h-[40px]"
                 data-testid="tab-overview"
               >
                 <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -669,7 +669,7 @@ export const OperationsZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="mmps" 
-                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-900 data-[state=active]:border-slate-200 dark:data-[state=active]:border-gray-700 data-[state=active]:shadow-sm border border-transparent min-h-[56px] sm:min-h-[40px]"
                 data-testid="tab-mmps"
               >
                 <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-blue-500/10 flex items-center justify-center flex-shrink-0">
@@ -679,7 +679,7 @@ export const OperationsZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="upcoming" 
-                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-900 data-[state=active]:border-slate-200 dark:data-[state=active]:border-gray-700 data-[state=active]:shadow-sm border border-transparent min-h-[56px] sm:min-h-[40px]"
                 data-testid="tab-upcoming"
               >
                 <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-blue-500/10 flex items-center justify-center flex-shrink-0">
@@ -689,7 +689,7 @@ export const OperationsZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="calendar" 
-                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-900 data-[state=active]:border-slate-200 dark:data-[state=active]:border-gray-700 data-[state=active]:shadow-sm border border-transparent min-h-[56px] sm:min-h-[40px]"
                 data-testid="tab-calendar"
               >
                 <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-green-500/10 flex items-center justify-center flex-shrink-0">
@@ -699,7 +699,7 @@ export const OperationsZone: React.FC = () => {
               </TabsTrigger>
               <TabsTrigger 
                 value="costs" 
-                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-900 data-[state=active]:border-slate-200 dark:data-[state=active]:border-gray-700 data-[state=active]:shadow-sm border border-transparent min-h-[56px] sm:min-h-[40px]"
                 data-testid="tab-costs"
               >
                 <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-orange-500/10 flex items-center justify-center flex-shrink-0">

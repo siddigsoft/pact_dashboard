@@ -754,16 +754,16 @@
     }, [menuPrefs.favoritePages]);
 
     return (
-      <Sidebar collapsible="icon" className="border-r bg-white dark:bg-gray-900">
+      <Sidebar collapsible="icon" className="border-r border-slate-200/80 bg-slate-50 dark:border-gray-800 dark:bg-gray-900">
 
-        <SidebarHeader className="border-b py-0">
-          <div className="flex h-15 items-center gap-0.5 px-0.5">
+        <SidebarHeader className="border-b border-slate-200/70 py-1">
+          <div className="flex h-14 items-center gap-1 px-2">
             <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
             <SidebarTrigger className="ml-auto h-4 w-4" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-0 pt-0 pb-0">
+        <SidebarContent className="px-1 pt-2 pb-1">
           {favoriteItems.length > 0 && (
             <Collapsible open={!isFavoritesCollapsed} className="">
               <SidebarGroup className="pt-3 pb-1 px-0">
@@ -825,19 +825,19 @@
                           asChild
                           isActive={pathname === item.url}
                           tooltip={item.title}
-                          className={`flex-1 rounded text-[13px] font-medium transition-all duration-200 
+                          className={`flex-1 rounded-md text-[13px] font-medium transition-all duration-200 h-8 
                             ${
                               pathname === item.url
-                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/70 dark:text-blue-300 font-semibold"
                                 : ""
                             }`}
                         >
-                          <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-link-${item.id}`}>
+                          <Link to={item.url} className="flex items-center gap-2" data-testid={`nav-link-${item.id}`}>
                             <item.icon
-                              className={`h-4 w-4 ${
+                              className={`h-3.5 w-3.5 ${
                                 pathname === item.url
                                   ? "text-blue-700 dark:text-blue-300"
-                                  : "text-blue-600 dark:text-blue-400"
+                                  : "text-slate-500 dark:text-slate-400"
                               }`}
                             />
                             <span className="truncate flex-1">{item.title}</span>
@@ -1005,7 +1005,7 @@
                   <SidebarGroup className="py-0 px-0">
                     <CollapsibleTrigger asChild>
                       <SidebarGroupLabel 
-                        className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                        className="px-2 py-0.5 h-6 text-[11px] uppercase tracking-[0.14em] font-semibold text-slate-500 dark:text-slate-400 cursor-pointer flex items-center justify-between hover:bg-slate-200/50 dark:hover:bg-gray-800 rounded transition-colors"
                         onClick={() => toggleGroupCollapse(group.id)}
                         data-testid={`group-label-${group.id}`}
                       >
@@ -1076,7 +1076,7 @@
           })()}
         </SidebarContent>
 
-        <SidebarFooter className="border-t p-2">
+        <SidebarFooter className="border-t border-slate-200/70 p-2">
           {currentUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
