@@ -1541,8 +1541,31 @@ const CostSubmission = () => {
     }));
   };
 
-  const openBulkCostEmailDialog = (forceSubmission?: OperationalCostSubmission) => {
-    const allApproved = operationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+  const openBulkCostEmailDialog = async (forceSubmission?: OperationalCostSubmission) => {
+    // Open dialog immediately in loading state so the user sees instant feedback
+    setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: true, sending: false });
+
+    // Fetch fresh data from Supabase to avoid stale/incomplete state
+    let freshCosts: OperationalCostSubmission[] = [];
+    try {
+      const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
+      if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
+        freshCosts = rpcResult.data as OperationalCostSubmission[];
+      } else {
+        const directResult = await supabase
+          .from('operational_cost_submissions')
+          .select('*')
+          .order('created_at', { ascending: false });
+        freshCosts = (directResult.data as OperationalCostSubmission[]) || [];
+      }
+      // Update the global state with the fresh data too
+      if (freshCosts.length > 0) setOperationalCosts(freshCosts);
+    } catch {
+      // Fall back to current state if fetch fails
+      freshCosts = operationalCosts;
+    }
+
+    const allApproved = freshCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
     const approvedSubs = forceSubmission
       ? [forceSubmission]
       : selectedCostIds.size > 0
@@ -1553,7 +1576,7 @@ const CostSubmission = () => {
       const direct = (oc as any).total_amount || (oc as any).amount || 0;
       return sum + (cents > 0 ? cents / 100 : direct);
     }, 0);
-    setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg, count: approvedSubs.length, approvedSubmissions: approvedSubs, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
+    setBulkCostEmailDialog(prev => ({ ...prev, totalSdg, count: approvedSubs.length, approvedSubmissions: approvedSubs, loading: false }));
   };
 
   const proceedBulkToRecipients = async () => {
@@ -5502,8 +5525,18 @@ const CostSubmission = () => {
             <>
               <div className="px-6 py-4 space-y-4 max-h-[65vh] overflow-y-auto">
 
+                {/* Loading skeleton while fetching fresh data */}
+                {bulkCostEmailDialog.loading && (
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg" />
+                    <div className="h-24 bg-slate-100 dark:bg-slate-800 rounded-xl" />
+                    <div className="h-8 bg-slate-100 dark:bg-slate-800 rounded-lg w-2/3" />
+                    <p className="text-center text-xs text-muted-foreground">Loading submissions… / جاري التحميل…</p>
+                  </div>
+                )}
+
                 {/* Warning: no submissions */}
-                {bulkCostEmailDialog.count === 0 && (
+                {!bulkCostEmailDialog.loading && bulkCostEmailDialog.count === 0 && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-sm text-amber-800 dark:text-amber-300">
@@ -5514,7 +5547,7 @@ const CostSubmission = () => {
                 )}
 
                 {/* Submissions table */}
-                {bulkCostEmailDialog.approvedSubmissions.length > 0 && (
+                {!bulkCostEmailDialog.loading && bulkCostEmailDialog.approvedSubmissions.length > 0 && (
                   <div className="rounded-xl border overflow-hidden">
                     <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2.5 flex items-center justify-between border-b">
                       <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
@@ -5611,53 +5644,55 @@ const CostSubmission = () => {
                   </div>
                 )}
 
-                {/* Exchange Rate Input */}
-                <div className="rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-2">
-                  <div className="flex items-center gap-2 mb-1">
-                    <DollarSign className="h-4 w-4 text-blue-600" />
-                    <Label htmlFor="usd-rate-input" className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                      Today's USD / SDG Exchange Rate
-                      <span className="font-normal text-xs text-muted-foreground mr-1"> — optional / اختياري</span>
-                    </Label>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">1 USD =</span>
-                    <Input
-                      id="usd-rate-input"
-                      type="number"
-                      min="1"
-                      step="0.01"
-                      placeholder="e.g. 3500"
-                      value={bulkCostEmailDialog.usdRate}
-                      onChange={(e) => setBulkCostEmailDialog(prev => ({ ...prev, usdRate: e.target.value }))}
-                      data-testid="input-bulk-usd-rate"
-                      className="text-lg font-bold border-blue-300 dark:border-blue-700 focus:ring-blue-400 max-w-[140px]"
-                      onKeyDown={(e) => { if (e.key === 'Enter') proceedBulkToRecipients(); }}
-                    />
-                    <span className="text-sm font-semibold text-muted-foreground">SDG</span>
-                  </div>
-                  {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 dark:bg-blue-900/50 px-3 py-1 text-xs font-semibold text-blue-800 dark:text-blue-200">
-                        <CheckCircle className="h-3 w-3" />
-                        Total ≈ USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs text-muted-foreground">
-                        Avg per submission: ~USD {(bulkCostEmailDialog.count > 0 ? (bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)) / bulkCostEmailDialog.count : 0).toFixed(2)}
-                      </span>
+                {/* Exchange Rate Input + Attachment note — only show once data is loaded */}
+                {!bulkCostEmailDialog.loading && <>
+                  <div className="rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <DollarSign className="h-4 w-4 text-blue-600" />
+                      <Label htmlFor="usd-rate-input" className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                        Today's USD / SDG Exchange Rate
+                        <span className="font-normal text-xs text-muted-foreground mr-1"> — optional / اختياري</span>
+                      </Label>
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground mt-1">Leave blank to send SDG amounts only — the table above will update live as you type.</p>
-                  )}
-                </div>
+                    <div className="flex gap-2 items-center">
+                      <span className="text-sm font-semibold text-muted-foreground whitespace-nowrap">1 USD =</span>
+                      <Input
+                        id="usd-rate-input"
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        placeholder="e.g. 3500"
+                        value={bulkCostEmailDialog.usdRate}
+                        onChange={(e) => setBulkCostEmailDialog(prev => ({ ...prev, usdRate: e.target.value }))}
+                        data-testid="input-bulk-usd-rate"
+                        className="text-lg font-bold border-blue-300 dark:border-blue-700 focus:ring-blue-400 max-w-[140px]"
+                        onKeyDown={(e) => { if (e.key === 'Enter') proceedBulkToRecipients(); }}
+                      />
+                      <span className="text-sm font-semibold text-muted-foreground">SDG</span>
+                    </div>
+                    {bulkCostEmailDialog.usdRate && !isNaN(parseFloat(bulkCostEmailDialog.usdRate)) && parseFloat(bulkCostEmailDialog.usdRate) > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 dark:bg-blue-900/50 px-3 py-1 text-xs font-semibold text-blue-800 dark:text-blue-200">
+                          <CheckCircle className="h-3 w-3" />
+                          Total ≈ USD {(bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs text-muted-foreground">
+                          Avg per submission: ~USD {(bulkCostEmailDialog.count > 0 ? (bulkCostEmailDialog.totalSdg / parseFloat(bulkCostEmailDialog.usdRate)) / bulkCostEmailDialog.count : 0).toFixed(2)}
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-1">Leave blank to send SDG amounts only — the table above will update live as you type.</p>
+                    )}
+                  </div>
 
-                {/* What will be attached */}
-                <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 px-4 py-3 flex items-center gap-3">
-                  <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <p className="text-xs text-muted-foreground">
-                    A <strong className="text-foreground">PDF report</strong> and <strong className="text-foreground">Excel workbook</strong> with full submission details will be auto-generated and attached to the email.
-                  </p>
-                </div>
+                  {/* What will be attached */}
+                  <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 px-4 py-3 flex items-center gap-3">
+                    <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      A <strong className="text-foreground">PDF report</strong> and <strong className="text-foreground">Excel workbook</strong> with full submission details will be auto-generated and attached to the email.
+                    </p>
+                  </div>
+                </>}
               </div>
 
               <div className="border-t px-6 py-3 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
@@ -5667,11 +5702,12 @@ const CostSubmission = () => {
                 <Button
                   type="button"
                   onClick={proceedBulkToRecipients}
+                  disabled={bulkCostEmailDialog.loading}
                   className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-1.5"
                   data-testid="button-bulk-next-recipients"
                 >
-                  Next: Choose Recipients
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  {bulkCostEmailDialog.loading ? 'Loading…' : 'Next: Choose Recipients'}
+                  {!bulkCostEmailDialog.loading && <ArrowRight className="h-3.5 w-3.5" />}
                 </Button>
               </div>
             </>
