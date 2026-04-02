@@ -47,6 +47,39 @@ function getProjectName(projectId: string | null, projects: ProjectLookup[]): st
   return projects.find(p => p.id === projectId)?.name || 'N/A';
 }
 
+// Light pastel RGB colours matching the UI project palette (same hash order)
+const PDF_PROJECT_RGB: [number, number, number][] = [
+  [220, 235, 255], // blue
+  [210, 249, 235], // emerald
+  [255, 245, 215], // amber
+  [235, 225, 255], // violet
+  [255, 225, 230], // rose
+  [210, 245, 255], // cyan
+  [255, 240, 220], // orange
+  [215, 250, 245], // teal
+  [255, 220, 240], // pink
+  [230, 230, 255], // indigo
+];
+
+function getProjectRgb(projectId: string | null | undefined): [number, number, number] {
+  if (!projectId) return [248, 250, 252]; // neutral for no project
+  const hash = projectId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return PDF_PROJECT_RGB[hash % PDF_PROJECT_RGB.length];
+}
+
+// Excel hex fill colours (light pastels matching same hash order)
+const EXCEL_PROJECT_HEX: string[] = [
+  'DCEBff', 'D2F9EB', 'FFF5D7', 'EBE1FF',
+  'FFE1E6', 'D2F5FF', 'FFF0DC', 'D7FAF5',
+  'FFDCF0', 'E6E6FF',
+];
+
+function getProjectHex(projectId: string | null | undefined): string {
+  if (!projectId) return 'F8FAFC';
+  const hash = projectId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return EXCEL_PROJECT_HEX[hash % EXCEL_PROJECT_HEX.length];
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   permits: 'Permits & Licenses',
   incentives: 'Incentives & Allowances',
@@ -140,6 +173,20 @@ export function exportSubmissionsToExcel(
   }));
   ws['!cols'] = colWidths;
 
+  // Apply project-colour row fills
+  const numCols = Object.keys(data[0] || {}).length;
+  submissions.forEach((oc, rowIdx) => {
+    const hex = getProjectHex(oc.project_id).replace('#', '');
+    for (let c = 0; c < numCols; c++) {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx + 1, c });
+      if (!ws[addr]) continue;
+      ws[addr].s = {
+        fill: { patternType: 'solid', fgColor: { rgb: hex } },
+        alignment: { wrapText: false },
+      };
+    }
+  });
+
   XLSX.writeFile(wb, `${filename}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
 }
 
@@ -210,8 +257,7 @@ export function exportSubmissionsToPDF(
     ]],
     body: tableData,
     styles: { fontSize: 7, cellPadding: 2 },
-    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontSize: 7 },
-    alternateRowStyles: { fillColor: [245, 247, 250] },
+    headStyles: { fillColor: [15, 32, 65], textColor: 255, fontSize: 7 },
     columnStyles: {
       0: { cellWidth: 18 },
       1: { cellWidth: 30 },
@@ -219,6 +265,12 @@ export function exportSubmissionsToPDF(
       4: { halign: 'right' },
     },
     margin: { left: 14, right: 14 },
+    didParseCell: (data) => {
+      if (data.section === 'body') {
+        const oc = submissions[data.row.index];
+        data.cell.styles.fillColor = getProjectRgb(oc?.project_id);
+      }
+    },
   });
 
   doc.setFontSize(7);
