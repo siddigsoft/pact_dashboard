@@ -1632,7 +1632,7 @@ const CostSubmission = () => {
       }
 
       try {
-        const excelBase64 = generateBulkCostExcelBase64(bulkSubs, approverName, effectiveRate, userMap, projectMap);
+        const excelBase64 = await generateBulkCostExcelBase64(bulkSubs, approverName, effectiveRate, userMap, projectMap);
         excelAttachment = {
           base64: excelBase64,
           filename: `PACT_Approved_Costs_${new Date().toISOString().slice(0, 10)}.xlsx`,

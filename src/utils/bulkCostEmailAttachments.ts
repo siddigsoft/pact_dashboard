@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { format } from 'date-fns';
 
 const C = {
@@ -263,122 +263,370 @@ export function generateBulkCostPDFBase64(
   return doc.output('datauristring').split(',')[1];
 }
 
-export function generateBulkCostExcelBase64(
+// ─── ExcelJS colour constants ────────────────────────────────────────────────
+const NAVY    = 'FF0F2041';
+const NAVY_MID = 'FF1E3A5F';
+const BLUE_XL = 'FF2962FF';
+const WHITE_XL = 'FFFFFFFF';
+const LIGHT_BG = 'FFF5F7FC';
+const BORDER_C = 'FFC8CDD7';
+const DARK_XL  = 'FF14141E';
+const GREEN_XL = 'FF107838';
+const GREEN_BG = 'FFE4F5EB';
+const AMBER_XL = 'FFB47800';
+const AMBER_BG = 'FFFFF8E6';
+const MUTED_XL = 'FF5A5F6E';
+
+function xlThin(): Partial<ExcelJS.Borders> {
+  const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: BORDER_C } };
+  return { top: s, bottom: s, left: s, right: s };
+}
+function xlFill(argb: string): ExcelJS.Fill {
+  return { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+}
+function xlFont(bold: boolean, size: number, argb = DARK_XL): Partial<ExcelJS.Font> {
+  return { bold, size, name: 'Calibri', color: { argb } };
+}
+function xlAlign(h: ExcelJS.Alignment['horizontal'], v: ExcelJS.Alignment['vertical'] = 'middle'): Partial<ExcelJS.Alignment> {
+  return { horizontal: h, vertical: v };
+}
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return '—';
+  try { return format(new Date(d), 'MMM d, yyyy'); } catch { return d || '—'; }
+}
+function fmtCurrency(sdgAmt: number): string {
+  return `SDG ${sdgAmt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+export async function generateBulkCostExcelBase64(
   submissions: BulkSubmission[],
   approverName: string,
   usdRate: number | null,
   userMap: BulkUserMap,
   projectMap: BulkProjectMap,
-): string {
-  const wb = XLSX.utils.book_new();
-  const dateStr = format(new Date(), 'dd MMM yyyy HH:mm');
+): Promise<string> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'PACT Command Center';
+  wb.created = new Date();
+
+  const dateStr = format(new Date(), 'MMM d, yyyy | HH:mm');
+  const refNo = `BULK-${submissions.length}-${format(new Date(), 'yyyyMMdd')}`;
   const totalAmtCents = submissions.reduce((s, r) => s + r.amount_cents, 0);
   const totalSdg = totalAmtCents / 100;
   const totalUsd = usdRate && usdRate > 0 ? totalSdg / usdRate : null;
 
-  const summaryData: (string | number)[][] = [
-    ['PACT COMMAND CENTER — Approved Operational Cost Submissions'],
-    ['Payment Request Report'],
-    [],
-    ['Generated On', dateStr],
-    ['Approved By', approverName],
-    ['Reference No', `BULK-${submissions.length}-${format(new Date(), 'yyyyMMdd')}`],
-    [],
-    ['SUMMARY', ''],
-    ['Total Submissions', submissions.length],
-    ['Total Amount (SDG)', totalSdg],
-    ...(totalUsd !== null ? [
-      ['USD Rate (1 USD = SDG)', usdRate as number],
-      ['USD Equivalent', totalUsd],
-    ] : []),
-    [],
-    ['CATEGORY BREAKDOWN', ''],
-    ...(() => {
-      const catTotals: Record<string, number> = {};
-      submissions.forEach(s => {
-        const cat = EXPENSE_LABELS[s.expense_category] || s.expense_category;
-        catTotals[cat] = (catTotals[cat] || 0) + s.amount_cents / 100;
-      });
-      return Object.entries(catTotals).map(([cat, amt]) => [cat, amt]);
-    })(),
+  const hasUsd = totalUsd !== null;
+  const TOTAL_COLS = hasUsd ? 9 : 8;
+
+  // ── helper: merge + style a section banner row ──────────────────────────
+  function addBanner(ws: ExcelJS.Worksheet, label: string, size = 12) {
+    const row = ws.addRow([label]);
+    ws.mergeCells(row.number, 1, row.number, TOTAL_COLS);
+    for (let c = 1; c <= TOTAL_COLS; c++) {
+      const cell = row.getCell(c);
+      cell.fill = xlFill(NAVY);
+      cell.font = xlFont(true, size, WHITE_XL);
+      cell.border = xlThin();
+    }
+    row.getCell(1).alignment = xlAlign('left');
+    row.height = 22;
+    return row;
+  }
+
+  // ── helper: add a key-value summary row ─────────────────────────────────
+  function addSummRow(ws: ExcelJS.Worksheet, label: string, value: string | number, alt: boolean) {
+    const data: (string | number)[] = [label, '', '', ''];
+    for (let c = 5; c <= TOTAL_COLS; c++) data.push(c === 5 ? value : '');
+    const row = ws.addRow(data);
+    ws.mergeCells(row.number, 1, row.number, 4);
+    ws.mergeCells(row.number, 5, row.number, 6);
+    const bg = alt ? xlFill(LIGHT_BG) : undefined;
+    const lCell = row.getCell(1);
+    lCell.font = xlFont(true, 10);
+    lCell.border = xlThin();
+    lCell.alignment = { vertical: 'middle', indent: 1 };
+    if (bg) lCell.fill = bg;
+    const vCell = row.getCell(5);
+    vCell.font = xlFont(true, 10);
+    vCell.border = xlThin();
+    vCell.alignment = xlAlign('right');
+    if (bg) vCell.fill = bg;
+    row.height = 18;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // SHEET 1 — Summary (styled like buildStatementWorkbook)
+  // ════════════════════════════════════════════════════════════════════════
+  const ws = wb.addWorksheet('Summary');
+
+  // Title
+  const titleRow = ws.addRow(['PACT Command Center  |  Approved Operational Cost Submissions']);
+  titleRow.font = xlFont(true, 16, NAVY);
+  titleRow.height = 32;
+  ws.mergeCells(titleRow.number, 1, titleRow.number, TOTAL_COLS);
+
+  // Subtitle
+  const subRow = ws.addRow(['Payment Request Report  —  Approved Submissions']);
+  subRow.font = xlFont(true, 13, BLUE_XL);
+  subRow.height = 22;
+  ws.mergeCells(subRow.number, 1, subRow.number, TOTAL_COLS);
+
+  // Meta rows
+  const metaRows: [string][] = [
+    [`Reference No: ${refNo}`],
+    [`Generated: ${dateStr}`],
+    [`Approved By: ${approverName}`],
   ];
+  metaRows.forEach(([text]) => {
+    const r = ws.addRow([text]);
+    r.font = xlFont(false, 10, MUTED_XL);
+    r.height = 16;
+    ws.mergeCells(r.number, 1, r.number, TOTAL_COLS);
+  });
 
-  const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
-  ws1['!cols'] = [{ wch: 32 }, { wch: 28 }];
-  XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+  ws.addRow([]).height = 6;
 
-  const detailHeaders = [
-    '#',
-    'Reference No',
-    'Submitter Name',
-    'Submitter Email',
-    'Category',
-    'Description',
-    'Vendor / Payee',
-    'Project',
-    'Expense Date',
-    'Submitted At',
-    'Tier1 Approved At',
-    'Tier2 Approved At',
-    'Amount (SDG)',
-    ...(usdRate && usdRate > 0 ? ['USD Equivalent'] : []),
-    'Notes',
+  // ── SUMMARY section ──────────────────────────────────────────────────────
+  addBanner(ws, 'SUMMARY');
+
+  const summaryPairs: [string, string][] = [
+    ['Total Submissions', String(submissions.length)],
+    [`Total Amount (SDG)`, fmtCurrency(totalSdg)],
+    ...(hasUsd ? [
+      [`Exchange Rate (1 USD = SDG)`, usdRate!.toLocaleString()],
+      [`USD Equivalent`, `USD ${totalUsd!.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`],
+    ] as [string, string][] : []),
+    ['Approved By', approverName],
+    ['Report Date', format(new Date(), 'MMMM d, yyyy')],
+  ];
+  summaryPairs.forEach(([label, value], i) => addSummRow(ws, label, value, i % 2 === 1));
+
+  ws.addRow([]).height = 6;
+
+  // ── CATEGORY BREAKDOWN section ───────────────────────────────────────────
+  addBanner(ws, 'CATEGORY BREAKDOWN', 11);
+
+  const catHdrRow = ws.addRow(['Category', '', '', '', 'Count', 'Total (SDG)', '', '', ...(hasUsd ? ['USD Equiv.'] : [])]);
+  ws.mergeCells(catHdrRow.number, 1, catHdrRow.number, 4);
+  catHdrRow.eachCell((cell, ci) => {
+    if (ci > 4 || ci === 1) {
+      cell.fill = xlFill(NAVY_MID);
+      cell.font = xlFont(true, 10, WHITE_XL);
+      cell.border = xlThin();
+      cell.alignment = xlAlign(ci === 1 ? 'left' : 'center');
+    }
+  });
+  catHdrRow.height = 20;
+
+  const catTotals: Record<string, { count: number; total: number }> = {};
+  submissions.forEach(s => {
+    const cat = EXPENSE_LABELS[s.expense_category] || s.expense_category || 'Uncategorized';
+    if (!catTotals[cat]) catTotals[cat] = { count: 0, total: 0 };
+    catTotals[cat].count += 1;
+    catTotals[cat].total += s.amount_cents / 100;
+  });
+
+  Object.entries(catTotals).forEach(([cat, { count, total }], i) => {
+    const rowData = [cat, '', '', '', count, fmtCurrency(total), '', '', ...(hasUsd ? [usdRate! > 0 ? `USD ${(total / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'] : [])];
+    const r = ws.addRow(rowData);
+    ws.mergeCells(r.number, 1, r.number, 4);
+    const bg = i % 2 === 1 ? xlFill(LIGHT_BG) : undefined;
+    r.eachCell((cell, ci) => {
+      cell.border = xlThin();
+      cell.font = xlFont(false, 10);
+      cell.alignment = xlAlign(ci === 1 ? 'left' : 'center');
+      if (bg) cell.fill = bg;
+    });
+    r.height = 18;
+  });
+
+  ws.addRow([]).height = 6;
+
+  // ── TRANSACTION DETAILS section ──────────────────────────────────────────
+  addBanner(ws, 'TRANSACTION DETAILS');
+
+  const colHeaders = [
+    '#', 'Ref ID', 'Submitter', 'Category',
+    'Project', 'Date', `Amount (SDG)`,
+    ...(hasUsd ? ['USD Equiv.'] : []),
     'Status',
   ];
+  const hdrRow = ws.addRow(colHeaders);
+  hdrRow.eachCell((cell, ci) => {
+    cell.fill = xlFill(NAVY_MID);
+    cell.font = xlFont(true, 10, WHITE_XL);
+    cell.border = xlThin();
+    cell.alignment = xlAlign(ci <= 4 ? 'left' : 'center');
+  });
+  hdrRow.height = 22;
 
-  const detailRows = submissions.map((s, idx) => {
+  submissions.forEach((s, idx) => {
     const submitter = userMap[s.submitted_by];
     const amtSdg = s.amount_cents / 100;
-    return [
+    const rowData = [
+      idx + 1,
+      s.reference_number || s.id.slice(0, 8).toUpperCase(),
+      submitter?.name || '—',
+      EXPENSE_LABELS[s.expense_category] || s.expense_category || '—',
+      s.project_id ? (projectMap[s.project_id] || '—') : '—',
+      s.expense_date ? format(new Date(s.expense_date), 'dd/MM/yyyy') : '—',
+      fmtCurrency(amtSdg),
+      ...(hasUsd ? [`USD ${(amtSdg / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
+      'Approved',
+    ];
+    const r = ws.addRow(rowData);
+    const bg = idx % 2 === 1 ? xlFill(LIGHT_BG) : undefined;
+    r.eachCell((cell, ci) => {
+      cell.border = xlThin();
+      cell.font = xlFont(false, 10);
+      cell.alignment = xlAlign(ci <= 4 ? 'left' : 'center');
+      if (bg) cell.fill = bg;
+    });
+    // Status cell — green
+    const statusCell = r.getCell(rowData.length);
+    statusCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: GREEN_XL } };
+    statusCell.fill = xlFill(GREEN_BG);
+    r.height = 18;
+  });
+
+  // Totals row
+  const totalsData = [
+    '', '', '', '', 'TOTALS',
+    fmtCurrency(totalSdg),
+    ...(hasUsd ? [`USD ${totalUsd!.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
+    '',
+  ];
+  const totRow = ws.addRow(totalsData);
+  totRow.eachCell((cell, ci) => {
+    cell.fill = xlFill('FFE2E8F0');
+    cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK_XL } };
+    cell.border = xlThin();
+    cell.alignment = xlAlign(ci <= 4 ? 'left' : 'center');
+  });
+  totRow.height = 20;
+
+  // Approval summary
+  ws.addRow([]).height = 6;
+  addBanner(ws, 'APPROVAL SUMMARY', 11);
+
+  const approvalPairs: [string, string][] = [
+    ['Total Approved Submissions', String(submissions.length)],
+    ['Approver / Sender', approverName],
+    ['Report Generated', format(new Date(), 'MMMM d, yyyy  HH:mm')],
+  ];
+  approvalPairs.forEach(([label, value], i) => addSummRow(ws, label, value, i % 2 === 1));
+
+  // Column widths for summary sheet
+  const summaryWidths = hasUsd
+    ? [5, 22, 26, 24, 24, 16, 18, 16, 12]
+    : [5, 22, 26, 24, 24, 16, 18, 12];
+  summaryWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // SHEET 2 — Full Submissions Detail
+  // ════════════════════════════════════════════════════════════════════════
+  const ws2 = wb.addWorksheet('Submissions Detail');
+
+  const det2TitleRow = ws2.addRow(['PACT Command Center  |  Approved Cost Submissions — Full Detail']);
+  det2TitleRow.font = xlFont(true, 14, NAVY);
+  det2TitleRow.height = 28;
+  const DET_COLS = hasUsd ? 16 : 15;
+  ws2.mergeCells(det2TitleRow.number, 1, det2TitleRow.number, DET_COLS);
+
+  const det2SubRow = ws2.addRow([`Generated: ${dateStr}  |  Approved By: ${approverName}  |  Ref: ${refNo}`]);
+  det2SubRow.font = xlFont(false, 10, MUTED_XL);
+  det2SubRow.height = 16;
+  ws2.mergeCells(det2SubRow.number, 1, det2SubRow.number, DET_COLS);
+
+  ws2.addRow([]).height = 6;
+
+  const detHeaders = [
+    '#', 'Reference No', 'Submitter Name', 'Submitter Email',
+    'Category', 'Description', 'Vendor / Payee', 'Project',
+    'Expense Date', 'Tier1 Approved', 'Tier2 Approved',
+    `Amount (SDG)`,
+    ...(hasUsd ? ['USD Equivalent'] : []),
+    'Notes', 'Status',
+  ];
+  const detHdrRow = ws2.addRow(detHeaders);
+  detHdrRow.eachCell((cell, ci) => {
+    cell.fill = xlFill(NAVY);
+    cell.font = xlFont(true, 10, WHITE_XL);
+    cell.border = xlThin();
+    cell.alignment = xlAlign(ci <= 8 ? 'left' : 'center');
+  });
+  detHdrRow.height = 22;
+
+  submissions.forEach((s, idx) => {
+    const submitter = userMap[s.submitted_by];
+    const amtSdg = s.amount_cents / 100;
+    const rowData = [
       idx + 1,
       s.reference_number || s.id,
       submitter?.name || '—',
       submitter?.email || '—',
-      EXPENSE_LABELS[s.expense_category] || s.expense_category,
+      EXPENSE_LABELS[s.expense_category] || s.expense_category || '—',
       s.description || '—',
       s.vendor || '—',
-      s.project_id ? (projectMap[s.project_id] || s.project_id) : '—',
+      s.project_id ? (projectMap[s.project_id] || '—') : '—',
       s.expense_date ? format(new Date(s.expense_date), 'dd/MM/yyyy') : '—',
-      s.submitted_at ? format(new Date(s.submitted_at), 'dd/MM/yyyy HH:mm') : '—',
       s.tier1_approved_at ? format(new Date(s.tier1_approved_at), 'dd/MM/yyyy') : '—',
       s.tier2_approved_at ? format(new Date(s.tier2_approved_at), 'dd/MM/yyyy') : '—',
-      amtSdg,
-      ...(usdRate && usdRate > 0 ? [amtSdg / usdRate] : []),
+      fmtCurrency(amtSdg),
+      ...(hasUsd ? [`USD ${(amtSdg / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
       s.tier2_notes || '—',
       'Approved',
     ];
+    const r = ws2.addRow(rowData);
+    const bg = idx % 2 === 1 ? xlFill(LIGHT_BG) : undefined;
+    r.eachCell((cell, ci) => {
+      cell.border = xlThin();
+      cell.font = xlFont(false, 10);
+      cell.alignment = xlAlign(ci <= 8 ? 'left' : 'center');
+      if (bg) cell.fill = bg;
+    });
+    const statusCell2 = r.getCell(rowData.length);
+    statusCell2.font = { bold: true, size: 10, name: 'Calibri', color: { argb: GREEN_XL } };
+    statusCell2.fill = xlFill(GREEN_BG);
+    r.height = 18;
   });
 
-  const totalsRow = [
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    'TOTAL',
-    totalSdg,
-    ...(usdRate && usdRate > 0 ? [totalUsd as number] : []),
-    '',
-    '',
-  ];
+  // Detail sheet totals
+  const det2Totals: (string | number)[] = ['', '', '', '', '', '', '', '', '', '', 'TOTAL', fmtCurrency(totalSdg), ...(hasUsd ? [`USD ${totalUsd!.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []), '', ''];
+  const det2TotRow = ws2.addRow(det2Totals);
+  det2TotRow.eachCell(cell => {
+    cell.fill = xlFill('FFE2E8F0');
+    cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK_XL } };
+    cell.border = xlThin();
+    cell.alignment = xlAlign('center');
+  });
+  det2TotRow.height = 20;
 
-  const ws2 = XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows, [], totalsRow]);
-  ws2['!cols'] = [
-    { wch: 5 }, { wch: 22 }, { wch: 28 }, { wch: 32 }, { wch: 24 },
-    { wch: 40 }, { wch: 28 }, { wch: 28 }, { wch: 14 }, { wch: 18 },
-    { wch: 18 }, { wch: 18 }, { wch: 16 },
-    ...(usdRate && usdRate > 0 ? [{ wch: 16 }] : []),
-    { wch: 36 }, { wch: 12 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws2, 'Submissions Detail');
+  const det2Widths = [5, 24, 28, 32, 22, 36, 26, 26, 14, 18, 18, 18, ...(hasUsd ? [16] : []), 32, 12];
+  det2Widths.forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
 
+  // ════════════════════════════════════════════════════════════════════════
+  // SHEET 3 — By Submitter
+  // ════════════════════════════════════════════════════════════════════════
   if (Object.keys(userMap).length > 0) {
+    const ws3 = wb.addWorksheet('By Submitter');
+    const subTitleRow = ws3.addRow(['PACT Command Center  |  Submissions by Submitter']);
+    subTitleRow.font = xlFont(true, 14, NAVY);
+    subTitleRow.height = 28;
+    const BY_COLS = hasUsd ? 5 : 4;
+    ws3.mergeCells(subTitleRow.number, 1, subTitleRow.number, BY_COLS);
+    ws3.addRow([]).height = 6;
+
+    const byHdrs = ['Submitter Name', 'Email', 'Submissions', `Total (SDG)`, ...(hasUsd ? ['Total (USD)'] : [])];
+    const byHdrRow = ws3.addRow(byHdrs);
+    byHdrRow.eachCell(cell => {
+      cell.fill = xlFill(NAVY);
+      cell.font = xlFont(true, 10, WHITE_XL);
+      cell.border = xlThin();
+      cell.alignment = xlAlign('left');
+    });
+    byHdrRow.height = 22;
+
     const submitterSummary: Record<string, { name: string; email: string; count: number; totalSdg: number }> = {};
     submissions.forEach(s => {
       const u = userMap[s.submitted_by];
@@ -388,21 +636,29 @@ export function generateBulkCostExcelBase64(
       submitterSummary[s.submitted_by].count += 1;
       submitterSummary[s.submitted_by].totalSdg += s.amount_cents / 100;
     });
-    const bySubmitterRows = [
-      ['Submitter Name', 'Email', 'Submissions', 'Total SDG', ...(usdRate && usdRate > 0 ? ['Total USD'] : [])],
-      ...Object.values(submitterSummary).map(r => [
-        r.name,
-        r.email,
-        r.count,
-        r.totalSdg,
-        ...(usdRate && usdRate > 0 ? [r.totalSdg / (usdRate || 1)] : []),
-      ]),
-    ];
-    const ws3 = XLSX.utils.aoa_to_sheet(bySubmitterRows);
-    ws3['!cols'] = [{ wch: 28 }, { wch: 32 }, { wch: 14 }, { wch: 18 }, ...(usdRate && usdRate > 0 ? [{ wch: 16 }] : [])];
-    XLSX.utils.book_append_sheet(wb, ws3, 'By Submitter');
+
+    Object.values(submitterSummary).forEach((row, i) => {
+      const r = ws3.addRow([
+        row.name, row.email, row.count, fmtCurrency(row.totalSdg),
+        ...(hasUsd ? [`USD ${(row.totalSdg / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
+      ]);
+      const bg = i % 2 === 1 ? xlFill(LIGHT_BG) : undefined;
+      r.eachCell(cell => {
+        cell.border = xlThin();
+        cell.font = xlFont(false, 10);
+        cell.alignment = xlAlign('left');
+        if (bg) cell.fill = bg;
+      });
+      r.height = 18;
+    });
+
+    [28, 32, 14, 18, ...(hasUsd ? [16] : [])].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
   }
 
-  const raw = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-  return raw;
+  // Write to buffer and return base64
+  const buffer = await wb.xlsx.writeBuffer();
+  const bytes = new Uint8Array(buffer as ArrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 }
