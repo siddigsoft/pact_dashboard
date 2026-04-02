@@ -1,10 +1,17 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
+import { useUser } from '@/context/user/UserContext';
 
 interface AdvanceInfo {
   status: string;
@@ -21,6 +28,8 @@ interface SiteStatusDetail {
   statusLabel: string;
   statusCategory: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending';
   locality: string;
+  stateName: string;
+  hubName: string;
   reason: string;
   actionBy: string;
   actionAt: string;
@@ -63,7 +72,7 @@ const ADVANCE_STATUS_CONFIG: Record<string, { label: string; color: string }> = 
   rejected:           { label: 'Advance: Rejected',           color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 };
 
-function SiteDetailRow({ site, userNames, advance }: { site: SiteStatusDetail; userNames: Record<string, string>; advance?: AdvanceInfo }) {
+function SiteDetailRow({ site, userNames, advance, onRequestFund }: { site: SiteStatusDetail; userNames: Record<string, string>; advance?: AdvanceInfo; onRequestFund?: (site: SiteStatusDetail) => void }) {
   const categoryColors: Record<string, string> = {
     verified: 'bg-green-50/80 dark:bg-green-900/15 border-green-100 dark:border-green-900/30',
     returned: 'bg-orange-50/80 dark:bg-orange-900/15 border-orange-100 dark:border-orange-900/30',
@@ -120,10 +129,22 @@ function SiteDetailRow({ site, userNames, advance }: { site: SiteStatusDetail; u
               )}
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex items-center gap-1 text-muted-foreground border-dashed">
-              <Wallet className="h-2.5 w-2.5" />
-              No Advance Request
-            </Badge>
+            <div className="flex items-center gap-1">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex items-center gap-1 text-muted-foreground border-dashed">
+                <Wallet className="h-2.5 w-2.5" />
+                No Advance Request
+              </Badge>
+              {onRequestFund && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRequestFund(site); }}
+                  className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors"
+                  title="Request transport advance for this site"
+                >
+                  <Plus className="h-2.5 w-2.5" />
+                  Request Fund
+                </button>
+              )}
+            </div>
           )}
         </div>
         {site.reason && (
@@ -148,7 +169,7 @@ function SiteDetailRow({ site, userNames, advance }: { site: SiteStatusDetail; u
   );
 }
 
-function LocalityGroup({ locality, sites, userNames, advanceMap }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string>; advanceMap: Record<string, AdvanceInfo> }) {
+function LocalityGroup({ locality, sites, userNames, advanceMap, onRequestFund }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string>; advanceMap: Record<string, AdvanceInfo>; onRequestFund?: (site: SiteStatusDetail) => void }) {
   return (
     <div className="ml-2" data-testid={`locality-group-${locality}`}>
       <div className="flex items-center gap-1.5 mb-1">
@@ -158,7 +179,7 @@ function LocalityGroup({ locality, sites, userNames, advanceMap }: { locality: s
       </div>
       <div className="space-y-1 ml-4">
         {sites.map((site) => (
-          <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} />
+          <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} onRequestFund={onRequestFund} />
         ))}
       </div>
     </div>
@@ -170,11 +191,13 @@ function StatusCategorySection({
   sites, 
   userNames,
   advanceMap,
+  onRequestFund,
 }: { 
   category: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending'; 
   sites: SiteStatusDetail[]; 
   userNames: Record<string, string>;
   advanceMap: Record<string, AdvanceInfo>;
+  onRequestFund?: (site: SiteStatusDetail) => void;
 }) {
   if (sites.length === 0) return null;
 
@@ -205,7 +228,7 @@ function StatusCategorySection({
       </p>
       <div className="space-y-2">
         {sortedLocalities.map(([locality, locSites]) => (
-          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} advanceMap={advanceMap} />
+          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} />
         ))}
       </div>
     </div>
@@ -217,6 +240,69 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
   const [coordinatorNames, setCoordinatorNames] = useState<Record<string, string>>({});
   const [actionByNames, setActionByNames] = useState<Record<string, string>>({});
   const [advanceMap, setAdvanceMap] = useState<Record<string, AdvanceInfo>>({});
+
+  const { createRequest } = useDownPayment();
+  const { currentUser } = useUser();
+
+  const [fundDialog, setFundDialog] = useState<{ open: boolean; site: SiteStatusDetail | null }>({ open: false, site: null });
+  const [fundAmount, setFundAmount] = useState('');
+  const [fundBudget, setFundBudget] = useState('');
+  const [fundJustification, setFundJustification] = useState('');
+  const [fundSubmitting, setFundSubmitting] = useState(false);
+
+  const handleOpenRequestFund = (site: SiteStatusDetail) => {
+    setFundDialog({ open: true, site });
+    setFundAmount('');
+    setFundBudget('');
+    setFundJustification('');
+  };
+
+  const handleSubmitFundRequest = async () => {
+    const site = fundDialog.site;
+    if (!site || !currentUser) return;
+    const amount = parseFloat(fundAmount);
+    const budget = parseFloat(fundBudget) || amount;
+    if (!amount || amount <= 0) return;
+    if (!fundJustification.trim()) return;
+    setFundSubmitting(true);
+    try {
+      const enumeratorId = site.claimedBy || currentUser.id;
+      await createRequest({
+        mmpSiteEntryId: site.id,
+        siteName: site.name,
+        requestedBy: enumeratorId,
+        requesterRole: 'dataCollector',
+        hubName: site.hubName || '',
+        stateName: site.stateName || '',
+        localityName: site.locality || '',
+        totalTransportationBudget: budget,
+        requestedAmount: amount,
+        paymentType: 'full_advance',
+        justification: fundJustification.trim(),
+      });
+      setFundDialog({ open: false, site: null });
+      // Refresh advance map to show updated status
+      const entryIds = siteEntries.map((e: any) => e.id).filter((id: any) => typeof id === 'string' && id.length > 0);
+      if (entryIds.length > 0) {
+        const { data } = await supabase.from('down_payment_requests').select('mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount').in('mmp_site_entry_id', entryIds);
+        if (data) {
+          const map: Record<string, AdvanceInfo> = {};
+          data.forEach((row: any) => {
+            const eid = row.mmp_site_entry_id;
+            if (!eid) return;
+            const existing = map[eid];
+            const isCancelled = row.status === 'cancelled' || row.status === 'rejected';
+            if (!existing || (!isCancelled && (existing.status === 'cancelled' || existing.status === 'rejected'))) {
+              map[eid] = { status: row.status || 'pending_supervisor', requestedAmount: Number(row.requested_amount) || 0, approvedAmount: Number(row.approved_amount) || 0, totalPaid: Number(row.total_paid_amount) || 0 };
+            }
+          });
+          setAdvanceMap(map);
+        }
+      }
+    } finally {
+      setFundSubmitting(false);
+    }
+  };
 
   const coordinatorsByState = useMemo(() => {
     if (!siteEntries || siteEntries.length === 0) return [];
@@ -329,6 +415,8 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         statusLabel: statusLabels[entryStatus] || (entry.status || entryStatus).replace(/_/g, ' '),
         statusCategory,
         locality: entry.locality || entry.localityName || '',
+        stateName: entry.state || entry.stateName || stateName,
+        hubName: entry.hub_office || entry.hub_name || entry.hubName || '',
         reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
         actionBy: actionByRaw,
         actionAt: isVerified
@@ -698,11 +786,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="px-2 pb-2 space-y-3 mt-2">
-                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} advanceMap={advanceMap} />
-                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} advanceMap={advanceMap} />
-                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} advanceMap={advanceMap} />
-                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} advanceMap={advanceMap} />
-                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} advanceMap={advanceMap} />
+                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
+                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
+                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
+                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
+                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
@@ -714,6 +802,87 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           </CollapsibleContent>
         </Collapsible>
       </CardContent>
+
+      {/* Request Fund Dialog */}
+      <Dialog open={fundDialog.open} onOpenChange={(open) => !open && setFundDialog({ open: false, site: null })}>
+        <DialogContent className="max-w-md" data-testid="dialog-request-fund">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-primary" />
+              Request Transport Advance
+            </DialogTitle>
+            <DialogDescription>
+              Submit an advance fund request for this site visit.
+            </DialogDescription>
+          </DialogHeader>
+
+          {fundDialog.site && (
+            <div className="space-y-4">
+              <div className="rounded-md bg-muted/50 p-3 space-y-1 text-sm">
+                <p><span className="font-medium">Site:</span> {fundDialog.site.name}</p>
+                {fundDialog.site.stateName && <p><span className="font-medium">State:</span> {fundDialog.site.stateName}</p>}
+                {fundDialog.site.locality && <p><span className="font-medium">Locality:</span> {fundDialog.site.locality}</p>}
+                {fundDialog.site.hubName && <p><span className="font-medium">Hub:</span> {fundDialog.site.hubName}</p>}
+                {fundDialog.site.claimedBy && (
+                  <p><span className="font-medium">Data Collector:</span> {actionByNames[fundDialog.site.claimedBy] || coordinatorNames[fundDialog.site.claimedBy] || fundDialog.site.claimedBy.slice(0, 8) + '…'}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fund-amount">Requested Amount (SDG) <span className="text-destructive">*</span></Label>
+                <Input
+                  id="fund-amount"
+                  type="number"
+                  min="1"
+                  value={fundAmount}
+                  onChange={(e) => { setFundAmount(e.target.value); if (!fundBudget) setFundBudget(e.target.value); }}
+                  placeholder="e.g. 50000"
+                  data-testid="input-fund-amount"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fund-budget">Transportation Budget (SDG)</Label>
+                <Input
+                  id="fund-budget"
+                  type="number"
+                  min="1"
+                  value={fundBudget}
+                  onChange={(e) => setFundBudget(e.target.value)}
+                  placeholder="Defaults to requested amount"
+                  data-testid="input-fund-budget"
+                />
+                <p className="text-xs text-muted-foreground">Leave blank to use the requested amount as the budget.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fund-justification">Justification <span className="text-destructive">*</span></Label>
+                <Textarea
+                  id="fund-justification"
+                  value={fundJustification}
+                  onChange={(e) => setFundJustification(e.target.value)}
+                  placeholder="Reason for transport advance request…"
+                  rows={3}
+                  data-testid="textarea-fund-justification"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFundDialog({ open: false, site: null })} disabled={fundSubmitting} data-testid="button-cancel-fund-request">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitFundRequest}
+              disabled={fundSubmitting || !fundAmount || parseFloat(fundAmount) <= 0 || !fundJustification.trim()}
+              data-testid="button-submit-fund-request"
+            >
+              {fundSubmitting ? 'Submitting…' : 'Submit Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
