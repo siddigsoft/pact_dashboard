@@ -1245,13 +1245,25 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             generatedBy: approverName,
           };
 
-          // Generate one Excel workbook with 6 sheets: Statement, Full Details, By State, By Hub, By Locality, By Enumerator.
+          // Generate both Excel (6 sheets) and signed PDF certificates, attach both to the email.
           const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-          let excelAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
+          const PDF_MIME  = 'application/pdf';
+          let bothAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
           try {
             const generated = await generateAllSheetsStatementExcelBase64(statementRows, config);
-            if (generated) excelAttachments = [{ ...generated, mimeType: XLSX_MIME }];
-          } catch { /* continue without attachment */ }
+            if (generated) bothAttachments.push({ ...generated, mimeType: XLSX_MIME });
+          } catch { /* continue without Excel */ }
+          try {
+            const certDataList = await Promise.all(
+              bulkRequests.map(async (bReq) => {
+                const sig = await getSignatureImageData(bReq);
+                return buildCertData(bReq, sig);
+              })
+            );
+            const pdfGen = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+            if (pdfGen) bothAttachments.push({ ...pdfGen, mimeType: PDF_MIME });
+          } catch { /* continue without PDF */ }
+          const excelAttachments = bothAttachments; // kept for variable name compatibility below
 
           const bulkMmps1 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
           const mmpLabel1 = bulkMmps1.length > 0 ? bulkMmps1.join(', ') : groupLabel || 'All Approved';
@@ -1289,8 +1301,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
           if (result.success && !result.error) {
             toast({
-              title: 'Bulk Excel Sent / تم إرسال Excel الجماعي',
-              description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with the formatted Excel report attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم مع ملف Excel المنسق.`,
+              title: 'Sent with Both Attachments / تم الإرسال مع المرفقين',
+              description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with Excel report (6 sheets) + signed PDF certificates attached. / تم إرسال ${bulkRequests.length} طلب مع ملف Excel (6 أوراق) وشهادات PDF الموقعة.`,
             });
           } else if (result.success && result.error) {
             toast({
@@ -4181,7 +4193,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       {paymentRequestDialog.sendMode === 'excel'
-                        ? `Excel workbook with 6 sheets (Statement, Full Details, By State, By Hub, By Locality, By Enumerator) covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached.`
+                        ? `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkRequests.length} requests will both be attached.`
                         : paymentRequestDialog.bulkRequests.length > 30
                           ? `${paymentRequestDialog.bulkRequests.length} requests — PDF is too large to attach directly. A download link will be included in the email body instead. Consider switching to Excel for a direct attachment.`
                           : `A summary PDF covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached to the email.`
@@ -4293,7 +4305,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
                     : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    Attached: {paymentRequestDialog.sendMode === 'excel' ? '1 Excel file · 6 sheets (Statement, Full Details, By State, By Hub, By Locality, By Enumerator)' : 'PDF Certificate (.pdf)'}
+                    Attached: {paymentRequestDialog.sendMode === 'excel' ? 'Excel (6 sheets) + Signed PDF Certificates' : 'PDF Certificate (.pdf)'}
                   </span>
                 </div>
               </div>
