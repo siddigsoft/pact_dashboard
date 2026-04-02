@@ -5398,64 +5398,119 @@ const CostSubmission = () => {
           setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
         }
       }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2" data-testid="dialog-payment-request-title">
-              <Mail className="h-5 w-5" />
-              Request Payment
-              <span dir="rtl" className="text-sm font-normal text-muted-foreground">/ طلب دفع</span>
-            </DialogTitle>
-            <DialogDescription>
-              Select who should receive the payment request email.
-              <span dir="rtl" className="block text-xs mt-1">اختر من سيستلم بريد طلب الدفع.</span>
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-md p-0 overflow-hidden gap-0">
 
-          {paymentRequestDialog.loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Skeleton className="h-6 w-48" />
-            </div>
-          ) : paymentRequestDialog.availableRecipients.length === 0 ? (
-            <div className="py-6 text-center text-muted-foreground text-sm">
-              No finance/admin users found.
-              <span dir="rtl" className="block text-xs mt-1">لم يتم العثور على مستخدمين في المالية/الإدارة.</span>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 pb-2 border-b">
-                <Checkbox
-                  id="select-all-recipients"
-                  checked={paymentRequestDialog.selectedRecipientIds.length === paymentRequestDialog.availableRecipients.length}
-                  onCheckedChange={toggleAllPaymentRecipients}
-                  data-testid="checkbox-select-all-recipients"
-                />
-                <Label htmlFor="select-all-recipients" className="text-sm font-medium cursor-pointer">
-                  Select All ({paymentRequestDialog.availableRecipients.length})
-                  <span dir="rtl" className="text-xs text-muted-foreground mr-2"> / تحديد الكل</span>
-                </Label>
+          {/* ── Gradient Header ── */}
+          <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                <Mail className="h-4.5 w-4.5 text-white" />
               </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {paymentRequestDialog.availableRecipients.map(recipient => (
-                  <div key={recipient.id} className="flex items-center gap-2 py-1.5 px-2 rounded-md hover-elevate">
-                    <Checkbox
-                      id={`recipient-${recipient.id}`}
-                      checked={paymentRequestDialog.selectedRecipientIds.includes(recipient.id)}
-                      onCheckedChange={() => togglePaymentRecipient(recipient.id)}
-                      data-testid={`checkbox-recipient-${recipient.id}`}
-                    />
-                    <Label htmlFor={`recipient-${recipient.id}`} className="flex-1 cursor-pointer">
-                      <div className="text-sm font-medium">{recipient.name}</div>
-                      <div className="text-xs text-muted-foreground">{recipient.email}</div>
-                    </Label>
-                    <Badge variant="secondary" className="text-xs">{recipient.role}</Badge>
+              <div>
+                <h2 className="text-base font-bold text-white leading-tight" data-testid="dialog-payment-request-title">
+                  Request Payment
+                  <span dir="rtl" className="font-normal text-white/60 text-xs mr-2"> / طلب دفع</span>
+                </h2>
+                <p className="text-xs text-white/65 mt-0.5">
+                  Select who should receive the payment request email / من سيستلم بريد طلب الدفع.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Body ── */}
+          <div className="px-5 py-4 max-h-[55vh] overflow-y-auto space-y-3">
+
+            {paymentRequestDialog.loading ? (
+              <div className="space-y-3 animate-pulse py-2">
+                {[1,2,3].map(i => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-2/3" />
+                      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2" />
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : paymentRequestDialog.availableRecipients.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground text-sm">
+                <Mail className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                No finance/admin users found.
+                <span dir="rtl" className="block text-xs mt-1">لم يتم العثور على مستخدمين في المالية/الإدارة.</span>
+              </div>
+            ) : (
+              <>
+                {/* Select All row */}
+                <div
+                  className="flex items-center gap-3 pb-3 border-b cursor-pointer group"
+                  onClick={toggleAllPaymentRecipients as any}
+                >
+                  <Checkbox
+                    id="select-all-recipients"
+                    checked={paymentRequestDialog.selectedRecipientIds.length === paymentRequestDialog.availableRecipients.length && paymentRequestDialog.availableRecipients.length > 0}
+                    onCheckedChange={toggleAllPaymentRecipients}
+                    data-testid="checkbox-select-all-recipients"
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <div className="w-9 h-9 rounded-full bg-[#0F2041]/10 dark:bg-white/10 flex items-center justify-center shrink-0">
+                    <CheckCircle className="h-4 w-4 text-[#0F2041] dark:text-white/70" />
+                  </div>
+                  <Label htmlFor="select-all-recipients" className="flex-1 cursor-pointer">
+                    <span className="text-sm font-semibold">Select All ({paymentRequestDialog.availableRecipients.length})</span>
+                    <span dir="rtl" className="text-xs text-muted-foreground mr-2"> / تحديد الكل</span>
+                  </Label>
+                </div>
 
+                {/* Recipient list */}
+                <div className="space-y-1">
+                  {paymentRequestDialog.availableRecipients.map(recipient => {
+                    const isSelected = paymentRequestDialog.selectedRecipientIds.includes(recipient.id);
+                    const initials = (recipient.name || '?').split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+                    const roleColor = recipient.role === 'super_admin' || recipient.role === 'superAdmin'
+                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
+                      : recipient.role === 'finance'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300';
+                    return (
+                      <div
+                        key={recipient.id}
+                        onClick={() => togglePaymentRecipient(recipient.id)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-[#0F2041]/8 dark:bg-white/8 border border-[#0F2041]/20 dark:border-white/15'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 border border-transparent'
+                        }`}
+                      >
+                        <Checkbox
+                          id={`recipient-${recipient.id}`}
+                          checked={isSelected}
+                          onCheckedChange={() => togglePaymentRecipient(recipient.id)}
+                          data-testid={`checkbox-recipient-${recipient.id}`}
+                          onClick={e => e.stopPropagation()}
+                        />
+                        {/* Avatar */}
+                        <div className="w-9 h-9 rounded-full bg-[#0F2041] flex items-center justify-center shrink-0 text-white text-xs font-bold shadow-sm">
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold truncate">{recipient.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{recipient.email}</div>
+                        </div>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${roleColor}`}>
+                          {recipient.role}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── CC Section ── */}
           {!paymentRequestDialog.loading && paymentRequestDialog.availableRecipients.length > 0 && (
-            <div className="border-t pt-3">
+            <div className="border-t px-5 pt-3 pb-2">
               <EmailCCInput
                 ccEmails={paymentRequestDialog.ccEmails}
                 onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
@@ -5464,7 +5519,8 @@ const CostSubmission = () => {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          {/* ── Footer ── */}
+          <div className="border-t px-5 py-3 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
             <Button
               variant="outline"
               onClick={() => setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false })}
@@ -5476,14 +5532,16 @@ const CostSubmission = () => {
             <Button
               onClick={handleSendPaymentRequest}
               disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+              className="bg-[#0F2041] hover:bg-[#1D3461] text-white gap-1.5"
               data-testid="button-payment-request-send"
             >
-              <Mail className="h-3.5 w-3.5 mr-1" />
+              <Mail className="h-3.5 w-3.5" />
               {paymentRequestDialog.sending
-                ? 'Sending... / جارٍ الإرسال...'
-                : `Send to ${paymentRequestDialog.selectedRecipientIds.length} Recipient(s) / إرسال`}
+                ? 'Sending… / جارٍ الإرسال…'
+                : `Send to ${paymentRequestDialog.selectedRecipientIds.length} Recipient${paymentRequestDialog.selectedRecipientIds.length !== 1 ? 's' : ''} / إرسال`}
             </Button>
-          </DialogFooter>
+          </div>
+
         </DialogContent>
       </Dialog>
 
