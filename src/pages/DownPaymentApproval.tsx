@@ -408,8 +408,21 @@ export default function DownPaymentApproval() {
 
   // Filter option lists (computed from all requests)
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))].sort() as string[], [requests]);
-  const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))].sort() as string[], [requests]);
-  const uniqueLocalities = useMemo(() => [...new Set(requests.map(r => r.localityName).filter(Boolean))].sort() as string[], [requests]);
+  const uniqueStates = useMemo(() => {
+    const base = filters.hubId
+      ? requests.filter(r => r.hubName?.toLowerCase() === filters.hubId!.toLowerCase())
+      : requests;
+    return [...new Set(base.map(r => r.stateName).filter(Boolean))].sort() as string[];
+  }, [requests, filters.hubId]);
+  const uniqueLocalities = useMemo(() => {
+    let base = filters.hubId
+      ? requests.filter(r => r.hubName?.toLowerCase() === filters.hubId!.toLowerCase())
+      : requests;
+    if (filters.stateName) {
+      base = base.filter(r => r.stateName?.toLowerCase() === filters.stateName!.toLowerCase());
+    }
+    return [...new Set(base.map(r => r.localityName).filter(Boolean))].sort() as string[];
+  }, [requests, filters.hubId, filters.stateName]);
   const uniqueMmps = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort() as string[], [requests]);
   const uniqueRequesters = useMemo(() => {
     const ids = new Set(requests.map(r => r.requestedBy).filter(Boolean));
@@ -657,7 +670,7 @@ export default function DownPaymentApproval() {
                 </div>
                 <div>
                   <Label className="text-xs">Hub</Label>
-                  <Select value={filters.hubId || 'all'} onValueChange={v => setFilters(f => ({ ...f, hubId: v === 'all' ? undefined : v }))}>
+                  <Select value={filters.hubId || 'all'} onValueChange={v => setFilters(f => ({ ...f, hubId: v === 'all' ? undefined : v, stateName: undefined, localityName: undefined }))}>
                     <SelectTrigger data-testid="select-page-filter-hub"><SelectValue placeholder="All Hubs" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Hubs</SelectItem>
@@ -667,7 +680,7 @@ export default function DownPaymentApproval() {
                 </div>
                 <div>
                   <Label className="text-xs">State</Label>
-                  <Select value={filters.stateName || 'all'} onValueChange={v => setFilters(f => ({ ...f, stateName: v === 'all' ? undefined : v }))}>
+                  <Select value={filters.stateName || 'all'} onValueChange={v => setFilters(f => ({ ...f, stateName: v === 'all' ? undefined : v, localityName: undefined }))}>
                     <SelectTrigger data-testid="select-page-filter-state"><SelectValue placeholder="All States" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All States</SelectItem>
