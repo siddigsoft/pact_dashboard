@@ -1549,7 +1549,7 @@ const CostSubmission = () => {
         ? allApproved.filter(o => selectedCostIds.has(o.id))
         : allApproved;
     const totalSdg = approvedSubs.reduce((sum, oc) => {
-      const cents = (oc as any).amount_cents || 0;
+      const cents = Number((oc as any).amount_cents) || 0;
       const direct = (oc as any).total_amount || (oc as any).amount || 0;
       return sum + (cents > 0 ? cents / 100 : direct);
     }, 0);
@@ -1643,7 +1643,8 @@ const CostSubmission = () => {
       }
 
       const recalcTotalSdg = approvedSubmissions.reduce((sum, s) => {
-        const fromCents = s.amount_cents && s.amount_cents > 0 ? s.amount_cents / 100 : 0;
+        const centsNum = Number(s.amount_cents) || 0;
+        const fromCents = centsNum > 0 ? centsNum / 100 : 0;
         const direct = (s as any).total_amount || (s as any).amount || 0;
         return sum + (fromCents > 0 ? fromCents : direct);
       }, 0);
@@ -1699,7 +1700,8 @@ const CostSubmission = () => {
       const approverEmail = currentUser.email || '';
       const project = (oc as any).project_id ? allProjects?.find(p => p.id === (oc as any).project_id) : null;
       const projectName = project?.name || (oc as any).project_id || 'N/A';
-      const totalAmount = (oc as any).total_amount || (oc as any).amount || (oc as any).amount_cents || 0;
+      const rawCents = Number((oc as any).amount_cents) || 0;
+      const totalAmount = rawCents > 0 ? rawCents / 100 : ((oc as any).total_amount || (oc as any).amount || 0);
       const requestId = oc.id?.slice(0, 8)?.toUpperCase() || 'N/A';
 
       let pdfAttachment: { base64: string; filename: string } | undefined;
@@ -1785,7 +1787,7 @@ const CostSubmission = () => {
         requestId,
         (oc as any).expense_category || (oc as any).category || 'general',
         totalAmount,
-        (oc as any).funding_type || 'advance',
+        (oc as any).funding_type || 'operational_cost',
         projectName,
         (oc as any).currency || 'SDG',
         '',
@@ -5541,7 +5543,8 @@ const CostSubmission = () => {
                         </thead>
                         <tbody>
                           {bulkCostEmailDialog.approvedSubmissions.map((sub, idx) => {
-                            const amtSdg = (sub.amount_cents || 0) > 0 ? (sub.amount_cents || 0) / 100 : ((sub as any).total_amount || (sub as any).amount || 0);
+                            const rawAmtCents = Number(sub.amount_cents) || 0;
+                            const amtSdg = rawAmtCents > 0 ? rawAmtCents / 100 : ((sub as any).total_amount || (sub as any).amount || 0);
                             const rate = parseFloat(bulkCostEmailDialog.usdRate);
                             const amtUsd = !isNaN(rate) && rate > 0 ? amtSdg / rate : null;
                             const submitterUser = users.find(u => u.id === sub.submitted_by);
