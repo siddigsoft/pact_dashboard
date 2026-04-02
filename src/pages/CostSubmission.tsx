@@ -1139,9 +1139,10 @@ const CostSubmission = () => {
   };
 
   const canDeleteSubmission = (oc: OperationalCostSubmission): boolean => {
+    if (isSuperAdmin) return true;
     const derivedStatus = getOperationalDerivedStatus(oc);
     if (derivedStatus !== 'pending') return false;
-    if (isSuperAdmin || isAdmin) return true;
+    if (isAdmin) return true;
     return oc.submitted_by === currentUser?.id;
   };
 
