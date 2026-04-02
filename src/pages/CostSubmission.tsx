@@ -4072,6 +4072,50 @@ const CostSubmission = () => {
                 {/* ── Scrollable body ── */}
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
+                  {/* ── Group Line Items (multi-item requests) ── */}
+                  {oc.request_group_id && (() => {
+                    const groupItems = operationalCosts.filter(o => o.request_group_id === oc.request_group_id);
+                    if (groupItems.length <= 1) return null;
+                    const groupTotal = groupItems.reduce((s, o) => s + o.amount_cents, 0);
+                    return (
+                      <section>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                          Line Items / بنود الطلب ({groupItems.length})
+                        </p>
+                        <div className="rounded-lg border overflow-hidden text-sm">
+                          {groupItems.map((item, idx) => {
+                            const itemCat = EXPENSE_CATEGORY_MAP[item.expense_category];
+                            const ItemIcon = itemCat?.icon;
+                            const itemDesc = item.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || item.expense_category;
+                            const itemDerivedStatus = item.paid_at ? 'paid' : item.reconciled_at ? 'reconciled' : item.status;
+                            const isCurrentItem = item.id === oc.id;
+                            return (
+                              <div key={item.id} className={`flex items-center gap-2 px-3 py-2 ${idx !== 0 ? 'border-t' : ''} ${isCurrentItem ? 'bg-primary/5' : ''}`}>
+                                <div className="flex-none text-muted-foreground">
+                                  {ItemIcon ? <ItemIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="truncate font-medium text-[13px]">{itemDesc}</p>
+                                  <p className="text-xs text-muted-foreground">{itemCat?.label || item.expense_category}</p>
+                                </div>
+                                <div className="flex-none text-right">
+                                  <p className="font-semibold tabular-nums text-[13px]">{item.currency} {(item.amount_cents / 100).toLocaleString()}</p>
+                                  <p className={`text-[10px] ${itemDerivedStatus === 'approved' || itemDerivedStatus === 'paid' ? 'text-green-600' : itemDerivedStatus === 'rejected' ? 'text-red-500' : 'text-amber-600'}`}>
+                                    {statusLabels[itemDerivedStatus] || itemDerivedStatus}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-t font-semibold text-[13px]">
+                            <span>Total / المجموع</span>
+                            <span className="tabular-nums">{groupItems[0]?.currency} {(groupTotal / 100).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </section>
+                    );
+                  })()}
+
                   {/* ── Expense Details ── */}
                   <section>
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Expense Details / تفاصيل المصروف</p>
