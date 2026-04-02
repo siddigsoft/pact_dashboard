@@ -3442,9 +3442,7 @@ const CostSubmission = () => {
                     return (
                       <div
                         key={oc.id}
-                        className={isMultiItem
-                          ? `p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`
-                          : `rounded-md border bg-background p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
+                        className={`p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
                         data-testid={`operational-cost-${oc.id}`}
                       >
                           {canMarkAsPaid(oc) && (
@@ -3461,9 +3459,6 @@ const CostSubmission = () => {
                           <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                {!isMultiItem && (
-                                  <span className="font-semibold text-base truncate" data-testid={`text-title-${oc.id}`}>{title}</span>
-                                )}
                                 <Badge variant="outline" className="text-xs flex items-center gap-1">
                                   {CatIcon && <CatIcon className="h-3 w-3" />}
                                   {catMeta?.label || oc.expense_category}
@@ -3474,18 +3469,6 @@ const CostSubmission = () => {
                                   <FileText className="h-3 w-3" />
                                   ID: {requestId}
                                 </span>
-                                {!isMultiItem && linkedProjectName && (
-                                  <span className="flex items-center gap-1">
-                                    <Briefcase className="h-3 w-3" />
-                                    {linkedProjectName}
-                                  </span>
-                                )}
-                                {!isMultiItem && canViewTeamSubmissions && (
-                                  <span className="flex items-center gap-1">
-                                    <Users className="h-3 w-3" />
-                                    {submitterName}
-                                  </span>
-                                )}
                                 <span className="flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
                                   {oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy') : 'N/A'}
@@ -3909,15 +3892,55 @@ const CostSubmission = () => {
                     );
                     }); // end itemElements map
 
-                    return isMultiItem ? (
-                      <div key={groupId} className="rounded-xl border border-[#1D3461]/20 shadow-sm overflow-hidden">
-                        {GroupHeader}
-                        {expandedGroups.has(groupId!) && (
-                          <div className="divide-y">{itemElements}</div>
-                        )}
+                    if (isMultiItem) {
+                      return (
+                        <div key={groupId} className="rounded-xl border border-[#1D3461]/20 shadow-sm overflow-hidden">
+                          {GroupHeader}
+                          {expandedGroups.has(groupId!) && (
+                            <div className="divide-y">{itemElements}</div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // Standalone item — navy header matching grouped style
+                    const soc = groupItems[0];
+                    const sTitle = soc.request_title
+                      || soc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')
+                      || 'Cost Request';
+                    const sSubmitter = users.find(u => u.id === soc.submitted_by)?.name || 'Unknown';
+                    const sProject = soc.project_id ? allProjects.find(p => p.id === soc.project_id)?.name : null;
+                    const sDs = getOperationalDerivedStatus(soc);
+                    const sBarColor = (sDs === 'approved' || sDs === 'paid' || sDs === 'reconciled')
+                      ? 'bg-green-400'
+                      : sDs === 'rejected' ? 'bg-red-400' : 'bg-amber-400';
+
+                    return (
+                      <div key={soc.id} className="rounded-xl border border-[#1D3461]/20 shadow-sm overflow-hidden">
+                        {/* Standalone navy header */}
+                        <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-none mt-0.5">
+                              <Receipt className="h-4 w-4 text-white/70" />
+                            </div>
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                              <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{sTitle}</p>
+                              <div className="flex items-center gap-2 flex-wrap text-[11px] text-white/60">
+                                {sProject && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{sProject}</span>}
+                                {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{sSubmitter}</span>}
+                                <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(soc.created_at), 'MMM d, yyyy')}</span>
+                              </div>
+                            </div>
+                            <div className="flex-none text-right space-y-1">
+                              <p className="font-bold text-base tabular-nums text-white">{soc.currency} {(soc.amount_cents / 100).toLocaleString()}</p>
+                              <p className="text-[10px] text-white/50">Total</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className={`h-1 ${sBarColor}`} />
+                        {/* Item body */}
+                        <div>{itemElements[0]}</div>
                       </div>
-                    ) : (
-                      itemElements[0]
                     );
                   })}
                 </div>
