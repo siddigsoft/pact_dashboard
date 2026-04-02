@@ -1320,10 +1320,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           return;
         }
 
-        // ── PDF MODE (default) ─────────────────────────────────────────────
-        // Always generate the full PDF (all requests as pages in one file).
-        // For large batches the PDF is uploaded to storage and shared as a download link
+        // ── PDF + EXCEL MODE (always attach both) ──────────────────────────
+        // PDF: For large batches the PDF is uploaded to storage and shared as a download link
         // instead of being attached directly (which would exceed email size limits).
+        // Excel: Always generated and attached regardless of batch size.
         const PDF_ATTACH_LIMIT = 30;
         const pdfTooLarge = bulkRequests.length > PDF_ATTACH_LIMIT;
 
@@ -1364,6 +1364,25 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           }
         } catch { /* continue without PDF */ }
 
+        // Always generate Excel and attach alongside the PDF
+        const pdfModeExcelAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
+        try {
+          const pdfStatementRows: StatementRow[] = bulkRequests.map(mapRequestToStatementRow);
+          const pdfExcelConfig: StatementConfig = {
+            title: 'Transportation Advance',
+            titleAr: 'سلفة النقل',
+            statementType: 'transport_advance',
+            statusFilter: groupLabel || 'All Approved',
+            statusFilterAr: groupLabel ? groupLabel : 'الكل',
+            currency: 'SDG',
+            generatedBy: approverName,
+          };
+          const pdfModeExcel = await generateAllSheetsStatementExcelBase64(pdfStatementRows, pdfExcelConfig);
+          if (pdfModeExcel) {
+            pdfModeExcelAttachments.push({ ...pdfModeExcel, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          }
+        } catch { /* continue without Excel */ }
+
         const pdfNote = pdfTooLarge
           ? pdfDownloadUrl
             ? `\n\nBULK PDF DOWNLOAD: This batch contains ${bulkRequests.length} requests. The full PDF (all ${bulkRequests.length} pages) is available for download here (link valid for 7 days):\n${pdfDownloadUrl}\n\nتنزيل PDF: الملف الكامل (${bulkRequests.length} صفحة) متاح للتنزيل عبر الرابط أعلاه (صالح لمدة 7 أيام).`
@@ -1373,6 +1392,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         const bulkMmps2 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
         const mmpLabel2 = bulkMmps2.length > 0 ? bulkMmps2.join(', ') : groupLabel || 'All Approved';
         const projectLabel2 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+        const pdfModeBreakdowns = [
+          { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        ].filter(b => b.rows.length > 0);
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
           approverName,
@@ -1388,10 +1413,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.${pdfNote}`,
           '/down-payment-approval',
           summaryPdf,
-          undefined,
+          pdfModeExcelAttachments.length > 0 ? pdfModeExcelAttachments : undefined,
           ccEmails.length > 0 ? ccEmails : undefined,
           mmpLabel2,
-          effectiveRate
+          effectiveRate,
+          pdfModeBreakdowns
         );
 
         const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -4195,8 +4221,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                       {paymentRequestDialog.sendMode === 'excel'
                         ? `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkRequests.length} requests will both be attached.`
                         : paymentRequestDialog.bulkRequests.length > 30
-                          ? `${paymentRequestDialog.bulkRequests.length} requests — PDF is too large to attach directly. A download link will be included in the email body instead. Consider switching to Excel for a direct attachment.`
-                          : `A summary PDF covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached to the email.`
+                          ? `Excel (6 sheets) will be attached. PDF is too large for direct attachment — a download link will be included in the email body.`
+                          : `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkRequests.length} requests will both be attached.`
                       }
                     </p>
                   </div>
@@ -4305,7 +4331,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
                     : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    Attached: {paymentRequestDialog.sendMode === 'excel' ? 'Excel (6 sheets) + Signed PDF Certificates' : 'PDF Certificate (.pdf)'}
+                    Attached: {paymentRequestDialog.bulkRequests.length > 30 ? 'Excel (6 sheets) + PDF download link in body' : 'Excel (6 sheets) + Signed PDF Certificates'}
                   </span>
                 </div>
               </div>
