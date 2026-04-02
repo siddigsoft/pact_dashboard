@@ -30,6 +30,7 @@ interface SiteStatusDetail {
   locality: string;
   stateName: string;
   hubName: string;
+  transportBudget?: number;
   reason: string;
   actionBy: string;
   actionAt: string;
@@ -246,14 +247,12 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
 
   const [fundDialog, setFundDialog] = useState<{ open: boolean; site: SiteStatusDetail | null }>({ open: false, site: null });
   const [fundAmount, setFundAmount] = useState('');
-  const [fundBudget, setFundBudget] = useState('');
   const [fundJustification, setFundJustification] = useState('');
   const [fundSubmitting, setFundSubmitting] = useState(false);
 
   const handleOpenRequestFund = (site: SiteStatusDetail) => {
     setFundDialog({ open: true, site });
     setFundAmount('');
-    setFundBudget('');
     setFundJustification('');
   };
 
@@ -261,7 +260,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     const site = fundDialog.site;
     if (!site || !currentUser) return;
     const amount = parseFloat(fundAmount);
-    const budget = parseFloat(fundBudget) || amount;
+    const budget = site.transportBudget && site.transportBudget > 0 ? site.transportBudget : amount;
     if (!amount || amount <= 0) return;
     if (!fundJustification.trim()) return;
     setFundSubmitting(true);
@@ -417,6 +416,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         locality: entry.locality || entry.localityName || '',
         stateName: entry.state || entry.stateName || stateName,
         hubName: entry.hub_office || entry.hub_name || entry.hubName || '',
+        transportBudget: entry.transport_budget_total != null ? Number(entry.transport_budget_total) : (ad.transport_budget_total != null ? Number(ad.transport_budget_total) : undefined),
         reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
         actionBy: actionByRaw,
         actionAt: isVerified
@@ -829,6 +829,15 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                 )}
               </div>
 
+              {fundDialog.site.transportBudget != null && fundDialog.site.transportBudget > 0 && (
+                <div className="flex items-center justify-between rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground font-medium">Transportation Budget</span>
+                  <span className="font-semibold text-blue-700 dark:text-blue-300">
+                    {fundDialog.site.transportBudget.toLocaleString()} SDG
+                  </span>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="fund-amount">Requested Amount (SDG) <span className="text-destructive">*</span></Label>
                 <Input
@@ -836,24 +845,10 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                   type="number"
                   min="1"
                   value={fundAmount}
-                  onChange={(e) => { setFundAmount(e.target.value); if (!fundBudget) setFundBudget(e.target.value); }}
+                  onChange={(e) => setFundAmount(e.target.value)}
                   placeholder="e.g. 50000"
                   data-testid="input-fund-amount"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="fund-budget">Transportation Budget (SDG)</Label>
-                <Input
-                  id="fund-budget"
-                  type="number"
-                  min="1"
-                  value={fundBudget}
-                  onChange={(e) => setFundBudget(e.target.value)}
-                  placeholder="Defaults to requested amount"
-                  data-testid="input-fund-budget"
-                />
-                <p className="text-xs text-muted-foreground">Leave blank to use the requested amount as the budget.</p>
               </div>
 
               <div className="space-y-2">
