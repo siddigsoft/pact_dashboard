@@ -216,30 +216,48 @@ function buildStatementWorkbook(
     stateSectionRow.height = 22;
     ws.mergeCells(stateSectionRow.number, 1, stateSectionRow.number, totalCols);
 
-    const stateHdrData = ['State', 'Requests', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`];
+    // Shift one column right so State name lands in col B (width 22) instead of col A (width 5/#)
+    const stateHdrData = ['', 'State', 'Requests', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`];
     const stateHdr = ws.addRow([...stateHdrData, ...Array(totalCols - stateHdrData.length).fill('')]);
     stateHdr.eachCell((cell, ci) => {
       cell.fill = subHeaderFill();
       cell.font = headerFont(10);
       cell.border = thinBorder();
-      cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+      cell.alignment = { horizontal: ci <= 2 ? 'left' : 'center', vertical: 'middle' };
     });
     stateHdr.height = 20;
 
     stateEntries.forEach(([stateName, s], i) => {
       const rowData: (string | number)[] = [
-        stateName, s.count, fmtCurrency(s.requested, cur), fmtCurrency(s.approved, cur), fmtCurrency(s.paid, cur),
-        ...Array(totalCols - 5).fill(''),
+        '', stateName, s.count, fmtCurrency(s.requested, cur), fmtCurrency(s.approved, cur), fmtCurrency(s.paid, cur),
+        ...Array(totalCols - 6).fill(''),
       ];
       const row = ws.addRow(rowData);
       row.eachCell((cell, ci) => {
         cell.border = thinBorder();
-        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.alignment = { horizontal: ci <= 2 ? 'left' : 'center', vertical: 'middle' };
         cell.font = bodyFont(10);
         if (i % 2 === 1) cell.fill = altFill();
       });
       row.height = 18;
     });
+
+    // Grand total row for STATE SUMMARY
+    const sGrandReq  = Array.from(stateMap.values()).reduce((s, v) => s + v.requested, 0);
+    const sGrandApp  = Array.from(stateMap.values()).reduce((s, v) => s + v.approved, 0);
+    const sGrandPaid = Array.from(stateMap.values()).reduce((s, v) => s + v.paid, 0);
+    const stateGrandData: (string | number)[] = [
+      '', 'GRAND TOTAL', rows.length, fmtCurrency(sGrandReq, cur), fmtCurrency(sGrandApp, cur), fmtCurrency(sGrandPaid, cur),
+      ...Array(totalCols - 6).fill(''),
+    ];
+    const stateGrandRow = ws.addRow(stateGrandData);
+    stateGrandRow.eachCell((cell, ci) => {
+      cell.fill = sectionFill();
+      cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: WHITE } };
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci <= 2 ? 'left' : 'center', vertical: 'middle' };
+    });
+    stateGrandRow.height = 20;
 
     ws.addRow([]).height = 6;
   }
