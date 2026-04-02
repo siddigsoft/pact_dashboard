@@ -58,6 +58,25 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { getStatesInHub, normalizeHubId } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
+const PROJECT_PALETTE = [
+  { bg: 'rgba(59,130,246,0.25)',  border: '#3B82F6', text: '#93C5FD' },  // blue
+  { bg: 'rgba(16,185,129,0.25)', border: '#10B981', text: '#6EE7B7' },  // emerald
+  { bg: 'rgba(245,158,11,0.25)', border: '#F59E0B', text: '#FCD34D' },  // amber
+  { bg: 'rgba(139,92,246,0.25)', border: '#8B5CF6', text: '#C4B5FD' },  // violet
+  { bg: 'rgba(244,63,94,0.25)',  border: '#F43F5E', text: '#FCA5A5' },  // rose
+  { bg: 'rgba(6,182,212,0.25)',  border: '#06B6D4', text: '#67E8F9' },  // cyan
+  { bg: 'rgba(249,115,22,0.25)', border: '#F97316', text: '#FED7AA' },  // orange
+  { bg: 'rgba(20,184,166,0.25)', border: '#14B8A6', text: '#99F6E4' },  // teal
+  { bg: 'rgba(236,72,153,0.25)', border: '#EC4899', text: '#F9A8D4' },  // pink
+  { bg: 'rgba(99,102,241,0.25)', border: '#6366F1', text: '#A5B4FC' },  // indigo
+];
+
+function getProjectPalette(projectId: string | null | undefined) {
+  if (!projectId) return PROJECT_PALETTE[0];
+  const hash = projectId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return PROJECT_PALETTE[hash % PROJECT_PALETTE.length];
+}
+
 const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   permits: { label: 'Permits & Licenses', icon: Ticket },
   incentives: { label: 'Incentives & Allowances', icon: Gift },
@@ -3315,6 +3334,7 @@ const CostSubmission = () => {
                         || 'Grouped Request';
                       const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
                       const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
+                      const projPalette = getProjectPalette(groupItems[0].project_id);
                       const groupApprovableTier: 1 | 2 | 3 | null =
                         groupItems.some(o => canTier1Approve(o)) ? 1 :
                         groupItems.some(o => canTier2Approve(o)) ? 2 :
@@ -3332,17 +3352,27 @@ const CostSubmission = () => {
                             onClick={() => toggleGroup(groupId!)}
                             data-testid={`button-group-toggle-${groupId}`}
                           >
-                            <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3">
+                            <div
+                              className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3"
+                              style={{ borderLeft: `4px solid ${projPalette.border}` }}
+                            >
                               <div className="flex items-start gap-3">
                                 <div className="flex-none mt-0.5">
                                   <Layers className="h-4 w-4 text-white/70" />
                                 </div>
                                 <div className="flex-1 min-w-0 space-y-1.5">
                                   <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{groupTitle}</p>
-                                  <div className="flex items-center gap-2 flex-wrap text-[11px] text-white/60">
-                                    {linkedProjectName && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{linkedProjectName}</span>}
-                                    {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{submitterName}</span>}
-                                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
+                                  <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                    {linkedProjectName && (
+                                      <span
+                                        className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
+                                        style={{ backgroundColor: projPalette.bg, color: projPalette.text, border: `1px solid ${projPalette.border}40` }}
+                                      >
+                                        <Briefcase className="h-3 w-3" />{linkedProjectName}
+                                      </span>
+                                    )}
+                                    {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
+                                    <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
                                   </div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white">
@@ -3910,6 +3940,7 @@ const CostSubmission = () => {
                       || 'Cost Request';
                     const sSubmitter = users.find(u => u.id === soc.submitted_by)?.name || 'Unknown';
                     const sProject = soc.project_id ? allProjects.find(p => p.id === soc.project_id)?.name : null;
+                    const sPalette = getProjectPalette(soc.project_id);
                     const sDs = getOperationalDerivedStatus(soc);
                     const sBarColor = (sDs === 'approved' || sDs === 'paid' || sDs === 'reconciled')
                       ? 'bg-green-400'
@@ -3918,17 +3949,27 @@ const CostSubmission = () => {
                     return (
                       <div key={soc.id} className="rounded-xl border border-[#1D3461]/20 shadow-sm overflow-hidden">
                         {/* Standalone navy header */}
-                        <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3">
+                        <div
+                          className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3"
+                          style={{ borderLeft: `4px solid ${sPalette.border}` }}
+                        >
                           <div className="flex items-start gap-3">
                             <div className="flex-none mt-0.5">
                               <Receipt className="h-4 w-4 text-white/70" />
                             </div>
                             <div className="flex-1 min-w-0 space-y-1.5">
                               <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{sTitle}</p>
-                              <div className="flex items-center gap-2 flex-wrap text-[11px] text-white/60">
-                                {sProject && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{sProject}</span>}
-                                {canViewTeamSubmissions && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{sSubmitter}</span>}
-                                <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{format(new Date(soc.created_at), 'MMM d, yyyy')}</span>
+                              <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                {sProject && (
+                                  <span
+                                    className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
+                                    style={{ backgroundColor: sPalette.bg, color: sPalette.text, border: `1px solid ${sPalette.border}40` }}
+                                  >
+                                    <Briefcase className="h-3 w-3" />{sProject}
+                                  </span>
+                                )}
+                                {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{sSubmitter}</span>}
+                                <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(soc.created_at), 'MMM d, yyyy')}</span>
                               </div>
                             </div>
                             <div className="flex-none text-right space-y-1">
