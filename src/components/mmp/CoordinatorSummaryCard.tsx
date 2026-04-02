@@ -7,17 +7,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet, Plus } from 'lucide-react';
+import { Users, User, MapPin, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock, XCircle, Wallet, Plus, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useUser } from '@/context/user/UserContext';
 
 interface AdvanceInfo {
+  id: string;
   status: string;
   requestedAmount: number;
   approvedAmount: number;
   totalPaid: number;
+  justification?: string;
 }
 
 interface SiteStatusDetail {
@@ -73,7 +75,7 @@ const ADVANCE_STATUS_CONFIG: Record<string, { label: string; color: string }> = 
   rejected:           { label: 'Advance: Rejected',           color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 };
 
-function SiteDetailRow({ site, userNames, advance, onRequestFund }: { site: SiteStatusDetail; userNames: Record<string, string>; advance?: AdvanceInfo; onRequestFund?: (site: SiteStatusDetail) => void }) {
+function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: { site: SiteStatusDetail; userNames: Record<string, string>; advance?: AdvanceInfo; onRequestFund?: (site: SiteStatusDetail) => void; onEditFund?: (site: SiteStatusDetail, advance: AdvanceInfo) => void }) {
   const categoryColors: Record<string, string> = {
     verified: 'bg-green-50/80 dark:bg-green-900/15 border-green-100 dark:border-green-900/30',
     returned: 'bg-orange-50/80 dark:bg-orange-900/15 border-orange-100 dark:border-orange-900/30',
@@ -116,19 +118,31 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund }: { site: Site
             {site.statusLabel}
           </Badge>
           {advance && advanceCfg ? (
-            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${advanceCfg.color}`}>
-              <Wallet className="h-2.5 w-2.5" />
-              {advanceCfg.label}
-              {advance.requestedAmount > 0 && (
-                <span className="ml-0.5 opacity-80">
-                  {advance.totalPaid > 0
-                    ? `(${advance.totalPaid.toLocaleString()} / ${advance.requestedAmount.toLocaleString()} SDG)`
-                    : advance.approvedAmount > 0
-                      ? `(${advance.approvedAmount.toLocaleString()} SDG)`
-                      : `(${advance.requestedAmount.toLocaleString()} SDG)`}
-                </span>
+            <div className="flex items-center gap-1">
+              <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 flex items-center gap-1 ${advanceCfg.color}`}>
+                <Wallet className="h-2.5 w-2.5" />
+                {advanceCfg.label}
+                {advance.requestedAmount > 0 && (
+                  <span className="ml-0.5 opacity-80">
+                    {advance.totalPaid > 0
+                      ? `(${advance.totalPaid.toLocaleString()} / ${advance.requestedAmount.toLocaleString()} SDG)`
+                      : advance.approvedAmount > 0
+                        ? `(${advance.approvedAmount.toLocaleString()} SDG)`
+                        : `(${advance.requestedAmount.toLocaleString()} SDG)`}
+                  </span>
+                )}
+              </Badge>
+              {onEditFund && ['pending_supervisor', 'pending_admin'].includes(advance.status) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onEditFund(site, advance); }}
+                  className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+                  title="Edit this advance request"
+                >
+                  <Pencil className="h-2.5 w-2.5" />
+                  Edit
+                </button>
               )}
-            </Badge>
+            </div>
           ) : (
             <div className="flex items-center gap-1">
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex items-center gap-1 text-muted-foreground border-dashed">
@@ -170,7 +184,7 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund }: { site: Site
   );
 }
 
-function LocalityGroup({ locality, sites, userNames, advanceMap, onRequestFund }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string>; advanceMap: Record<string, AdvanceInfo>; onRequestFund?: (site: SiteStatusDetail) => void }) {
+function LocalityGroup({ locality, sites, userNames, advanceMap, onRequestFund, onEditFund }: { locality: string; sites: SiteStatusDetail[]; userNames: Record<string, string>; advanceMap: Record<string, AdvanceInfo>; onRequestFund?: (site: SiteStatusDetail) => void; onEditFund?: (site: SiteStatusDetail, advance: AdvanceInfo) => void }) {
   return (
     <div className="ml-2" data-testid={`locality-group-${locality}`}>
       <div className="flex items-center gap-1.5 mb-1">
@@ -180,7 +194,7 @@ function LocalityGroup({ locality, sites, userNames, advanceMap, onRequestFund }
       </div>
       <div className="space-y-1 ml-4">
         {sites.map((site) => (
-          <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} onRequestFund={onRequestFund} />
+          <SiteDetailRow key={site.id} site={site} userNames={userNames} advance={advanceMap[site.id]} onRequestFund={onRequestFund} onEditFund={onEditFund} />
         ))}
       </div>
     </div>
@@ -193,12 +207,14 @@ function StatusCategorySection({
   userNames,
   advanceMap,
   onRequestFund,
+  onEditFund,
 }: { 
   category: 'verified' | 'returned' | 'rejected' | 'in_progress' | 'pending'; 
   sites: SiteStatusDetail[]; 
   userNames: Record<string, string>;
   advanceMap: Record<string, AdvanceInfo>;
   onRequestFund?: (site: SiteStatusDetail) => void;
+  onEditFund?: (site: SiteStatusDetail, advance: AdvanceInfo) => void;
 }) {
   if (sites.length === 0) return null;
 
@@ -229,7 +245,7 @@ function StatusCategorySection({
       </p>
       <div className="space-y-2">
         {sortedLocalities.map(([locality, locSites]) => (
-          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} />
+          <LocalityGroup key={locality} locality={locality} sites={locSites} userNames={userNames} advanceMap={advanceMap} onRequestFund={onRequestFund} onEditFund={onEditFund} />
         ))}
       </div>
     </div>
@@ -242,21 +258,30 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
   const [actionByNames, setActionByNames] = useState<Record<string, string>>({});
   const [advanceMap, setAdvanceMap] = useState<Record<string, AdvanceInfo>>({});
 
-  const { createRequest } = useDownPayment();
+  const { createRequest, editRequest } = useDownPayment();
   const { currentUser } = useUser();
 
-  const [fundDialog, setFundDialog] = useState<{ open: boolean; site: SiteStatusDetail | null }>({ open: false, site: null });
+  const [fundDialog, setFundDialog] = useState<{ open: boolean; site: SiteStatusDetail | null; editMode: boolean; existingAdvance: AdvanceInfo | null }>({ open: false, site: null, editMode: false, existingAdvance: null });
   const [fundAmount, setFundAmount] = useState('');
   const [fundJustification, setFundJustification] = useState('');
+  const [fundEditReason, setFundEditReason] = useState('');
   const [fundSubmitting, setFundSubmitting] = useState(false);
   const [fundFetchedBudget, setFundFetchedBudget] = useState<number | null>(null);
   const [fundBudgetLoading, setFundBudgetLoading] = useState(false);
 
   const handleOpenRequestFund = (site: SiteStatusDetail) => {
-    setFundDialog({ open: true, site });
+    setFundDialog({ open: true, site, editMode: false, existingAdvance: null });
     setFundAmount('');
     setFundJustification('');
-    // Seed from what we already know; live fetch will update
+    setFundEditReason('');
+    setFundFetchedBudget(site.transportBudget && site.transportBudget > 0 ? site.transportBudget : null);
+  };
+
+  const handleOpenEditFund = (site: SiteStatusDetail, advance: AdvanceInfo) => {
+    setFundDialog({ open: true, site, editMode: true, existingAdvance: advance });
+    setFundAmount(advance.requestedAmount > 0 ? String(advance.requestedAmount) : '');
+    setFundJustification(advance.justification || '');
+    setFundEditReason('');
     setFundFetchedBudget(site.transportBudget && site.transportBudget > 0 ? site.transportBudget : null);
   };
 
@@ -290,27 +315,40 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     const budget = (fundFetchedBudget && fundFetchedBudget > 0) ? fundFetchedBudget : amount;
     if (!amount || amount <= 0) return;
     if (!fundJustification.trim()) return;
+    if (fundDialog.editMode && !fundEditReason.trim()) return;
     setFundSubmitting(true);
     try {
-      const enumeratorId = site.claimedBy || currentUser.id;
-      await createRequest({
-        mmpSiteEntryId: site.id,
-        siteName: site.name,
-        requestedBy: enumeratorId,
-        requesterRole: 'dataCollector',
-        hubName: site.hubName || '',
-        stateName: site.stateName || '',
-        localityName: site.locality || '',
-        totalTransportationBudget: budget,
-        requestedAmount: amount,
-        paymentType: 'full_advance',
-        justification: fundJustification.trim(),
-      });
-      setFundDialog({ open: false, site: null });
+      if (fundDialog.editMode && fundDialog.existingAdvance) {
+        await editRequest({
+          requestId: fundDialog.existingAdvance.id,
+          editedBy: currentUser.id,
+          reason: fundEditReason.trim(),
+          changes: {
+            requestedAmount: amount,
+            justification: fundJustification.trim(),
+          },
+        });
+      } else {
+        const enumeratorId = site.claimedBy || currentUser.id;
+        await createRequest({
+          mmpSiteEntryId: site.id,
+          siteName: site.name,
+          requestedBy: enumeratorId,
+          requesterRole: 'dataCollector',
+          hubName: site.hubName || '',
+          stateName: site.stateName || '',
+          localityName: site.locality || '',
+          totalTransportationBudget: budget,
+          requestedAmount: amount,
+          paymentType: 'full_advance',
+          justification: fundJustification.trim(),
+        });
+      }
+      setFundDialog({ open: false, site: null, editMode: false, existingAdvance: null });
       // Refresh advance map to show updated status
       const entryIds = siteEntries.map((e: any) => e.id).filter((id: any) => typeof id === 'string' && id.length > 0);
       if (entryIds.length > 0) {
-        const { data } = await supabase.from('down_payment_requests').select('mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount').in('mmp_site_entry_id', entryIds);
+        const { data } = await supabase.from('down_payment_requests').select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification').in('mmp_site_entry_id', entryIds);
         if (data) {
           const map: Record<string, AdvanceInfo> = {};
           data.forEach((row: any) => {
@@ -319,7 +357,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             const existing = map[eid];
             const isCancelled = row.status === 'cancelled' || row.status === 'rejected';
             if (!existing || (!isCancelled && (existing.status === 'cancelled' || existing.status === 'rejected'))) {
-              map[eid] = { status: row.status || 'pending_supervisor', requestedAmount: Number(row.requested_amount) || 0, approvedAmount: Number(row.approved_amount) || 0, totalPaid: Number(row.total_paid_amount) || 0 };
+              map[eid] = { id: row.id, status: row.status || 'pending_supervisor', requestedAmount: Number(row.requested_amount) || 0, approvedAmount: Number(row.approved_amount) || 0, totalPaid: Number(row.total_paid_amount) || 0, justification: row.justification || '' };
             }
           });
           setAdvanceMap(map);
@@ -558,7 +596,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       // Supabase .in() with many IDs is sent as POST (no URL limit issues for reasonable sizes)
       const { data, error } = await supabase
         .from('down_payment_requests')
-        .select('mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount')
+        .select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification')
         .in('mmp_site_entry_id', entryIds);
 
       if (error || !data) return;
@@ -574,10 +612,12 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         const isCancelled = row.status === 'cancelled' || row.status === 'rejected';
         if (!existing || (!isCancelled && (existing.status === 'cancelled' || existing.status === 'rejected'))) {
           map[eid] = {
+            id: row.id,
             status: row.status || 'pending_supervisor',
             requestedAmount: Number(row.requested_amount) || 0,
             approvedAmount: Number(row.approved_amount) || 0,
             totalPaid: Number(row.total_paid_amount) || 0,
+            justification: row.justification || '',
           };
         }
       });
@@ -814,11 +854,11 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="px-2 pb-2 space-y-3 mt-2">
-                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
-                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
-                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
-                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
-                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} />
+                          <StatusCategorySection category="in_progress" sites={inProgressSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
+                          <StatusCategorySection category="pending" sites={pendingSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
+                          <StatusCategorySection category="verified" sites={verifiedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
+                          <StatusCategorySection category="returned" sites={returnedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
+                          <StatusCategorySection category="rejected" sites={rejectedSites} userNames={actionByNames} advanceMap={advanceMap} onRequestFund={handleOpenRequestFund} onEditFund={handleOpenEditFund} />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
@@ -832,15 +872,15 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       </CardContent>
 
       {/* Request Fund Dialog */}
-      <Dialog open={fundDialog.open} onOpenChange={(open) => !open && setFundDialog({ open: false, site: null })}>
+      <Dialog open={fundDialog.open} onOpenChange={(open) => !open && setFundDialog({ open: false, site: null, editMode: false, existingAdvance: null })}>
         <DialogContent className="max-w-md" data-testid="dialog-request-fund">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-primary" />
-              Request Transport Advance
+              {fundDialog.editMode ? <Pencil className="h-5 w-5 text-amber-600" /> : <Wallet className="h-5 w-5 text-primary" />}
+              {fundDialog.editMode ? 'Edit Advance Request' : 'Request Transport Advance'}
             </DialogTitle>
             <DialogDescription>
-              Submit an advance fund request for this site visit.
+              {fundDialog.editMode ? 'Update the requested amount or justification for this advance request.' : 'Submit an advance fund request for this site visit.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -893,19 +933,32 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                   data-testid="textarea-fund-justification"
                 />
               </div>
+
+              {fundDialog.editMode && (
+                <div className="space-y-2">
+                  <Label htmlFor="fund-edit-reason">Reason for Edit <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="fund-edit-reason"
+                    value={fundEditReason}
+                    onChange={(e) => setFundEditReason(e.target.value)}
+                    placeholder="Why are you editing this request?"
+                    data-testid="input-fund-edit-reason"
+                  />
+                </div>
+              )}
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFundDialog({ open: false, site: null })} disabled={fundSubmitting} data-testid="button-cancel-fund-request">
+            <Button variant="outline" onClick={() => setFundDialog({ open: false, site: null, editMode: false, existingAdvance: null })} disabled={fundSubmitting} data-testid="button-cancel-fund-request">
               Cancel
             </Button>
             <Button
               onClick={handleSubmitFundRequest}
-              disabled={fundSubmitting || !fundAmount || parseFloat(fundAmount) <= 0 || !fundJustification.trim()}
+              disabled={fundSubmitting || !fundAmount || parseFloat(fundAmount) <= 0 || !fundJustification.trim() || (fundDialog.editMode && !fundEditReason.trim())}
               data-testid="button-submit-fund-request"
             >
-              {fundSubmitting ? 'Submitting…' : 'Submit Request'}
+              {fundSubmitting ? 'Submitting…' : fundDialog.editMode ? 'Save Changes' : 'Submit Request'}
             </Button>
           </DialogFooter>
         </DialogContent>
