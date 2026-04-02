@@ -3107,8 +3107,9 @@ const CostSubmission = () => {
             </Button>
           </div>
 
-          {/* Batch Pay selection bar — visible when ≥1 payable submission is selected */}
+          {/* Batch Pay selection bar — visible only on the Approved tab when ≥1 payable submission exists */}
           {(() => {
+            if (statusFilter !== 'approved') return null;
             const payableOcs = filteredOperationalCosts.filter(canMarkAsPaid);
             const selectedPayable = payableOcs.filter(oc => selectedCostIds.has(oc.id));
             if (payableOcs.length === 0) return null;
