@@ -707,6 +707,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       });
       return false;
     }
+    if (!data.receiptUrl) {
+      toastRef.current({
+        title: 'Receipt Required / الإيصال مطلوب',
+        description: 'A payment receipt must be uploaded before marking as paid. / يجب رفع إيصال الدفع قبل تحديده كمدفوع.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     try {
       return await withTimeout(
         (async () => {
@@ -1417,17 +1425,10 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         };
       }
 
-      // Race the DB update against a 15-second timeout so the UI never hangs indefinitely
-      const updatePromise = supabase
+      const { error } = await supabase
         .from('down_payment_requests')
         .update(updateData)
         .eq('id', data.requestId);
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out — please try again')), 15000)
-      );
-
-      const { error } = await Promise.race([updatePromise, timeoutPromise]) as { error: any };
 
       if (error) throw error;
 
@@ -1444,7 +1445,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       await refreshRequests();
       return true;
         })(),
-        MUTATION_TIMEOUT_MS,
+        30000,
         'Request timed out. Please try again or refresh the page.'
       );
     } catch (error: any) {

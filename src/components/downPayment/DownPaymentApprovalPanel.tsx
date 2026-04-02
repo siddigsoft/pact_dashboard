@@ -490,6 +490,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       return;
     }
 
+    if (!payProofFile) {
+      toast({ title: 'Receipt Required / الإيصال مطلوب', description: 'Please attach a payment receipt before confirming. / يرجى إرفاق إيصال الدفع قبل التأكيد.', variant: 'destructive' });
+      return;
+    }
+
     setProcessing(true);
     let receiptUrl: string | null = null;
     try {
@@ -588,19 +593,24 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     }
   };
 
-  const handleBulkRevert = async (targetStatus: 'pending_supervisor' | 'pending_admin') => {
-    if (!currentUser || selectedIds.size === 0) return;
+  const handleBulkRevert = async (targetStatus: 'pending_supervisor' | 'pending_admin' | 'approved', ids?: string[]) => {
+    if (!currentUser) return;
+    const revertIds = ids ?? Array.from(selectedIds);
+    if (revertIds.length === 0) return;
     setProcessing(true);
     try {
       let successCount = 0;
       let failCount = 0;
-      const ids = Array.from(selectedIds);
-      for (const id of ids) {
+      const targetLabel =
+        targetStatus === 'pending_supervisor' ? 'Pending Supervisor' :
+        targetStatus === 'pending_admin'       ? 'Pending Admin' :
+                                                'Approved (Ready for Payment)';
+      for (const id of revertIds) {
         const success = await revertToPending({
           requestId: id,
           revertedBy: currentUser.id,
           revertedByName: currentUser.fullName || currentUser.email,
-          reason: `Bulk revert to ${targetStatus === 'pending_supervisor' ? 'Pending Supervisor' : 'Pending Admin'}`,
+          reason: `Bulk revert to ${targetLabel}`,
           targetStatus,
         });
         if (success) successCount++; else failCount++;
@@ -3316,15 +3326,37 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                       </span>
                     </div>
                     {paidWaitingRequests.filter(r => selectedIds.has(r.id)).length > 0 && (
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                        onClick={() => setBulkConfirmRequests(paidWaitingRequests.filter(r => selectedIds.has(r.id)))}
-                        data-testid="button-bulk-confirm-selected"
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                        Confirm {paidWaitingRequests.filter(r => selectedIds.has(r.id)).length} with One Signature
-                      </Button>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => setBulkConfirmRequests(paidWaitingRequests.filter(r => selectedIds.has(r.id)))}
+                          data-testid="button-bulk-confirm-selected"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                          Confirm {paidWaitingRequests.filter(r => selectedIds.has(r.id)).length} with One Signature
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleBulkRevert('approved', paidWaitingRequests.filter(r => selectedIds.has(r.id)).map(r => r.id))}
+                          disabled={processing}
+                          data-testid="button-bulk-revert-approved"
+                        >
+                          <Undo2 className="h-4 w-4 mr-1" />
+                          Revert to Approved
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleBulkRevert('pending_supervisor', paidWaitingRequests.filter(r => selectedIds.has(r.id)).map(r => r.id))}
+                          disabled={processing}
+                          data-testid="button-bulk-revert-supervisor"
+                        >
+                          <Undo2 className="h-4 w-4 mr-1" />
+                          Revert to Pending
+                        </Button>
+                      </div>
                     )}
                   </div>
                   <VirtualizedRequestList requests={paidWaitingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
