@@ -50,8 +50,8 @@ function sectionFill(): ExcelJS.Fill {
   return { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
 }
 
-// Explicit column widths for transport statement (Financial Statement sheet, 11 cols)
-const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 16, 15, 15, 11, 26, 18, 12];
+// Explicit column widths for transport statement (Financial Statement sheet, 12 cols — incl. State)
+const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 16, 14, 15, 15, 11, 26, 18, 12];
 // Explicit column widths for transport Full Details sheet (19 cols)
 const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 16, 14, 13, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 18];
 // Explicit column widths for operational cost (Financial Statement sheet, 11 cols — inc. Project)
@@ -106,7 +106,7 @@ function buildStatementWorkbook(
 
   const statusLabel = fmtStatus(config.statusFilter);
   const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';
-  const totalCols = 11; // transport: 11 cols, operational: 11 cols (with Project)
+  const totalCols = isTransport ? 12 : 11; // transport: 12 cols (incl. State), operational: 11 cols (with Project)
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -192,6 +192,58 @@ function buildStatementWorkbook(
 
   ws.addRow([]).height = 6;
 
+  // STATE SUMMARY section (transport only, when state data is available)
+  if (isTransport) {
+    const stateMap = new Map<string, { count: number; requested: number; approved: number; paid: number }>();
+    rows.forEach(r => {
+      const k = r.state && r.state.trim() ? r.state.trim() : 'Unknown';
+      if (!stateMap.has(k)) stateMap.set(k, { count: 0, requested: 0, approved: 0, paid: 0 });
+      const s = stateMap.get(k)!;
+      s.count++;
+      s.requested += r.requestedAmount;
+      s.approved += r.approvedAmount;
+      s.paid += r.paidAmount;
+    });
+    const stateEntries = Array.from(stateMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+    const stateSectionRow = ws.addRow(['STATE SUMMARY']);
+    for (let c = 1; c <= totalCols; c++) {
+      const cell = stateSectionRow.getCell(c);
+      cell.fill = sectionFill();
+      cell.font = headerFont(12);
+      cell.border = thinBorder();
+    }
+    stateSectionRow.height = 22;
+    ws.mergeCells(stateSectionRow.number, 1, stateSectionRow.number, totalCols);
+
+    const stateHdrData = ['State', 'Requests', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`];
+    const stateHdr = ws.addRow([...stateHdrData, ...Array(totalCols - stateHdrData.length).fill('')]);
+    stateHdr.eachCell((cell, ci) => {
+      cell.fill = subHeaderFill();
+      cell.font = headerFont(10);
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+    });
+    stateHdr.height = 20;
+
+    stateEntries.forEach(([stateName, s], i) => {
+      const rowData: (string | number)[] = [
+        stateName, s.count, fmtCurrency(s.requested, cur), fmtCurrency(s.approved, cur), fmtCurrency(s.paid, cur),
+        ...Array(totalCols - 5).fill(''),
+      ];
+      const row = ws.addRow(rowData);
+      row.eachCell((cell, ci) => {
+        cell.border = thinBorder();
+        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.font = bodyFont(10);
+        if (i % 2 === 1) cell.fill = altFill();
+      });
+      row.height = 18;
+    });
+
+    ws.addRow([]).height = 6;
+  }
+
   // TRANSACTION DETAILS section
   const detailSectionRow = ws.addRow(['TRANSACTION DETAILS']);
   for (let c = 1; c <= totalCols; c++) {
@@ -204,7 +256,7 @@ function buildStatementWorkbook(
   ws.mergeCells(detailSectionRow.number, 1, detailSectionRow.number, totalCols);
 
   const tableHead = isTransport
-    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
+    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
     : ['#', 'Ref ID', 'Date', 'Requester', 'Project', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
 
   const hdrRow = ws.addRow(tableHead);
@@ -212,21 +264,21 @@ function buildStatementWorkbook(
     cell.fill = subHeaderFill();
     cell.font = headerFont(10);
     cell.border = thinBorder();
-    cell.alignment = { horizontal: ci <= (isTransport ? 4 : 5) ? 'left' : 'center', vertical: 'middle', wrapText: false };
+    cell.alignment = { horizontal: ci <= (isTransport ? 5 : 5) ? 'left' : 'center', vertical: 'middle', wrapText: false };
   });
   hdrRow.height = 22;
 
   rows.forEach((r, idx) => {
     const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
     if (isTransport) {
-      rowData.push(r.site || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
+      rowData.push(r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
     } else {
       rowData.push(r.project || '', r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
     }
     rowData.push(r.t1Approver || 'N/A', r.t2Approver || 'N/A', fmtStatus(r.status));
 
     const dataRow = ws.addRow(rowData);
-    const leftCols = isTransport ? 4 : 5;
+    const leftCols = isTransport ? 5 : 5;
     dataRow.eachCell((cell, ci) => {
       cell.border = thinBorder();
       cell.alignment = { horizontal: ci <= leftCols ? 'left' : 'center', vertical: 'middle', wrapText: false };
@@ -243,7 +295,7 @@ function buildStatementWorkbook(
   });
 
   const totalsData: (string | number)[] = isTransport
-    ? ['', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+    ? ['', '', '', '', 'TOTALS', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
     : ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
 
   const totRow = ws.addRow(totalsData);
@@ -364,7 +416,7 @@ function addGroupedSheet(
 
   const cur = config.currency || 'SDG';
   const isTransport = config.statementType === 'transport_advance';
-  const totalCols = isTransport ? 11 : 10;
+  const totalCols = isTransport ? 12 : 10;
   const refNum = `STMT-${format(new Date(), 'yyyyMMdd-HHmm')}`;
 
   const groupLabel = groupBy === 'state' ? 'By State' : 'By Enumerator';
@@ -440,7 +492,7 @@ function addGroupedSheet(
   ws.addRow([]).height = 8;
 
   const tableHead = isTransport
-    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
+    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
     : ['#', 'Ref ID', 'Date', 'Requester', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
 
   // ── Groups ───────────────────────────────────────────────────────────────
@@ -462,14 +514,14 @@ function addGroupedSheet(
     const hdrRow = ws.addRow(tableHead);
     hdrRow.eachCell((cell, ci) => {
       cell.fill = subHeaderFill(); cell.font = headerFont(9); cell.border = thinBorder();
-      cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+      cell.alignment = { horizontal: ci <= (isTransport ? 5 : 4) ? 'left' : 'center', vertical: 'middle', wrapText: false };
     });
     hdrRow.height = 20;
 
     groupRows.forEach((r, idx) => {
       const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
       if (isTransport) {
-        rowData.push(r.site || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
+        rowData.push(r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
       } else {
         rowData.push(r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
       }
@@ -477,7 +529,7 @@ function addGroupedSheet(
       const dataRow = ws.addRow(rowData);
       dataRow.eachCell((cell, ci) => {
         cell.border = thinBorder();
-        cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle', wrapText: false };
+        cell.alignment = { horizontal: ci <= (isTransport ? 5 : 4) ? 'left' : 'center', vertical: 'middle', wrapText: false };
         cell.font = bodyFont(9);
         if (idx % 2 === 1) cell.fill = altFill();
       });
@@ -489,14 +541,14 @@ function addGroupedSheet(
     });
 
     const subtotalData: (string | number)[] = isTransport
-      ? ['', '', '', '', `Subtotal — ${groupName}`, fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), fmtCurrency(gPaid, cur), '', '', '']
+      ? ['', '', '', '', `Subtotal — ${groupName}`, '', fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), fmtCurrency(gPaid, cur), '', '', '']
       : ['', '', '', '', `Subtotal — ${groupName}`, fmtCurrency(gReq, cur), fmtCurrency(gApp, cur), '', '', ''];
     const subTotRow = ws.addRow(subtotalData);
     subTotRow.eachCell((cell, ci) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
       cell.font = { bold: true, size: 9, name: 'Calibri', color: { argb: NAVY } };
       cell.border = thinBorder();
-      cell.alignment = { horizontal: ci <= 4 ? 'left' : 'center', vertical: 'middle' };
+      cell.alignment = { horizontal: ci <= (isTransport ? 5 : 4) ? 'left' : 'center', vertical: 'middle' };
     });
     subTotRow.height = 18;
     ws.addRow([]).height = 4;
@@ -504,7 +556,7 @@ function addGroupedSheet(
 
   // ── Grand total ──────────────────────────────────────────────────────────
   const grandData: (string | number)[] = isTransport
-    ? ['', '', '', '', 'GRAND TOTAL', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+    ? ['', '', '', '', 'GRAND TOTAL', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
     : ['', '', '', '', 'GRAND TOTAL', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
   const grandRow = ws.addRow(grandData);
   grandRow.eachCell((cell, ci) => {
