@@ -3982,6 +3982,24 @@ const CostSubmission = () => {
             const linkedProject = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
             const derivedStatus = oc.paid_at ? 'paid' : oc.reconciled_at ? 'reconciled' : oc.status;
             const cleanNote = (n: string | null) => n?.replace(/\[Signed:.*?\]/g, '').trim() || null;
+            const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : hasThreeTiers(oc) && oc.tier3_status === 'pending' ? '3' : '?';
+
+            const statusColors: Record<string, string> = {
+              pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+              under_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+              approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+              rejected: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+              paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+              reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+            };
+            const statusLabels: Record<string, string> = {
+              pending: `Pending (Tier ${pendingTierLabel}) / معلق (المرحلة ${pendingTierLabel})`,
+              under_review: `In Review (Tier ${pendingTierLabel}) / قيد المراجعة (المرحلة ${pendingTierLabel})`,
+              approved: 'Approved / تمت الموافقة',
+              rejected: 'Rejected / مرفوض',
+              paid: 'Paid / تم الدفع',
+              reconciled: 'Reconciled / مسوّى',
+            };
 
             const statusBand: Record<string, string> = {
               approved: 'bg-emerald-600 dark:bg-emerald-700',
