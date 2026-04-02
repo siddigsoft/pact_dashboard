@@ -269,11 +269,12 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       setFundBudgetLoading(true);
       const { data } = await supabase
         .from('mmp_site_entries')
-        .select('transport_budget_total')
+        .select('transport_fee, transport_budget_total')
         .eq('id', site.id)
         .maybeSingle();
       if (!cancelled) {
-        const val = data?.transport_budget_total != null ? Number(data.transport_budget_total) : null;
+        const raw = data?.transport_fee ?? data?.transport_budget_total;
+        const val = raw != null ? Number(raw) : null;
         if (val && val > 0) setFundFetchedBudget(val);
         setFundBudgetLoading(false);
       }
@@ -442,7 +443,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         locality: entry.locality || entry.localityName || '',
         stateName: entry.state || entry.stateName || stateName,
         hubName: entry.hub_office || entry.hub_name || entry.hubName || '',
-        transportBudget: entry.transport_budget_total != null ? Number(entry.transport_budget_total) : (ad.transport_budget_total != null ? Number(ad.transport_budget_total) : undefined),
+        transportBudget: entry.transport_fee != null ? Number(entry.transport_fee) : (entry.transport_budget_total != null ? Number(entry.transport_budget_total) : (ad.transport_budget_total != null ? Number(ad.transport_budget_total) : undefined)),
         reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
         actionBy: actionByRaw,
         actionAt: isVerified
