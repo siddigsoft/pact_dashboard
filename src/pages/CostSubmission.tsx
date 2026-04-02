@@ -1542,6 +1542,8 @@ const CostSubmission = () => {
   };
 
   const openBulkCostEmailDialog = async (forceSubmission?: OperationalCostSubmission) => {
+    console.log('[BulkEmail] OPEN called | forceSubmission id:', forceSubmission?.id ?? 'none', '| expense_category:', forceSubmission?.expense_category ?? 'N/A', '| amount_cents:', forceSubmission?.amount_cents ?? 'N/A', '| selectedCostIds.size:', selectedCostIds.size, '| operationalCosts.length:', operationalCosts.length);
+
     // Open dialog immediately in loading state so the user sees instant feedback
     setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: true, sending: false });
 
@@ -1549,6 +1551,7 @@ const CostSubmission = () => {
     let freshCosts: OperationalCostSubmission[] = [];
     try {
       const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
+      console.log('[BulkEmail] RPC result: error=', rpcResult.error?.message ?? 'none', '| data count=', (rpcResult.data as any[])?.length ?? 'null');
       if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
         freshCosts = rpcResult.data as OperationalCostSubmission[];
       } else {
@@ -1556,29 +1559,38 @@ const CostSubmission = () => {
           .from('operational_cost_submissions')
           .select('*')
           .order('created_at', { ascending: false });
+        console.log('[BulkEmail] Direct query result: error=', directResult.error?.message ?? 'none', '| data count=', directResult.data?.length ?? 'null');
         freshCosts = (directResult.data as OperationalCostSubmission[]) || [];
       }
       // Update the global state with the fresh data too
       if (freshCosts.length > 0) setOperationalCosts(freshCosts);
-    } catch {
+    } catch (err) {
       // Fall back to current state if fetch fails
+      console.log('[BulkEmail] CATCH error:', err);
       freshCosts = operationalCosts;
     }
 
+    console.log('[BulkEmail] freshCosts total:', freshCosts.length, '| sample keys:', freshCosts[0] ? Object.keys(freshCosts[0]).join(', ') : 'none');
+    console.log('[BulkEmail] sample record:', freshCosts[0]);
+
     const allApproved = freshCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+    console.log('[BulkEmail] allApproved:', allApproved.length, '| selectedCostIds:', selectedCostIds.size, '| forceSubmission id:', forceSubmission?.id ?? 'none');
 
     let approvedSubs: OperationalCostSubmission[];
     if (forceSubmission) {
       // Prefer the freshly-fetched version of the record so the dialog always shows current data
       const freshVersion = freshCosts.find(o => o.id === forceSubmission.id);
+      console.log('[BulkEmail] forceSubmission freshVersion:', freshVersion ? 'found' : 'not found (using original)', '| amount_cents:', (freshVersion || forceSubmission).amount_cents, '| category:', (freshVersion || forceSubmission).expense_category);
       approvedSubs = [freshVersion || forceSubmission];
     } else if (selectedCostIds.size > 0) {
       const filtered = allApproved.filter(o => selectedCostIds.has(o.id));
       // If selection doesn't overlap with approved records (e.g., user selected pending ones), fall back to ALL approved
       approvedSubs = filtered.length > 0 ? filtered : allApproved;
+      console.log('[BulkEmail] selectedCostIds filtered:', filtered.length, '→ using', approvedSubs.length, 'subs');
     } else {
       approvedSubs = allApproved;
     }
+    console.log('[BulkEmail] final approvedSubs:', approvedSubs.length, '| first amount_cents:', approvedSubs[0]?.amount_cents, '| first category:', approvedSubs[0]?.expense_category);
     const totalSdg = approvedSubs.reduce((sum, oc) => {
       const cents = Number((oc as any).amount_cents) || 0;
       const direct = (oc as any).total_amount || (oc as any).amount || 0;
@@ -2078,7 +2090,7 @@ const CostSubmission = () => {
             {(isAdmin || isSuperAdmin) && !isFOM && (
               <Button
                 size="default"
-                onClick={openBulkCostEmailDialog}
+                onClick={() => openBulkCostEmailDialog()}
                 className="bg-[#0F2041] hover:bg-[#1D3461] text-white shrink-0 font-semibold shadow-md"
                 data-testid="button-bulk-cost-email"
               >
@@ -3131,7 +3143,7 @@ const CostSubmission = () => {
                 <Button
                   size="sm"
                   type="button"
-                  onClick={openBulkCostEmailDialog}
+                  onClick={() => openBulkCostEmailDialog()}
                   disabled={approvedCount === 0}
                   className={`shrink-0 font-semibold gap-1.5 ${approvedCount > 0 ? 'bg-white text-[#0F2041] hover:bg-white/90 shadow-lg shadow-black/20' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
                   data-testid="button-bulk-cost-email-bar"
