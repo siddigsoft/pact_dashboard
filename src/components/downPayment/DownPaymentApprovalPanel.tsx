@@ -1856,12 +1856,6 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                       {request.stateName}{request.localityName ? ` / ${request.localityName}` : ''}
                     </span>
                   )}
-                  {request.mmpName && (
-                    <span className="flex items-center gap-1">
-                      <FileText className="h-3 w-3" />
-                      {request.mmpName}
-                    </span>
-                  )}
                   {request.activityType && (
                     <span className="flex items-center gap-1">
                       <Activity className="h-3 w-3" />
@@ -1885,6 +1879,80 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               {getStatusBadge(request.status)}
             </div>
           </div>
+
+          {/* ── MMP Focus Block (D2 — Grounded) ── */}
+          {request.mmpName && (
+            <div
+              style={{
+                marginTop: 10,
+                background: '#F0F4FA',
+                borderLeft: '5px solid #1D3461',
+                borderRadius: 8,
+                boxShadow: '0 2px 8px rgba(29,52,97,0.10), inset 0 0 0 1px rgba(29,52,97,0.08)',
+                padding: '9px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+              }}
+              data-testid={`mmp-block-${request.id}`}
+            >
+              {/* Icon */}
+              <div style={{
+                width: 34, height: 34, borderRadius: 8,
+                background: '#1D3461',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                outline: '3px solid rgba(29,52,97,0.15)',
+                outlineOffset: 2,
+              }}>
+                <FileText className="h-4 w-4 text-white" />
+              </div>
+              {/* Text */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                  <span style={{
+                    background: '#1D3461', color: '#fff',
+                    fontSize: 8.5, fontWeight: 700,
+                    letterSpacing: 0.9, textTransform: 'uppercase',
+                    borderRadius: 999, padding: '2px 7px',
+                  }}>MMP</span>
+                  <span style={{
+                    background: 'rgba(29,52,97,0.1)', color: '#1D3461',
+                    fontSize: 9, fontWeight: 600,
+                    borderRadius: 999, padding: '2px 8px',
+                    letterSpacing: 0.3,
+                  }}>
+                    {format(new Date(request.requestedAt), 'MMM yyyy')}
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: 17, fontWeight: 900, color: '#0F2041',
+                  letterSpacing: 0.15,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {request.mmpName}
+                </div>
+              </div>
+              {/* Arrow button */}
+              <button
+                style={{
+                  flexShrink: 0,
+                  background: '#1D3461',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 7,
+                  width: 28, height: 28,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 4px rgba(29,52,97,0.3)',
+                }}
+                title="View MMP"
+                data-testid={`btn-view-mmp-${request.id}`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           <div className="mt-2">
             <WorkflowTimeline request={request} />
