@@ -4136,11 +4136,43 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                       <p>يجب على المستلمين تقديم الإيصالات وإرجاع الأموال غير المستخدمة خلال 5 أيام عمل.</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {paymentRequestDialog.sendMode === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-                    <span>{paymentRequestDialog.sendMode === 'excel'
-                      ? `1 Excel file (4 sheets) will be attached: Statement · Full Details · By State · By Enumerator — covering all ${paymentRequestDialog.bulkRequests.length} requests.`
-                      : 'A single summary PDF with all requests will be generated and attached to the email.'}</span>
+                  {/* Attachment mode toggle — PDF vs Excel */}
+                  <div className="rounded-lg border bg-slate-50 dark:bg-slate-900 p-3 space-y-2">
+                    <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Attachment Mode / نوع المرفق</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentRequestDialog(prev => ({ ...prev, sendMode: 'pdf' }))}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg border-2 text-xs font-semibold transition-colors ${
+                          paymentRequestDialog.sendMode !== 'excel'
+                            ? 'border-[#0F2041] bg-[#0F2041]/8 text-[#0F2041] dark:border-blue-400 dark:text-blue-300'
+                            : 'border-transparent bg-white dark:bg-slate-800 text-muted-foreground hover:border-slate-300'
+                        }`}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        PDF Summary
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentRequestDialog(prev => ({ ...prev, sendMode: 'excel' }))}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg border-2 text-xs font-semibold transition-colors ${
+                          paymentRequestDialog.sendMode === 'excel'
+                            ? 'border-green-600 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300'
+                            : 'border-transparent bg-white dark:bg-slate-800 text-muted-foreground hover:border-slate-300'
+                        }`}
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        Excel (4 sheets)
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {paymentRequestDialog.sendMode === 'excel'
+                        ? `Excel workbook with 4 sheets (Statement, Full Details, By State, By Enumerator) covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached.`
+                        : paymentRequestDialog.bulkRequests.length > 30
+                          ? `${paymentRequestDialog.bulkRequests.length} requests — PDF is too large to attach directly. A download link will be included in the email body instead. Consider switching to Excel for a direct attachment.`
+                          : `A summary PDF covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached to the email.`
+                      }
+                    </p>
                   </div>
                 </div>
               )}

@@ -602,6 +602,16 @@ function buildAllSheetsWorkbook(
   return { wb: base.wb, filename };
 }
 
+/** Convert a Uint8Array to a base64 string using 64 KB chunks to avoid O(n²) string concatenation. */
+function uint8ToBase64(bytes: Uint8Array): string {
+  const CHUNK = 65536;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
 export async function generateAllSheetsStatementExcelBase64(
   rows: StatementRow[],
   config: StatementConfig
@@ -610,9 +620,7 @@ export async function generateAllSheetsStatementExcelBase64(
   if (!result) return null;
   const buffer = await result.wb.xlsx.writeBuffer();
   const bytes = new Uint8Array(buffer as ArrayBuffer);
-  let binary = '';
-  bytes.forEach(b => { binary += String.fromCharCode(b); });
-  return { base64: btoa(binary), filename: result.filename };
+  return { base64: uint8ToBase64(bytes), filename: result.filename };
 }
 
 export function generateFinancialStatementExcel(
@@ -634,7 +642,5 @@ export async function generateFinancialStatementExcelBase64(
   if (!result) return null;
   const buffer = await result.wb.xlsx.writeBuffer();
   const bytes = new Uint8Array(buffer as ArrayBuffer);
-  let binary = '';
-  bytes.forEach(b => { binary += String.fromCharCode(b); });
-  return { base64: btoa(binary), filename: result.filename };
+  return { base64: uint8ToBase64(bytes), filename: result.filename };
 }
