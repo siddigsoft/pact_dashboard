@@ -68,6 +68,7 @@ import {
   Pencil,
   Send,
   Fingerprint,
+  Users,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -2855,7 +2856,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                       <span>%</span>
                     </div>
                   )}
-                  <Button size="sm" onClick={handleBulkApprove} disabled={processing} data-testid="button-bulk-approve">
+                  <Button size="sm" onClick={() => handleBulkApprove()} disabled={processing} data-testid="button-bulk-approve">
                     <CheckCircle2 className="h-4 w-4 mr-1" />
                     Approve All
                   </Button>
@@ -4080,7 +4081,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                       <p className="text-[11px] text-muted-foreground">If provided, the USD equivalent will appear in the email and attached files / إذا أُدخل، سيظهر المعادل بالدولار في البريد والمرفقات</p>
                     </div>
                   </div>
-                  <BulkSummaryTable requests={paymentRequestDialog.bulkRequests} users={users} />
+                  <BulkSummaryTable requests={paymentRequestDialog.bulkRequests as any} users={users as any} />
                   <div className="p-2 bg-destructive/10 rounded text-xs text-destructive flex items-start gap-2">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                     <div>
@@ -4544,7 +4545,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         onOpenChange={(open) => {
           if (!open && !batchPayDialog.uploading) {
             if (batchPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchPayDialog.proofPreviewUrl);
-            setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false });
+            setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
           }
         }}
       >
