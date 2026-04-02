@@ -427,7 +427,7 @@ function addGroupedSheet(
   wb: ExcelJS.Workbook,
   rows: StatementRow[],
   config: StatementConfig,
-  groupBy: 'state' | 'enumerator'
+  groupBy: 'state' | 'enumerator' | 'hub' | 'locality'
 ): void {
   if (rows.length === 0) return;
 
@@ -436,11 +436,19 @@ function addGroupedSheet(
   const totalCols = isTransport ? 12 : 10;
   const refNum = `STMT-${format(new Date(), 'yyyyMMdd-HHmm')}`;
 
-  const groupLabel = groupBy === 'state' ? 'By State' : 'By Enumerator';
+  const groupLabel =
+    groupBy === 'state' ? 'By State' :
+    groupBy === 'hub' ? 'By Hub' :
+    groupBy === 'locality' ? 'By Locality' : 'By Enumerator';
+  const entityLabel =
+    groupBy === 'state' ? 'state' :
+    groupBy === 'hub' ? 'hub' :
+    groupBy === 'locality' ? 'locality' : 'enumerator';
   const groupKey = (r: StatementRow): string =>
-    groupBy === 'state'
-      ? (r.state || 'Unknown State')
-      : (r.requester || 'Unknown Enumerator');
+    groupBy === 'state' ? (r.state || 'Unknown State') :
+    groupBy === 'hub' ? (r.hub || 'Unknown Hub') :
+    groupBy === 'locality' ? (r.locality || 'Unknown Locality') :
+    (r.requester || 'Unknown Enumerator');
 
   const groupMap = new Map<string, StatementRow[]>();
   rows.forEach(r => {
@@ -474,7 +482,7 @@ function addGroupedSheet(
   ws.addRow([]).height = 6;
 
   // ── Overall summary ──────────────────────────────────────────────────────
-  const summSectionRow = ws.addRow([`OVERALL SUMMARY  (${groups.length} ${groupLabel === 'By State' ? 'state' : 'enumerator'}s)`]);
+  const summSectionRow = ws.addRow([`OVERALL SUMMARY  (${groups.length} ${entityLabel}s)`]);
   for (let c = 1; c <= totalCols; c++) {
     const cell = summSectionRow.getCell(c);
     cell.fill = sectionFill(); cell.font = headerFont(12); cell.border = thinBorder();
@@ -518,7 +526,7 @@ function addGroupedSheet(
     const gApp  = groupRows.reduce((s, r) => s + r.approvedAmount, 0);
     const gPaid = groupRows.reduce((s, r) => s + r.paidAmount, 0);
 
-    const groupHeaderRow = ws.addRow([`${groupLabel === 'By State' ? 'State' : 'Enumerator'}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
+    const groupHeaderRow = ws.addRow([`${groupLabel.replace('By ', '')}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
     for (let c = 1; c <= totalCols; c++) {
       const cell = groupHeaderRow.getCell(c);
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GROUP_BAND } };
@@ -594,6 +602,8 @@ function buildAllSheetsWorkbook(
   const base = buildStatementWorkbook(rows, config);
   if (!base) return null;
   addGroupedSheet(base.wb, rows, config, 'state');
+  addGroupedSheet(base.wb, rows, config, 'hub');
+  addGroupedSheet(base.wb, rows, config, 'locality');
   addGroupedSheet(base.wb, rows, config, 'enumerator');
   const isTransport = config.statementType === 'transport_advance';
   const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';

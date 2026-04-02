@@ -1156,6 +1156,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       const bulkMmps = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
       const mmpLabel = bulkMmps.length > 0 ? bulkMmps.join(', ') : groupLabel;
       const projectLabel = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+      const previewBreakdowns = [
+        { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+      ].filter(b => b.rows.length > 0);
       return buildEnhancedPaymentEmailHTML({
         recipientName,
         approverName,
@@ -1172,6 +1178,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         isBulk: true,
         currency: 'SDG',
         usdRate: effectiveRate,
+        breakdowns: previewBreakdowns,
       });
     } else if (req) {
       const amount = req.approvedAmount || req.requestedAmount;
@@ -1238,7 +1245,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             generatedBy: approverName,
           };
 
-          // Generate one Excel workbook with 4 sheets: Statement, Full Details, By State, By Enumerator.
+          // Generate one Excel workbook with 6 sheets: Statement, Full Details, By State, By Hub, By Locality, By Enumerator.
           const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
           let excelAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
           try {
@@ -1249,6 +1256,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           const bulkMmps1 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
           const mmpLabel1 = bulkMmps1.length > 0 ? bulkMmps1.join(', ') : groupLabel || 'All Approved';
           const projectLabel1 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+          const sendBreakdowns = [
+            { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+            { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+            { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+            { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          ].filter(b => b.rows.length > 0);
           const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
             selectedRecipients,
             approverName,
@@ -1267,7 +1280,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             excelAttachments.length > 0 ? excelAttachments : undefined,
             ccEmails,
             mmpLabel1,
-            effectiveRate
+            effectiveRate,
+            sendBreakdowns
           );
 
           const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -4162,12 +4176,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                         }`}
                       >
                         <FileSpreadsheet className="h-3.5 w-3.5" />
-                        Excel (4 sheets)
+                        Excel (6 sheets)
                       </button>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       {paymentRequestDialog.sendMode === 'excel'
-                        ? `Excel workbook with 4 sheets (Statement, Full Details, By State, By Enumerator) covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached.`
+                        ? `Excel workbook with 6 sheets (Statement, Full Details, By State, By Hub, By Locality, By Enumerator) covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached.`
                         : paymentRequestDialog.bulkRequests.length > 30
                           ? `${paymentRequestDialog.bulkRequests.length} requests — PDF is too large to attach directly. A download link will be included in the email body instead. Consider switching to Excel for a direct attachment.`
                           : `A summary PDF covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached to the email.`
@@ -4279,7 +4293,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
                     : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    Attached: {paymentRequestDialog.sendMode === 'excel' ? '1 Excel file · 4 sheets (Statement, Full Details, By State, By Enumerator)' : 'PDF Certificate (.pdf)'}
+                    Attached: {paymentRequestDialog.sendMode === 'excel' ? '1 Excel file · 6 sheets (Statement, Full Details, By State, By Hub, By Locality, By Enumerator)' : 'PDF Certificate (.pdf)'}
                   </span>
                 </div>
               </div>
