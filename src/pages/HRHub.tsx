@@ -180,18 +180,26 @@ interface ProjectionRow { id: string; role: string; headcount: number; baseSalar
 
 const CHART_COLORS = ['#0F2041','#1D3461','#4f86c6','#34d399','#f59e0b','#a78bfa','#f87171','#38bdf8','#fb923c'];
 
+const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'EGP', 'SAR', 'AED', 'TRY'] as const;
+
 function StaffCostProjection() {
   const [scenarioName, setScenarioName] = useState('Scenario 1');
   const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
+  const [displayCurrency, setDisplayCurrency] = useState('SDG');
   const [rows, setRows] = useState<ProjectionRow[]>([
     { id: crypto.randomUUID(), role: 'Field Coordinator', headcount: 5,  baseSalary: 50000, allowancePct: 20, deductionPct: 10, currency: 'SDG' },
     { id: crypto.randomUUID(), role: 'Data Collector',    headcount: 10, baseSalary: 30000, allowancePct: 10, deductionPct: 8,  currency: 'SDG' },
   ]);
   const [loadingReal, setLoadingReal] = useState(false);
 
+  const changeCurrency = (cur: string) => {
+    setDisplayCurrency(cur);
+    setRows(prev => prev.map(r => ({ ...r, currency: cur })));
+  };
+
   const updateRow = (id: string, field: keyof ProjectionRow, val: any) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: typeof r[field] === 'number' ? (parseFloat(val) || 0) : val } : r));
-  const addRow    = () => setRows(prev => [...prev, { id: crypto.randomUUID(), role: 'New Role', headcount: 1, baseSalary: 30000, allowancePct: 10, deductionPct: 8, currency: 'SDG' }]);
+  const addRow    = () => setRows(prev => [...prev, { id: crypto.randomUUID(), role: 'New Role', headcount: 1, baseSalary: 30000, allowancePct: 10, deductionPct: 8, currency: displayCurrency }]);
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
 
   const loadFromReal = useCallback(async () => {
@@ -269,7 +277,7 @@ function StaffCostProjection() {
     XLSX.writeFile(wb, `${scenarioName.replace(/\s+/g,'-')}-cost-projection.xlsx`);
   }, [computed, totals, scenarioName]);
 
-  const fmtN = (n: number, cur = 'SDG') => `${cur} ${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  const fmtN = (n: number, cur = displayCurrency) => `${cur} ${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
   return (
     <div className="space-y-4">
@@ -291,6 +299,14 @@ function StaffCostProjection() {
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportXLSX}>
             <Download className="h-3.5 w-3.5" />Export Excel
           </Button>
+          <Select value={displayCurrency} onValueChange={changeCurrency}>
+            <SelectTrigger className="h-8 w-[76px] text-xs font-semibold" data-testid="select-display-currency">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <div className="flex border rounded-lg overflow-hidden">
             <button onClick={() => setViewMode('table')} className={cn('h-8 px-2.5 text-xs flex items-center gap-1 transition-colors', viewMode === 'table' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50')}>
               <TableIcon className="h-3.5 w-3.5" />
@@ -325,7 +341,7 @@ function StaffCostProjection() {
       {viewMode === 'chart' ? (
         /* ── Bar chart view ── */
         <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Monthly Cost by Role (SDG)</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Monthly Cost by Role ({displayCurrency})</p>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 24 }}>
               <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" />
@@ -379,10 +395,7 @@ function StaffCostProjection() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1 justify-end">
-                        <Select value={r.currency} onValueChange={v => updateRow(r.id, 'currency', v)}>
-                          <SelectTrigger className="h-7 w-[58px] text-[11px] px-1.5"><SelectValue /></SelectTrigger>
-                          <SelectContent>{['SDG','USD','EUR','GBP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                        </Select>
+                        <span className="text-[11px] text-muted-foreground font-medium w-10 text-right shrink-0">{displayCurrency}</span>
                         <Input type="number" value={r.baseSalary} onChange={e => updateRow(r.id, 'baseSalary', e.target.value)} className="h-7 text-xs w-24 text-right" />
                       </div>
                     </td>
