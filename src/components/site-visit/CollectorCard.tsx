@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { normalizeRole } from '@/utils/roleMapping';
 import { Navigation, MapPin, Clock, ClipboardList, AlertCircle } from 'lucide-react';
 import { CollectorMatch, MAX_WORKLOAD } from '@/utils/gpsMatchingUtils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -39,7 +40,7 @@ const CollectorCard: React.FC<CollectorCardProps> = ({ collector, isSelected, on
           <div className="flex items-center gap-2">
             <span className="font-medium">{user.name}</span>
             <Badge variant="outline">
-              {user.role === 'coordinator' ? 'Coordinator' : 'Data Collector'}
+              {normalizeRole(user.role) === 'coordinator' ? 'Coordinator' : 'Data Collector'}
             </Badge>
           </div>
           <Badge

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { normalizeRole } from '@/utils/roleMapping';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/context/AppContext';
@@ -90,8 +91,8 @@ const CreateSiteVisitUrgent = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const coordinators = users.filter(user => user.role === 'coordinator');
-  const supervisors = users.filter(user => user.role === 'supervisor');
+  const coordinators = users.filter(user => normalizeRole(user.role) === 'coordinator');
+  const supervisors = users.filter(user => normalizeRole(user.role) === 'supervisor');
   
   const form = useForm<UrgentSiteVisitForm>({
     resolver: zodResolver(urgentSiteVisitSchema),

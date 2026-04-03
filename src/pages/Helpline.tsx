@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +46,8 @@ const CATEGORY_ICONS: Record<string, any> = {
 export default function Helpline() {
   const { user, roles } = useAppContext();
   const { toast } = useToast();
-  const isAdmin = roles?.includes('super_admin') || roles?.includes('admin');
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const isAdmin = isSuperAdmin() || hasAnyRole(['admin']);
   const [contacts, setContacts] = useState<HelplineContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);

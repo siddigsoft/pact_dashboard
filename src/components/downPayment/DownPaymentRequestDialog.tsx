@@ -10,6 +10,7 @@ import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Trash2, DollarSign, AlertTriangle, Banknote } from 'lucide-react';
 import { PaymentType, InstallmentPlan } from '@/types/down-payment';
+import { normalizeRole } from '@/utils/roleMapping';
 
 interface DownPaymentRequestDialogProps {
   open: boolean;
@@ -103,7 +104,7 @@ export function DownPaymentRequestDialog({
       mmpSiteEntryId,
       siteName,
       requestedBy: requesterId,
-      requesterRole: onBehalfOf ? 'dataCollector' : (currentUser.role === 'coordinator' ? 'coordinator' : 'dataCollector'),
+      requesterRole: onBehalfOf ? 'dataCollector' : (normalizeRole(currentUser.role) === 'coordinator' ? 'coordinator' : 'dataCollector'),
       hubId,
       hubName,
       totalTransportationBudget: transportationBudget,

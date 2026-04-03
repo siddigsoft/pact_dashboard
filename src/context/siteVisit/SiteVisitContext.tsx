@@ -6,6 +6,7 @@ import { useUser } from '../user/UserContext';
 import { SiteVisitContextType } from './types';
 import { calculateOnTimeRate, calculateUserRating } from './utils';
 import { isUserNearSite, calculateUserWorkload, calculateDistance } from '@/utils/collectorUtils';
+import { normalizeRole } from '@/utils/roleMapping';
 import { createSiteVisitInDb, updateSiteVisitInDb, deleteSiteVisitInDb } from './supabase';
 import { useNotifications } from '../notifications/NotificationContext';
 import { useWallet } from '../wallet/WalletContext';
@@ -461,7 +462,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       await updateSiteVisitInDb(siteVisitId, { status: 'inProgress' });
       refreshSiteVisits();
 
-      const supervisors = users.filter(u => u.role === 'supervisor');
+      const supervisors = users.filter(u => normalizeRole(u.role) === 'supervisor');
       supervisors.forEach(supervisor => {
         addNotification({
           userId: supervisor.id,
@@ -572,7 +573,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updateUser(updatedUser);
       }
 
-      const supervisors = users.filter(u => u.role === 'supervisor');
+      const supervisors = users.filter(u => normalizeRole(u.role) === 'supervisor');
       const collectorName = currentUser?.name || currentUser?.fullName || (currentUser as any)?.email || 'Data collector';
       const siteName = siteVisit?.siteName || 'Site';
       supervisors.forEach(supervisor => {
@@ -815,7 +816,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!siteVisit) return [];
     
     return users.filter(user => 
-      (user.role === 'dataCollector' || user.role === 'datacollector') && 
+      normalizeRole(user.role) === 'dataCollector' && 
       user.status === 'active' && 
       user.availability !== 'offline' && 
       isUserNearSite(user, siteVisit, 15)
