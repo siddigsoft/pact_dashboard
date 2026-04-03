@@ -3589,15 +3589,12 @@ const CostSubmission = () => {
                             {/* Main content */}
                             <div className="flex-1 min-w-0">
                               {(() => {
-                                // Extract the meaningful description: skip the [ADVANCE] <<group title>> prefix line
-                                // and any blank lines; take the first non-empty, non-justification line
+                                // Strip the [ADVANCE] <<group title>> prefix line, show the rest
                                 const descLines = (oc.description || '').split('\n');
-                                const meaningful = descLines.find(l => {
-                                  const t = l.trim();
-                                  return t && !t.includes('<<') && !t.startsWith('Justification:') && !t.startsWith('[ADVANCE]');
-                                })?.trim() || '';
-                                return meaningful ? (
-                                  <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{meaningful}</p>
+                                const bodyLines = descLines.filter(l => !l.includes('<<') && !l.startsWith('[ADVANCE]'));
+                                const fullDesc = bodyLines.join('\n').trim();
+                                return fullDesc ? (
+                                  <p className="text-[12px] text-gray-800 dark:text-gray-200 leading-snug whitespace-pre-line">{fullDesc}</p>
                                 ) : null;
                               })()}
                               <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
