@@ -446,6 +446,95 @@ const ROLE_CHIP: Record<string, string> = {
 const roleChip = (role: string | null) => ROLE_CHIP[role ?? ''] ?? 'bg-slate-100 text-slate-600';
 const fmtRole = (r: string | null) => (r ?? '—').replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase());
 
+const ORG_COLORS = ['bg-blue-500','bg-violet-500','bg-emerald-500','bg-amber-500','bg-pink-500','bg-cyan-500','bg-indigo-500','bg-rose-500'];
+const colorForId = (id: string) => ORG_COLORS[id.charCodeAt(0) % ORG_COLORS.length];
+const orgInitials = (name: string | null) => (name ?? '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+interface OrgNodeProps {
+  person: OrgPersonExtended;
+  depth?: number;
+  expandAll: boolean | null;
+  childrenOf: Record<string, OrgPersonExtended[]>;
+  navigate: (path: string) => void;
+}
+
+function OrgNode({ person, depth = 0, expandAll, childrenOf, navigate }: OrgNodeProps) {
+  const [expanded, setExpanded] = useState(expandAll !== null ? expandAll : depth < 2);
+  const prevExpAll = useRef(expandAll);
+
+  useEffect(() => {
+    if (expandAll !== null && expandAll !== prevExpAll.current) {
+      setExpanded(expandAll);
+      prevExpAll.current = expandAll;
+    }
+  }, [expandAll]);
+
+  const children = childrenOf[person.id] ?? [];
+  const hasChildren = children.length > 0;
+
+  return (
+    <div className={cn('relative', depth > 0 && 'ml-7 pl-4 border-l-2 border-slate-200 dark:border-slate-700')}>
+      <div
+        className={cn(
+          'flex items-center gap-2.5 py-2 px-3 rounded-xl my-0.5 transition-all',
+          'hover:bg-slate-50 dark:hover:bg-slate-800/30',
+          depth === 0 && 'bg-white dark:bg-slate-900 shadow-sm border',
+          hasChildren && 'cursor-pointer',
+        )}
+        onClick={() => hasChildren && setExpanded(v => !v)}
+      >
+        {person.avatar_url ? (
+          <img src={person.avatar_url} className="w-8 h-8 rounded-full object-cover shrink-0" alt={person.full_name ?? ''} />
+        ) : (
+          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', colorForId(person.id))}>
+            {orgInitials(person.full_name)}
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-sm font-semibold leading-tight truncate">{person.full_name ?? '—'}</p>
+            {person.employment_type && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-300 text-emerald-700 dark:text-emerald-400 font-medium capitalize">
+                {person.employment_type.replace(/-/g, ' ')}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className={cn('text-[10px] px-1.5 py-0 rounded-full font-medium', roleChip(person.role))}>
+              {fmtRole(person.role)}
+            </span>
+            {person.department_name && (
+              <span className="text-[10px] text-muted-foreground">· {person.department_name}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {hasChildren && (
+            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
+              {children.length} {children.length === 1 ? 'report' : 'reports'}
+            </span>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); navigate(`/users/${person.id}`); }}
+            className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors opacity-0 group-hover:opacity-100"
+            title="View profile"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </button>
+          {hasChildren && (
+            <span className="text-slate-400">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
+          )}
+        </div>
+      </div>
+      {expanded && children.map(c => (
+        <OrgNode key={c.id} person={c} depth={depth + 1} expandAll={expandAll} childrenOf={childrenOf} navigate={navigate} />
+      ))}
+    </div>
+  );
+}
+
 function OrgChartView() {
   const navigate = useNavigate();
   const [searchQ, setSearchQ] = useState('');
@@ -512,88 +601,6 @@ function OrgChartView() {
       (p.role ?? '').toLowerCase().includes(q));
   }, [visiblePeople, searchQ]);
 
-  const COLORS = ['bg-blue-500','bg-violet-500','bg-emerald-500','bg-amber-500','bg-pink-500','bg-cyan-500','bg-indigo-500','bg-rose-500'];
-  const colorForId = (id: string) => COLORS[id.charCodeAt(0) % COLORS.length];
-  const initials   = (name: string | null) => (name ?? '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-
-  function OrgNode({ person, depth = 0 }: { person: OrgPersonExtended; depth?: number }) {
-    const [expanded, setExpanded] = useState(expandAll !== null ? expandAll : depth < 2);
-    const prevExpAll = useRef(expandAll);
-
-    useEffect(() => {
-      if (expandAll !== null && expandAll !== prevExpAll.current) {
-        setExpanded(expandAll);
-        prevExpAll.current = expandAll;
-      }
-    }, [expandAll]);
-
-    const children = childrenOf[person.id] ?? [];
-    const hasChildren = children.length > 0;
-
-    return (
-      <div className={cn('relative', depth > 0 && 'ml-7 pl-4 border-l-2 border-slate-200 dark:border-slate-700')}>
-        <div
-          className={cn(
-            'flex items-center gap-2.5 py-2 px-3 rounded-xl my-0.5 transition-all',
-            'hover:bg-slate-50 dark:hover:bg-slate-800/30',
-            depth === 0 && 'bg-white dark:bg-slate-900 shadow-sm border',
-            hasChildren && 'cursor-pointer',
-          )}
-          onClick={() => hasChildren && setExpanded(v => !v)}
-        >
-          {/* Avatar */}
-          {person.avatar_url ? (
-            <img src={person.avatar_url} className="w-8 h-8 rounded-full object-cover shrink-0" alt={person.full_name ?? ''} />
-          ) : (
-            <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', colorForId(person.id))}>
-              {initials(person.full_name)}
-            </div>
-          )}
-
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="text-sm font-semibold leading-tight truncate">{person.full_name ?? '—'}</p>
-              {person.employment_type && (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-300 text-emerald-700 dark:text-emerald-400 font-medium capitalize">
-                  {person.employment_type.replace(/-/g, ' ')}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className={cn('text-[10px] px-1.5 py-0 rounded-full font-medium', roleChip(person.role))}>
-                {fmtRole(person.role)}
-              </span>
-              {person.department_name && (
-                <span className="text-[10px] text-muted-foreground">· {person.department_name}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Right side */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {hasChildren && (
-              <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
-                {children.length} {children.length === 1 ? 'report' : 'reports'}
-              </span>
-            )}
-            <button
-              onClick={e => { e.stopPropagation(); navigate(`/users/${person.id}`); }}
-              className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors opacity-0 group-hover:opacity-100"
-              title="View profile"
-            >
-              <ExternalLink className="h-3 w-3" />
-            </button>
-            {hasChildren && (
-              <span className="text-slate-400">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
-            )}
-          </div>
-        </div>
-        {expanded && children.map(c => <OrgNode key={c.id} person={c} depth={depth + 1} />)}
-      </div>
-    );
-  }
-
   if (isLoading) return <div className="py-20 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>;
 
   const withManagerCount = visiblePeople.filter(p => p.reports_to && personMap[p.reports_to]).length;
@@ -654,7 +661,7 @@ function OrgChartView() {
                     <img src={p.avatar_url} className="w-9 h-9 rounded-full object-cover shrink-0" alt={p.full_name ?? ''} />
                   ) : (
                     <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0', colorForId(p.id))}>
-                      {initials(p.full_name)}
+                      {orgInitials(p.full_name)}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -691,7 +698,7 @@ function OrgChartView() {
         </div>
       ) : (
         <div className="space-y-0.5">
-          {roots.map(r => <OrgNode key={r.id} person={r} depth={0} />)}
+          {roots.map(r => <OrgNode key={r.id} person={r} depth={0} expandAll={expandAll} childrenOf={childrenOf} navigate={navigate} />)}
         </div>
       )}
     </div>
