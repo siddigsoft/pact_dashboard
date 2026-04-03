@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { useUserCostSubmissions, useCostSubmissions } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { useUser } from "@/context/user/UserContext";
 import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
@@ -107,37 +108,20 @@ const STATUS_AR_MAP_OC: Record<string, string> = {
 const MobileCostSubmission = () => {
   const navigate = useNavigate();
   const { currentUser, roles } = useAppContext();
+  const { hasAnyRole, isSuperAdmin: isSuperAdminFn } = useAuthorization();
   const { users } = useUser();
   const { projects: allProjects } = useProjectContext();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { toast } = useToast();
 
-  const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
-  const isSupervisor = roles?.includes('hubSupervisor' as AppRole) || 
-                       roles?.includes('supervisor' as AppRole) ||
-                       currentUser?.role === 'hubSupervisor' || 
-                       currentUser?.role === 'supervisor';
-  const isFOM = roles?.includes('Field Operation Manager (FOM)' as AppRole) ||
-                roles?.includes('fom' as AppRole) ||
-                currentUser?.role === 'Field Operation Manager (FOM)' ||
-                currentUser?.role === 'fom' ||
-                (currentUser?.role || '').toLowerCase() === 'fom';
-  const isCoordinator = roles?.includes('Coordinator' as AppRole) || 
-                        currentUser?.role === 'Coordinator' ||
-                        currentUser?.role === 'coordinator';
-  const isCountryDirector = roles?.includes('CountryDirector' as AppRole) || 
-                            currentUser?.role === 'CountryDirector';
-  const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
-                          roles?.includes('Enumerator' as AppRole) ||
-                          currentUser?.role === 'DataCollector' ||
-                          currentUser?.role === 'datacollector' ||
-                          currentUser?.role === 'Enumerator' ||
-                          currentUser?.role === 'enumerator';
-  const isSuperAdmin = isAdminOrSuperUser || 
-    currentUser?.role === 'SuperAdmin' || currentUser?.role === 'superAdmin' || 
-    currentUser?.role === 'super_admin' || currentUser?.role === 'Super Admin';
-  const isFinanceAdmin = roles?.includes('finance_admin' as AppRole) || 
-    currentUser?.role === 'finance_admin' || currentUser?.role === 'Finance Admin';
+  const isAdmin = hasAnyRole(['admin', 'ict']);
+  const isSupervisor = hasAnyRole(['supervisor']);
+  const isFOM = hasAnyRole(['fom']);
+  const isCoordinator = hasAnyRole(['coordinator']);
+  const isCountryDirector = hasAnyRole(['countryDirector']);
+  const isDataCollector = hasAnyRole(['dataCollector']);
+  const isSuperAdmin = isAdminOrSuperUser || isSuperAdminFn();
+  const isFinanceAdmin = hasAnyRole(['financialAdmin']);
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;

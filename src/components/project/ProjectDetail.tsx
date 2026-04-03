@@ -36,6 +36,7 @@ import {
   LayoutGrid,
   LayoutList,
   Table2,
+  Handshake,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -253,6 +254,13 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   const [isArchiving, setIsArchiving] = useState(false);
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list' | 'table'>('grid');
+  const [partnerName, setPartnerName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!project.partnerId) { setPartnerName(null); return; }
+    supabase.from('crm_partners').select('name').eq('id', project.partnerId).single()
+      .then(({ data }) => setPartnerName(data?.name ?? null));
+  }, [project.partnerId]);
 
   // Stalled detection: find days since last stage advance
   const stalledDays = (() => {
@@ -597,6 +605,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     <MapPin className="h-3.5 w-3.5" />
                     {project.location.region}
                     {project.location.state && `, ${project.location.state}`}
+                  </span>
+                )}
+                {partnerName && (
+                  <span className="flex items-center gap-1">
+                    <Handshake className="h-3.5 w-3.5" />
+                    {partnerName}
                   </span>
                 )}
               </div>

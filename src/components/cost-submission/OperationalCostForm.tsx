@@ -12,6 +12,7 @@ import { SupportingDocument, OperationalExpenseCategory, OPERATIONAL_EXPENSE_LAB
 import CostDocumentUpload from "./CostDocumentUpload";
 import { Loader2, DollarSign, FileText, Calendar, Building2, Receipt, Info, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationTriggerService } from "@/services/NotificationTriggerService";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,7 @@ const createEmptyItem = (): LineItem => ({
 const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: OperationalCostFormProps) => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
+  const { hasAnyRole } = useAuthorization();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [supportingDocuments, setSupportingDocuments] = useState<SupportingDocument[]>([]);
   const [lineItems, setLineItems] = useState<LineItem[]>([createEmptyItem()]);
@@ -253,7 +255,7 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
         </CardTitle>
         <CardDescription>
           Add one or more expense items below. You can select the same category multiple times (e.g. Permits for different states).
-          {currentUser?.role === 'country_director'
+          {hasAnyRole(['countryDirector'])
             ? ' Submissions require two-tier approval (Admin, then Super Admin).'
             : ' Submissions require two-tier approval (Supervisor/FOM, then Admin).'}
         </CardDescription>
