@@ -233,21 +233,6 @@ function StaffCostProjection() {
     } finally { setLoadingReal(false); }
   }, []);
 
-  const exportXLSX = useCallback(() => {
-    const wb = XLSX.utils.book_new();
-    const data = [
-      ['Role / Grade', 'Headcount', 'Base Salary', 'Allow %', 'Deduct %', 'Net / Head', 'Monthly Gross', 'Monthly Net', 'Annual Net', 'Currency'],
-      ...computed.map(r => [r.role, r.headcount, r.baseSalary, r.allowancePct, r.deductionPct,
-        Math.round(r.netPerHead), Math.round(r.monthlyGross), Math.round(r.monthlyNet), Math.round(r.monthlyNet * 12), r.currency]),
-      [],
-      ['TOTALS', totals.headcount, '', '', '', '',
-        Math.round(totals.monthlyGross), Math.round(totals.monthlyNet), Math.round(totals.annualNet), ''],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, scenarioName.slice(0, 31));
-    XLSX.writeFile(wb, `${scenarioName.replace(/\s+/g,'-')}-cost-projection.xlsx`);
-  }, [computed, totals, scenarioName]);
-
   const computed = useMemo(() => rows.map(r => {
     const gross = r.baseSalary * (1 + r.allowancePct / 100);
     const net   = gross * (1 - r.deductionPct / 100);
@@ -268,6 +253,21 @@ function StaffCostProjection() {
     net: Math.round(r.monthlyNet),
     color: CHART_COLORS[i % CHART_COLORS.length],
   })), [computed]);
+
+  const exportXLSX = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['Role / Grade', 'Headcount', 'Base Salary', 'Allow %', 'Deduct %', 'Net / Head', 'Monthly Gross', 'Monthly Net', 'Annual Net', 'Currency'],
+      ...computed.map(r => [r.role, r.headcount, r.baseSalary, r.allowancePct, r.deductionPct,
+        Math.round(r.netPerHead), Math.round(r.monthlyGross), Math.round(r.monthlyNet), Math.round(r.monthlyNet * 12), r.currency]),
+      [],
+      ['TOTALS', totals.headcount, '', '', '', '',
+        Math.round(totals.monthlyGross), Math.round(totals.monthlyNet), Math.round(totals.annualNet), ''],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, scenarioName.slice(0, 31));
+    XLSX.writeFile(wb, `${scenarioName.replace(/\s+/g,'-')}-cost-projection.xlsx`);
+  }, [computed, totals, scenarioName]);
 
   const fmtN = (n: number, cur = 'SDG') => `${cur} ${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
