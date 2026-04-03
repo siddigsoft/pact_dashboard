@@ -3601,11 +3601,6 @@ const CostSubmission = () => {
                               {isRejected && oc.rejection_reason && (
                                 <p className="text-[11px] text-red-500 mt-0.5 italic">↩ {oc.rejection_reason}</p>
                               )}
-                              {(cleanTier1Notes || cleanTier2Notes || cleanTier3Notes) && (
-                                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                                  {cleanTier2Notes || cleanTier3Notes || cleanTier1Notes}
-                                </p>
-                              )}
                               <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                                 <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusColors[derivedStatus] || statusColors.pending}`}>
                                   {statusLabels[derivedStatus] || derivedStatus}
