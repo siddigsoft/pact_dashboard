@@ -134,6 +134,7 @@ const CRMEngagements = lazy(() => import('./pages/CRMEngagements'));
 const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasks'));
+const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -328,6 +329,7 @@ const AppRoutes = () => {
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/payroll" element={<PayrollPage />} />
         <Route path="/hr" element={<HRHub />} />
+        <Route path="/leave" element={<LeaveRequests />} />
         <Route path="/admin/wallets" element={<AdminWallets />} />
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />

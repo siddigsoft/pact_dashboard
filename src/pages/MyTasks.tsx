@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback, type ReactNode } fro
 import {
   format, isToday, isThisWeek, isBefore, parseISO, isValid,
   startOfDay, addDays, eachDayOfInterval, startOfToday, isAfter,
+  startOfMonth, endOfMonth, getDay, subMonths, addMonths,
 } from 'date-fns';
 import {
   CheckSquare, Plus, Trash2, Edit2, MoreHorizontal, Flag,
@@ -3128,6 +3129,94 @@ function TeamSnapshot() {
   );
 }
 
+// ── Calendar View ───────────────────────────────────────────────────────────
+
+interface CalendarViewProps {
+  tasks: PersonalTask[];
+  onOpenTask: (id: string) => void;
+}
+function TaskCalendarView({ tasks, onOpenTask }: CalendarViewProps) {
+  const [viewMonth, setViewMonth] = useState(() => new Date());
+  const tasksByDate = useMemo(() => {
+    const m: Record<string, PersonalTask[]> = {};
+    tasks.forEach(t => {
+      if (t.dueDate) {
+        const key = typeof t.dueDate === 'string' ? t.dueDate.slice(0, 10) : '';
+        if (key) { if (!m[key]) m[key] = []; m[key].push(t); }
+      }
+    });
+    return m;
+  }, [tasks]);
+
+  const firstDay = startOfMonth(viewMonth);
+  const lastDay  = endOfMonth(viewMonth);
+  const padStart = getDay(firstDay);
+  const days     = eachDayOfInterval({ start: firstDay, end: lastDay });
+
+  const PRIORITY_DOT: Record<string, string> = {
+    urgent: 'bg-red-500', high: 'bg-orange-400', medium: 'bg-amber-400', low: 'bg-blue-400',
+  };
+
+  return (
+    <div className="select-none">
+      {/* Month nav */}
+      <div className="flex items-center justify-between mb-4">
+        <button type="button" onClick={() => setViewMonth(m => subMonths(m, 1))}
+          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+          <ChevronRight className="h-4 w-4 rotate-180" />
+        </button>
+        <span className="text-sm font-bold">{format(viewMonth, 'MMMM yyyy')}</span>
+        <button type="button" onClick={() => setViewMonth(m => addMonths(m, 1))}
+          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+      {/* Day headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+          <div key={d} className="text-[11px] text-center font-semibold text-muted-foreground py-1">{d}</div>
+        ))}
+      </div>
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: padStart }).map((_, i) => (
+          <div key={`p${i}`} className="min-h-[72px] rounded-lg bg-muted/10" />
+        ))}
+        {days.map(day => {
+          const key = format(day, 'yyyy-MM-dd');
+          const dayTasks = tasksByDate[key] || [];
+          const today = isToday(day);
+          return (
+            <div key={key}
+              className={cn('min-h-[72px] rounded-lg border p-1 bg-card transition-colors', today ? 'border-[#1D3461] ring-1 ring-[#1D3461]/20' : 'border-border/50 hover:border-border')}>
+              <div className={cn('text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center mb-0.5 mx-auto', today ? 'bg-[#1D3461] text-white' : 'text-muted-foreground')}>
+                {format(day, 'd')}
+              </div>
+              <div className="space-y-0.5">
+                {dayTasks.slice(0, 3).map(t => (
+                  <button key={t.id} type="button" onClick={() => onOpenTask(t.id)}
+                    className="w-full flex items-center gap-0.5 text-left text-[10px] leading-tight bg-[#1D3461]/10 text-[#1D3461] dark:text-blue-300 rounded px-1 py-0.5 hover:bg-[#1D3461]/20 transition-colors truncate">
+                    <div className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', PRIORITY_DOT[t.priority ?? 'medium'] || 'bg-muted-foreground')} />
+                    <span className="truncate">{t.title}</span>
+                  </button>
+                ))}
+                {dayTasks.length > 3 && (
+                  <div className="text-[10px] text-muted-foreground pl-1">+{dayTasks.length - 3} more</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {tasks.filter(t => !t.dueDate).length > 0 && (
+        <p className="text-[11px] text-muted-foreground mt-3 text-center">
+          {tasks.filter(t => !t.dueDate).length} task{tasks.filter(t => !t.dueDate).length !== 1 ? 's' : ''} without due date not shown
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function MyTasks() {
@@ -3167,7 +3256,11 @@ export default function MyTasks() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
-  const [personalView, setPersonalView] = useState<'list' | 'board'>('list');
+  const [personalView, setPersonalView] = useState<'list' | 'board' | 'calendar'>('list');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkIds, setBulkIds] = useState<Set<string>>(new Set());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('created');
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
@@ -3242,11 +3335,25 @@ export default function MyTasks() {
   const q = searchQuery.toLowerCase().trim();
 
   // Filtered lists (filter + search)
+  const allTags = useMemo(() => {
+    const s = new Set<string>();
+    personalTasks.forEach(t => (t.tags ?? []).forEach((tag: string) => s.add(tag)));
+    return Array.from(s).sort();
+  }, [personalTasks]);
+
+  const allCategories = useMemo(() => {
+    const s = new Set<string>();
+    personalTasks.forEach(t => { if (t.category) s.add(t.category); });
+    return Array.from(s).sort();
+  }, [personalTasks]);
+
   const filteredPersonal = useMemo(() =>
     personalTasks
       .filter(t => matchFilter(t.dueDate, t.status, filter))
-      .filter(t => !q || t.title.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q) || (t.category ?? '').toLowerCase().includes(q)),
-    [personalTasks, filter, q],
+      .filter(t => !q || t.title.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q) || (t.category ?? '').toLowerCase().includes(q))
+      .filter(t => tagFilter === 'all' || (t.tags ?? []).includes(tagFilter))
+      .filter(t => categoryFilter === 'all' || (t.category ?? '') === categoryFilter),
+    [personalTasks, filter, q, tagFilter, categoryFilter],
   );
 
   const filteredProject = useMemo(() =>
@@ -3507,6 +3614,42 @@ export default function MyTasks() {
         )}
       </div>
 
+      {/* ── Tag & Category filters ── */}
+      {(allTags.length > 0 || allCategories.length > 0) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {allCategories.length > 0 && (
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 shadow-sm" data-testid="select-category-filter">
+                <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All categories</SelectItem>
+                {allCategories.map(c => <SelectItem key={c} value={c} className="text-xs capitalize">{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {allTags.length > 0 && (
+            <Select value={tagFilter} onValueChange={setTagFilter}>
+              <SelectTrigger className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 shadow-sm" data-testid="select-tag-filter">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder="Tag" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">All tags</SelectItem>
+                {allTags.map(t => <SelectItem key={t} value={t} className="text-xs">#{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {(tagFilter !== 'all' || categoryFilter !== 'all') && (
+            <button type="button" onClick={() => { setTagFilter('all'); setCategoryFilter('all'); }}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 h-8 px-2">
+              <X className="h-3 w-3" />Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Planning Hub ── */}
       <PlanningHub allTasks={[
         ...personalTasks,
@@ -3692,7 +3835,37 @@ export default function MyTasks() {
                 <LayoutGrid className="h-3.5 w-3.5" />
                 <span>Board</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setPersonalView('calendar')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 h-full text-xs font-semibold rounded-md transition-all',
+                  personalView === 'calendar'
+                    ? 'bg-[#1D3461] text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                title="Calendar view"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Cal</span>
+              </button>
             </div>
+            {/* Bulk select toggle */}
+            <button
+              type="button"
+              onClick={() => { setBulkMode(v => !v); setBulkIds(new Set()); }}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 h-8 text-xs font-semibold rounded-lg border transition-all',
+                bulkMode
+                  ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm'
+                  : 'bg-card text-muted-foreground border-border/70 hover:border-[#1D3461]/40 hover:text-[#1D3461]',
+              )}
+              title="Bulk select tasks"
+              data-testid="toggle-bulk-mode"
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              <span>Select</span>
+            </button>
           </div>
         </div>
 
@@ -3709,6 +3882,43 @@ export default function MyTasks() {
           );
         })()}
 
+        {/* ── Bulk Action Bar ── */}
+        {bulkMode && bulkIds.size > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-[#1D3461] text-white rounded-xl shadow-lg animate-in slide-in-from-top-2">
+            <span className="text-xs font-semibold flex-1">{bulkIds.size} task{bulkIds.size !== 1 ? 's' : ''} selected</span>
+            <button type="button"
+              onClick={async () => {
+                for (const id of bulkIds) {
+                  const t = personalTasks.find(x => x.id === id);
+                  if (t && t.status !== 'done') await handleStatusChange(id, 'done', t.status as PersonalTaskStatus);
+                }
+                setBulkIds(new Set()); setBulkMode(false);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold transition-colors">
+              <CheckCircle2 className="h-3.5 w-3.5" />Mark Done
+            </button>
+            <button type="button"
+              onClick={async () => {
+                if (!confirm(`Delete ${bulkIds.size} task${bulkIds.size !== 1 ? 's' : ''}?`)) return;
+                for (const id of bulkIds) await handleDelete(id);
+                setBulkIds(new Set()); setBulkMode(false);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 bg-red-500/80 hover:bg-red-500 rounded-lg text-xs font-semibold transition-colors">
+              <Trash2 className="h-3.5 w-3.5" />Delete
+            </button>
+            <button type="button" onClick={() => setBulkIds(new Set())}
+              className="p-1 rounded-lg hover:bg-white/20 transition-colors" title="Deselect all">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        {bulkMode && filteredPersonal.length > 0 && (
+          <div className="flex items-center gap-2 px-1">
+            <input type="checkbox" checked={bulkIds.size === filteredPersonal.length} onChange={e => setBulkIds(e.target.checked ? new Set(filteredPersonal.map(t => t.id)) : new Set())} className="h-3.5 w-3.5 rounded accent-[#1D3461]" />
+            <span className="text-xs text-muted-foreground">Select all ({filteredPersonal.length})</span>
+          </div>
+        )}
+
         {loadingPersonal ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -3722,6 +3932,8 @@ export default function MyTasks() {
                 : `No tasks for "${FILTERS.find(f => f.key === filter)?.label}"`}
             </p>
           </div>
+        ) : personalView === 'calendar' ? (
+          <TaskCalendarView tasks={filteredPersonal} onOpenTask={id => setSelectedTaskId(id)} />
         ) : personalView === 'board' ? (
           <BoardView
             tasks={filteredPersonal}
@@ -3743,8 +3955,15 @@ export default function MyTasks() {
                 )}
                 <div className="space-y-2">
                   {group.tasks.map(task => (
+                    <div key={task.id} className={cn('flex items-start gap-2', bulkMode && 'pl-1')}>
+                      {bulkMode && (
+                        <div className="pt-3 flex-shrink-0">
+                          <input type="checkbox" checked={bulkIds.has(task.id)}
+                            onChange={() => setBulkIds(prev => { const n = new Set(prev); n.has(task.id) ? n.delete(task.id) : n.add(task.id); return n; })}
+                            className="h-3.5 w-3.5 rounded accent-[#1D3461]" />
+                        </div>
+                      )}
                     <PersonalTaskCard
-                      key={task.id}
                       task={task}
                       subtasks={allPersonalTasks.filter(t => t.parentTaskId === task.id)}
                       onStatusChange={(s, prev) => handleStatusChange(task.id, s, prev)}
@@ -3756,6 +3975,7 @@ export default function MyTasks() {
                       }}
                       onSubtaskStatusChange={(id, s, prev) => handleStatusChange(id, s, prev)}
                     />
+                    </div>
                   ))}
                 </div>
               </div>

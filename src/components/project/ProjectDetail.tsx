@@ -37,6 +37,7 @@ import {
   LayoutList,
   Table2,
   Handshake,
+  Flag,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -52,6 +53,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import ProjectCommentsPanel from './ProjectCommentsPanel';
 import ProjectDocumentsPanel from './ProjectDocumentsPanel';
 import { ProjectFieldTasksPanel } from './ProjectFieldTasksPanel';
+import { ProjectMilestonesPanel } from './ProjectMilestonesPanel';
 import { OutlookCalendarPanel } from './OutlookCalendarPanel';
 
 import { Project } from '@/types/project';
@@ -818,6 +820,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <TabsTrigger value="calendar" data-testid="tab-calendar">
             <Calendar className="h-3.5 w-3.5 mr-1" />Calendar
           </TabsTrigger>
+          <TabsTrigger value="milestones" data-testid="tab-milestones">
+            <Flag className="h-3.5 w-3.5 mr-1" />Milestones
+          </TabsTrigger>
         </TabsList>
         </div>
 
@@ -1354,6 +1359,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
         <TabsContent value="calendar" className="mt-4">
           <OutlookCalendarPanel projectId={project.id} />
+        </TabsContent>
+
+        <TabsContent value="milestones" className="mt-4">
+          <ProjectMilestonesPanel projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>
