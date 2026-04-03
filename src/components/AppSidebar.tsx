@@ -426,7 +426,7 @@
       hrItems.push({ id: 'my-payroll', title: "My Payroll", url: "/hr?tab=payroll", icon: Banknote, priority: 1, isPinned: isPinned('/hr') });
     }
     if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      hrItems.push({ id: 'employees', title: "Employees", url: "/admin/staff-profiles", icon: Users, priority: 2, isPinned: isPinned('/admin/staff-profiles') });
+      hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 2, isPinned: isPinned('/employees') });
     }
     if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       hrItems.push({ id: 'payroll-admin', title: "Payroll Admin", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 3, isPinned: false });

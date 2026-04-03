@@ -103,6 +103,7 @@ const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 const EmailManagement = lazy(() => import('./pages/EmailManagement'));
 const AdminBroadcast = lazy(() => import('./pages/AdminBroadcast'));
 const StaffDirectory = lazy(() => import('./pages/StaffDirectory'));
+const Employees = lazy(() => import('./pages/Employees'));
 const Departments = lazy(() => import('./pages/Departments'));
 const TaskAdmin = lazy(() => import('./pages/TaskAdmin'));
 const TransactionScanner = lazy(() => import('./pages/TransactionScanner'));
@@ -385,6 +386,7 @@ const AppRoutes = () => {
         <Route path="/email-management" element={<EmailManagement />} />
         <Route path="/admin/broadcast" element={<AdminBroadcast />} />
         <Route path="/admin/staff-profiles" element={<StaffDirectory />} />
+        <Route path="/employees" element={<Employees />} />
         <Route path="/departments" element={<Departments />} />
         <Route path="/task-admin" element={<TaskAdmin />} />
         <Route path="/admin/transaction-scanner" element={<TransactionScanner />} />
