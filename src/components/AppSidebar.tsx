@@ -436,8 +436,23 @@
 
     // ── 8. CRM ────────────────────────────────────────────────────────────────
     const crmItems: MenuGroup['items'] = [];
-    if (!isHidden('/crm/partners') && (isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector)) {
-      crmItems.push({ id: 'crm-partners', title: 'Partners & Donors', url: '/crm/partners', icon: Handshake, priority: 1, isPinned: isPinned('/crm/partners') });
+    const hasCrmAccess = isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector;
+    if (hasCrmAccess) {
+      if (!isHidden('/crm')) {
+        crmItems.push({ id: 'crm-overview', title: 'CRM Overview', url: '/crm', icon: Handshake, priority: 1, isPinned: isPinned('/crm') });
+      }
+      if (!isHidden('/crm/partners')) {
+        crmItems.push({ id: 'crm-partners', title: 'Partners & Donors', url: '/crm/partners', icon: Building2, priority: 2, isPinned: isPinned('/crm/partners') });
+      }
+      if (!isHidden('/crm/contacts')) {
+        crmItems.push({ id: 'crm-contacts', title: 'Contacts', url: '/crm/contacts', icon: Users, priority: 3, isPinned: isPinned('/crm/contacts') });
+      }
+      if (!isHidden('/crm/engagements')) {
+        crmItems.push({ id: 'crm-engagements', title: 'Engagements', url: '/crm/engagements', icon: MessageSquare, priority: 4, isPinned: isPinned('/crm/engagements') });
+      }
+      if (!isHidden('/crm/opportunities')) {
+        crmItems.push({ id: 'crm-opportunities', title: 'Pipeline', url: '/crm/opportunities', icon: TrendingUp, priority: 5, isPinned: isPinned('/crm/opportunities') });
+      }
     }
     if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 

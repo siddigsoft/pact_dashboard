@@ -128,6 +128,10 @@ const IncidentReports = lazy(() => import('./pages/IncidentReports'));
 const EquipmentPage = lazy(() => import('./pages/Equipment'));
 const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
 const CRMPartners = lazy(() => import('./pages/CRMPartners'));
+const CRMDashboard = lazy(() => import('./pages/CRMDashboard'));
+const CRMContacts = lazy(() => import('./pages/CRMContacts'));
+const CRMEngagements = lazy(() => import('./pages/CRMEngagements'));
+const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasks'));
 
@@ -396,7 +400,11 @@ const AppRoutes = () => {
         <Route path="/equipment" element={<EquipmentPage />} />
         <Route path="/monitoring-form" element={<MonitoringForm />} />
         <Route path="/helpline" element={<Helpline />} />
+        <Route path="/crm" element={<CRMDashboard />} />
         <Route path="/crm/partners" element={<CRMPartners />} />
+        <Route path="/crm/contacts" element={<CRMContacts />} />
+        <Route path="/crm/engagements" element={<CRMEngagements />} />
+        <Route path="/crm/opportunities" element={<CRMOpportunities />} />
       </Route>
 
       {/* Redirects */}
