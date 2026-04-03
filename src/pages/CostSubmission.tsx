@@ -3588,12 +3588,24 @@ const CostSubmission = () => {
                             </div>
                             {/* Main content */}
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900">
+                              {(() => {
+                                // Extract the meaningful description: skip the [ADVANCE] <<group title>> prefix line
+                                // and any blank lines; take the first non-empty, non-justification line
+                                const descLines = (oc.description || '').split('\n');
+                                const meaningful = descLines.find(l => {
+                                  const t = l.trim();
+                                  return t && !t.includes('<<') && !t.startsWith('Justification:') && !t.startsWith('[ADVANCE]');
+                                })?.trim() || '';
+                                return meaningful ? (
+                                  <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{meaningful}</p>
+                                ) : null;
+                              })()}
+                              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900">
                                   {catMeta?.label || oc.expense_category}
                                 </span>
                               </div>
-                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2 flex-wrap">
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
                                 <span className="flex items-center gap-0.5"><FileText className="h-3 w-3" />ID: {requestId}</span>
                                 <span className="flex items-center gap-0.5"><Calendar className="h-3 w-3" />{oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : format(new Date(oc.created_at), 'MMM d, yyyy')}</span>
                                 {oc.vendor && <span className="flex items-center gap-0.5"><Building2 className="h-3 w-3" />{oc.vendor}</span>}
