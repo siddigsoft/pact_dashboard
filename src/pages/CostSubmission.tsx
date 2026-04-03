@@ -3588,11 +3588,9 @@ const CostSubmission = () => {
                             </div>
                             {/* Main content */}
                             <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{oc.description?.split('\n')[0] || catMeta?.label || oc.expense_category}</p>
+                              <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{catMeta?.label || oc.expense_category}</p>
                               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                                {catMeta?.label || oc.expense_category}
-                                {oc.vendor ? ` · ${oc.vendor}` : ''}
-                                {' · '}
+                                {oc.vendor ? `${oc.vendor} · ` : ''}
                                 {oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : format(new Date(oc.created_at), 'MMM d, yyyy')}
                               </p>
                               {isRejected && oc.rejection_reason && (
