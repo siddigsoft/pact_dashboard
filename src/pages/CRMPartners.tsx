@@ -136,11 +136,11 @@ const blankEngagement = () => ({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CRMPartners() {
-  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin, checkPermission } = useAuthorization();
   const { currentUser } = useAppContext();
   const { toast } = useToast();
 
-  const canManage = isSuperAdmin || hasAnyRole(['admin', 'fom', 'projectManager', 'CountryDirector', 'countryDirector']);
+  const canManage = isSuperAdmin || checkPermission('crm', 'create');
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [partners, setPartners] = useState<CRMPartner[]>([]);

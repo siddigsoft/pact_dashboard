@@ -85,7 +85,8 @@ export type ResourceType =
   | 'super_admins'
   | 'audit_logs'
   | 'wallets'
-  | 'system';
+  | 'system'
+  | 'crm';
 
 export type ActionType = 
   | 'create'
@@ -111,7 +112,8 @@ export const RESOURCES: ResourceType[] = [
   'super_admins',
   'audit_logs',
   'wallets',
-  'system'
+  'system',
+  'crm'
 ];
 
 export const ACTIONS: ActionType[] = [
@@ -199,6 +201,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'wallets', action: 'approve' },
     // Audit logs - can read
     { resource: 'audit_logs', action: 'read' },
+    // CRM - full management
+    { resource: 'crm', action: 'create' },
+    { resource: 'crm', action: 'read' },
+    { resource: 'crm', action: 'update' },
+    { resource: 'crm', action: 'delete' },
     // NOTE: Admin cannot: manage super_admins, delete audit_logs, restore records, override system, delete wallets
   ],
   // Country Director: Limited operations role
@@ -218,6 +225,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'read' },
     // Projects - read only (context for MMP)
     { resource: 'projects', action: 'read' },
+    // CRM - read only (partner/donor context)
+    { resource: 'crm', action: 'read' },
   ],
   ICT: [
     { resource: 'users', action: 'create' },
@@ -243,7 +252,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'reports', action: 'read' },
     { resource: 'reports', action: 'create' },
     { resource: 'settings', action: 'read' },
-    { resource: 'settings', action: 'update' }
+    { resource: 'settings', action: 'update' },
+    // CRM - read only (technical access)
+    { resource: 'crm', action: 'read' },
   ],
   'Field Operation Manager (FOM)': [
     { resource: 'projects', action: 'read' },
@@ -256,7 +267,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
     { resource: 'finances', action: 'read' },
-    { resource: 'reports', action: 'read' }
+    { resource: 'reports', action: 'read' },
+    // CRM - full operational access (manage partners/donors)
+    { resource: 'crm', action: 'create' },
+    { resource: 'crm', action: 'read' },
+    { resource: 'crm', action: 'update' },
   ],
   FinancialAdmin: [
     { resource: 'site_visits', action: 'read' },
@@ -264,7 +279,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'finances', action: 'update' },
     { resource: 'finances', action: 'approve' },
     { resource: 'mmp', action: 'archive' },
-    { resource: 'reports', action: 'read' }
+    { resource: 'reports', action: 'read' },
+    // CRM - read only (donor/partner financial context)
+    { resource: 'crm', action: 'read' },
   ],
   ProjectManager: [
     { resource: 'projects', action: 'create' },
@@ -295,6 +312,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'wallets', action: 'approve' },
     { resource: 'audit_logs', action: 'read' },
     { resource: 'settings', action: 'read' },
+    // CRM - manage partners linked to projects
+    { resource: 'crm', action: 'create' },
+    { resource: 'crm', action: 'read' },
+    { resource: 'crm', action: 'update' },
   ],
   SeniorOperationsLead: [
     { resource: 'projects', action: 'read' },
@@ -318,6 +339,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'wallets', action: 'override' },
     { resource: 'audit_logs', action: 'read' },
     { resource: 'settings', action: 'read' },
+    // CRM - read only (strategic oversight)
+    { resource: 'crm', action: 'read' },
   ],
   Supervisor: [
     { resource: 'mmp', action: 'read' },
@@ -343,6 +366,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'reports', action: 'create' },
     { resource: 'users', action: 'read' },
     { resource: 'audit_logs', action: 'read' },
+    // CRM - read only (analytics and reporting)
+    { resource: 'crm', action: 'read' },
   ],
   DataCollector: [
     { resource: 'site_visits', action: 'read' },
@@ -361,5 +386,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'projects', action: 'read' },
     { resource: 'users', action: 'read' },
     { resource: 'settings', action: 'read' },
+    // CRM - read only (audit trail of partner engagements)
+    { resource: 'crm', action: 'read' },
   ]
 };
