@@ -51,7 +51,8 @@
     AlertTriangle,
     Package,
     HeartPulse,
-    CheckSquare
+    CheckSquare,
+    Handshake
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -259,6 +260,8 @@
     const isFOM = hasRole('fom');
     const isSupervisor = hasRole('supervisor');
     const isDataTeam = hasRole('dataTeam');
+    const isProjectManager = hasRole('projectManager');
+    const isCountryDirector = hasRole('countryDirector');
 
     const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
     const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -454,6 +457,13 @@
       finReportItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 4, isPinned: isPinned('/exchange-rates') });
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
+
+    // CRM category
+    const crmItems: MenuGroup['items'] = [];
+    if (!isHidden('/crm/partners') && (isSuperAdmin || isAdmin || isFOM || isProjectManager || isCountryDirector)) {
+      crmItems.push({ id: 'crm-partners', title: 'Partners & Donors', url: '/crm/partners', icon: Handshake, priority: 1, isPinned: isPinned('/crm/partners') });
+    }
+    if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 
     // Administration category - User and role management
     const adminItems: MenuGroup['items'] = [];
