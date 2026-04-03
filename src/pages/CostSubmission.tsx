@@ -3603,12 +3603,6 @@ const CostSubmission = () => {
                                 const justText = justLines.join('\n').replace(/^Justification:\s*/i, '').trim();
                                 return (
                                   <div className="space-y-1">
-                                    {reqTitle && (
-                                      <div>
-                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Request Title</span>
-                                        <p className="text-[12px] font-semibold text-blue-700 dark:text-blue-400 leading-snug">{reqTitle}</p>
-                                      </div>
-                                    )}
                                     {descText && (
                                       <div>
                                         <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Description</span>
