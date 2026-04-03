@@ -96,7 +96,7 @@ const METHOD_LABELS: Record<RecoveryMethod, string> = {
 };
 
 export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
-  const { currentUser: profile } = useAuthorization();
+  const { currentUser: profile, hasAnyRole } = useAuthorization();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [recoveries, setRecoveries] = useState<RecoveryRecord[]>([]);
@@ -111,9 +111,9 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
   const [receiptReference, setReceiptReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const isSuperAdmin = profile?.role === 'super_admin';
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'ict';
-  const isFinance = profile?.role === 'finance';
+  const isSuperAdmin = hasAnyRole(['superAdmin']);
+  const isAdmin = hasAnyRole(['admin', 'ict']);
+  const isFinance = hasAnyRole(['financialAdmin']);
   const canProcess = isSuperAdmin || isAdmin || isFinance;
 
   useEffect(() => {

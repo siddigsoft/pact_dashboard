@@ -99,7 +99,7 @@ const getOpDerivedStatus = (oc: OpCostRow): string => {
 const FinancialOperations = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { canManageFinances } = useAuthorization();
+  const { canManageFinances, isSuperAdmin } = useAuthorization();
   const [activeTab, setActiveTab] = useState('consolidated');
 
   const { submissions: costSubmissions, isLoading: submissionsLoading } = useCostSubmissions();
@@ -137,7 +137,7 @@ const FinancialOperations = () => {
   const [periodCloseDialog, setPeriodCloseDialog] = useState<{ open: boolean; month: string; label: string; pendingCount: number }>({ open: false, month: '', label: '', pendingCount: 0 });
   const [periodReopenDialog, setPeriodReopenDialog] = useState<{ open: boolean; month: string; label: string }>({ open: false, month: '', label: '' });
 
-  const isSuperAdmin = currentUser?.role === 'superAdmin' || currentUser?.roles?.includes('superAdmin' as any);
+  const isSuperAdminUser = isSuperAdmin();
 
   const fetchClosedPeriods = async () => {
     try {
@@ -1747,7 +1747,7 @@ const FinancialOperations = () => {
                                     Close Period
                                   </Button>
                                 )}
-                                {(period.status === 'closed' || period.status === 'locked') && isSuperAdmin && (
+                                {(period.status === 'closed' || period.status === 'locked') && isSuperAdminUser && (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -1758,7 +1758,7 @@ const FinancialOperations = () => {
                                     Reopen
                                   </Button>
                                 )}
-                                {(period.status === 'closed' || period.status === 'locked') && !isSuperAdmin && (
+                                {(period.status === 'closed' || period.status === 'locked') && !isSuperAdminUser && (
                                   <span className="text-xs text-muted-foreground">Super admin required</span>
                                 )}
                               </TableCell>
