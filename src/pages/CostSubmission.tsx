@@ -3589,6 +3589,9 @@ const CostSubmission = () => {
                             {/* Main content */}
                             <div className="flex-1 min-w-0">
                               <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{catMeta?.label || oc.expense_category}</p>
+                              {oc.description?.split('\n')[0] && (
+                                <p className="text-[12px] text-gray-700 dark:text-gray-300 mt-0.5 leading-snug">{oc.description.split('\n')[0]}</p>
+                              )}
                               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                                 {oc.vendor ? `${oc.vendor} · ` : ''}
                                 {oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : format(new Date(oc.created_at), 'MMM d, yyyy')}
