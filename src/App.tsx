@@ -127,6 +127,7 @@ const SafetyHub = lazy(() => import('./pages/SafetyHub'));
 const IncidentReports = lazy(() => import('./pages/IncidentReports'));
 const EquipmentPage = lazy(() => import('./pages/Equipment'));
 const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
+const CRMPartners = lazy(() => import('./pages/CRMPartners'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasks'));
 
@@ -395,6 +396,7 @@ const AppRoutes = () => {
         <Route path="/equipment" element={<EquipmentPage />} />
         <Route path="/monitoring-form" element={<MonitoringForm />} />
         <Route path="/helpline" element={<Helpline />} />
+        <Route path="/crm/partners" element={<CRMPartners />} />
       </Route>
 
       {/* Redirects */}

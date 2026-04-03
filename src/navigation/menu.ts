@@ -27,6 +27,7 @@ import {
   Phone,
   Bell,
   Eye,
+  Handshake,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
@@ -197,6 +198,12 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/settings') && ((isAdmin || perms.settings) && !isDataCollector)) {
     adminItems.push({ id: 'settings', title: 'Settings', url: '/settings', icon: Settings, priority: 10, isPinned: isPinned('/settings') });
   }
+  const crmItems: MenuGroup['items'] = [];
+  if (!isHidden('/crm/partners') && (isAdmin || isSuperAdmin || isFOM || isProjectManager || isCountryDirector)) {
+    crmItems.push({ id: 'crm-partners', title: 'Partners & Donors', url: '/crm/partners', icon: Handshake, priority: 1, isPinned: isPinned('/crm/partners') });
+  }
+  if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
+
   if (adminItems.length) groups.push({ id: 'admin', label: 'Administration', order: 6, items: adminItems });
 
   groups.forEach(group => {
