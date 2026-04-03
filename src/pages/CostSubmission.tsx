@@ -3589,13 +3589,23 @@ const CostSubmission = () => {
                             {/* Main content */}
                             <div className="flex-1 min-w-0">
                               {(() => {
+                                const raw = oc.description || '';
+                                // Extract title from <<...>>
+                                const titleMatch = raw.match(/<<([^>>]+)>>/);
+                                const title = titleMatch ? titleMatch[1].trim() : '';
                                 // Strip the [ADVANCE] <<group title>> prefix line, show the rest
-                                const descLines = (oc.description || '').split('\n');
-                                const bodyLines = descLines.filter(l => !l.includes('<<') && !l.startsWith('[ADVANCE]'));
+                                const bodyLines = raw.split('\n').filter(l => !l.includes('<<') && !l.startsWith('[ADVANCE]'));
                                 const fullDesc = bodyLines.join('\n').trim();
-                                return fullDesc ? (
-                                  <p className="text-[12px] text-gray-800 dark:text-gray-200 leading-snug whitespace-pre-line">{fullDesc}</p>
-                                ) : null;
+                                return (
+                                  <>
+                                    {title && (
+                                      <p className="text-[12px] font-semibold text-blue-700 dark:text-blue-400 leading-snug mb-0.5">{title}</p>
+                                    )}
+                                    {fullDesc && (
+                                      <p className="text-[12px] text-gray-800 dark:text-gray-200 leading-snug whitespace-pre-line">{fullDesc}</p>
+                                    )}
+                                  </>
+                                );
                               })()}
                               <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                                 <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900">
