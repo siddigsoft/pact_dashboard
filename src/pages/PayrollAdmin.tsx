@@ -3,6 +3,7 @@
  * 3 sub-tabs: Employee Salaries · Run Payroll · Payslips & History
  */
 import { useState, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -934,7 +935,11 @@ function deptBreakdown(items: RunItem[]): DeptSummary[] {
 }
 
 function PayrollReportsTab({ runs, employees, currentUserId }: { runs: PayrollRun[]; employees: EmployeeRow[]; currentUserId: string }) {
-  const [reportTab, setReportTab] = useState<'breakdown' | 'contracts' | 'headcount' | 'ytd' | 'compare' | 'statutory' | 'budget'>('breakdown');
+  const [searchParams] = useSearchParams();
+  const validReportTabs = ['breakdown', 'contracts', 'headcount', 'ytd', 'compare', 'statutory', 'budget'] as const;
+  type ReportTab = typeof validReportTabs[number];
+  const initialReportTab = (validReportTabs.includes(searchParams.get('report') as ReportTab) ? searchParams.get('report') : 'breakdown') as ReportTab;
+  const [reportTab, setReportTab] = useState<ReportTab>(initialReportTab);
 
   return (
     <div className="space-y-4">

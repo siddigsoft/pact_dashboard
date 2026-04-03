@@ -425,16 +425,20 @@
     if (!isHidden('/hr')) {
       hrItems.push({ id: 'my-payroll', title: "My Payroll", url: "/hr?tab=payroll", icon: Banknote, priority: 1, isPinned: isPinned('/hr') });
     }
+    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      hrItems.push({ id: 'employees', title: "Employees", url: "/admin/staff-profiles", icon: Users, priority: 2, isPinned: isPinned('/admin/staff-profiles') });
+    }
     if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      hrItems.push({ id: 'payroll-admin', title: "Payroll Admin", url: "/hr?tab=payroll-admin", icon: Users, priority: 2, isPinned: false });
-      hrItems.push({ id: 'retainer-hr', title: "Retainer", url: "/hr?tab=retainer", icon: CreditCard, priority: 3, isPinned: false });
-      hrItems.push({ id: 'hr-tools', title: "HR Tools", url: "/hr?tab=hr-tools", icon: Settings, priority: 4, isPinned: false });
+      hrItems.push({ id: 'payroll-admin', title: "Payroll Admin", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 3, isPinned: false });
+      hrItems.push({ id: 'retainer-hr', title: "Retainer", url: "/hr?tab=retainer", icon: CreditCard, priority: 4, isPinned: false });
+      hrItems.push({ id: 'hr-tools', title: "HR Tools", url: "/hr?tab=hr-tools", icon: Settings, priority: 5, isPinned: false });
+      hrItems.push({ id: 'contracts', title: "Contracts", url: "/hr?tab=payroll-admin&report=contracts", icon: FileText, priority: 6, isPinned: false });
     }
     if (!isHidden('/leave')) {
-      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/leave", icon: CalendarOff, priority: 5, isPinned: isPinned('/leave') });
+      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/leave", icon: CalendarOff, priority: 7, isPinned: isPinned('/leave') });
     }
     if (!isHidden('/task-admin') && (isSuperAdmin || isAdmin)) {
-      hrItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: CheckSquare, priority: 6, isPinned: isPinned('/task-admin') });
+      hrItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: CheckSquare, priority: 8, isPinned: isPinned('/task-admin') });
     }
     if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
 
