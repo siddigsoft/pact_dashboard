@@ -504,6 +504,7 @@ function TaskDetailSheet({
   const [notes, setNotes] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [tagDuplicate, setTagDuplicate] = useState(false);
   const [category, setCategory] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
@@ -514,7 +515,10 @@ function TaskDetailSheet({
   const [coUserSearch, setCoUserSearch] = useState('');
   const [dependencies, setDependencies] = useState<string[]>([]);
   const [depInput, setDepInput] = useState('');
+  const [depDuplicate, setDepDuplicate] = useState(false);
   const [tools, setTools] = useState('');
+  const tagInputRef = useRef<HTMLInputElement>(null);
+  const depInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-task-assign'],
@@ -544,6 +548,8 @@ function TaskDetailSheet({
       setDirty(false);
       setTagInput('');
       setDepInput('');
+      setTagDuplicate(false);
+      setDepDuplicate(false);
       setNewSubtaskTitle('');
       setCoUserSearch('');
     }
@@ -576,16 +582,37 @@ function TaskDetailSheet({
 
   const handleAddTag = () => {
     const t = tagInput.trim().toLowerCase().replace(/\s+/g, '-');
-    if (t && !tags.includes(t)) {
-      setTags(prev => [...prev, t]);
-      markDirty();
+    if (!t) return;
+    if (tags.includes(t)) {
+      setTagDuplicate(true);
+      setTimeout(() => setTagDuplicate(false), 2000);
+      return;
     }
+    setTags(prev => [...prev, t]);
+    markDirty();
     setTagInput('');
+    setTagDuplicate(false);
+    setTimeout(() => tagInputRef.current?.focus(), 50);
   };
 
   const handleRemoveTag = (tag: string) => {
     setTags(prev => prev.filter(t => t !== tag));
     markDirty();
+  };
+
+  const handleAddDep = () => {
+    const d = depInput.trim();
+    if (!d) return;
+    if (dependencies.includes(d)) {
+      setDepDuplicate(true);
+      setTimeout(() => setDepDuplicate(false), 2000);
+      return;
+    }
+    setDependencies(prev => [...prev, d]);
+    markDirty();
+    setDepInput('');
+    setDepDuplicate(false);
+    setTimeout(() => depInputRef.current?.focus(), 50);
   };
 
   const handleAddSubtask = async () => {
@@ -792,9 +819,9 @@ function TaskDetailSheet({
               {tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {tags.map(tag => (
-                    <span key={tag} className="flex items-center gap-1 text-[13px] bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/20 px-2.5 py-1 rounded-full font-medium">
+                    <span key={tag} className="flex items-center gap-1 text-[13px] bg-[#1D3461]/10 text-[#1D3461] border border-[#1D3461]/20 px-2.5 py-1 rounded-full font-medium">
                       <Hash className="h-3 w-3 opacity-60" />{tag}
-                      <button type="button" onClick={() => handleRemoveTag(tag)} className="text-[#1D3461]/50 hover:text-[#1D3461] ml-0.5">
+                      <button type="button" onClick={() => handleRemoveTag(tag)} className="text-[#1D3461]/50 hover:text-red-500 ml-0.5 transition-colors" data-testid={`remove-tag-${tag}`}>
                         <X className="h-3 w-3" />
                       </button>
                     </span>
@@ -803,17 +830,33 @@ function TaskDetailSheet({
               )}
               <div className="flex gap-2">
                 <Input
+                  ref={tagInputRef}
                   placeholder="Type a tag and press Enter — e.g. urgent, review, field"
                   value={tagInput}
-                  onChange={e => setTagInput(e.target.value)}
+                  onChange={e => { setTagInput(e.target.value); if (tagDuplicate) setTagDuplicate(false); }}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                  className="h-10 text-[14px] flex-1"
+                  className={cn('h-10 text-[14px] flex-1 transition-colors', tagDuplicate && 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/10 focus-visible:ring-amber-400/30')}
                   data-testid="sheet-input-tag"
                 />
-                <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!tagInput.trim()} className="h-10 px-4 text-sm">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tagInput.trim() ? 'default' : 'outline'}
+                  onClick={handleAddTag}
+                  disabled={!tagInput.trim()}
+                  className={cn('h-10 px-4 text-sm transition-all', tagInput.trim() ? 'bg-[#1D3461] hover:bg-[#0F2041] text-white' : '')}
+                  data-testid="sheet-btn-add-tag"
+                >
                   <Plus className="h-3.5 w-3.5 mr-1" />Add
                 </Button>
               </div>
+              {tagDuplicate ? (
+                <p className="text-[12px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />Tag already exists — try a different label
+                </p>
+              ) : (
+                <p className="text-[12px] text-muted-foreground mt-1.5">Tags help you filter and group related tasks.</p>
+              )}
             </div>
 
             {/* Category */}
@@ -825,21 +868,22 @@ function TaskDetailSheet({
                 placeholder="Group this task — e.g. field-ops, admin, finance, reporting"
                 className="h-10 text-[14px]"
               />
+              <p className="text-[12px] text-muted-foreground mt-1.5">Used to group tasks in the overview panels.</p>
             </div>
 
             {/* Dependencies */}
             <div>
               <SectionLabel icon={<Link2 className="h-3.5 w-3.5" />}>Dependencies</SectionLabel>
               {dependencies.length > 0 && (
-                <div className="space-y-1.5 mb-3 rounded-xl border bg-muted/20 p-2">
+                <div className="space-y-1 mb-3 rounded-xl border bg-muted/30 p-2">
                   {dependencies.map((dep, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors">
-                      <div className="h-1.5 w-1.5 rounded-full bg-[#1D3461]/60 flex-shrink-0" />
-                      <span className="text-[14px] flex-1 text-foreground leading-snug">{dep}</span>
+                    <div key={i} className="flex items-start gap-2 px-2.5 py-2 rounded-lg hover:bg-muted/50 transition-colors group/dep">
+                      <div className="h-2 w-2 rounded-full bg-[#1D3461]/50 flex-shrink-0 mt-1.5" />
+                      <span className="text-[13px] flex-1 text-foreground leading-snug">{dep}</span>
                       <button
                         type="button"
                         onClick={() => { setDependencies(prev => prev.filter((_, idx) => idx !== i)); markDirty(); }}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        className="text-muted-foreground/40 hover:text-destructive transition-colors opacity-0 group-hover/dep:opacity-100"
                         data-testid={`remove-dep-${i}`}
                       >
                         <X className="h-3.5 w-3.5" />
@@ -850,34 +894,33 @@ function TaskDetailSheet({
               )}
               <div className="flex gap-2">
                 <Input
+                  ref={depInputRef}
                   placeholder="Blocked by or depends on — e.g. 'Site survey complete'"
                   value={depInput}
-                  onChange={e => setDepInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const d = depInput.trim();
-                      if (d && !dependencies.includes(d)) { setDependencies(prev => [...prev, d]); markDirty(); }
-                      setDepInput('');
-                    }
-                  }}
-                  className="h-10 text-[14px] flex-1"
+                  onChange={e => { setDepInput(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddDep(); } }}
+                  className={cn('h-10 text-[14px] flex-1 transition-colors', depDuplicate && 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/10 focus-visible:ring-amber-400/30')}
                   data-testid="sheet-input-dependency"
                 />
                 <Button
-                  size="sm" variant="outline"
-                  onClick={() => {
-                    const d = depInput.trim();
-                    if (d && !dependencies.includes(d)) { setDependencies(prev => [...prev, d]); markDirty(); }
-                    setDepInput('');
-                  }}
+                  type="button"
+                  size="sm"
+                  variant={depInput.trim() ? 'default' : 'outline'}
+                  onClick={handleAddDep}
                   disabled={!depInput.trim()}
-                  className="h-10 px-4 text-sm"
+                  className={cn('h-10 px-4 text-sm transition-all', depInput.trim() ? 'bg-[#1D3461] hover:bg-[#0F2041] text-white' : '')}
+                  data-testid="sheet-btn-add-dep"
                 >
                   <Plus className="h-3.5 w-3.5 mr-1" />Add
                 </Button>
               </div>
-              <p className="text-[12px] text-muted-foreground mt-1.5">List tasks, approvals, or conditions that must be completed before this task can start.</p>
+              {depDuplicate ? (
+                <p className="text-[12px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />This dependency is already listed
+                </p>
+              ) : (
+                <p className="text-[12px] text-muted-foreground mt-1.5">List tasks, approvals, or conditions that must be completed before this task can start.</p>
+              )}
             </div>
 
           </TabsContent>
@@ -1081,25 +1124,38 @@ function TaskDetailSheet({
         </Tabs>{/* ── end tabbed body ── */}
 
         {/* ── Sticky footer — always visible ── */}
-        <div className="px-6 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
+        <div className={cn(
+          'px-6 py-3.5 border-t flex items-center justify-between gap-3 flex-shrink-0 transition-colors',
+          dirty ? 'bg-[#0F2041]/5 dark:bg-[#1D3461]/10 shadow-[0_-1px_6px_rgba(0,0,0,0.08)]' : 'bg-card shadow-[0_-1px_4px_rgba(0,0,0,0.04)]',
+        )}>
           <Button
+            type="button"
             variant="ghost" size="sm"
             onClick={() => { setDirty(false); onClose(); }}
-            className={cn('text-sm', dirty ? 'text-muted-foreground' : 'text-muted-foreground/50')}
+            className={cn('text-sm transition-colors', dirty ? 'text-muted-foreground hover:text-destructive hover:bg-destructive/8' : 'text-muted-foreground/40')}
           >
             {dirty ? 'Discard changes' : 'Close'}
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!title.trim() || isSaving || !dirty}
-            className={cn(
-              'text-white px-6 text-sm transition-all',
-              dirty ? 'bg-[#1D3461] hover:bg-[#0F2041]' : 'bg-[#1D3461]/30 cursor-not-allowed',
+          <div className="flex items-center gap-2">
+            {dirty && (
+              <span className="text-[11px] text-[#1D3461]/60 font-medium flex items-center gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-[#1D3461]/60 animate-pulse" />
+                Unsaved changes
+              </span>
             )}
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {dirty ? 'Save Changes' : 'No Changes'}
-          </Button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={!title.trim() || isSaving || !dirty}
+              className={cn(
+                'text-white px-6 text-sm transition-all',
+                dirty ? 'bg-[#1D3461] hover:bg-[#0F2041] shadow-sm' : 'bg-[#1D3461]/25 cursor-not-allowed',
+              )}
+            >
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save Changes
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
