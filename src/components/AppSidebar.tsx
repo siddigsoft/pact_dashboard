@@ -601,8 +601,21 @@
     const roleIsFinance      = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
     const roleCanSeeIncident = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
 
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-    const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(false);
+    const ALL_GROUP_IDS = ['overview','communication','planning','field-ops','cycle-management','verification','reports','help','finance-parent','crm','admin','super-admin'];
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+      try {
+        const stored = localStorage.getItem('pact-sidebar-collapsed');
+        if (stored !== null) return new Set(JSON.parse(stored));
+      } catch {}
+      return new Set(ALL_GROUP_IDS);
+    });
+    const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(() => {
+      try {
+        const stored = localStorage.getItem('pact-favorites-collapsed');
+        if (stored !== null) return stored === 'true';
+      } catch {}
+      return true;
+    });
 
     const { counts } = useNavBadgeCountsContext();
     const pendingReclaimCount = counts.pendingReclaimCount;
@@ -692,6 +705,7 @@
         } else {
           next.add(groupId);
         }
+        try { localStorage.setItem('pact-sidebar-collapsed', JSON.stringify([...next])); } catch {}
         return next;
       });
     };
@@ -780,7 +794,7 @@
                 <CollapsibleTrigger asChild>
                   <SidebarGroupLabel 
                     className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-amber-600 dark:text-amber-400 cursor-pointer flex items-center justify-between hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
-                    onClick={() => setIsFavoritesCollapsed(!isFavoritesCollapsed)}
+                    onClick={() => { const next = !isFavoritesCollapsed; setIsFavoritesCollapsed(next); try { localStorage.setItem('pact-favorites-collapsed', String(next)); } catch {} }}
                     data-testid="group-label-favorites"
                   >
                     <span className="flex items-center gap-1">
