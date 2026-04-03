@@ -137,7 +137,7 @@ const blankEngagement = () => ({
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CRMPartners() {
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
-  const { profile } = useAppContext();
+  const { currentUser } = useAppContext();
   const { toast } = useToast();
 
   const canManage = isSuperAdmin || hasAnyRole(['admin', 'fom', 'projectManager', 'CountryDirector', 'countryDirector']);
@@ -241,7 +241,7 @@ export default function CRMPartners() {
         setSelectedPartner({ ...selectedPartner, ...(payload as CRMPartner) });
       }
     } else {
-      const { error } = await supabase.from('crm_partners').insert({ ...payload, created_by: profile?.id });
+      const { error } = await supabase.from('crm_partners').insert({ ...payload, created_by: currentUser?.id });
       if (error) { toast({ title: 'Error saving', variant: 'destructive' }); setSavingPartner(false); return; }
       toast({ title: 'Partner added' });
     }
@@ -271,7 +271,7 @@ export default function CRMPartners() {
     const { error } = await supabase.from('crm_engagements').insert({
       ...engForm,
       partner_id: selectedPartner!.id,
-      created_by: profile?.id,
+      created_by: currentUser?.id,
     });
     if (error) toast({ title: 'Error saving engagement', variant: 'destructive' });
     else {
