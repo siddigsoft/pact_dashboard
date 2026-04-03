@@ -3588,10 +3588,15 @@ const CostSubmission = () => {
                             </div>
                             {/* Main content */}
                             <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{catMeta?.label || oc.expense_category}</p>
-                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                                {oc.vendor ? `${oc.vendor} · ` : ''}
-                                {oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : format(new Date(oc.created_at), 'MMM d, yyyy')}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900">
+                                  {catMeta?.label || oc.expense_category}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2 flex-wrap">
+                                <span className="flex items-center gap-0.5"><FileText className="h-3 w-3" />ID: {requestId}</span>
+                                <span className="flex items-center gap-0.5"><Calendar className="h-3 w-3" />{oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : format(new Date(oc.created_at), 'MMM d, yyyy')}</span>
+                                {oc.vendor && <span className="flex items-center gap-0.5"><Building2 className="h-3 w-3" />{oc.vendor}</span>}
                               </p>
                               {isRejected && oc.rejection_reason && (
                                 <p className="text-[11px] text-red-500 mt-0.5 italic">↩ {oc.rejection_reason}</p>
