@@ -3590,21 +3590,38 @@ const CostSubmission = () => {
                             <div className="flex-1 min-w-0">
                               {(() => {
                                 const raw = oc.description || '';
-                                // Extract title from <<...>>
+                                // Extract request title from <<...>>
                                 const titleMatch = raw.match(/<<([^>>]+)>>/);
-                                const title = titleMatch ? titleMatch[1].trim() : '';
-                                // Strip the [ADVANCE] <<group title>> prefix line, show the rest
+                                const reqTitle = titleMatch ? titleMatch[1].trim() : '';
+                                // Remove the [ADVANCE] <<...>> prefix line
                                 const bodyLines = raw.split('\n').filter(l => !l.includes('<<') && !l.startsWith('[ADVANCE]'));
-                                const fullDesc = bodyLines.join('\n').trim();
+                                // Split into description (before Justification:) and justification (after)
+                                const justIdx = bodyLines.findIndex(l => l.trim().startsWith('Justification:'));
+                                const descLines = justIdx >= 0 ? bodyLines.slice(0, justIdx) : bodyLines;
+                                const justLines = justIdx >= 0 ? bodyLines.slice(justIdx) : [];
+                                const descText = descLines.join('\n').trim();
+                                const justText = justLines.join('\n').replace(/^Justification:\s*/i, '').trim();
                                 return (
-                                  <>
-                                    {title && (
-                                      <p className="text-[12px] font-semibold text-blue-700 dark:text-blue-400 leading-snug mb-0.5">{title}</p>
+                                  <div className="space-y-1">
+                                    {reqTitle && (
+                                      <div>
+                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Request Title</span>
+                                        <p className="text-[12px] font-semibold text-blue-700 dark:text-blue-400 leading-snug">{reqTitle}</p>
+                                      </div>
                                     )}
-                                    {fullDesc && (
-                                      <p className="text-[12px] text-gray-800 dark:text-gray-200 leading-snug whitespace-pre-line">{fullDesc}</p>
+                                    {descText && (
+                                      <div>
+                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Description</span>
+                                        <p className="text-[12px] text-gray-800 dark:text-gray-200 leading-snug whitespace-pre-line">{descText}</p>
+                                      </div>
                                     )}
-                                  </>
+                                    {justText && (
+                                      <div>
+                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Justification</span>
+                                        <p className="text-[12px] text-gray-600 dark:text-gray-300 leading-snug whitespace-pre-line">{justText}</p>
+                                      </div>
+                                    )}
+                                  </div>
                                 );
                               })()}
                               <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
