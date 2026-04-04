@@ -2,17 +2,17 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/cost-group/GroupedList.tsx": () => import("../components/mockups/cost-group/GroupedList.tsx"),
-  "./components/mockups/mmp-card/OptionA.tsx": () => import("../components/mockups/mmp-card/OptionA.tsx"),
-  "./components/mockups/mmp-card/OptionB.tsx": () => import("../components/mockups/mmp-card/OptionB.tsx"),
-  "./components/mockups/mmp-card/OptionC.tsx": () => import("../components/mockups/mmp-card/OptionC.tsx"),
-  "./components/mockups/mmp-card/OptionD.tsx": () => import("../components/mockups/mmp-card/OptionD.tsx"),
-  "./components/mockups/mmp-card/OptionD1.tsx": () => import("../components/mockups/mmp-card/OptionD1.tsx"),
-  "./components/mockups/mmp-card/OptionD2.tsx": () => import("../components/mockups/mmp-card/OptionD2.tsx"),
   "./components/mockups/task-cards/ActionFirst.tsx": () => import("../components/mockups/task-cards/ActionFirst.tsx"),
   "./components/mockups/task-cards/CompactRow.tsx": () => import("../components/mockups/task-cards/CompactRow.tsx"),
   "./components/mockups/task-cards/DenseChips.tsx": () => import("../components/mockups/task-cards/DenseChips.tsx"),
   "./components/mockups/task-cards/FocusMode.tsx": () => import("../components/mockups/task-cards/FocusMode.tsx"),
   "./components/mockups/task-cards/HealthDashboard.tsx": () => import("../components/mockups/task-cards/HealthDashboard.tsx"),
   "./components/mockups/task-cards/PriorityHeader.tsx": () => import("../components/mockups/task-cards/PriorityHeader.tsx"),
-  "./components/mockups/task-cards/TimelineStrip.tsx": () => import("../components/mockups/task-cards/TimelineStrip.tsx")
+  "./components/mockups/task-cards/TimelineStrip.tsx": () => import("../components/mockups/task-cards/TimelineStrip.tsx"),
+  "./components/mockups/mmp-card/OptionA.tsx": () => import("../components/mockups/mmp-card/OptionA.tsx"),
+  "./components/mockups/mmp-card/OptionB.tsx": () => import("../components/mockups/mmp-card/OptionB.tsx"),
+  "./components/mockups/mmp-card/OptionC.tsx": () => import("../components/mockups/mmp-card/OptionC.tsx"),
+  "./components/mockups/mmp-card/OptionD.tsx": () => import("../components/mockups/mmp-card/OptionD.tsx"),
+  "./components/mockups/mmp-card/OptionD1.tsx": () => import("../components/mockups/mmp-card/OptionD1.tsx"),
+  "./components/mockups/mmp-card/OptionD2.tsx": () => import("../components/mockups/mmp-card/OptionD2.tsx")
 };
