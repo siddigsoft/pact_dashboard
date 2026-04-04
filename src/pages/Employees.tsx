@@ -9,14 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Users, Wifi, Search, Building2, MapPin,
+  Users, Search, Building2, MapPin,
   RefreshCw, ChevronRight,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
-  Hash, Globe, Activity, Copy, Download, FileSpreadsheet,
-  FileText, FileDown, GitBranch, UserCheck, UserX,
+  Hash, Activity, Copy,
+  FileText, FileDown, GitBranch, UserX,
   TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle,
   Landmark, LayoutGrid, List, Shield,
 } from "lucide-react";
@@ -52,6 +49,23 @@ interface EmployeeProfile {
   bank_account: BankAccount | null;
   last_activity: string | null; device_info: string | null; app_version: string | null;
   department_id: string | null;
+  contract_type: 'salary' | 'retainer' | 'both' | null;
+}
+
+type ContractType = 'salary' | 'retainer' | 'both';
+const CONTRACT_CONFIG: Record<ContractType, { label: string; labelAr: string; color: string; dot: string }> = {
+  salary:   { label: 'Salary',             labelAr: 'موظف براتب',       color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 border-blue-200 dark:border-blue-800',     dot: 'bg-blue-500'   },
+  retainer: { label: 'Retainer-Only',      labelAr: 'مكافأة فقط',       color: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200 border-violet-200 dark:border-violet-800', dot: 'bg-violet-500' },
+  both:     { label: 'Salary + Retainer',  labelAr: 'راتب ومكافأة',    color: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border-teal-200 dark:border-teal-800',     dot: 'bg-teal-500'   },
+};
+function ContractBadge({ type }: { type: string | null }) {
+  const cfg = CONTRACT_CONFIG[(type as ContractType) ?? 'salary'] ?? CONTRACT_CONFIG.salary;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${cfg.color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -205,6 +219,7 @@ function EmployeeDetail({
                 <p className="text-white/60 text-xs truncate mt-0.5">{profile.email}</p>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <RoleBadge role={profile.role} />
+                  <ContractBadge type={profile.contract_type} />
                   {profile.employee_id && (
                     <span className="text-[10px] font-mono bg-white/10 text-white/80 px-1.5 py-0.5 rounded">
                       {profile.employee_id}
@@ -221,12 +236,21 @@ function EmployeeDetail({
         </div>
 
         <div className="divide-y divide-border">
-          {/* ── Hub / Location ── */}
+          {/* ── Hub / Location / Contract ── */}
           <div className="px-6 py-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
-              <MapPin className="h-3 w-3" />Assignment
+              <MapPin className="h-3 w-3" />Assignment & Contract
             </p>
             <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md bg-muted/50 p-2.5">
+                <p className="text-[10px] text-muted-foreground mb-1">Contract Type</p>
+                <ContractBadge type={profile.contract_type} />
+                {profile.contract_type && (
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {CONTRACT_CONFIG[(profile.contract_type as ContractType)]?.labelAr}
+                  </p>
+                )}
+              </div>
               {([
                 ['Hub', hub?.name || '—'],
                 ['State', state?.name || '—'],
@@ -582,11 +606,12 @@ export default function Employees() {
   }, []);
 
   /* Filters */
-  const [search, setSearch]         = useState('');
-  const [hubFilter, setHubFilter]   = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [bankFilter, setBankFilter] = useState('all');
-  const [viewMode, setViewMode]     = useState<'cards' | 'table'>('table');
+  const [search, setSearch]               = useState('');
+  const [hubFilter, setHubFilter]         = useState('all');
+  const [roleFilter, setRoleFilter]       = useState('all');
+  const [bankFilter, setBankFilter]       = useState('all');
+  const [contractFilter, setContractFilter] = useState('all');
+  const [viewMode, setViewMode]           = useState<'cards' | 'table'>('table');
   const [activeTab, setActiveTab]   = useState('roster');
 
   /* ── Data loading ── */
@@ -598,7 +623,7 @@ export default function Employees() {
 
       const { data: pData } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id')
+        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
         .order('full_name');
 
       if (pData) {
@@ -639,14 +664,17 @@ export default function Employees() {
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
       if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
+      if (contractFilter !== 'all' && (p.contract_type || 'salary') !== contractFilter) return false;
       return true;
     });
-  }, [enriched, search, hubFilter, roleFilter, bankFilter]);
+  }, [enriched, search, hubFilter, roleFilter, bankFilter, contractFilter]);
 
   /* Stats */
   const stats = useMemo(() => ({
     total:       enriched.length,
-    online:      enriched.filter(p => p.presence === 'online').length,
+    salary:      enriched.filter(p => !p.contract_type || p.contract_type === 'salary').length,
+    retainer:    enriched.filter(p => p.contract_type === 'retainer').length,
+    both:        enriched.filter(p => p.contract_type === 'both').length,
     withBank:    enriched.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
     missingBank: enriched.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
   }), [enriched]);
@@ -672,8 +700,8 @@ export default function Employees() {
     );
   }
 
-  const clearFilters = () => { setSearch(''); setHubFilter('all'); setRoleFilter('all'); setBankFilter('all'); };
-  const hasFilters = !!(search || hubFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all');
+  const clearFilters = () => { setSearch(''); setHubFilter('all'); setRoleFilter('all'); setBankFilter('all'); setContractFilter('all'); };
+  const hasFilters = !!(search || hubFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all' || contractFilter !== 'all');
 
   /* ── Filter Bar ── */
   const FilterBar = (
@@ -715,6 +743,17 @@ export default function Employees() {
             <SelectItem value="all">All Accounts</SelectItem>
             <SelectItem value="has">Has Account</SelectItem>
             <SelectItem value="missing">Missing Account</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={contractFilter} onValueChange={setContractFilter}>
+          <SelectTrigger className="h-8 w-[150px] text-xs" data-testid="select-contract">
+            <SelectValue placeholder="All Contracts" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Contracts</SelectItem>
+            <SelectItem value="salary">Salary</SelectItem>
+            <SelectItem value="retainer">Retainer-Only</SelectItem>
+            <SelectItem value="both">Salary + Retainer</SelectItem>
           </SelectContent>
         </Select>
         {hasFilters && (
@@ -783,12 +822,13 @@ export default function Employees() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Total Employees" value={stats.total} icon={Users}
             accent={{ border: 'bg-[#1D3461]', iconBg: 'bg-blue-100 dark:bg-blue-900/40', iconColor: 'text-[#1D3461] dark:text-blue-300', numColor: 'text-[#0F2041] dark:text-blue-300' }} />
-          <StatCard label="Online Now" value={stats.online} icon={Wifi}
-            accent={{ border: 'bg-green-500', iconBg: 'bg-green-100 dark:bg-green-900/40', iconColor: 'text-green-600 dark:text-green-400', numColor: 'text-green-700 dark:text-green-400' }} />
-          <StatCard label="With Bank Account" value={stats.withBank} icon={UserCheck}
+          <StatCard label="Salary Staff" value={stats.salary} icon={Banknote}
             accent={{ border: 'bg-blue-500', iconBg: 'bg-blue-100 dark:bg-blue-900/40', iconColor: 'text-blue-600 dark:text-blue-400', numColor: 'text-blue-700 dark:text-blue-400' }}
-            onClick={() => { setBankFilter('has'); setActiveTab('bank_accounts'); }} />
-          <StatCard label="Missing Account" value={stats.missingBank} icon={UserX}
+            onClick={() => { setContractFilter('salary'); }} />
+          <StatCard label="Retainer-Only" value={stats.retainer} icon={FileDown}
+            accent={{ border: 'bg-violet-500', iconBg: 'bg-violet-100 dark:bg-violet-900/40', iconColor: 'text-violet-600 dark:text-violet-400', numColor: 'text-violet-700 dark:text-violet-400' }}
+            onClick={() => { setContractFilter('retainer'); }} />
+          <StatCard label="Missing Bank Account" value={stats.missingBank} icon={UserX}
             accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
             onClick={() => { setBankFilter('missing'); setActiveTab('bank_accounts'); }} />
         </div>
@@ -855,6 +895,7 @@ export default function Employees() {
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <RoleBadge role={p.role} />
+                            <ContractBadge type={p.contract_type} />
                           </div>
                           {(hub || state) && (
                             <div className="space-y-0.5">
@@ -887,6 +928,7 @@ export default function Employees() {
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableHead className="w-[200px]">Name</TableHead>
                         <TableHead>Role</TableHead>
+                        <TableHead>Contract</TableHead>
                         <TableHead>Hub</TableHead>
                         <TableHead>State</TableHead>
                         <TableHead>Bank Account</TableHead>
@@ -914,6 +956,7 @@ export default function Employees() {
                               </div>
                             </TableCell>
                             <TableCell><RoleBadge role={p.role} /></TableCell>
+                            <TableCell><ContractBadge type={p.contract_type} /></TableCell>
                             <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
                             <TableCell className="text-xs">{state?.name || '—'}</TableCell>
                             <TableCell>
@@ -978,6 +1021,7 @@ export default function Employees() {
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
                       <TableHead>Employee</TableHead>
                       <TableHead>Role</TableHead>
+                      <TableHead>Contract</TableHead>
                       <TableHead>Hub / State</TableHead>
                       <TableHead>Account Name</TableHead>
                       <TableHead>Account Number</TableHead>
@@ -989,10 +1033,10 @@ export default function Employees() {
                   <TableBody>
                     {loading ? (
                       Array(5).fill(0).map((_, i) => (
-                        <TableRow key={i}>{Array(8).fill(0).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
+                        <TableRow key={i}>{Array(9).fill(0).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
                       ))
                     ) : filtered.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">No employees match your filters</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">No employees match your filters</TableCell></TableRow>
                     ) : filtered.map(p => {
                       const hub   = dbHubs.find(h => h.id === p.hub_id);
                       const state = sudanStates.find(s => s.id === p.state_id);
@@ -1010,6 +1054,7 @@ export default function Employees() {
                             </div>
                           </TableCell>
                           <TableCell><RoleBadge role={p.role} /></TableCell>
+                          <TableCell><ContractBadge type={p.contract_type} /></TableCell>
                           <TableCell className="text-xs text-muted-foreground">{[hub?.name, state?.name].filter(Boolean).join(' / ') || '—'}</TableCell>
                           <TableCell className="text-sm font-medium">{p.bank_account?.accountName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
                           <TableCell>
