@@ -875,6 +875,8 @@ export default function Employees() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return enriched.filter(p => {
+      // Employment gate: only show profiles with an employee_id unless admin toggles "show all"
+      if (!showUnregistered && (!p.employee_id || p.employee_id.trim() === '')) return false;
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
@@ -883,17 +885,26 @@ export default function Employees() {
       if (contractFilter !== 'all' && (p.contract_type || 'salary') !== contractFilter) return false;
       return true;
     });
-  }, [enriched, search, hubFilter, roleFilter, bankFilter, contractFilter]);
+  }, [enriched, search, hubFilter, roleFilter, bankFilter, contractFilter, showUnregistered]);
 
-  /* Stats */
+  const unregisteredCount = useMemo(
+    () => enriched.filter(p => !p.employee_id || p.employee_id.trim() === '').length,
+    [enriched]
+  );
+
+  /* Stats — computed over registered employees only */
+  const registeredEmployees = useMemo(
+    () => enriched.filter(p => p.employee_id && p.employee_id.trim() !== ''),
+    [enriched]
+  );
   const stats = useMemo(() => ({
-    total:       enriched.length,
-    salary:      enriched.filter(p => !p.contract_type || p.contract_type === 'salary').length,
-    retainer:    enriched.filter(p => p.contract_type === 'retainer').length,
-    both:        enriched.filter(p => p.contract_type === 'both').length,
-    withBank:    enriched.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
-    missingBank: enriched.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
-  }), [enriched]);
+    total:       registeredEmployees.length,
+    salary:      registeredEmployees.filter(p => !p.contract_type || p.contract_type === 'salary').length,
+    retainer:    registeredEmployees.filter(p => p.contract_type === 'retainer').length,
+    both:        registeredEmployees.filter(p => p.contract_type === 'both').length,
+    withBank:    registeredEmployees.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+    missingBank: registeredEmployees.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+  }), [registeredEmployees]);
 
   /* ── Stat Card ── */
   function StatCard({ label, value, icon: Icon, accent, onClick }: {
@@ -915,6 +926,8 @@ export default function Employees() {
       </button>
     );
   }
+
+  const [showUnregistered, setShowUnregistered] = useState(false);
 
   const clearFilters = () => { setSearch(''); setHubFilter('all'); setRoleFilter('all'); setBankFilter('all'); setContractFilter('all'); };
   const hasFilters = !!(search || hubFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all' || contractFilter !== 'all');
@@ -976,6 +989,21 @@ export default function Employees() {
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs gap-1 text-muted-foreground" data-testid="button-clear-filters">
             <XCircle className="h-3.5 w-3.5" />Clear
           </Button>
+        )}
+        {canEdit && unregisteredCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowUnregistered(v => !v)}
+            data-testid="toggle-show-unregistered"
+            className={`h-8 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${
+              showUnregistered
+                ? 'bg-amber-50 border-amber-300 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300'
+                : 'bg-background border-dashed text-muted-foreground hover:text-foreground hover:border-solid'
+            }`}
+          >
+            <Users className="h-3 w-3" />
+            {showUnregistered ? `Showing all (${unregisteredCount} no ID)` : `+${unregisteredCount} without Employee ID`}
+          </button>
         )}
         <div className="flex items-center gap-1.5 ml-auto">
           {hasFilters && (
