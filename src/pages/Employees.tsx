@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Users, Search, Building2, MapPin,
-  RefreshCw, ChevronRight,
+  RefreshCw, ChevronRight, Pencil, Check,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Activity, Copy,
   FileText, FileDown, GitBranch, UserX,
@@ -138,11 +138,13 @@ function RoleBadge({ role }: { role: string | null }) {
 
 /* ─── Employee Detail Modal ──────────────────────────────── */
 function EmployeeDetail({
-  profile, onClose, dbHubs,
+  profile, onClose, dbHubs, onUpdate, canEdit,
 }: {
   profile: EmployeeProfile;
   onClose: () => void;
   dbHubs: { id: string; name: string }[];
+  onUpdate: (id: string, type: ContractType) => void;
+  canEdit: boolean;
 }) {
   const { toast } = useToast();
   const hub      = dbHubs.find(h => h.id === profile.hub_id);
@@ -150,6 +152,24 @@ function EmployeeDetail({
   const av       = avBadge(profile.presence);
   const ba       = profile.bank_account;
   const hasBank  = !!(ba?.accountNumber || ba?.accountName);
+
+  /* ── Inline contract edit ── */
+  const [editingContract, setEditingContract] = useState(false);
+  const [contractDraft, setContractDraft]     = useState<string>(profile.contract_type || 'salary');
+  const [savingContract, setSavingContract]   = useState(false);
+
+  const saveContract = async () => {
+    setSavingContract(true);
+    const { error } = await supabase.from('profiles').update({ contract_type: contractDraft }).eq('id', profile.id);
+    if (error) {
+      toast({ title: 'Failed to update contract type', description: error.message, variant: 'destructive' });
+    } else {
+      onUpdate(profile.id, contractDraft as ContractType);
+      setEditingContract(false);
+      toast({ title: 'Contract type updated', description: `${profile.full_name} → ${CONTRACT_CONFIG[contractDraft as ContractType]?.label}` });
+    }
+    setSavingContract(false);
+  };
 
   const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
 
@@ -243,12 +263,57 @@ function EmployeeDetail({
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-md bg-muted/50 p-2.5">
-                <p className="text-[10px] text-muted-foreground mb-1">Contract Type</p>
-                <ContractBadge type={profile.contract_type} />
-                {profile.contract_type && (
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    {CONTRACT_CONFIG[(profile.contract_type as ContractType)]?.labelAr}
-                  </p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[10px] text-muted-foreground">Contract Type</p>
+                  {canEdit && !editingContract && (
+                    <button
+                      type="button"
+                      onClick={() => { setContractDraft(profile.contract_type || 'salary'); setEditingContract(true); }}
+                      className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5 hover:bg-muted"
+                      title="Edit contract type"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {editingContract ? (
+                  <div className="space-y-2">
+                    <select
+                      value={contractDraft}
+                      onChange={e => setContractDraft(e.target.value)}
+                      className="w-full text-xs border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      <option value="salary">Salary — موظف براتب</option>
+                      <option value="retainer">Retainer-Only — مكافأة فقط</option>
+                      <option value="both">Salary + Retainer — راتب ومكافأة</option>
+                    </select>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={saveContract}
+                        disabled={savingContract}
+                        className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold bg-[#0F2041] text-white rounded-md px-2 py-1.5 hover:bg-[#1D3461] disabled:opacity-60 transition-colors"
+                      >
+                        {savingContract ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        {savingContract ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditingContract(false); setContractDraft(profile.contract_type || 'salary'); }}
+                        disabled={savingContract}
+                        className="flex items-center justify-center gap-1 text-[10px] font-semibold border rounded-md px-2 py-1.5 hover:bg-muted transition-colors disabled:opacity-60"
+                      >
+                        <XCircle className="h-3 w-3" />Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <ContractBadge type={profile.contract_type} />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {CONTRACT_CONFIG[(profile.contract_type || 'salary') as ContractType]?.labelAr}
+                    </p>
+                  </>
                 )}
               </div>
               {([
@@ -488,6 +553,131 @@ function EmployeeDetail({
   );
 }
 
+/* ─── Inline Contract Cell (table row edit) ──────────────── */
+function InlineContractCell({
+  profile, onUpdate, canEdit,
+}: { profile: EmployeeProfile; onUpdate: (id: string, type: ContractType) => void; canEdit: boolean }) {
+  const { toast } = useToast();
+  const [editing, setEditing]   = useState(false);
+  const [draft, setDraft]       = useState<string>(profile.contract_type || 'salary');
+  const [saving, setSaving]     = useState(false);
+
+  const save = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSaving(true);
+    const { error } = await supabase.from('profiles').update({ contract_type: draft }).eq('id', profile.id);
+    if (error) {
+      toast({ title: 'Update failed', variant: 'destructive' });
+    } else {
+      onUpdate(profile.id, draft as ContractType);
+      setEditing(false);
+      toast({ title: 'Contract type updated', description: CONTRACT_CONFIG[draft as ContractType]?.label });
+    }
+    setSaving(false);
+  };
+
+  if (!canEdit) return <ContractBadge type={profile.contract_type} />;
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-1.5 group">
+        <ContractBadge type={profile.contract_type} />
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); setDraft(profile.contract_type || 'salary'); setEditing(true); }}
+          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all p-0.5 rounded hover:bg-muted"
+          title="Edit contract type"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <select
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        className="text-xs border rounded-md px-1.5 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+        autoFocus
+        onKeyDown={e => { if (e.key === 'Escape') { setEditing(false); setDraft(profile.contract_type || 'salary'); } }}
+      >
+        <option value="salary">Salary</option>
+        <option value="retainer">Retainer-Only</option>
+        <option value="both">Both</option>
+      </select>
+      <button type="button" onClick={save} disabled={saving}
+        className="text-green-600 hover:text-green-700 disabled:opacity-50 p-0.5 rounded hover:bg-green-50 dark:hover:bg-green-950/30">
+        {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+      </button>
+      <button type="button" onClick={e => { e.stopPropagation(); setEditing(false); setDraft(profile.contract_type || 'salary'); }}
+        className="text-muted-foreground hover:text-foreground p-0.5 rounded hover:bg-muted transition-colors">
+        <XCircle className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/* ─── Bulk Contract Dialog ───────────────────────────────── */
+function BulkContractDialog({
+  count, onConfirm, onClose, saving,
+}: { count: number; onConfirm: (type: string) => void; onClose: () => void; saving: boolean }) {
+  const [selectedType, setSelectedType] = useState<string>('retainer');
+  const cfg = CONTRACT_CONFIG[selectedType as ContractType];
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-muted-foreground" />
+            Bulk Assign Contract Type
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              {count} employee{count !== 1 ? 's' : ''} will be updated
+            </p>
+            <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-0.5">
+              This applies to all currently-filtered employees
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Set contract type to:</p>
+            <select
+              value={selectedType}
+              onChange={e => setSelectedType(e.target.value)}
+              className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="salary">Salary — موظف براتب</option>
+              <option value="retainer">Retainer-Only — مكافأة فقط</option>
+              <option value="both">Salary + Retainer — راتب ومكافأة</option>
+            </select>
+            {cfg && (
+              <div className="flex items-center gap-2 pt-1">
+                <ContractBadge type={selectedType} />
+                <span className="text-xs text-muted-foreground">{cfg.labelAr}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              className="flex-1 bg-[#0F2041] hover:bg-[#1D3461] text-white"
+              onClick={() => onConfirm(selectedType)}
+              disabled={saving}
+            >
+              {saving ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+              {saving ? 'Updating…' : `Apply to ${count} employee${count !== 1 ? 's' : ''}`}
+            </Button>
+            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Financial Summary Card ─────────────────────────────── */
 interface FinRow { total: number; approved: number; amountSDG: number }
 interface FinMonth { current: FinRow; prev: FinRow }
@@ -563,11 +753,37 @@ export default function Employees() {
     }
   }, []);
 
+  const canEdit = !!(currentUser?.role && ['super_admin', 'admin', 'country_director', 'fom', 'financial_auditor'].includes(currentUser.role));
+
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
   const [dbHubs, setDbHubs]     = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<EmployeeProfile | null>(null);
+
+  /* ── Bulk contract assign ── */
+  const [showBulkDialog, setShowBulkDialog] = useState(false);
+  const [bulkSaving, setBulkSaving]         = useState(false);
+
+  const handleUpdate = useCallback((id: string, newType: ContractType) => {
+    setProfiles(prev => prev.map(p => p.id === id ? { ...p, contract_type: newType } : p));
+    setSelected(prev => prev?.id === id ? { ...prev, contract_type: newType } : prev);
+  }, []);
+
+  const handleBulkAssign = async (type: string) => {
+    setBulkSaving(true);
+    const ids = filtered.map(p => p.id);
+    const { error } = await (supabase as any).from('profiles').update({ contract_type: type }).in('id', ids);
+    if (error) {
+      toast({ title: 'Bulk update failed', description: error.message, variant: 'destructive' });
+    } else {
+      setProfiles(prev => prev.map(p => ids.includes(p.id) ? { ...p, contract_type: type as ContractType } : p));
+      setSelected(prev => prev && ids.includes(prev.id) ? { ...prev, contract_type: type as ContractType } : prev);
+      toast({ title: `${ids.length} employee${ids.length !== 1 ? 's' : ''} updated`, description: `Contract type → ${CONTRACT_CONFIG[type as ContractType]?.label}` });
+      setShowBulkDialog(false);
+    }
+    setBulkSaving(false);
+  };
 
   /* ── Financial summary state ── */
   const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
@@ -765,6 +981,19 @@ export default function Employees() {
           {hasFilters && (
             <Badge variant="secondary" className="text-xs font-medium">{filtered.length} of {enriched.length}</Badge>
           )}
+          {canEdit && !loading && filtered.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBulkDialog(true)}
+              className="h-8 text-xs gap-1.5 border-dashed"
+              data-testid="button-bulk-contract"
+            >
+              <Pencil className="h-3 w-3" />
+              Bulk Assign
+              {filtered.length < enriched.length && <span className="font-bold text-[#0F2041]">({filtered.length})</span>}
+            </Button>
+          )}
           <div className="flex border rounded-md overflow-hidden">
             <button type="button" onClick={() => setViewMode('table')}
               className={`px-2 py-1.5 transition-colors ${viewMode === 'table' ? 'bg-[#0F2041] text-white' : 'bg-background text-muted-foreground hover:bg-muted'}`}
@@ -956,7 +1185,7 @@ export default function Employees() {
                               </div>
                             </TableCell>
                             <TableCell><RoleBadge role={p.role} /></TableCell>
-                            <TableCell><ContractBadge type={p.contract_type} /></TableCell>
+                            <TableCell><InlineContractCell profile={p} onUpdate={handleUpdate} canEdit={canEdit} /></TableCell>
                             <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
                             <TableCell className="text-xs">{state?.name || '—'}</TableCell>
                             <TableCell>
@@ -1054,7 +1283,7 @@ export default function Employees() {
                             </div>
                           </TableCell>
                           <TableCell><RoleBadge role={p.role} /></TableCell>
-                          <TableCell><ContractBadge type={p.contract_type} /></TableCell>
+                          <TableCell><InlineContractCell profile={p} onUpdate={handleUpdate} canEdit={canEdit} /></TableCell>
                           <TableCell className="text-xs text-muted-foreground">{[hub?.name, state?.name].filter(Boolean).join(' / ') || '—'}</TableCell>
                           <TableCell className="text-sm font-medium">{p.bank_account?.accountName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
                           <TableCell>
@@ -1101,7 +1330,17 @@ export default function Employees() {
 
       {/* ── Employee Detail Modal ── */}
       {selected && (
-        <EmployeeDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} />
+        <EmployeeDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} onUpdate={handleUpdate} canEdit={canEdit} />
+      )}
+
+      {/* ── Bulk Contract Dialog ── */}
+      {showBulkDialog && (
+        <BulkContractDialog
+          count={filtered.length}
+          onConfirm={handleBulkAssign}
+          onClose={() => setShowBulkDialog(false)}
+          saving={bulkSaving}
+        />
       )}
     </div>
   );
