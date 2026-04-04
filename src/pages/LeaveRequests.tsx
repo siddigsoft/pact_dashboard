@@ -1,10 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, isValid, differenceInCalendarDays } from 'date-fns';
+import {
+  format, parseISO, isValid, differenceInCalendarDays,
+  startOfMonth, endOfMonth, eachDayOfInterval, getDay,
+  addMonths, subMonths, isToday, isSameDay,
+} from 'date-fns';
 import {
   CalendarOff, Plus, CheckCircle2, XCircle, Clock, Loader2,
   RefreshCw, User, CalendarDays, MessageSquare, Filter,
-  AlertTriangle, ChevronDown,
+  AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, List,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +79,8 @@ export default function LeaveRequests() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [calMonth, setCalMonth] = useState(() => startOfMonth(new Date()));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [reviewDialog, setReviewDialog] = useState<LeaveRequest | null>(null);
   const [reviewAction, setReviewAction] = useState<'approved' | 'rejected'>('approved');
@@ -113,6 +119,22 @@ export default function LeaveRequests() {
     if (typeFilter !== 'all') res = res.filter(r => r.leave_type === typeFilter);
     return res;
   }, [requests, statusFilter, typeFilter]);
+
+  /* ── Calendar: map approved requests to days in calMonth ── */
+  const calDays = useMemo(() => {
+    const monthStart = startOfMonth(calMonth);
+    const monthEnd   = endOfMonth(calMonth);
+    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    const approvedReqs = requests.filter(r => r.status === 'approved' || r.status === 'pending');
+    return days.map(day => {
+      const dayStr = format(day, 'yyyy-MM-dd');
+      const entries = approvedReqs.filter(r => {
+        if (!isValid(parseISO(r.start_date)) || !isValid(parseISO(r.end_date))) return false;
+        return r.start_date <= dayStr && r.end_date >= dayStr;
+      });
+      return { day, entries };
+    });
+  }, [calMonth, requests]);
 
   const stats = useMemo(() => ({
     pending:  requests.filter(r => r.status === 'pending').length,
@@ -238,8 +260,8 @@ export default function LeaveRequests() {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-5">
+        {/* Filters + view toggle */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-5 items-start sm:items-center">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full sm:w-44"><Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" /><SelectValue placeholder="All statuses" /></SelectTrigger>
             <SelectContent>
@@ -254,10 +276,111 @@ export default function LeaveRequests() {
               {LEAVE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
+          <div className="flex border rounded-lg overflow-hidden ml-auto">
+            <button type="button" onClick={() => setView('list')}
+              className={cn('px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors', view === 'list' ? 'bg-[#0F2041] text-white' : 'bg-background text-muted-foreground hover:bg-muted')}
+              data-testid="button-leave-list-view">
+              <List className="h-3.5 w-3.5" />List
+            </button>
+            <button type="button" onClick={() => setView('calendar')}
+              className={cn('px-3 py-2 flex items-center gap-1.5 text-xs font-medium transition-colors', view === 'calendar' ? 'bg-[#0F2041] text-white' : 'bg-background text-muted-foreground hover:bg-muted')}
+              data-testid="button-leave-calendar-view">
+              <CalendarDays className="h-3.5 w-3.5" />Calendar
+            </button>
+          </div>
         </div>
 
-        {/* Request cards */}
-        {loading ? (
+        {/* ── Calendar view ── */}
+        {view === 'calendar' && !loading && (
+          <div className="bg-card border rounded-2xl overflow-hidden shadow-sm">
+            {/* Month navigation */}
+            <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/30">
+              <button type="button" onClick={() => setCalMonth(m => subMonths(m, 1))}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors" data-testid="button-cal-prev">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-sm">{format(calMonth, 'MMMM yyyy')}</span>
+                <button type="button" onClick={() => setCalMonth(startOfMonth(new Date()))}
+                  className="text-xs text-[#1D3461] font-medium hover:underline" data-testid="button-cal-today">
+                  Today
+                </button>
+              </div>
+              <button type="button" onClick={() => setCalMonth(m => addMonths(m, 1))}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors" data-testid="button-cal-next">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Day-of-week header */}
+            <div className="grid grid-cols-7 border-b">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                <div key={d} className="text-center text-[11px] font-semibold text-muted-foreground py-2 border-r last:border-r-0">
+                  {d}
+                </div>
+              ))}
+            </div>
+
+            {/* Day grid */}
+            <div className="grid grid-cols-7">
+              {/* Leading empty cells */}
+              {Array.from({ length: getDay(calDays[0]?.day ?? new Date()) }).map((_, i) => (
+                <div key={`e-${i}`} className="min-h-[80px] border-r border-b bg-muted/10" />
+              ))}
+              {calDays.map(({ day, entries }) => {
+                const today = isToday(day);
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className={cn('min-h-[80px] border-r last:border-r-0 border-b p-1.5 relative', today && 'bg-blue-50/60 dark:bg-blue-900/10')}
+                  >
+                    <span className={cn('inline-flex items-center justify-center text-xs font-semibold w-5 h-5 rounded-full mb-1',
+                      today ? 'bg-[#0F2041] text-white' : 'text-muted-foreground')}>
+                      {format(day, 'd')}
+                    </span>
+                    <div className="space-y-0.5">
+                      {entries.slice(0, 3).map(req => {
+                        const tc = LEAVE_TYPES.find(t => t.value === req.leave_type);
+                        const isFirst = req.start_date === format(day, 'yyyy-MM-dd');
+                        return (
+                          <div
+                            key={req.id}
+                            className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium truncate leading-tight cursor-default',
+                              req.status === 'approved' ? (tc?.color ?? 'bg-blue-100 text-blue-700') : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40'
+                            )}
+                            title={`${req.user_name || 'You'} — ${tc?.label} (${req.status})`}
+                          >
+                            {isAdmin ? (isFirst ? (req.user_name?.split(' ')[0] || 'Staff') : '·') : (tc?.label || req.leave_type)}
+                          </div>
+                        );
+                      })}
+                      {entries.length > 3 && (
+                        <div className="text-[10px] text-muted-foreground px-1">+{entries.length - 3} more</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center gap-4 px-5 py-3 border-t bg-muted/20 flex-wrap">
+              {LEAVE_TYPES.filter(t => requests.some(r => r.leave_type === t.value && (r.status === 'approved' || r.status === 'pending'))).map(t => (
+                <div key={t.value} className="flex items-center gap-1.5">
+                  <span className={cn('w-3 h-3 rounded-sm inline-block', t.color)} />
+                  <span className="text-[11px] text-muted-foreground">{t.label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm inline-block bg-amber-100 dark:bg-amber-900/40" />
+                <span className="text-[11px] text-muted-foreground">Pending</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── List view ── */}
+        {view === 'list' && (loading ? (
           <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-muted-foreground">
@@ -343,7 +466,7 @@ export default function LeaveRequests() {
               );
             })}
           </div>
-        )}
+        ))}
       </div>
 
       {/* Submit Request Dialog */}
