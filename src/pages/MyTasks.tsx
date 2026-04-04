@@ -3207,6 +3207,10 @@ function TaskCalendarView({ tasks, onOpenTask }: CalendarViewProps) {
             </div>
           );
         })}
+        {/* Trailing empty cells to complete last row */}
+        {Array.from({ length: days.length > 0 ? (6 - getDay(lastDay)) : 0 }).map((_, i) => (
+          <div key={`post${i}`} className="min-h-[72px] rounded-lg bg-muted/10" />
+        ))}
       </div>
       {tasks.filter(t => !t.dueDate).length > 0 && (
         <p className="text-[11px] text-muted-foreground mt-3 text-center">

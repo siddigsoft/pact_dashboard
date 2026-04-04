@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   format, parseISO, isValid, differenceInCalendarDays,
   startOfMonth, endOfMonth, eachDayOfInterval, getDay,
-  addMonths, subMonths, isToday, isSameDay,
+  addMonths, subMonths, isToday,
 } from 'date-fns';
 import {
   CalendarOff, Plus, CheckCircle2, XCircle, Clock, Loader2,
@@ -291,6 +291,9 @@ export default function LeaveRequests() {
         </div>
 
         {/* ── Calendar view ── */}
+        {view === 'calendar' && loading && (
+          <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        )}
         {view === 'calendar' && !loading && (
           <div className="bg-card border rounded-2xl overflow-hidden shadow-sm">
             {/* Month navigation */}
@@ -325,7 +328,7 @@ export default function LeaveRequests() {
             <div className="grid grid-cols-7">
               {/* Leading empty cells */}
               {Array.from({ length: getDay(calDays[0]?.day ?? new Date()) }).map((_, i) => (
-                <div key={`e-${i}`} className="min-h-[80px] border-r border-b bg-muted/10" />
+                <div key={`pre-${i}`} className="min-h-[80px] border-r border-b bg-muted/10" />
               ))}
               {calDays.map(({ day, entries }) => {
                 const today = isToday(day);
@@ -361,6 +364,10 @@ export default function LeaveRequests() {
                   </div>
                 );
               })}
+              {/* Trailing empty cells to complete last row */}
+              {Array.from({ length: calDays.length > 0 ? (6 - getDay(calDays[calDays.length - 1].day)) : 0 }).map((_, i) => (
+                <div key={`post-${i}`} className="min-h-[80px] border-r border-b bg-muted/10" />
+              ))}
             </div>
 
             {/* Legend */}
