@@ -234,7 +234,7 @@ export default function PayrollAdmin() {
     ...PA_CACHE,
     queryFn: async () => {
       const [{ data: profs }, { data: depts }, { data: configs }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date, contract_end_date, contract_type').order('full_name'),
+        supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date, contract_end_date, contract_type, is_employee').order('full_name'),
         supabase.from('departments').select('id, name'),
         supabase.from('employee_salary_config').select('*'),
       ]);
@@ -243,7 +243,7 @@ export default function PayrollAdmin() {
       const cfgMap: Record<string, SalaryConfig> = {};
       (configs ?? []).forEach((c: any) => { cfgMap[c.user_id] = { ...c, allowances: Array.isArray(c.allowances) ? c.allowances : [], deductions: Array.isArray(c.deductions) ? c.deductions : [] }; });
       return (profs ?? [])
-        .filter((p: any) => p.employment_type != null && p.employment_type !== '')
+        .filter((p: any) => p.is_employee === true)
         .filter((p: any) => !p.contract_type || p.contract_type !== 'retainer')
         .map((p: any) => ({
           id: p.id, full_name: p.full_name, role: p.role, email: p.email,
