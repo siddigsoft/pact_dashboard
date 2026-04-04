@@ -1,7 +1,8 @@
   import { useLocation, Link, useNavigate } from "react-router-dom";
   import { Button } from "@/components/ui/button";
   import { 
-    Users, 
+    Users,
+    UsersRound,
     Settings, 
     FolderKanban, 
     Activity,
@@ -425,8 +426,11 @@
     if (!isHidden('/hr')) {
       hrItems.push({ id: 'my-payroll', title: "My Payroll", url: "/hr?tab=payroll", icon: Banknote, priority: 1, isPinned: isPinned('/hr') });
     }
-    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/employees') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 2, isPinned: isPinned('/employees') });
+    }
+    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      hrItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 2.5, isPinned: isPinned('/admin/staff-profiles') });
     }
     if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       hrItems.push({ id: 'payroll-admin', title: "Payroll Admin", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 3, isPinned: false });
@@ -493,9 +497,6 @@
     const adminItems: MenuGroup['items'] = [];
     if (!isHidden('/users') && (isSuperAdmin || isAdmin || isICT || perms.users)) {
       adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
-    }
-    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      adminItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: Users, priority: 2, isPinned: isPinned('/admin/staff-profiles') });
     }
     if (!isHidden('/departments') && (isSuperAdmin || isAdmin)) {
       adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 3, isPinned: isPinned('/departments') });
