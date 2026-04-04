@@ -401,9 +401,6 @@
     if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
       finMgmtItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 3, isPinned: isPinned('/financial-operations') });
     }
-    if (!isHidden('/retainer-management') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
-      finMgmtItems.push({ id: 'retainer-management', title: "Retainer Management", url: "/retainer-management", icon: Banknote, priority: 4, isPinned: isPinned('/retainer-management') });
-    }
     if (!isHidden('/reconciliation-dashboard') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finMgmtItems.push({ id: 'reconciliation-dashboard', title: "Reconciliation Dashboard", url: "/reconciliation-dashboard", icon: ClipboardCheck, priority: 5, isPinned: isPinned('/reconciliation-dashboard') });
     }
@@ -436,7 +433,7 @@
     }
     // 3. Retainer Payments — retainer agreements and monthly payments (admin only)
     if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/hr?tab=retainer", icon: CreditCard, priority: 3, isPinned: false });
+      hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/retainer-management", icon: CreditCard, priority: 3, isPinned: isPinned('/retainer-management') });
     }
     // 4. Leave Requests — all staff submit; admins approve
     if (!isHidden('/leave')) {
