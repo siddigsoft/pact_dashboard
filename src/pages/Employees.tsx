@@ -15,7 +15,7 @@ import {
   Hash, Activity, Copy,
   FileText, FileDown, GitBranch, UserX,
   TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle,
-  Landmark, LayoutGrid, List, Shield, Layers,
+  Landmark, LayoutGrid, List, Shield, Layers, Briefcase,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates } from "@/data/sudanStates";
@@ -50,6 +50,7 @@ interface EmployeeProfile {
   last_activity: string | null; device_info: string | null; app_version: string | null;
   department_id: string | null;
   contract_type: 'salary' | 'retainer' | 'both' | null;
+  is_employee: boolean;
 }
 
 type ContractType = 'salary' | 'retainer' | 'both';
@@ -138,12 +139,13 @@ function RoleBadge({ role }: { role: string | null }) {
 
 /* ─── Employee Detail Modal ──────────────────────────────── */
 function EmployeeDetail({
-  profile, onClose, dbHubs, onUpdate, canEdit,
+  profile, onClose, dbHubs, onUpdate, onEmploymentChange, canEdit,
 }: {
   profile: EmployeeProfile;
   onClose: () => void;
   dbHubs: { id: string; name: string }[];
   onUpdate: (id: string, type: ContractType) => void;
+  onEmploymentChange: (id: string, updates: { is_employee: boolean; employee_id: string | null }) => void;
   canEdit: boolean;
 }) {
   const { toast } = useToast();
@@ -152,6 +154,24 @@ function EmployeeDetail({
   const av       = avBadge(profile.presence);
   const ba       = profile.bank_account;
   const hasBank  = !!(ba?.accountNumber || ba?.accountName);
+
+  /* ── Employment registration (admin-only) ── */
+  const [empIdDraft, setEmpIdDraft]         = useState(profile.employee_id || '');
+  const [savingEmp, setSavingEmp]           = useState(false);
+
+  const saveEmployment = async (markAsEmployee: boolean) => {
+    setSavingEmp(true);
+    const updates: Record<string, unknown> = { is_employee: markAsEmployee };
+    if (markAsEmployee) updates.employee_id = empIdDraft.trim() || null;
+    const { error } = await supabase.from('profiles').update(updates).eq('id', profile.id);
+    if (error) {
+      toast({ title: 'Failed to update employment', description: error.message, variant: 'destructive' });
+    } else {
+      onEmploymentChange(profile.id, { is_employee: markAsEmployee, employee_id: markAsEmployee ? (empIdDraft.trim() || null) : profile.employee_id });
+      toast({ title: markAsEmployee ? 'Registered as employee' : 'Removed from employees', description: profile.full_name || '' });
+    }
+    setSavingEmp(false);
+  };
 
   /* ── Inline contract edit ── */
   const [editingContract, setEditingContract] = useState(false);
@@ -256,6 +276,63 @@ function EmployeeDetail({
         </div>
 
         <div className="divide-y divide-border">
+          {/* ── Employment Registration (Admin Only) ── */}
+          {canEdit && (
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                  <Briefcase className="h-3 w-3" />Employment
+                  <span className="text-[9px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700 rounded px-1.5 py-0.5">Admin Only</span>
+                </p>
+                {profile.is_employee ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle className="h-3 w-3" />Registered Employee
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
+                    <XCircle className="h-3 w-3" />Not an Employee
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <p className="text-[10px] text-muted-foreground mb-1">Employee ID</p>
+                  <input
+                    type="text"
+                    value={empIdDraft}
+                    onChange={e => setEmpIdDraft(e.target.value)}
+                    placeholder="e.g. EMP-001"
+                    className="w-full text-xs border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                    data-testid="input-employee-id"
+                  />
+                </div>
+                {profile.is_employee ? (
+                  <button
+                    type="button"
+                    disabled={savingEmp}
+                    onClick={() => saveEmployment(false)}
+                    className="mt-4 flex items-center gap-1 text-[10px] font-semibold border border-red-200 text-red-600 rounded-md px-2.5 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 transition-colors whitespace-nowrap"
+                    data-testid="button-remove-employee"
+                  >
+                    {savingEmp ? <RefreshCw className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                    Remove
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={savingEmp}
+                    onClick={() => saveEmployment(true)}
+                    className="mt-4 flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white rounded-md px-2.5 py-1.5 hover:bg-emerald-700 disabled:opacity-60 transition-colors whitespace-nowrap"
+                    data-testid="button-register-employee"
+                  >
+                    {savingEmp ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Register as Employee
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Hub / Location / Contract ── */}
           <div className="px-6 py-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
@@ -770,6 +847,11 @@ export default function Employees() {
     setSelected(prev => prev?.id === id ? { ...prev, contract_type: newType } : prev);
   }, []);
 
+  const handleEmploymentChange = useCallback((id: string, updates: { is_employee: boolean; employee_id: string | null }) => {
+    setProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    setSelected(prev => prev?.id === id ? { ...prev, ...updates } : prev);
+  }, []);
+
   const handleBulkAssign = async (type: string) => {
     setBulkSaving(true);
     const ids = filtered.map(p => p.id);
@@ -840,7 +922,7 @@ export default function Employees() {
 
       const { data: pData } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
+        .select('id, full_name, email, phone, role, employee_id, is_employee, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
         .order('full_name');
 
       if (pData) {
@@ -852,7 +934,7 @@ export default function Employees() {
           const device_info   = p.device_info || null;
           const app_version   = p.app_version || null;
           const presence      = isUserOnline(p.id) ? 'online' : presenceFromActivity(last_activity, p.updated_at);
-          return { ...p, bank_account: ba, last_activity, device_info, app_version, presence };
+          return { ...p, bank_account: ba, last_activity, device_info, app_version, presence, is_employee: !!p.is_employee };
         }));
       }
     } catch (err: any) {
@@ -876,8 +958,8 @@ export default function Employees() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return enriched.filter(p => {
-      // Employment gate: only show profiles with an employee_id unless admin toggles "show all"
-      if (!showUnregistered && (!p.employee_id || p.employee_id.trim() === '')) return false;
+      // Employment gate: only show profiles marked as employees by an admin (is_employee = true)
+      if (!showUnregistered && !p.is_employee) return false;
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
@@ -889,13 +971,13 @@ export default function Employees() {
   }, [enriched, search, hubFilter, roleFilter, bankFilter, contractFilter, showUnregistered]);
 
   const unregisteredCount = useMemo(
-    () => enriched.filter(p => !p.employee_id || p.employee_id.trim() === '').length,
+    () => enriched.filter(p => !p.is_employee).length,
     [enriched]
   );
 
   /* Stats — computed over registered employees only */
   const registeredEmployees = useMemo(
-    () => enriched.filter(p => p.employee_id && p.employee_id.trim() !== ''),
+    () => enriched.filter(p => p.is_employee),
     [enriched]
   );
   const stats = useMemo(() => ({
@@ -1001,7 +1083,7 @@ export default function Employees() {
             }`}
           >
             <Users className="h-3 w-3" />
-            {showUnregistered ? `Showing all (${unregisteredCount} no ID)` : `+${unregisteredCount} without Employee ID`}
+            {showUnregistered ? `Showing all (${unregisteredCount} not registered)` : `+${unregisteredCount} profiles not registered`}
           </button>
         )}
         <div className="flex items-center gap-1.5 ml-auto">
@@ -1128,7 +1210,19 @@ export default function Employees() {
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-3">
                 <div className="rounded-full bg-muted p-4"><Users className="h-8 w-8" /></div>
-                <p className="text-sm font-medium">No employees match your filters</p>
+                {!showUnregistered && registeredEmployees.length === 0 ? (
+                  <>
+                    <p className="text-sm font-medium">No employees registered yet</p>
+                    <p className="text-xs text-center max-w-xs">Open any user profile and click <span className="font-semibold text-emerald-600">Register as Employee</span> to add them here.</p>
+                    {canEdit && unregisteredCount > 0 && (
+                      <button type="button" onClick={() => setShowUnregistered(true)} className="text-xs font-semibold text-[#0F2041] underline underline-offset-2">
+                        Browse {unregisteredCount} system profiles →
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm font-medium">No employees match your filters</p>
+                )}
               </div>
             ) : viewMode === 'cards' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -1360,7 +1454,7 @@ export default function Employees() {
 
       {/* ── Employee Detail Modal ── */}
       {selected && (
-        <EmployeeDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} onUpdate={handleUpdate} canEdit={canEdit} />
+        <EmployeeDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} onUpdate={handleUpdate} onEmploymentChange={handleEmploymentChange} canEdit={canEdit} />
       )}
 
       {/* ── Bulk Contract Dialog ── */}
