@@ -276,7 +276,7 @@ function EmployeeDetail({
         </div>
 
         <div className="divide-y divide-border">
-          {/* ── Employment Registration (Admin Only) ── */}
+          {/* ── Employment (Admin Only) ── */}
           {canEdit && (
             <div className="px-6 py-4">
               <div className="flex items-center justify-between mb-3">
@@ -289,47 +289,48 @@ function EmployeeDetail({
                     <CheckCircle className="h-3 w-3" />Registered Employee
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
-                    <XCircle className="h-3 w-3" />Not an Employee
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                    <AlertCircle className="h-3 w-3" />Not yet registered
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mb-2.5">
                 <div className="flex-1">
                   <p className="text-[10px] text-muted-foreground mb-1">Employee ID</p>
-                  <input
-                    type="text"
-                    value={empIdDraft}
-                    onChange={e => setEmpIdDraft(e.target.value)}
-                    placeholder="e.g. EMP-001"
-                    className="w-full text-xs border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring font-mono"
-                    data-testid="input-employee-id"
-                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={empIdDraft}
+                      onChange={e => setEmpIdDraft(e.target.value)}
+                      placeholder="e.g. EMP-001"
+                      className="flex-1 text-xs border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                      data-testid="input-employee-id"
+                    />
+                    <button
+                      type="button"
+                      disabled={savingEmp || empIdDraft === (profile.employee_id || '')}
+                      onClick={() => saveEmployment(profile.is_employee)}
+                      className="flex items-center gap-1 text-[10px] font-semibold bg-[#0F2041] text-white rounded-md px-2.5 py-1.5 hover:bg-[#1D3461] disabled:opacity-40 transition-colors"
+                      data-testid="button-save-employee-id"
+                    >
+                      {savingEmp ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Save
+                    </button>
+                  </div>
                 </div>
-                {profile.is_employee ? (
-                  <button
-                    type="button"
-                    disabled={savingEmp}
-                    onClick={() => saveEmployment(false)}
-                    className="mt-4 flex items-center gap-1 text-[10px] font-semibold border border-red-200 text-red-600 rounded-md px-2.5 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 transition-colors whitespace-nowrap"
-                    data-testid="button-remove-employee"
-                  >
-                    {savingEmp ? <RefreshCw className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
-                    Remove
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={savingEmp}
-                    onClick={() => saveEmployment(true)}
-                    className="mt-4 flex items-center gap-1 text-[10px] font-semibold bg-emerald-600 text-white rounded-md px-2.5 py-1.5 hover:bg-emerald-700 disabled:opacity-60 transition-colors whitespace-nowrap"
-                    data-testid="button-register-employee"
-                  >
-                    {savingEmp ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                    Register as Employee
-                  </button>
-                )}
               </div>
+              {!profile.is_employee && (
+                <p className="text-[10px] text-muted-foreground bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-2.5 py-2">
+                  To register as employee, open their full profile in <span className="font-semibold">User Management</span> and fill in the Employment Record section.
+                </p>
+              )}
+              <a
+                href={`/users/${profile.id}`}
+                className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-[#0F2041] dark:text-blue-400 hover:underline"
+                data-testid="link-user-management"
+              >
+                <ChevronRight className="h-3 w-3" />Open full profile in User Management
+              </a>
             </div>
           )}
 
