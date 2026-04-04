@@ -24,7 +24,7 @@ const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: strin
   { id: 'payroll',       label: 'My Payroll',      icon: Banknote,   accent: '#D97706', bg: 'rgba(217,119,6,0.12)',   adminOnly: false },
   { id: 'payroll-admin', label: 'Payroll Admin',    icon: Settings2,  accent: '#67e8f9', bg: 'rgba(103,232,249,0.12)', adminOnly: true  },
   { id: 'retainer',      label: 'Retainer',         icon: FileText,   accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: true  },
-  { id: 'hr-tools',      label: 'HR Tools',         icon: Wrench,     accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
+  { id: 'hr-tools',      label: 'HR Analytics',     icon: BarChart2,  accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
 ];
 
 const ADMIN_ROLES = [

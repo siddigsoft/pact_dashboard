@@ -361,6 +361,9 @@
     if (!isHidden('/mmp/cycle-close') && (isSuperAdmin || isAdmin || isFOM || isSupervisor)) {
       coordinationItems.push({ id: 'mmp-cycle-close', title: "Cycle Management", url: "/mmp/cycle-close", icon: CheckCircle, priority: 4, isPinned: isPinned('/mmp/cycle-close') });
     }
+    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin || isFOM)) {
+      coordinationItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 5, isPinned: isPinned('/admin/staff-profiles') });
+    }
     if (coordinationItems.length) groups.push({ id: 'coordination', label: "Coordination & Oversight", order: 4.5, items: coordinationItems });
 
     // ── 6. Payments & Finance (sub-groups) ────────────────────────────────────
@@ -421,28 +424,31 @@
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
 
-    // ── 7. HR & People ────────────────────────────────────────────────────────
+    // ── 7. HR & People — logical flow: Employees → Payroll → Retainer → Leave → Analytics → My Payslip ──
     const hrItems: MenuGroup['items'] = [];
-    if (!isHidden('/hr')) {
-      hrItems.push({ id: 'my-payroll', title: "My Payroll", url: "/hr?tab=payroll", icon: Banknote, priority: 1, isPinned: isPinned('/hr') });
-    }
+    // 1. Employees — who works here: contracts, bank accounts, contract type
     if (!isHidden('/employees') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 2, isPinned: isPinned('/employees') });
+      hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
-    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      hrItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 2.5, isPinned: isPinned('/admin/staff-profiles') });
-    }
+    // 2. Payroll — salary setup, run payroll, payslips, reports (admin only)
     if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      hrItems.push({ id: 'payroll-admin', title: "Payroll Admin", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 3, isPinned: false });
-      hrItems.push({ id: 'retainer-hr', title: "Retainer", url: "/hr?tab=retainer", icon: CreditCard, priority: 4, isPinned: false });
-      hrItems.push({ id: 'hr-tools', title: "HR Tools", url: "/hr?tab=hr-tools", icon: Settings, priority: 5, isPinned: false });
-      hrItems.push({ id: 'contracts', title: "Contracts", url: "/hr?tab=payroll-admin&report=contracts", icon: FileText, priority: 6, isPinned: false });
+      hrItems.push({ id: 'payroll-admin', title: "Payroll", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 2, isPinned: false });
     }
+    // 3. Retainer Payments — retainer agreements and monthly payments (admin only)
+    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/hr?tab=retainer", icon: CreditCard, priority: 3, isPinned: false });
+    }
+    // 4. Leave Requests — all staff submit; admins approve
     if (!isHidden('/leave')) {
-      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/leave", icon: CalendarOff, priority: 7, isPinned: isPinned('/leave') });
+      hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/leave", icon: CalendarOff, priority: 4, isPinned: isPinned('/leave') });
     }
-    if (!isHidden('/task-admin') && (isSuperAdmin || isAdmin)) {
-      hrItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: CheckSquare, priority: 8, isPinned: isPinned('/task-admin') });
+    // 5. HR Analytics — staff cost projections, org chart, budget vs actual (admin only)
+    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      hrItems.push({ id: 'hr-analytics', title: "HR Analytics", url: "/hr?tab=hr-tools", icon: TrendingUp, priority: 5, isPinned: false });
+    }
+    // 6. My Payslip — personal payslip for every staff member
+    if (!isHidden('/hr')) {
+      hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 6, isPinned: isPinned('/hr') });
     }
     if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
 
@@ -510,8 +516,11 @@
     if (!isHidden('/classification-fees') && (isSuperAdmin || isAdmin)) {
       adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 6, isPinned: isPinned('/classification-fees') });
     }
+    if (!isHidden('/task-admin') && (isSuperAdmin || isAdmin)) {
+      adminItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: CheckSquare, priority: 7, isPinned: isPinned('/task-admin') });
+    }
     if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {
-      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 7, isPinned: isPinned('/settings') });
+      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 8, isPinned: isPinned('/settings') });
     }
     if (!isSuperAdmin && hasMonitoringAccess && !isHidden('/admin/monitoring')) {
       adminItems.push({ id: 'monitoring-dashboard', title: "System Monitoring", url: "/admin/monitoring", icon: Activity, priority: 8, isPinned: isPinned('/admin/monitoring') });
