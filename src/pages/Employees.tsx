@@ -827,6 +827,7 @@ export default function Employees() {
   const [roleFilter, setRoleFilter]       = useState('all');
   const [bankFilter, setBankFilter]       = useState('all');
   const [contractFilter, setContractFilter] = useState('all');
+  const [showUnregistered, setShowUnregistered] = useState(false);
   const [viewMode, setViewMode]           = useState<'cards' | 'table'>('table');
   const [activeTab, setActiveTab]   = useState('roster');
 
@@ -926,8 +927,6 @@ export default function Employees() {
       </button>
     );
   }
-
-  const [showUnregistered, setShowUnregistered] = useState(false);
 
   const clearFilters = () => { setSearch(''); setHubFilter('all'); setRoleFilter('all'); setBankFilter('all'); setContractFilter('all'); };
   const hasFilters = !!(search || hubFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all' || contractFilter !== 'all');
