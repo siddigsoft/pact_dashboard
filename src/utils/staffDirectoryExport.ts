@@ -30,6 +30,7 @@ export interface ExportProfile {
   state_name: string;
   locality_name: string;
   availability: string | null;
+  contract_type: string | null;
   bank_account: {
     accountName?: string;
     accountNumber?: string;
@@ -165,7 +166,8 @@ export async function exportStaffToExcel(profiles: ExportProfile[], label = '') 
 
   /* ── Sheet 1: Full Directory ─────────────────────────────────── */
   const ws1 = wb.addWorksheet('Staff Directory', { pageSetup: { orientation: 'landscape' } });
-  const hdrs1 = ['#', 'Full Name', 'Email', 'Phone', 'Role', 'Employee ID', 'Hub', 'State', 'Locality', 'Status', 'GPS Sharing', 'Last Active', 'Device', 'App Version', 'Bank Account', 'Account Name', 'Account No.', 'Bank', 'Branch'];
+  const CONTRACT_LABELS: Record<string, string> = { salary: 'Salary', retainer: 'Retainer', both: 'Salary+Retainer' };
+  const hdrs1 = ['#', 'Full Name', 'Email', 'Phone', 'Role', 'Employee ID', 'Contract Type', 'Hub', 'State', 'Locality', 'Status', 'GPS Sharing', 'Last Active', 'Device', 'App Version', 'Bank Account', 'Account Name', 'Account No.', 'Bank', 'Branch'];
   addCoverBlock(ws1, 'Staff Directory Report', `All staff profiles${filterLabel}`, hdrs1.length);
   addHeader(ws1, hdrs1);
 
@@ -178,6 +180,7 @@ export async function exportStaffToExcel(profiles: ExportProfile[], label = '') 
       p.phone || '—',
       ROLE_LABELS[p.role || ''] || p.role || '—',
       p.employee_id || '—',
+      CONTRACT_LABELS[p.contract_type || ''] || 'Salary',
       p.hub_name || '—',
       p.state_name || '—',
       p.locality_name || '—',
@@ -199,16 +202,16 @@ export async function exportStaffToExcel(profiles: ExportProfile[], label = '') 
       cell.alignment = { horizontal: ci <= 2 ? 'left' : 'center', vertical: 'middle' };
       if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
     });
-    /* Status colour */
-    const stCell = row.getCell(10);
+    /* Status colour (column 11 after adding Contract Type at 7) */
+    const stCell = row.getCell(11);
     const st = (p.availability || 'offline').toLowerCase();
     stCell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: st === 'online' ? GREEN : st === 'busy' ? AMBER : '5A5F6E' } };
     stCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: st === 'online' ? GREEN_BG : st === 'busy' ? AMBER_BG : 'FFF1F1F1' } };
-    /* Bank status colour */
-    addBankStatusCell(row, 15, hasBank);
+    /* Bank status colour (column 16 after adding Contract Type at 7) */
+    addBankStatusCell(row, 16, hasBank);
   });
 
-  addTotalRow(ws1, ['', `Total: ${profiles.length} staff`, '', '', '', '', '', '', '', '', '', '', '', '', `${profiles.filter(p => !!p.bank_account?.accountNumber).length} registered`, '', '', '', ''], hdrs1.length);
+  addTotalRow(ws1, ['', `Total: ${profiles.length} staff`, '', '', '', '', '', '', '', '', '', '', '', '', '', `${profiles.filter(p => !!p.bank_account?.accountNumber).length} registered`, '', '', '', ''], hdrs1.length);
   autoFit(ws1);
 
   /* ── Sheet 2: Bank Accounts ──────────────────────────────────── */
@@ -504,11 +507,14 @@ export function exportStaffToCSV(profiles: ExportProfile[], tab: 'directory' | '
     add('Role', buildMap('role'));
     add('State', buildMap('state_name'));
   } else {
-    headers = ['Full Name', 'Email', 'Phone', 'Role', 'Employee ID', 'Hub', 'State', 'Locality', 'Status', 'GPS Sharing', 'Last Active', 'Device', 'App Version', 'Has Bank Account', 'Account Number'];
+    const CT_LABELS: Record<string, string> = { salary: 'Salary', retainer: 'Retainer', both: 'Salary+Retainer' };
+    headers = ['Full Name', 'Email', 'Phone', 'Role', 'Employee ID', 'Contract Type', 'Hub', 'State', 'Locality', 'Status', 'GPS Sharing', 'Last Active', 'Device', 'App Version', 'Has Bank Account', 'Account Number'];
     rows = profiles.map(p => [
       p.full_name || '', p.email || '', p.phone || '',
       ROLE_LABELS[p.role || ''] || p.role || '',
-      p.employee_id || '', p.hub_name, p.state_name, p.locality_name,
+      p.employee_id || '',
+      CT_LABELS[p.contract_type || ''] || 'Salary',
+      p.hub_name, p.state_name, p.locality_name,
       p.availability || 'offline', p.location_sharing ? 'Yes' : 'No',
       lastActive(p.last_activity), p.device_info || '', p.app_version || '',
       p.bank_account?.accountNumber ? 'Yes' : 'No',

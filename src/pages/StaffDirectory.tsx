@@ -60,6 +60,7 @@ interface StaffProfile {
   updated_at: string; created_at: string; bank_account: BankAccount | null;
   last_activity: string | null; device_info: string | null; app_version: string | null;
   department_id: string | null; department_name?: string | null;
+  contract_type: 'salary' | 'retainer' | 'both' | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -124,7 +125,8 @@ function toExportProfiles(profiles: StaffProfile[], hubList: { id: string; name:
       hub_name: hub?.name || 'Unassigned',
       state_name: state?.name || 'Unassigned',
       locality_name: (locality as any)?.name || '—',
-      availability: p.availability, bank_account: p.bank_account,
+      availability: p.availability, contract_type: p.contract_type ?? null,
+      bank_account: p.bank_account,
       last_activity: p.last_activity, device_info: p.device_info,
       app_version: p.app_version, location_sharing: p.location_sharing,
     };
@@ -517,7 +519,7 @@ export default function StaffDirectory() {
 
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id')
+        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
         .order('full_name');
       if (pErr) throw pErr;
 
@@ -748,6 +750,16 @@ export default function StaffDirectory() {
             {/* Role + status row */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <RoleBadge role={p.role} />
+              {p.contract_type === 'retainer' && (
+                <span className="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800">
+                  Retainer
+                </span>
+              )}
+              {p.contract_type === 'both' && (
+                <span className="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800">
+                  Salary+Retainer
+                </span>
+              )}
               {/* WhatsApp-style inline status dot + label */}
               <span className="inline-flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${

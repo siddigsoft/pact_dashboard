@@ -15,7 +15,7 @@ import {
   Hash, Activity, Copy,
   FileText, FileDown, GitBranch, UserX,
   TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle,
-  Landmark, LayoutGrid, List, Shield,
+  Landmark, LayoutGrid, List, Shield, Layers,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates } from "@/data/sudanStates";
@@ -1048,7 +1048,7 @@ export default function Employees() {
         />
 
         {/* ── Stats ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <StatCard label="Total Employees" value={stats.total} icon={Users}
             accent={{ border: 'bg-[#1D3461]', iconBg: 'bg-blue-100 dark:bg-blue-900/40', iconColor: 'text-[#1D3461] dark:text-blue-300', numColor: 'text-[#0F2041] dark:text-blue-300' }} />
           <StatCard label="Salary Staff" value={stats.salary} icon={Banknote}
@@ -1057,6 +1057,9 @@ export default function Employees() {
           <StatCard label="Retainer-Only" value={stats.retainer} icon={FileDown}
             accent={{ border: 'bg-violet-500', iconBg: 'bg-violet-100 dark:bg-violet-900/40', iconColor: 'text-violet-600 dark:text-violet-400', numColor: 'text-violet-700 dark:text-violet-400' }}
             onClick={() => { setContractFilter('retainer'); }} />
+          <StatCard label="Both (Salary+Retainer)" value={stats.both} icon={Layers}
+            accent={{ border: 'bg-teal-500', iconBg: 'bg-teal-100 dark:bg-teal-900/40', iconColor: 'text-teal-600 dark:text-teal-400', numColor: 'text-teal-700 dark:text-teal-400' }}
+            onClick={() => { setContractFilter('both'); }} />
           <StatCard label="Missing Bank Account" value={stats.missingBank} icon={UserX}
             accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
             onClick={() => { setBankFilter('missing'); setActiveTab('bank_accounts'); }} />
