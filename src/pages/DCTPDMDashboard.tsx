@@ -1715,8 +1715,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                         const devColor   = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
                         const isFirst    = ri === 0;
 
+                        // Left-border colour = progress traffic light
+                        const rowBorder =
+                          devPct == null   ? 'border-l-4 border-l-slate-200 dark:border-l-slate-700' :
+                          devPct >= 100    ? 'border-l-4 border-l-emerald-500' :
+                          devPct >= 90     ? 'border-l-4 border-l-blue-400'    :
+                          devPct >= 75     ? 'border-l-4 border-l-amber-400'   :
+                          devPct >= 50     ? 'border-l-4 border-l-orange-400'  :
+                          devPct > 0       ? 'border-l-4 border-l-red-400'     :
+                                             'border-l-4 border-l-red-300';
+
                         return (
-                          <tr key={row.id} className={`border-b ${rowBg}`}>
+                          <tr key={row.id} className={`border-b ${rowBg} ${rowBorder}`}>
                             {isFirst && (
                               <td
                                 rowSpan={stateRowSpan}
@@ -1738,12 +1748,20 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                   data-testid={`input-locality-${row.id}`}
                                 />
                               ) : (
-                                <span className="text-muted-foreground">{row.locality || '—'}</span>
+                                <div className="flex items-center gap-1.5">
+                                  {planned != null && (
+                                    <span
+                                      title="PRINCIPAL (green) sample target"
+                                      className="flex-shrink-0 h-2 w-2 rounded-full bg-emerald-500"
+                                    />
+                                  )}
+                                  <span className="text-muted-foreground">{row.locality || '—'}</span>
+                                </div>
                               )}
                             </td>
 
-                            {/* Planned */}
-                            <td className="px-4 py-2 text-center">
+                            {/* Planned — green tint = PRINCIPAL sample rows */}
+                            <td className={`px-4 py-2 text-center ${planned ? 'bg-emerald-50/70 dark:bg-emerald-900/10' : ''}`}>
                               {canUpload && isEditMode ? (
                                 <input
                                   type="number"
@@ -1755,7 +1773,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                   data-testid={`input-planned-${row.id}`}
                                 />
                               ) : (
-                                <span className="font-medium">{planned ?? '—'}</span>
+                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">{planned ?? '—'}</span>
                               )}
                             </td>
 
