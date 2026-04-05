@@ -882,6 +882,169 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       });
       ws7.views = [{ state: 'frozen', ySplit: 1 }];
 
+      // ── Chart drawing helpers ─────────────────────────────────────────────
+      const px = (n: number) => Math.round(n);
+      const b64 = (canvas: HTMLCanvasElement) => canvas.toDataURL('image/png').split(',')[1];
+
+      const drawVBar = (data: { label: string; value: number; color?: string }[], title: string): string => {
+        const W = 640, H = 360, PL = 50, PR = 20, PT = 48, PB = 80;
+        const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#0F2041'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
+        ctx.fillText(title, W / 2, 30);
+        const cW = W - PL - PR, cH = H - PT - PB;
+        const maxV = Math.max(...data.map(d => d.value), 1);
+        const bW = (cW / data.length) * 0.65, gap = cW / data.length;
+        // grid
+        for (let i = 0; i <= 4; i++) {
+          const y = PT + cH - (cH * i / 4);
+          ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W - PR, y); ctx.stroke();
+          ctx.fillStyle = '#6B7280'; ctx.font = '10px Arial'; ctx.textAlign = 'right';
+          ctx.fillText(String(px(maxV * i / 4)), PL - 5, y + 4);
+        }
+        data.forEach((d, i) => {
+          const bH = (d.value / maxV) * cH;
+          const x = PL + gap * i + (gap - bW) / 2, y = PT + cH - bH;
+          ctx.fillStyle = d.color || '#1D3461';
+          ctx.fillRect(px(x), px(y), px(bW), px(bH));
+          ctx.fillStyle = '#111827'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
+          if (d.value > 0) ctx.fillText(String(d.value), px(x + bW / 2), px(y - 5));
+          ctx.fillStyle = '#374151'; ctx.font = '10px Arial';
+          const lbl = d.label.length > 12 ? d.label.slice(0, 11) + '…' : d.label;
+          ctx.fillText(lbl, px(x + bW / 2), PT + cH + 20);
+        });
+        ctx.strokeStyle = '#9CA3AF'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(PL, PT); ctx.lineTo(PL, PT + cH); ctx.lineTo(W - PR, PT + cH); ctx.stroke();
+        return b64(canvas);
+      };
+
+      const drawHBar = (data: { label: string; value: number; color?: string }[], title: string): string => {
+        const BAR = 26, GAP = 10, PL = 210, PR = 70, PT = 50;
+        const W = 640, H = PT + data.length * (BAR + GAP) + 30;
+        const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#0F2041'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
+        ctx.fillText(title, W / 2, 30);
+        const maxV = Math.max(...data.map(d => d.value), 1), cW = W - PL - PR;
+        data.forEach((d, i) => {
+          const y = PT + i * (BAR + GAP);
+          if (i % 2 === 1) { ctx.fillStyle = '#F9FAFB'; ctx.fillRect(0, y - 2, W, BAR + 4); }
+          ctx.fillStyle = '#374151'; ctx.font = '10px Arial'; ctx.textAlign = 'right';
+          const lbl = d.label.length > 26 ? d.label.slice(0, 25) + '…' : d.label;
+          ctx.fillText(lbl, PL - 8, y + BAR / 2 + 4);
+          const bW = (d.value / maxV) * cW;
+          ctx.fillStyle = d.color || '#1D3461';
+          ctx.fillRect(PL, y, px(bW), BAR);
+          ctx.fillStyle = '#111827'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'left';
+          ctx.fillText(String(d.value), PL + px(bW) + 5, y + BAR / 2 + 4);
+        });
+        return b64(canvas);
+      };
+
+      const drawPie = (data: { name: string; value: number; color: string }[], title: string): string => {
+        const W = 640, H = 360;
+        const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#0F2041'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
+        ctx.fillText(title, W / 2, 30);
+        const tot = data.reduce((s, d) => s + d.value, 0);
+        if (tot === 0) return b64(canvas);
+        const cx = 210, cy = 200, r = 140;
+        let angle = -Math.PI / 2;
+        data.forEach(d => {
+          const slice = (d.value / tot) * 2 * Math.PI;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, angle, angle + slice); ctx.closePath();
+          ctx.fillStyle = d.color; ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+          const mid = angle + slice / 2, pct = Math.round((d.value / tot) * 100);
+          if (pct >= 5) {
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(`${pct}%`, cx + r * 0.65 * Math.cos(mid), cy + r * 0.65 * Math.sin(mid) + 5);
+          }
+          angle += slice;
+        });
+        let ly = 70;
+        data.forEach(d => {
+          const pct = Math.round((d.value / tot) * 100);
+          ctx.fillStyle = d.color; ctx.fillRect(420, ly - 11, 14, 14);
+          ctx.fillStyle = '#374151'; ctx.font = '11px Arial'; ctx.textAlign = 'left';
+          ctx.fillText(`${d.name}  (${d.value} · ${pct}%)`, 440, ly + 2);
+          ly += 28;
+        });
+        return b64(canvas);
+      };
+
+      const drawGroupedBar = (data: { category: string; yes: number; no: number }[], title: string): string => {
+        const W = 640, H = 360, PL = 60, PR = 20, PT = 48, PB = 80;
+        const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#0F2041'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
+        ctx.fillText(title, W / 2, 30);
+        const cW = W - PL - PR, cH = H - PT - PB;
+        const maxV = Math.max(...data.flatMap(d => [d.yes, d.no]), 1);
+        const grpW = cW / data.length, bW = grpW * 0.38;
+        for (let i = 0; i <= 4; i++) {
+          const y = PT + cH - (cH * i / 4);
+          ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W - PR, y); ctx.stroke();
+          ctx.fillStyle = '#6B7280'; ctx.font = '10px Arial'; ctx.textAlign = 'right';
+          ctx.fillText(String(px(maxV * i / 4)), PL - 5, y + 4);
+        }
+        data.forEach((d, i) => {
+          const gx = PL + grpW * i;
+          const bYes = (d.yes / maxV) * cH, bNo = (d.no / maxV) * cH;
+          ctx.fillStyle = '#22c55e'; ctx.fillRect(px(gx + 3), px(PT + cH - bYes), px(bW), px(bYes));
+          ctx.fillStyle = '#ef4444'; ctx.fillRect(px(gx + bW + 6), px(PT + cH - bNo), px(bW), px(bNo));
+          ctx.fillStyle = '#374151'; ctx.font = '9px Arial'; ctx.textAlign = 'center';
+          const lbl = d.category.length > 14 ? d.category.slice(0, 13) + '…' : d.category;
+          ctx.fillText(lbl, px(gx + grpW / 2), PT + cH + 20);
+        });
+        // legend
+        ctx.fillStyle = '#22c55e'; ctx.fillRect(PL, PT + cH + 38, 12, 12);
+        ctx.fillStyle = '#374151'; ctx.font = '11px Arial'; ctx.textAlign = 'left'; ctx.fillText('Yes', PL + 16, PT + cH + 49);
+        ctx.fillStyle = '#ef4444'; ctx.fillRect(PL + 60, PT + cH + 38, 12, 12);
+        ctx.fillText('No', PL + 76, PT + cH + 49);
+        return b64(canvas);
+      };
+
+      // Helper to add an image to a worksheet
+      const addImg = (ws: any, base64: string, col: number, row: number, w: number, h: number) => {
+        const id = wb.addImage({ base64, extension: 'png' });
+        ws.addImage(id, { tl: { col, row }, ext: { width: w, height: h } });
+      };
+
+      // ── Sheet 0 (inserted first): Charts ──────────────────────────────────
+      const wsC = wb.addWorksheet('Charts', { properties: { tabColor: { argb: 'FF0F2041' } } });
+      wsC.properties.defaultColWidth = 11;
+      wsC.properties.defaultRowHeight = 20;
+
+      // Generate all chart images
+      const chartByState  = drawHBar(byState.map(s => ({ label: s.state, value: s.count, color: '#1D3461' })), 'Surveys by State');
+      const chartTimeline = drawVBar(timeline.map(t => ({ label: t.date, value: t.count, color: '#3b82f6' })), 'Submission Timeline');
+      const chartSex      = drawPie(sexData, 'HH Head Sex');
+      const chartStatus   = drawPie(statusData.map(d => ({ ...d, color: d.color })), 'HH Head Status');
+      const chartHHSize   = drawVBar(hhSizeData.map(d => ({ label: d.size + ' members', value: d.count, color: '#8b5cf6' })), 'Household Size Distribution');
+      const chartReceived = drawPie(receivedData, 'Assistance Receipt Status');
+      const chartMode     = drawPie(modeData, 'Mode of Digital Cash Delivery');
+      const chartSat      = drawVBar(satData.map(d => ({ label: d.label, value: d.count, color: d.color })), 'Satisfaction Rating Distribution');
+      const chartChal     = drawHBar(challengeData.slice(0, 8).map(d => ({ label: d.name, value: d.count, color: '#f97316' })), 'Top Challenges Reported');
+      const chartUtil     = drawGroupedBar(accessData, 'Utilization Indicators (Yes vs No)');
+
+      // Layout: 2 charts per row, each 640×360px
+      // At col-width=11 (~75px), 640px ≈ 8.5 cols → right chart starts at col 9
+      // At row-height=20px, 360px = 18 rows → next row starts 20 rows down (18 + 2 gap)
+      const charts = [chartByState, chartTimeline, chartSex, chartStatus, chartHHSize, chartReceived, chartMode, chartSat, chartChal, chartUtil];
+      charts.forEach((img, i) => {
+        const col = (i % 2 === 0) ? 0 : 9;
+        const row = Math.floor(i / 2) * 20;
+        addImg(wsC, img, col, row, 640, 360);
+      });
+
       // ── Download ─────────────────────────────────────────────────────────
       const buffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
