@@ -1553,7 +1553,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               <tbody>
                 {groupedRows.filter(g => g.rows.some(r => r.locality || r.planned)).map((group, gi) => {
                   const hasRows = group.rows.length > 0;
-                  const showSubtotal = group.rows.length > 1;
+                  const showSubtotal = group.rows.length >= 1;
                   const addRowSpan = canUpload ? 1 : 0;
                   const subtotalSpan = showSubtotal ? 1 : 0;
                   const stateRowSpan = hasRows ? group.rows.length + addRowSpan + subtotalSpan : 1;
