@@ -258,41 +258,36 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   interface LocalityTarget { planned: string; deviation: string; remarks: string; }
 
-  // GREEN = confirmed sample; YELLOW = backup (used if green doesn't respond)
-  // Counts extracted from WFP DCT beneficiary sample file (DCT_Sample.xlsx)
+  // State-level planned counts from WFP DCT sample file (green=confirmed, yellow=backup)
+  // SD01=Khartoum (KRT Bahri+ShargAnNeel), SD09=WhiteNile (Rabak+Kosti+UmRimta),
+  // SD16=RiverNile (Shendi), SD17=Northern (Al Golid)
   const SAMPLE_PLANNED: Record<string, string> = {
-    SD16010: '150', // Hosh Banga    — RN Shendi: 150 confirmed + 20 backup
-    SD01003: '100', // Al Kadaro     — KRT Bahri: 100 confirmed + 20 backup
-    SD01004: '55',  // Al-Ulayfun   — KRT Sharg An Neel > Al 'Aylafun: 55 confirmed + 3 backup
-    SD01007: '29',  // Haj Yousif   — KRT Sharg An Neel > Al Haj Yousef Wasat: 29 confirmed + 4 backup
-    SD09047: '61',  // Square 42     — WN Rabak > Asalaya: 61 confirmed + 7 backup
-    SD09046: '39',  // Rabak Sq.48  — WN Rabak > Rabak: 39 confirmed + 13 backup
-    SD09045: '35',  // Wad Nimir    — WN Um Rimta > Wad Nimir: 35 confirmed + 5 backup
-    SD17018: '150', // Montego       — NS Northern: 150 confirmed + 20 backup
+    SD01: '250', // Khartoum     — 250 confirmed HHs
+    SD09: '250', // White Nile   — 250 confirmed HHs
+    SD16: '150', // River Nile   — 150 confirmed HHs
+    SD17: '150', // Northern     — 150 confirmed HHs
   };
   const SAMPLE_BACKUP: Record<string, number> = {
-    SD16010: 20, SD01003: 20, SD01004: 3,  SD01007: 4,
-    SD09047: 7,  SD09046: 13, SD09045: 5,  SD17018: 20,
+    SD01: 40, SD09: 50, SD16: 20, SD17: 20,
   };
 
-  const SEED_VER = 'v3-confirmed-only'; // bump when SAMPLE_PLANNED changes
+  const SEED_VER = 'v4-state-level';
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
       const seeded = localStorage.getItem('pact-pdm-locality-seed-ver');
-      // Re-apply confirmed-sample planned counts on version change
       if (seeded !== SEED_VER) {
+        const fresh: Record<string, LocalityTarget> = {};
         Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
-          stored[code] = { deviation: '', remarks: '', ...stored[code], planned };
+          fresh[code] = { planned, deviation: stored[code]?.deviation || '', remarks: stored[code]?.remarks || '' };
         });
         localStorage.setItem('pact-pdm-locality-seed-ver', SEED_VER);
-        localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(stored));
-      } else {
-        Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
-          if (!stored[code]) stored[code] = { planned, deviation: '', remarks: '' };
-          else if (!stored[code].planned) stored[code] = { ...stored[code], planned };
-        });
+        localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(fresh));
+        return fresh;
       }
+      Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
+        if (!stored[code]) stored[code] = { planned, deviation: '', remarks: '' };
+      });
       return stored;
     } catch { return Object.fromEntries(Object.entries(SAMPLE_PLANNED).map(([k, v]) => [k, { planned: v, deviation: '', remarks: '' }])); }
   });
@@ -470,20 +465,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
   }, [filtered]);
 
-  // ── Locality Progress Table ───────────────────────────────────────────────
+  // ── State Progress Table ─────────────────────────────────────────────────
   const localityProgressData = useMemo(() => {
-    const m: Record<string, { state: string; count: number }> = {};
-    records.forEach(r => {  // use full records (not filtered) for true total
-      if (!r.locality) return;
-      if (!m[r.locality]) m[r.locality] = { state: r.state || '', count: 0 };
-      m[r.locality].count++;
+    const m: Record<string, number> = {};
+    records.forEach(r => {
+      if (!r.state) return;
+      m[r.state] = (m[r.state] || 0) + 1;
     });
-    return Object.entries(m).map(([code, v]) => ({
+    return Object.entries(m).map(([code, count]) => ({
       code,
-      name: LOCALITY_LABELS[code] || code,
-      state: STATE_LABELS[v.state] || v.state,
-      reached: v.count,
-    })).sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name));
+      name: STATE_LABELS[code] || code,
+      reached: count,
+    })).sort((a, b) => a.name.localeCompare(b.name));
   }, [records]);
 
   const importProgressRef = useRef<HTMLInputElement>(null);
@@ -507,8 +500,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     try {
       const XLSXLib = await import('xlsx');
       const buf = await file.arrayBuffer();
-      const wb = XLSXLib.read(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
+      const wbImp = XLSXLib.read(buf, { type: 'array' });
+      const ws = wbImp.Sheets[wbImp.SheetNames[0]];
       const rows: Record<string, string>[] = XLSXLib.utils.sheet_to_json(ws, { defval: '' });
       const updated: Record<string, LocalityTarget> = { ...localityTargets };
       let matched = 0;
@@ -520,16 +513,13 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           }
           return '';
         };
-        const localityRaw = getCol('locality', 'اسم المنطقة', 'المنطقة');
-        const planned    = getCol('planned', 'مخطط', 'target', 'plan');
-        const deviation  = getCol('reason', 'deviation', 'سبب', 'انحراف');
-        const remarks    = getCol('remark', 'ملاحظ', 'note', 'comment');
-        if (!localityRaw) return;
-        let code =
-          Object.keys(LOCALITY_LABELS).find(c => c.toLowerCase() === localityRaw.toLowerCase()) ||
-          ARABIC_TO_CODE[localityRaw] ||
-          ENGLISH_TO_CODE[localityRaw.toLowerCase()] ||
-          localityProgressData.find(r => r.name.toLowerCase() === localityRaw.toLowerCase())?.code;
+        const stateRaw = getCol('state', 'ولاية');
+        const planned  = getCol('planned', 'مخطط', 'target', 'confirmed');
+        const deviation = getCol('reason', 'deviation', 'سبب', 'انحراف');
+        const remarks  = getCol('remark', 'ملاحظ', 'note', 'comment');
+        if (!stateRaw) return;
+        const code = localityProgressData.find(r => r.name.toLowerCase() === stateRaw.toLowerCase())?.code
+          || Object.entries(STATE_LABELS).find(([, v]) => v.toLowerCase() === stateRaw.toLowerCase())?.[0];
         if (!code) return;
         updated[code] = {
           planned: planned || updated[code]?.planned || '',
@@ -540,8 +530,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       });
       setLocalityTargets(updated);
       try { localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(updated)); } catch {}
-      alert(`Imported data for ${matched} locality/localities successfully.`);
-    } catch (err) {
+      alert(`Imported data for ${matched} state(s) successfully.`);
+    } catch {
       alert('Could not read the file. Please use the Excel template format.');
     }
   };
@@ -549,18 +539,16 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const handleDownloadTemplate = async () => {
     const XLSXLib = await import('xlsx');
     const rows = localityProgressData.map(r => ({
-      'Locality Code': r.code,
-      'Locality': r.name,
-      'State': r.state,
-      'Planned Number for PDM': '',
+      'State': r.name,
+      'Planned Number for PDM (Confirmed)': localityTargets[r.code]?.planned || '',
       'Reason for Deviation': '',
       'Remarks': '',
     }));
     const ws = XLSXLib.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 22 }, { wch: 30 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 34 }, { wch: 30 }];
     const wbOut = XLSXLib.utils.book_new();
-    XLSXLib.utils.book_append_sheet(wbOut, ws, 'Locality Targets');
-    XLSXLib.writeFile(wbOut, 'pdm_locality_template.xlsx');
+    XLSXLib.utils.book_append_sheet(wbOut, ws, 'PDM State Targets');
+    XLSXLib.writeFile(wbOut, 'pdm_state_template.xlsx');
   };
 
   const handleExportProgress = async () => {
@@ -568,21 +556,23 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     const rows = localityProgressData.map(r => {
       const t = localityTargets[r.code];
       const planned = t?.planned ? Number(t.planned) : null;
+      const backup = SAMPLE_BACKUP[r.code] ?? 0;
       const dev = planned != null ? r.reached - planned : null;
       return {
-        'State': r.state,
-        'Locality': r.name,
-        'Planned Number for PDM': planned ?? '',
+        'State': r.name,
+        'Planned Number for PDM (Confirmed)': planned ?? '',
+        'Backup Sample': backup || '',
         'Number Reached by PDM (up to date)': r.reached,
         'Deviation': dev != null ? dev : '',
-        'Reason for Deviation': t?.deviation || '',
+        'Reason for Deviation (if any)': t?.deviation || '',
         'Remarks': t?.remarks || '',
       };
     });
     const ws = XLSXLib.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 34 }, { wch: 30 }];
     const wb = XLSXLib.utils.book_new();
     XLSXLib.utils.book_append_sheet(wb, ws, 'PDM Progress');
-    XLSXLib.writeFile(wb, 'pdm_progress_by_locality.xlsx');
+    XLSXLib.writeFile(wb, 'pdm_progress_by_state.xlsx');
   };
 
   // ── Beneficiary Feedback & Field Reports ──────────────────────────────────
@@ -802,10 +792,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <MapPin className="h-4 w-4 text-[#1D3461]" />
-                <h3 className="text-sm font-bold text-foreground">PDM Progress by Locality</h3>
-                <Badge variant="outline" className="text-[10px]">{localityProgressData.length} localities</Badge>
+                <h3 className="text-sm font-bold text-foreground">PDM Progress by State</h3>
+                <Badge variant="outline" className="text-[10px]">{localityProgressData.length} states</Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per locality · {canUpload ? 'Click any cell to edit, or import from file' : 'Read-only view'}</p>
+              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per state · {canUpload ? 'Click any cell to edit, or import from file' : 'Read-only view'}</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {canUpload && (
@@ -838,7 +828,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               <thead>
                 <tr className="bg-[#0F2041] text-white">
                   <th className="text-left px-4 py-2.5 font-semibold">State</th>
-                  <th className="text-left px-4 py-2.5 font-semibold">Locality</th>
                   <th className="text-center px-4 py-2.5 font-semibold">
                     <div className="flex flex-col items-center gap-0.5">
                       <span>Planned for PDM</span>
@@ -863,8 +852,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   const devColor = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
                   return (
                     <tr key={row.code} className={`border-b last:border-0 ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>
-                      <td className="px-4 py-2 font-medium text-[#1D3461] whitespace-nowrap">{row.state}</td>
-                      <td className="px-4 py-2 font-semibold whitespace-nowrap">{row.name}</td>
+                      <td className="px-4 py-2.5 font-bold text-[#1D3461] whitespace-nowrap text-[13px]">{row.name}</td>
 
                       <td className="px-4 py-2 text-center">
                         <div className="flex flex-col items-center gap-0.5">
@@ -943,7 +931,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               </tbody>
               <tfoot>
                 <tr className="bg-muted/50 border-t-2 border-border font-bold">
-                  <td className="px-4 py-2.5 text-[11px] font-bold" colSpan={2}>TOTAL</td>
+                  <td className="px-4 py-2.5 text-[11px] font-bold">TOTAL</td>
                   <td className="px-4 py-2.5 text-center text-[12px]">
                     {localityProgressData.reduce((s, r) => {
                       const p = localityTargets[r.code]?.planned;
