@@ -60,6 +60,14 @@ interface PDMRecord {
 const STATIC_DATA = (rawData as any).processed as PDMRecord[];
 
 // ── Excel processing (mirrors the Node.js build-time script) ────────────────
+const toNum = (v: any): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+};
+const toStr = (v: any): string | null =>
+  (v !== null && v !== undefined && String(v).trim() !== '') ? String(v).trim() : null;
+
 function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
   const sheetName = (wb.SheetNames as string[]).find((n: string) => n.toLowerCase() === 'data') || wb.SheetNames[0];
   const rows = XLSXLib.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null }) as any[][];
@@ -68,44 +76,44 @@ function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
   const idx = (col: string) => headers.indexOf(col);
   const chalNums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 999];
   return (rows.slice(2) as any[][]).map((row) => ({
-    id: row[idx('_id')],
-    date: row[idx('general_info/a_date')],
-    state: row[idx('general_info/a_state')],
-    locality: row[idx('general_info/locality')],
-    location: row[idx('general_info/location')],
-    interviewer: row[idx('identification/a_interviewer')],
-    hhid: row[idx('identification/hhid')],
-    org: row[idx('general_info/a_org')],
-    sex: row[idx('PDM_Demographic_module/RESPSex')],
-    hhStatus: row[idx('PDM_Demographic_module/HHRstatus')],
-    occupation: row[idx('PDM_Demographic_module/Hhoccupation')],
-    hhTotal: row[idx('PDM_Demographic_module/PDMHHTotal')],
-    hhChildren05: row[idx('PDM_Demographic_module/PDM_HHNumchild')],
-    hhChildren618: row[idx('PDM_Demographic_module/PDM_HHNumchild618')],
-    hhAdults: row[idx('PDM_Demographic_module/PDM_HHNuadult')],
-    hhElderly: row[idx('PDM_Demographic_module/PDM_HHNeldery')],
-    asstReceived: row[idx('PDM_Asst_verif/Asstreceived')],
-    asstAmtRec: row[idx('PDM_Asst_verif/HHAsstCBTRec')],
-    asstAmtExp: row[idx('PDM_Asst_verif/HHAsstCBTExp')],
-    paidFees: row[idx('PDM_Asst_verif/HHAsstPayEnt')],
-    usedAssistance: row[idx('Utilization/used_assitance')],
-    modeUsed: row[idx('Utilization/mode_used_assitance')],
-    priceHigher: row[idx('Utilization/price_higher')],
-    marketAccess: row[idx('Utilization/access_local_market')],
-    foodAvailable: row[idx('Utilization/food_available')],
-    expChallenge: row[idx('Utilization/Experiencechallenge')],
+    id:             toNum(row[idx('_id')]),
+    date:           row[idx('general_info/a_date')],
+    state:          toStr(row[idx('general_info/a_state')]),
+    locality:       toStr(row[idx('general_info/locality')]),
+    location:       toStr(row[idx('general_info/location')]),
+    interviewer:    toStr(row[idx('identification/a_interviewer')]),
+    hhid:           toStr(row[idx('identification/hhid')]),
+    org:            toNum(row[idx('general_info/a_org')]),
+    sex:            toNum(row[idx('PDM_Demographic_module/RESPSex')]),
+    hhStatus:       toNum(row[idx('PDM_Demographic_module/HHRstatus')]),
+    occupation:     toNum(row[idx('PDM_Demographic_module/Hhoccupation')]),
+    hhTotal:        toNum(row[idx('PDM_Demographic_module/PDMHHTotal')]),
+    hhChildren05:   toNum(row[idx('PDM_Demographic_module/PDM_HHNumchild')]),
+    hhChildren618:  toNum(row[idx('PDM_Demographic_module/PDM_HHNumchild618')]),
+    hhAdults:       toNum(row[idx('PDM_Demographic_module/PDM_HHNuadult')]),
+    hhElderly:      toNum(row[idx('PDM_Demographic_module/PDM_HHNeldery')]),
+    asstReceived:   toNum(row[idx('PDM_Asst_verif/Asstreceived')]),
+    asstAmtRec:     toNum(row[idx('PDM_Asst_verif/HHAsstCBTRec')]),
+    asstAmtExp:     toNum(row[idx('PDM_Asst_verif/HHAsstCBTExp')]),
+    paidFees:       toNum(row[idx('PDM_Asst_verif/HHAsstPayEnt')]),
+    usedAssistance: toNum(row[idx('Utilization/used_assitance')]),
+    modeUsed:       toNum(row[idx('Utilization/mode_used_assitance')]),
+    priceHigher:    toNum(row[idx('Utilization/price_higher')]),
+    marketAccess:   toNum(row[idx('Utilization/access_local_market')]),
+    foodAvailable:  toNum(row[idx('Utilization/food_available')]),
+    expChallenge:   toNum(row[idx('Utilization/Experiencechallenge')]),
     challenges: chalNums
-      .map((n) => (row[idx(`Utilization/Challenges/${n}`)] === 1 ? n : null))
+      .map((n) => (toNum(row[idx(`Utilization/Challenges/${n}`)]) === 1 ? n : null))
       .filter(Boolean) as number[],
-    propFood: row[idx('Utilization/PRPOPTIONfi')],
-    propNFI: row[idx('Utilization/PRPOPTIONnfi')],
-    sharing: row[idx('Utilization/HHAsstUsageShareGift')],
-    sharingPct: row[idx('Utilization/HHAsstUsageShareGiftSh')],
-    securityChallenge: row[idx('Utilization/SECUchalleng')],
-    freeResponse: row[idx('PDM_other/FreeResp')] ?? null,
-    cfm: row[idx('PDM_other/PDM_HHAsstKnowCFM')],
-    satisfaction: row[idx('PDM_other/Satisfaction_self')],
-    submission: row[idx('_submission_time')],
+    propFood:           toNum(row[idx('Utilization/PRPOPTIONfi')]),
+    propNFI:            toNum(row[idx('Utilization/PRPOPTIONnfi')]),
+    sharing:            toNum(row[idx('Utilization/HHAsstUsageShareGift')]),
+    sharingPct:         toNum(row[idx('Utilization/HHAsstUsageShareGiftSh')]),
+    securityChallenge:  toNum(row[idx('Utilization/SECUchalleng')]),
+    freeResponse:       toStr(row[idx('PDM_other/FreeResp')]),
+    cfm:          toNum(row[idx('PDM_other/PDM_HHAsstKnowCFM')]),
+    satisfaction: toNum(row[idx('PDM_other/Satisfaction_self')]),
+    submission:   toStr(row[idx('_submission_time')]),
   }));
 }
 
