@@ -25,7 +25,7 @@ export default function DCTPDMPublicPage() {
     e.preventDefault();
     setLoading(true); setError('');
     setTimeout(() => {
-      if (username.trim() === GUEST_USER && password === GUEST_PASS) {
+      if (username.trim().toLowerCase() === GUEST_USER.toLowerCase() && password.trim() === GUEST_PASS) {
         sessionStorage.setItem(SESSION_KEY, '1');
         setAuthed(true);
       } else {
@@ -64,7 +64,7 @@ export default function DCTPDMPublicPage() {
                 <Input
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="Enter username"
+                  placeholder="e.g. WFP-Sudan"
                   autoComplete="username"
                   className="h-10"
                   data-testid="input-pdm-username"
