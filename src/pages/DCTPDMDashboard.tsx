@@ -7,7 +7,7 @@ import {
 import {
   Users, MapPin, CheckCircle2, TrendingUp,
   Download, Filter, BarChart3, ShoppingCart,
-  Phone, ThumbsUp, X, FileSpreadsheet, Upload, RefreshCw,
+  Phone, ThumbsUp, X, FileSpreadsheet, Upload, FileDown, RefreshCw,
   MessageSquare, AlertTriangle, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -450,6 +450,83 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     })).sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name));
   }, [records]);
 
+  const importProgressRef = useRef<HTMLInputElement>(null);
+
+  const ARABIC_TO_CODE: Record<string, string> = {
+    'حوش بانقا': 'SD16010', 'الكدرو': 'SD01003', 'العليفون': 'SD01004',
+    'ام بدة': 'SD01002', 'ام درمان': 'SD01006', 'الحاج يوسف': 'SD01007',
+    'الحاج يوسف الوحده مربع 7': 'SD01007', 'منتيقو': 'SD17018',
+    'منتيقو ( شيخ اسماعيل )': 'SD17018', 'ناوا': 'SD17017',
+    'كومي الجديده': 'SD17016', 'مربع 42': 'SD09047',
+    'ود نمر الحي الخامس': 'SD09045', 'ربك مربع 48': 'SD09046',
+  };
+  const ENGLISH_TO_CODE: Record<string, string> = Object.fromEntries(
+    Object.entries(LOCALITY_LABELS).map(([code, name]) => [name.toLowerCase(), code])
+  );
+
+  const handleImportProgress = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    try {
+      const XLSXLib = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = XLSXLib.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: Record<string, string>[] = XLSXLib.utils.sheet_to_json(ws, { defval: '' });
+      const updated: Record<string, LocalityTarget> = { ...localityTargets };
+      let matched = 0;
+      rows.forEach(row => {
+        const getCol = (...candidates: string[]) => {
+          for (const c of candidates) {
+            const k = Object.keys(row).find(k2 => k2.toLowerCase().includes(c));
+            if (k) return String(row[k]).trim();
+          }
+          return '';
+        };
+        const localityRaw = getCol('locality', 'اسم المنطقة', 'المنطقة');
+        const planned    = getCol('planned', 'مخطط', 'target', 'plan');
+        const deviation  = getCol('reason', 'deviation', 'سبب', 'انحراف');
+        const remarks    = getCol('remark', 'ملاحظ', 'note', 'comment');
+        if (!localityRaw) return;
+        let code =
+          Object.keys(LOCALITY_LABELS).find(c => c.toLowerCase() === localityRaw.toLowerCase()) ||
+          ARABIC_TO_CODE[localityRaw] ||
+          ENGLISH_TO_CODE[localityRaw.toLowerCase()] ||
+          localityProgressData.find(r => r.name.toLowerCase() === localityRaw.toLowerCase())?.code;
+        if (!code) return;
+        updated[code] = {
+          planned: planned || updated[code]?.planned || '',
+          deviation: deviation || updated[code]?.deviation || '',
+          remarks: remarks || updated[code]?.remarks || '',
+        };
+        matched++;
+      });
+      setLocalityTargets(updated);
+      try { localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(updated)); } catch {}
+      alert(`Imported data for ${matched} locality/localities successfully.`);
+    } catch (err) {
+      alert('Could not read the file. Please use the Excel template format.');
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    const XLSXLib = await import('xlsx');
+    const rows = localityProgressData.map(r => ({
+      'Locality Code': r.code,
+      'Locality': r.name,
+      'State': r.state,
+      'Planned Number for PDM': '',
+      'Reason for Deviation': '',
+      'Remarks': '',
+    }));
+    const ws = XLSXLib.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 22 }, { wch: 30 }, { wch: 30 }];
+    const wbOut = XLSXLib.utils.book_new();
+    XLSXLib.utils.book_append_sheet(wbOut, ws, 'Locality Targets');
+    XLSXLib.writeFile(wbOut, 'pdm_locality_template.xlsx');
+  };
+
   const handleExportProgress = async () => {
     const XLSXLib = await import('xlsx');
     const rows = localityProgressData.map(r => {
@@ -692,11 +769,31 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 <h3 className="text-sm font-bold text-foreground">PDM Progress by Locality</h3>
                 <Badge variant="outline" className="text-[10px]">{localityProgressData.length} localities</Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per locality · {canUpload ? 'Click any cell to edit planned targets or remarks' : 'Read-only view'}</p>
+              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per locality · {canUpload ? 'Click any cell to edit, or import from file' : 'Read-only view'}</p>
             </div>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExportProgress} data-testid="button-export-progress">
-              <Download className="h-3.5 w-3.5" />Export to Excel
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {canUpload && (
+                <>
+                  <input
+                    ref={importProgressRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={handleImportProgress}
+                    data-testid="input-import-progress"
+                  />
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => importProgressRef.current?.click()} data-testid="button-import-progress">
+                    <Upload className="h-3.5 w-3.5" />Import from File
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 text-muted-foreground" onClick={handleDownloadTemplate} data-testid="button-download-template">
+                    <FileDown className="h-3.5 w-3.5" />Get Template
+                  </Button>
+                </>
+              )}
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExportProgress} data-testid="button-export-progress">
+                <Download className="h-3.5 w-3.5" />Export to Excel
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="px-0 pb-2">
