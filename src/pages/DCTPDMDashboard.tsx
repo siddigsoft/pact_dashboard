@@ -258,29 +258,41 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   interface LocalityTarget { planned: string; deviation: string; remarks: string; }
 
-  // Planned counts extracted from the WFP DCT sample beneficiary file
-  // Sources: RN Shendi=170, KRT Bahri=120, KRT Sharg An Neel (Aylafun=58, Haj Yousef=33),
-  //          WN Rabak (Asalaya=68 for Sq.42, Rabak=52 for Sq.48), WN Um Rimta (Wad Nimir=40)
-  //          NS Northern total=170 (Al Golid area)
+  // GREEN = confirmed sample; YELLOW = backup (used if green doesn't respond)
+  // Counts extracted from WFP DCT beneficiary sample file (DCT_Sample.xlsx)
   const SAMPLE_PLANNED: Record<string, string> = {
-    SD16010: '170', // Hosh Banga — River Nile Shendi sample (170 HHs planned)
-    SD01003: '120', // Al Kadaro — KRT Bahri sample (120 HHs planned)
-    SD01004: '58',  // Al-Ulayfun — KRT Sharg An Neel > Al 'Aylafun (58 HHs planned)
-    SD01007: '33',  // Haj Yousif – KRT Sharg An Neel > Al Haj Yousef Wasat (33 HHs planned)
-    SD09047: '68',  // Square 42 — WN Rabak > Asalaya location (68 HHs planned)
-    SD09046: '52',  // Rabak Sq.48 — WN Rabak > Rabak location (52 HHs planned)
-    SD09045: '40',  // Wad Nimir – WN Um Rimta > Wad Nimir location (40 HHs planned)
-    SD17018: '170', // Montego — Northern state sample total (170 HHs planned)
+    SD16010: '150', // Hosh Banga    — RN Shendi: 150 confirmed + 20 backup
+    SD01003: '100', // Al Kadaro     — KRT Bahri: 100 confirmed + 20 backup
+    SD01004: '55',  // Al-Ulayfun   — KRT Sharg An Neel > Al 'Aylafun: 55 confirmed + 3 backup
+    SD01007: '29',  // Haj Yousif   — KRT Sharg An Neel > Al Haj Yousef Wasat: 29 confirmed + 4 backup
+    SD09047: '61',  // Square 42     — WN Rabak > Asalaya: 61 confirmed + 7 backup
+    SD09046: '39',  // Rabak Sq.48  — WN Rabak > Rabak: 39 confirmed + 13 backup
+    SD09045: '35',  // Wad Nimir    — WN Um Rimta > Wad Nimir: 35 confirmed + 5 backup
+    SD17018: '150', // Montego       — NS Northern: 150 confirmed + 20 backup
+  };
+  const SAMPLE_BACKUP: Record<string, number> = {
+    SD16010: 20, SD01003: 20, SD01004: 3,  SD01007: 4,
+    SD09047: 7,  SD09046: 13, SD09045: 5,  SD17018: 20,
   };
 
+  const SEED_VER = 'v3-confirmed-only'; // bump when SAMPLE_PLANNED changes
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
-      // Seed planned numbers from sample file for localities not yet set by admin
-      Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
-        if (!stored[code]) stored[code] = { planned, deviation: '', remarks: '' };
-        else if (!stored[code].planned) stored[code] = { ...stored[code], planned };
-      });
+      const seeded = localStorage.getItem('pact-pdm-locality-seed-ver');
+      // Re-apply confirmed-sample planned counts on version change
+      if (seeded !== SEED_VER) {
+        Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
+          stored[code] = { deviation: '', remarks: '', ...stored[code], planned };
+        });
+        localStorage.setItem('pact-pdm-locality-seed-ver', SEED_VER);
+        localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(stored));
+      } else {
+        Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
+          if (!stored[code]) stored[code] = { planned, deviation: '', remarks: '' };
+          else if (!stored[code].planned) stored[code] = { ...stored[code], planned };
+        });
+      }
       return stored;
     } catch { return Object.fromEntries(Object.entries(SAMPLE_PLANNED).map(([k, v]) => [k, { planned: v, deviation: '', remarks: '' }])); }
   });
@@ -827,7 +839,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 <tr className="bg-[#0F2041] text-white">
                   <th className="text-left px-4 py-2.5 font-semibold">State</th>
                   <th className="text-left px-4 py-2.5 font-semibold">Locality</th>
-                  <th className="text-center px-4 py-2.5 font-semibold whitespace-nowrap">Planned for PDM</th>
+                  <th className="text-center px-4 py-2.5 font-semibold">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span>Planned for PDM</span>
+                      <div className="flex items-center gap-1 text-[9px] font-normal opacity-80">
+                        <span className="bg-green-500 rounded-full px-1.5 py-0 text-white">● confirmed</span>
+                        <span className="bg-yellow-400 rounded-full px-1.5 py-0 text-white">● backup</span>
+                      </div>
+                    </div>
+                  </th>
                   <th className="text-center px-4 py-2.5 font-semibold whitespace-nowrap">Reached (up to date)</th>
                   <th className="text-center px-4 py-2.5 font-semibold">Deviation</th>
                   <th className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">Reason for Deviation</th>
@@ -847,19 +867,26 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                       <td className="px-4 py-2 font-semibold whitespace-nowrap">{row.name}</td>
 
                       <td className="px-4 py-2 text-center">
-                        {canUpload ? (
-                          <input
-                            type="number"
-                            min={0}
-                            className="w-20 text-center text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
-                            value={t?.planned ?? ''}
-                            placeholder="—"
-                            onChange={e => updateTarget(row.code, 'planned', e.target.value)}
-                            data-testid={`input-planned-${row.code}`}
-                          />
-                        ) : (
-                          <span className="font-medium">{planned ?? '—'}</span>
-                        )}
+                        <div className="flex flex-col items-center gap-0.5">
+                          {canUpload ? (
+                            <input
+                              type="number"
+                              min={0}
+                              className="w-20 text-center text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                              value={t?.planned ?? ''}
+                              placeholder="—"
+                              onChange={e => updateTarget(row.code, 'planned', e.target.value)}
+                              data-testid={`input-planned-${row.code}`}
+                            />
+                          ) : (
+                            <span className="font-medium">{planned ?? '—'}</span>
+                          )}
+                          {SAMPLE_BACKUP[row.code] != null && (
+                            <span className="inline-flex items-center gap-0.5 text-[9.5px] font-semibold px-1.5 py-0 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-300 whitespace-nowrap">
+                              +{SAMPLE_BACKUP[row.code]} backup
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-4 py-2 text-center">
