@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import DCTPDMDashboard from './DCTPDMDashboard';
 
-const GUEST_USER = 'pdm-report';
+const GUEST_USER = 'WFP-Sudan';
 const GUEST_PASS = 'PACT@2026';
 const SESSION_KEY = 'pdm_public_access';
 
