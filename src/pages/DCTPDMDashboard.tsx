@@ -238,8 +238,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 interface DataSource { name: string; uploadedAt: string; count: number; }
 
 export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: boolean } = {}) {
-  const { currentUserRole } = useAppContext();
-  const canUpload = !publicMode && ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'].includes(currentUserRole ?? '');
+  const { currentUser } = useAppContext();
+  const canUpload = !publicMode && ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'].includes((currentUser as any)?.role ?? '');
 
   const [records, setRecords]       = useState<PDMRecord[]>(STATIC_DATA);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
