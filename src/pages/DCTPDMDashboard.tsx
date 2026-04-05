@@ -257,8 +257,32 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const FEEDBACK_PAGE_SIZE = 10;
 
   interface LocalityTarget { planned: string; deviation: string; remarks: string; }
+
+  // Planned counts extracted from the WFP DCT sample beneficiary file
+  // Sources: RN Shendi=170, KRT Bahri=120, KRT Sharg An Neel (Aylafun=58, Haj Yousef=33),
+  //          WN Rabak (Asalaya=68 for Sq.42, Rabak=52 for Sq.48), WN Um Rimta (Wad Nimir=40)
+  //          NS Northern total=170 (Al Golid area)
+  const SAMPLE_PLANNED: Record<string, string> = {
+    SD16010: '170', // Hosh Banga — River Nile Shendi sample (170 HHs planned)
+    SD01003: '120', // Al Kadaro — KRT Bahri sample (120 HHs planned)
+    SD01004: '58',  // Al-Ulayfun — KRT Sharg An Neel > Al 'Aylafun (58 HHs planned)
+    SD01007: '33',  // Haj Yousif – KRT Sharg An Neel > Al Haj Yousef Wasat (33 HHs planned)
+    SD09047: '68',  // Square 42 — WN Rabak > Asalaya location (68 HHs planned)
+    SD09046: '52',  // Rabak Sq.48 — WN Rabak > Rabak location (52 HHs planned)
+    SD09045: '40',  // Wad Nimir – WN Um Rimta > Wad Nimir location (40 HHs planned)
+    SD17018: '170', // Montego — Northern state sample total (170 HHs planned)
+  };
+
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
-    try { return JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}'); } catch { return {}; }
+    try {
+      const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
+      // Seed planned numbers from sample file for localities not yet set by admin
+      Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
+        if (!stored[code]) stored[code] = { planned, deviation: '', remarks: '' };
+        else if (!stored[code].planned) stored[code] = { ...stored[code], planned };
+      });
+      return stored;
+    } catch { return Object.fromEntries(Object.entries(SAMPLE_PLANNED).map(([k, v]) => [k, { planned: v, deviation: '', remarks: '' }])); }
   });
   const updateTarget = (code: string, field: keyof LocalityTarget, val: string) => {
     setLocalityTargets(prev => {
