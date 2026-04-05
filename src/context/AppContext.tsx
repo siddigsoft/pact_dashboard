@@ -205,6 +205,12 @@ export const useAppContext = () => {
 };
 
 /**
+ * Safe version of useAppContext — returns undefined instead of throwing when
+ * used outside of AppProviders (e.g., on a fully public page like /pdm-report).
+ */
+export const useSafeAppContext = () => useContext(AppContext);
+
+/**
  * Select only the context fields you need to avoid re-renders when unrelated context changes.
  * Use instead of useAppContext() when you need a subset of values.
  */

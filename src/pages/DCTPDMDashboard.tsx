@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAppContext } from '@/context/AppContext';
+import { useSafeAppContext } from '@/context/AppContext';
 
 // ── Types & Config ──────────────────────────────────────────────────────────
 
@@ -325,7 +325,7 @@ const SUBCODE_TO_ROW_ID: Record<string, string> = {
 };
 
 export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: boolean } = {}) {
-  const { currentUser } = useAppContext();
+  const { currentUser } = useSafeAppContext() ?? {};
 
   /**
    * Upload / edit access is granted only on the private route (/dct-pdm) and

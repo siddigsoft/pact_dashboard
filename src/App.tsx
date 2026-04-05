@@ -455,6 +455,39 @@ function App() {
     }
   }, []);
 
+  // ── Public PDM Report — bypass ALL session/auth/mobile guards ──────────────
+  // This route has its own login gate (DCTPDMPublicPage) and must NEVER be
+  // intercepted by SessionGuard, AuthGuard, MobilePermissionGuard, or any
+  // notification/broadcast overlay.
+  if (window.location.pathname === '/pdm-report') {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+        <ErrorBoundary
+          fallback={
+            <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ color: '#DC2626', fontWeight: 'bold' }}>Something went wrong.</p>
+                <button onClick={() => window.location.reload()} style={{ marginTop: '12px', padding: '8px 16px', background: '#1D3461', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <QueryClientProvider client={queryClient}>
+            <Router>
+              <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0F2041' }}><div style={{ color: '#fff', fontSize: '14px' }}>Loading…</div></div>}>
+                <Routes>
+                  <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
+                </Routes>
+              </Suspense>
+            </Router>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </ThemeProvider>
+    );
+  }
+
   // If Supabase is not configured, show the configuration error screen
   // This prevents the app from crashing and gives a clear error message
   if (!isSupabaseConfigured) {
