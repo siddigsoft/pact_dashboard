@@ -1734,7 +1734,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                     data-testid={`textarea-deviation-${group.code}`}
                                   />
                                 ) : (
-                                  <span className="text-[12px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                                  <span className="text-[13px] font-bold text-foreground whitespace-pre-wrap leading-relaxed">
                                     {stateDeviations[group.code] || '—'}
                                   </span>
                                 )}
