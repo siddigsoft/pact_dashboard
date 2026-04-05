@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, Fragment } from 'react';
 import rawData from '@/data/pdm_data.json';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -8,7 +8,7 @@ import {
   Users, MapPin, CheckCircle2, TrendingUp,
   Download, Filter, BarChart3, ShoppingCart,
   Phone, ThumbsUp, X, FileSpreadsheet, Upload, FileDown, RefreshCw,
-  MessageSquare, AlertTriangle, ChevronDown, ChevronUp,
+  MessageSquare, AlertTriangle, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -365,6 +365,66 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       return next;
     });
   };
+
+  // ── Locality Rows (per-locality table data) ───────────────────────────────
+  interface LocalityRow {
+    id: string;
+    stateCode: string;
+    locality: string;
+    planned: string;
+    deviation: string;
+    remarks: string;
+  }
+
+  const LOCALITY_ROWS_VER = 'v1';
+  const [localityRows, setLocalityRows] = useState<LocalityRow[]>(() => {
+    try {
+      const stored = localStorage.getItem('pact-pdm-locality-rows');
+      const ver    = localStorage.getItem('pact-pdm-locality-rows-ver');
+      if (ver === LOCALITY_ROWS_VER && stored) return JSON.parse(stored);
+      // Seed one row per state from SAMPLE_PLANNED + SAMPLE_DEFAULTS
+      const rows: LocalityRow[] = Object.entries(SAMPLE_PLANNED).map(([code, planned]) => {
+        const def = SAMPLE_DEFAULTS[code] ?? { locality: '', deviation: '', remarks: '' };
+        return { id: `${code}-0`, stateCode: code, locality: def.locality, planned, deviation: def.deviation, remarks: def.remarks };
+      });
+      localStorage.setItem('pact-pdm-locality-rows',     JSON.stringify(rows));
+      localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
+      return rows;
+    } catch {
+      return Object.entries(SAMPLE_PLANNED).map(([code, planned]) => {
+        const def = SAMPLE_DEFAULTS[code] ?? { locality: '', deviation: '', remarks: '' };
+        return { id: `${code}-0`, stateCode: code, locality: def.locality, planned, deviation: def.deviation, remarks: def.remarks };
+      });
+    }
+  });
+
+  const saveRows = (rows: LocalityRow[]) => {
+    try { localStorage.setItem('pact-pdm-locality-rows', JSON.stringify(rows)); } catch {}
+  };
+  const addLocalityRow = (stateCode: string) => {
+    const row: LocalityRow = { id: `${stateCode}-${Date.now()}`, stateCode, locality: '', planned: '', deviation: '', remarks: '' };
+    setLocalityRows(prev => { const next = [...prev, row]; saveRows(next); return next; });
+  };
+  const updateLocalityRow = (id: string, field: keyof Omit<LocalityRow, 'id' | 'stateCode'>, val: string) => {
+    setLocalityRows(prev => { const next = prev.map(r => r.id === id ? { ...r, [field]: val } : r); saveRows(next); return next; });
+  };
+  const removeLocalityRow = (id: string) => {
+    setLocalityRows(prev => { const next = prev.filter(r => r.id !== id); saveRows(next); return next; });
+  };
+
+  // Groups all 18 states alphabetically; each state carries its matched locality rows
+  // and the reached count from the uploaded survey data.
+  const groupedRows = useMemo(() => {
+    const reachedMap = Object.fromEntries(allStateRows.map(r => [r.code, r.reached]));
+    return Object.keys(SAMPLE_PLANNED)
+      .sort((a, b) => (STATE_LABELS[a] || a).localeCompare(STATE_LABELS[b] || b))
+      .map(code => ({
+        code,
+        name: STATE_LABELS[code] || code,
+        reached: reachedMap[code] || 0,
+        rows: localityRows.filter(r => r.stateCode === code),
+      }));
+  }, [localityRows, allStateRows]);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
@@ -1336,7 +1396,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               <div className="flex items-center gap-2 mb-0.5">
                 <MapPin className="h-4 w-4 text-[#1D3461]" />
                 <h3 className="text-sm font-bold text-foreground">PDM Progress by State</h3>
-                <Badge variant="outline" className="text-[10px]">{allStateRows.length} states</Badge>
+                <Badge variant="outline" className="text-[10px]">{localityRows.length} localities · {groupedRows.filter(g => g.rows.length > 0).length} states</Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per state · {canUpload ? 'Click any cell to edit, or import from file' : canEditNotes ? 'You can edit Reason for Deviation and Remarks' : 'Read-only view'}</p>
             </div>
@@ -1384,125 +1444,195 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   <th className="text-center px-4 py-2.5 font-semibold">Deviation</th>
                   <th className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">Reason for Deviation</th>
                   <th className="text-left px-4 py-2.5 font-semibold">Remarks</th>
+                  {canUpload && <th className="px-2 py-2.5" />}
                 </tr>
               </thead>
               <tbody>
-                {allStateRows.map((row, i) => {
-                  const t = localityTargets[row.code];
-                  const planned = t?.planned ? Number(t.planned) : null;
-                  const dev = planned != null ? row.reached - planned : null;
-                  const devPct = planned ? Math.round((row.reached / planned) * 100) : null;
-                  const devColor = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
-                  return (
-                    <tr key={row.code} className={`border-b last:border-0 ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>
-                      <td className="px-4 py-2.5 font-bold text-[#1D3461] whitespace-nowrap text-[13px]">{row.name}</td>
+                {groupedRows.map((group, gi) => {
+                  const hasRows = group.rows.length > 0;
+                  const addRowSpan = canUpload ? 1 : 0;
+                  const stateRowSpan = hasRows ? group.rows.length + addRowSpan : 1;
+                  const rowBg = gi % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20';
+                  const extraCols = canUpload ? 7 : 6; // locality+planned+reached+dev+reason+remarks+(delete?)
 
-                      {/* Locality — editable by admin/super_admin (same as Planned) */}
-                      <td className="px-4 py-2">
-                        {canUpload ? (
-                          <input
-                            type="text"
-                            className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
-                            value={t?.locality ?? ''}
-                            placeholder="Enter locality…"
-                            onChange={e => updateTarget(row.code, 'locality', e.target.value)}
-                            data-testid={`input-locality-${row.code}`}
-                          />
-                        ) : (
-                          <span className="text-muted-foreground">{t?.locality || '—'}</span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-2 text-center">
-                        <div className="flex flex-col items-center gap-0.5">
+                  if (!hasRows) {
+                    return (
+                      <tr key={group.code} className={`border-b ${rowBg}`}>
+                        <td className="px-4 py-2.5 font-bold text-[#1D3461] whitespace-nowrap text-[13px] border-r border-border/30">{group.name}</td>
+                        <td colSpan={extraCols} className="px-4 py-2 text-center">
                           {canUpload ? (
-                            <input
-                              type="number"
-                              min={0}
-                              className="w-20 text-center text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
-                              value={t?.planned ?? ''}
-                              placeholder="—"
-                              onChange={e => updateTarget(row.code, 'planned', e.target.value)}
-                              data-testid={`input-planned-${row.code}`}
-                            />
+                            <button
+                              onClick={() => addLocalityRow(group.code)}
+                              className="text-[11px] text-[#1D3461]/50 hover:text-[#1D3461] flex items-center gap-1 mx-auto"
+                              data-testid={`btn-add-locality-${group.code}`}
+                            >
+                              <Plus className="h-3 w-3" />Add locality
+                            </button>
                           ) : (
-                            <span className="font-medium">{planned ?? '—'}</span>
+                            <span className="text-muted-foreground text-[11px]">No localities defined</span>
                           )}
-                        </div>
-                      </td>
+                        </td>
+                      </tr>
+                    );
+                  }
 
-                      <td className="px-4 py-2 text-center">
-                        <span className="inline-flex items-center gap-1 font-bold text-[#1D3461]">
-                          {row.reached}
-                          {devPct != null && (
-                            <span className={`text-[10px] font-normal ${devColor}`}>({devPct}%)</span>
-                          )}
-                        </span>
-                      </td>
+                  return (
+                    <Fragment key={group.code}>
+                      {group.rows.map((row, ri) => {
+                        const planned  = row.planned ? Number(row.planned) : null;
+                        const dev      = planned != null ? group.reached - planned : null;
+                        const devPct   = planned ? Math.round((group.reached / planned) * 100) : null;
+                        const devColor = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
+                        const isFirst  = ri === 0;
 
-                      <td className="px-4 py-2 text-center">
-                        {dev == null ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <span className={`font-bold ${devColor}`}>
-                            {dev > 0 ? `+${dev}` : dev}
-                          </span>
-                        )}
-                      </td>
+                        return (
+                          <tr key={row.id} className={`border-b ${rowBg}`}>
+                            {isFirst && (
+                              <td
+                                rowSpan={stateRowSpan}
+                                className="px-4 py-2.5 font-bold text-[#1D3461] whitespace-nowrap text-[13px] border-r border-border/30 align-top"
+                              >
+                                {group.name}
+                              </td>
+                            )}
 
-                      <td className="px-4 py-2">
-                        {canEditNotes ? (
-                          <input
-                            type="text"
-                            className="w-full min-w-[160px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
-                            value={t?.deviation ?? ''}
-                            placeholder="Enter reason…"
-                            onChange={e => updateTarget(row.code, 'deviation', e.target.value)}
-                            data-testid={`input-deviation-${row.code}`}
-                          />
-                        ) : (
-                          <span className="text-muted-foreground">{t?.deviation || '—'}</span>
-                        )}
-                      </td>
+                            {/* Locality */}
+                            <td className="px-4 py-2">
+                              {canUpload ? (
+                                <input
+                                  type="text"
+                                  className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                                  value={row.locality}
+                                  placeholder="Enter locality…"
+                                  onChange={e => updateLocalityRow(row.id, 'locality', e.target.value)}
+                                  data-testid={`input-locality-${row.id}`}
+                                />
+                              ) : (
+                                <span className="text-muted-foreground">{row.locality || '—'}</span>
+                              )}
+                            </td>
 
-                      <td className="px-4 py-2">
-                        {canEditNotes ? (
-                          <input
-                            type="text"
-                            className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
-                            value={t?.remarks ?? ''}
-                            placeholder="Add remarks…"
-                            onChange={e => updateTarget(row.code, 'remarks', e.target.value)}
-                            data-testid={`input-remarks-${row.code}`}
-                          />
-                        ) : (
-                          <span className="text-muted-foreground">{t?.remarks || '—'}</span>
-                        )}
-                      </td>
-                    </tr>
+                            {/* Planned */}
+                            <td className="px-4 py-2 text-center">
+                              {canUpload ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  className="w-20 text-center text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                                  value={row.planned}
+                                  placeholder="—"
+                                  onChange={e => updateLocalityRow(row.id, 'planned', e.target.value)}
+                                  data-testid={`input-planned-${row.id}`}
+                                />
+                              ) : (
+                                <span className="font-medium">{planned ?? '—'}</span>
+                              )}
+                            </td>
+
+                            {/* Reached — always the state total (survey records for that state) */}
+                            <td className="px-4 py-2 text-center">
+                              <span className="inline-flex items-center gap-1 font-bold text-[#1D3461]">
+                                {group.reached}
+                                {devPct != null && (
+                                  <span className={`text-[10px] font-normal ${devColor}`}>({devPct}%)</span>
+                                )}
+                              </span>
+                            </td>
+
+                            {/* Deviation */}
+                            <td className="px-4 py-2 text-center">
+                              {dev == null ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span className={`font-bold ${devColor}`}>{dev > 0 ? `+${dev}` : dev}</span>
+                              )}
+                            </td>
+
+                            {/* Reason for Deviation */}
+                            <td className="px-4 py-2">
+                              {canEditNotes ? (
+                                <input
+                                  type="text"
+                                  className="w-full min-w-[160px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                                  value={row.deviation}
+                                  placeholder="Enter reason…"
+                                  onChange={e => updateLocalityRow(row.id, 'deviation', e.target.value)}
+                                  data-testid={`input-deviation-${row.id}`}
+                                />
+                              ) : (
+                                <span className="text-muted-foreground">{row.deviation || '—'}</span>
+                              )}
+                            </td>
+
+                            {/* Remarks */}
+                            <td className="px-4 py-2">
+                              {canEditNotes ? (
+                                <input
+                                  type="text"
+                                  className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                                  value={row.remarks}
+                                  placeholder="Add remarks…"
+                                  onChange={e => updateLocalityRow(row.id, 'remarks', e.target.value)}
+                                  data-testid={`input-remarks-${row.id}`}
+                                />
+                              ) : (
+                                <span className="text-muted-foreground">{row.remarks || '—'}</span>
+                              )}
+                            </td>
+
+                            {/* Delete row */}
+                            {canUpload && (
+                              <td className="px-2 py-2 text-center">
+                                <button
+                                  onClick={() => removeLocalityRow(row.id)}
+                                  className="text-red-400 hover:text-red-600 text-base leading-none font-bold"
+                                  title="Remove locality row"
+                                  data-testid={`btn-remove-locality-${row.id}`}
+                                >×</button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+
+                      {/* Add-locality button row (covered by state rowSpan) */}
+                      {canUpload && (
+                        <tr className={`border-b ${rowBg}`}>
+                          <td colSpan={extraCols} className="px-4 py-1">
+                            <button
+                              onClick={() => addLocalityRow(group.code)}
+                              className="text-[11px] text-[#1D3461]/50 hover:text-[#1D3461] flex items-center gap-1"
+                              data-testid={`btn-add-locality-${group.code}`}
+                            >
+                              <Plus className="h-3 w-3" />Add locality
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
               <tfoot>
-                <tr className="bg-muted/50 border-t-2 border-border font-bold">
-                  <td className="px-4 py-2.5 text-[11px] font-bold">TOTAL</td>
-                  <td className="px-4 py-2.5" />
-                  <td className="px-4 py-2.5 text-center text-[12px]">
-                    {allStateRows.reduce((s, r) => {
-                      const p = localityTargets[r.code]?.planned;
-                      return s + (p ? Number(p) : 0);
-                    }, 0) || '—'}
-                  </td>
-                  <td className="px-4 py-2.5 text-center text-[12px] text-[#1D3461]">{records.length}</td>
-                  <td className="px-4 py-2.5 text-center text-[12px]">
-                    {(() => {
-                      const totalPlanned = allStateRows.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
-                      const dev = totalPlanned ? records.length - totalPlanned : null;
-                      return dev != null ? <span className={dev >= 0 ? 'text-emerald-600' : 'text-red-500'}>{dev > 0 ? `+${dev}` : dev}</span> : '—';
-                    })()}
-                  </td>
-                  <td colSpan={2} />
-                </tr>
+                {(() => {
+                  const totalPlanned = localityRows.reduce((s, r) => s + (r.planned ? Number(r.planned) : 0), 0);
+                  const totalReached = records.length;
+                  const dev = totalPlanned > 0 ? totalReached - totalPlanned : null;
+                  return (
+                    <tr className="bg-muted/50 border-t-2 border-border font-bold">
+                      <td className="px-4 py-2.5 text-[11px] font-bold">TOTAL</td>
+                      <td className="px-4 py-2.5" />
+                      <td className="px-4 py-2.5 text-center text-[12px]">{totalPlanned || '—'}</td>
+                      <td className="px-4 py-2.5 text-center text-[12px] text-[#1D3461]">{totalReached}</td>
+                      <td className="px-4 py-2.5 text-center text-[12px]">
+                        {dev != null
+                          ? <span className={dev >= 0 ? 'text-emerald-600' : 'text-red-500'}>{dev > 0 ? `+${dev}` : dev}</span>
+                          : '—'}
+                      </td>
+                      <td colSpan={canUpload ? 3 : 2} />
+                    </tr>
+                  );
+                })()}
               </tfoot>
             </table>
           </div>
