@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
+import rawData from '@/data/pdm_data.json';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, Area, AreaChart,
@@ -52,7 +53,7 @@ interface PDMRecord {
   submission: string | null;
 }
 
-const EMPTY: PDMRecord[] = [];
+const STATIC_DATA = (rawData as any).processed as PDMRecord[];
 
 // ── Excel processing (mirrors the Node.js build-time script) ────────────────
 function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
@@ -201,20 +202,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 interface DataSource { name: string; uploadedAt: string; count: number; }
 
 export default function DCTPDMDashboard() {
-  const [records, setRecords]       = useState<PDMRecord[]>(EMPTY);
-  const [loading, setLoading]       = useState(true);
+  const [records, setRecords]       = useState<PDMRecord[]>(STATIC_DATA);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [uploading, setUploading]   = useState(false);
   const [dragOver, setDragOver]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Fetch built-in dataset from public folder on mount
-  useEffect(() => {
-    fetch('/pdm_data.json')
-      .then(r => r.json())
-      .then(d => { setRecords(d.processed || []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
 
   const [stateFilter, setStateFilter] = useState('all');
   const [sexFilter,   setSexFilter]   = useState('all');
@@ -258,12 +250,8 @@ export default function DCTPDMDashboard() {
   };
 
   const resetToDefault = () => {
-    setLoading(true); setDataSource(null);
+    setRecords(STATIC_DATA); setDataSource(null);
     setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
-    fetch('/pdm_data.json')
-      .then(r => r.json())
-      .then(d => { setRecords(d.processed || []); setLoading(false); })
-      .catch(() => setLoading(false));
   };
 
   const filtered = useMemo(() => records.filter(r => {
@@ -423,15 +411,6 @@ export default function DCTPDMDashboard() {
       </text>
     );
   };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
-        <RefreshCw className="h-8 w-8 animate-spin text-[#1D3461]" />
-        <p className="text-sm font-medium">Loading PDM data…</p>
-      </div>
-    );
-  }
 
   return (
     <div className="p-4 space-y-5 max-w-[1400px] mx-auto">
