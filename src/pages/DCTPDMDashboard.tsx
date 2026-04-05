@@ -240,12 +240,13 @@ interface LocalityTarget { planned: string; locality: string; deviation: string;
 interface LocalityRow { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string; }
 
 const FEEDBACK_PAGE_SIZE = 10;
-const LOCALITY_ROWS_VER = 'v6'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
+const LOCALITY_ROWS_VER = 'v7'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
 
 // State-level totals — PRINCIPAL only (ALTERNATE/yellow backup rows excluded)
 // v6: SD01 corrected 290→250 (Bahri backup 40 removed)
+// v7: SD09 297→247 (Rabak backup 50); SD16 170→150 (Shendi backup 20); SD17 170→150 (Al Golid backup 20)
 const SAMPLE_PLANNED: Record<string, string> = {
-  SD01: '250', SD09: '297', SD16: '170', SD17: '170', // Khartoum / White Nile / River Nile / Northern
+  SD01: '250', SD09: '247', SD16: '150', SD17: '150', // Khartoum / White Nile / River Nile / Northern
   SD02: '139',                                          // North Darfur
   SD07: '303',                                          // South Kordofan
   SD10: '21',                                           // Red Sea
@@ -284,7 +285,7 @@ const SEED_LOCALITY_ROWS_V2: LocalityRow[] = [
   { id: 'SD07-1', stateCode: 'SD07', locality: 'Habila',        planned: '34',  deviation: '', remarks: '' },
   { id: 'SD07-2', stateCode: 'SD07', locality: 'Dilling',       planned: '122', deviation: '', remarks: '' },
   // White Nile (SD09)
-  { id: 'SD09-0', stateCode: 'SD09', locality: 'Rabak',         planned: '120', deviation: '100 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 40 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 14 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
+  { id: 'SD09-0', stateCode: 'SD09', locality: 'Rabak',         planned: '70',  deviation: '100 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 40 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 14 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
   { id: 'SD09-1', stateCode: 'SD09', locality: 'Kosti',         planned: '117', deviation: '', remarks: '' },
   { id: 'SD09-2', stateCode: 'SD09', locality: 'Um Rimta',      planned: '60',  deviation: '', remarks: '' },
   // Red Sea (SD10)
@@ -293,9 +294,9 @@ const SEED_LOCALITY_ROWS_V2: LocalityRow[] = [
   { id: 'SD13-0', stateCode: 'SD13', locality: 'Um Rawaba',     planned: '117', deviation: '', remarks: '' },
   { id: 'SD13-1', stateCode: 'SD13', locality: 'Sheikan',       planned: '170', deviation: '', remarks: '' },
   // River Nile (SD16)
-  { id: 'SD16-0', stateCode: 'SD16', locality: 'Shendi',        planned: '170', deviation: '37 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 9 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 13 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
+  { id: 'SD16-0', stateCode: 'SD16', locality: 'Shendi',        planned: '150', deviation: '37 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 9 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 13 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
   // Northern (SD17)
-  { id: 'SD17-0', stateCode: 'SD17', locality: 'Al Golid',      planned: '170', deviation: '25 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 14 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 1 HH had an incorrect or invalid phone number that does not correspond to the registered beneficiary, confirmed after several verification attempts.', remarks: '' },
+  { id: 'SD17-0', stateCode: 'SD17', locality: 'Al Golid',      planned: '150', deviation: '25 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 14 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 1 HH had an incorrect or invalid phone number that does not correspond to the registered beneficiary, confirmed after several verification attempts.', remarks: '' },
   // West Kordofan (SD18)
   { id: 'SD18-0', stateCode: 'SD18', locality: 'As Sunut',      planned: '41',  deviation: '', remarks: '' },
   { id: 'SD18-1', stateCode: 'SD18', locality: 'Al Lagowa',     planned: '49',  deviation: '', remarks: '' },
@@ -371,7 +372,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const [feedbackExpanded, setFeedbackExpanded] = useState(false);
   // Bump seed version whenever defaults change — existing manual edits are
   // preserved; only blank fields are filled from the new defaults.
-  const SEED_VER = 'v8-principal-only'; // v8: SD01 planned 290→250 (backup excluded)
+  const SEED_VER = 'v9-principal-only'; // v9: SD09/SD16/SD17 backup subtracted
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
@@ -425,15 +426,19 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       if (stored) {
         const prev: LocalityRow[] = JSON.parse(stored);
         const prevMap: Record<string, LocalityRow> = Object.fromEntries(prev.map(r => [r.id, r]));
-        // v6 correction map: rows whose planned value changed from old→new seed.
-        // If the stored value still equals the old (wrong) seed default, adopt the correction.
-        const V6_PLANNED_CORRECTIONS: Record<string, { from: string; to: string }> = {
-          'SD01-0': { from: '120', to: '80' }, // Bahri: removed 40 backup HHs
+        // Seed correction map: rows whose planned value changed from old→new seed.
+        // If stored value still equals the old wrong default, auto-apply the fix.
+        // If user had already made a manual edit, the stored value differs → preserved.
+        const PLANNED_CORRECTIONS: Record<string, { from: string; to: string }> = {
+          'SD01-0': { from: '120', to: '80'  }, // Bahri:     removed 40 backup HHs (v6)
+          'SD09-0': { from: '120', to: '70'  }, // Rabak:     removed 50 backup HHs (v7)
+          'SD16-0': { from: '170', to: '150' }, // Shendi:    removed 20 backup HHs (v7)
+          'SD17-0': { from: '170', to: '150' }, // Al Golid:  removed 20 backup HHs (v7)
         };
         const merged = SEED_LOCALITY_ROWS_V2.map(seedRow => {
           const p = prevMap[seedRow.id];
           if (!p) return seedRow;
-          const correction = V6_PLANNED_CORRECTIONS[seedRow.id];
+          const correction = PLANNED_CORRECTIONS[seedRow.id];
           const plannedVal =
             correction && p.planned === correction.from
               ? correction.to                        // stored = old wrong seed → apply fix
