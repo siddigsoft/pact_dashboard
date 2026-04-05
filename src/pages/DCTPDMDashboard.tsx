@@ -1654,6 +1654,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   </th>
                   <th className="text-center px-4 py-2.5 font-semibold whitespace-nowrap">Reached (up to date)</th>
                   <th className="text-center px-4 py-2.5 font-semibold">Deviation</th>
+                  <th className="text-center px-4 py-2.5 font-semibold whitespace-nowrap">% Reached</th>
                   <th className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">Reason for Deviation</th>
                   <th className="text-left px-4 py-2.5 font-semibold">Remarks</th>
                   {canUpload && isEditMode && <th className="px-2 py-2.5" />}
@@ -1667,7 +1668,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   const subtotalSpan = showSubtotal ? 1 : 0;
                   const stateRowSpan = hasRows ? group.rows.length + addRowSpan + subtotalSpan : 1;
                   const rowBg = gi % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20';
-                  const extraCols = canUpload && isEditMode ? 7 : 6;
+                  const extraCols = canUpload && isEditMode ? 8 : 7;
 
                   if (!hasRows) {
                     return (
@@ -1746,11 +1747,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
                             {/* Reached — per-locality count from survey sub-code mapping */}
                             <td className="px-4 py-2 text-center">
-                              <span className="inline-flex items-center gap-1 font-bold text-[#1D3461]">
+                              <span className="font-bold text-[#1D3461]">
                                 {rowReached > 0 ? rowReached : <span className="text-muted-foreground font-normal">0</span>}
-                                {devPct != null && rowReached > 0 && (
-                                  <span className={`text-[10px] font-normal ${devColor}`}>({devPct}%)</span>
-                                )}
                               </span>
                             </td>
 
@@ -1760,6 +1758,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                 <span className="text-muted-foreground">—</span>
                               ) : (
                                 <span className={`font-bold ${devColor}`}>{dev > 0 ? `+${dev}` : dev}</span>
+                              )}
+                            </td>
+
+                            {/* % Reached */}
+                            <td className="px-4 py-2 text-center">
+                              {devPct != null ? (
+                                <span className={`font-bold text-[13px] ${devColor}`}>{devPct}%</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
                               )}
                             </td>
 
@@ -1852,18 +1859,21 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               {subPlanned || '—'}
                             </td>
                             <td className="px-4 py-1.5 text-center">
-                              <span className="inline-flex items-center gap-1 font-bold text-[#1D3461] text-[12px]">
-                                {subReached}
-                                {subPct != null && (
-                                  <span className={`text-[10px] font-normal ${subColor}`}>({subPct}%)</span>
-                                )}
-                              </span>
+                              <span className="font-bold text-[#1D3461] text-[12px]">{subReached}</span>
                             </td>
                             <td className="px-4 py-1.5 text-center">
                               {subDev == null ? (
                                 <span className="text-muted-foreground text-[12px]">—</span>
                               ) : (
                                 <span className={`font-bold text-[12px] ${subColor}`}>{subDev > 0 ? `+${subDev}` : subDev}</span>
+                              )}
+                            </td>
+                            {/* % Reached */}
+                            <td className="px-4 py-1.5 text-center">
+                              {subPct != null ? (
+                                <span className={`font-bold text-[12px] ${subColor}`}>{subPct}%</span>
+                              ) : (
+                                <span className="text-muted-foreground text-[12px]">—</span>
                               )}
                             </td>
                             {/* reason + remarks both covered by rowspan from first locality row */}
@@ -1895,6 +1905,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   const totalPlanned = localityRows.reduce((s, r) => s + (r.planned ? Number(r.planned) : 0), 0);
                   const totalReached = records.length;
                   const dev = totalPlanned > 0 ? totalReached - totalPlanned : null;
+                  const totalPct = totalPlanned > 0 ? Math.round((totalReached / totalPlanned) * 100) : null;
+                  const totColor = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
                   return (
                     <tr className="bg-muted/50 border-t-2 border-border font-bold">
                       <td className="px-4 py-2.5 text-[11px] font-bold">TOTAL</td>
@@ -1903,7 +1915,12 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                       <td className="px-4 py-2.5 text-center text-[12px] text-[#1D3461]">{totalReached}</td>
                       <td className="px-4 py-2.5 text-center text-[12px]">
                         {dev != null
-                          ? <span className={dev >= 0 ? 'text-emerald-600' : 'text-red-500'}>{dev > 0 ? `+${dev}` : dev}</span>
+                          ? <span className={totColor}>{dev > 0 ? `+${dev}` : dev}</span>
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-center text-[12px]">
+                        {totalPct != null
+                          ? <span className={totColor}>{totalPct}%</span>
                           : '—'}
                       </td>
                       <td colSpan={canUpload && isEditMode ? 3 : 2} />
