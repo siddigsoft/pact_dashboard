@@ -1531,8 +1531,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               <tbody>
                 {groupedRows.filter(g => g.rows.some(r => r.locality || r.planned)).map((group, gi) => {
                   const hasRows = group.rows.length > 0;
+                  const showSubtotal = group.rows.length > 1;
                   const addRowSpan = canUpload ? 1 : 0;
-                  const stateRowSpan = hasRows ? group.rows.length + addRowSpan : 1;
+                  const subtotalSpan = showSubtotal ? 1 : 0;
+                  const stateRowSpan = hasRows ? group.rows.length + addRowSpan + subtotalSpan : 1;
                   const rowBg = gi % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20';
                   const extraCols = canUpload ? 7 : 6; // locality+planned+reached+dev+reason+remarks+(delete?)
 
@@ -1675,6 +1677,43 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                           </tr>
                         );
                       })}
+
+                      {/* State subtotal row — only when multiple localities */}
+                      {showSubtotal && (() => {
+                        const subPlanned = group.rows.reduce((s, r) => s + (r.planned ? Number(r.planned) : 0), 0);
+                        const subReached = group.reached;
+                        const subDev     = subPlanned > 0 ? subReached - subPlanned : null;
+                        const subPct     = subPlanned > 0 ? Math.round((subReached / subPlanned) * 100) : null;
+                        const subColor   = subDev == null ? '' : subDev >= 0 ? 'text-emerald-600' : 'text-red-500';
+                        return (
+                          <tr className="border-b border-[#1D3461]/15 bg-[#0F2041]/[0.04] dark:bg-[#1D3461]/10">
+                            <td className="px-4 py-1.5 text-[11px] font-semibold text-[#1D3461]/70 italic whitespace-nowrap">
+                              State Subtotal
+                            </td>
+                            <td className="px-4 py-1.5 text-center text-[12px] font-bold text-[#1D3461]">
+                              {subPlanned || '—'}
+                            </td>
+                            <td className="px-4 py-1.5 text-center">
+                              <span className="inline-flex items-center gap-1 font-bold text-[#1D3461] text-[12px]">
+                                {subReached}
+                                {subPct != null && (
+                                  <span className={`text-[10px] font-normal ${subColor}`}>({subPct}%)</span>
+                                )}
+                              </span>
+                            </td>
+                            <td className="px-4 py-1.5 text-center">
+                              {subDev == null ? (
+                                <span className="text-muted-foreground text-[12px]">—</span>
+                              ) : (
+                                <span className={`font-bold text-[12px] ${subColor}`}>{subDev > 0 ? `+${subDev}` : subDev}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-1.5" />
+                            <td className="px-4 py-1.5" />
+                            {canUpload && <td className="px-2 py-1.5" />}
+                          </tr>
+                        );
+                      })()}
 
                       {/* Add-locality button row (covered by state rowSpan) */}
                       {canUpload && (
