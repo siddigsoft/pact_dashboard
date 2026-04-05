@@ -1669,6 +1669,20 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   const stateRowSpan = hasRows ? group.rows.length + addRowSpan + subtotalSpan : 1;
                   const rowBg = gi % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20';
                   const extraCols = canUpload && isEditMode ? 8 : 7;
+                  const pctBadge = (pct: number | null) => {
+                    if (pct == null) return <span className="text-muted-foreground text-[12px]">—</span>;
+                    const [bg, text] =
+                      pct >= 100 ? ['bg-emerald-100 dark:bg-emerald-900/40', 'text-emerald-700 dark:text-emerald-300'] :
+                      pct >= 90  ? ['bg-blue-100 dark:bg-blue-900/40',    'text-blue-700 dark:text-blue-300']    :
+                      pct >= 75  ? ['bg-amber-100 dark:bg-amber-900/40',  'text-amber-700 dark:text-amber-300']  :
+                      pct >= 50  ? ['bg-orange-100 dark:bg-orange-900/40','text-orange-700 dark:text-orange-300']:
+                                   ['bg-red-100 dark:bg-red-900/40',      'text-red-700 dark:text-red-300'];
+                    return (
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${bg} ${text}`}>
+                        {pct}%
+                      </span>
+                    );
+                  };
 
                   if (!hasRows) {
                     return (
@@ -1762,13 +1776,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                             </td>
 
                             {/* % Reached */}
-                            <td className="px-4 py-2 text-center">
-                              {devPct != null ? (
-                                <span className={`font-bold text-[13px] ${devColor}`}>{devPct}%</span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </td>
+                            <td className="px-4 py-2 text-center">{pctBadge(devPct)}</td>
 
                             {/* Reason for Deviation — merged cell per state, only in first row */}
                             {isFirst && (
@@ -1869,13 +1877,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               )}
                             </td>
                             {/* % Reached */}
-                            <td className="px-4 py-1.5 text-center">
-                              {subPct != null ? (
-                                <span className={`font-bold text-[12px] ${subColor}`}>{subPct}%</span>
-                              ) : (
-                                <span className="text-muted-foreground text-[12px]">—</span>
-                              )}
-                            </td>
+                            <td className="px-4 py-1.5 text-center">{pctBadge(subPct)}</td>
                             {/* reason + remarks both covered by rowspan from first locality row */}
                             {canUpload && isEditMode && <td className="px-2 py-1.5" />}
                           </tr>
@@ -1918,11 +1920,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                           ? <span className={totColor}>{dev > 0 ? `+${dev}` : dev}</span>
                           : '—'}
                       </td>
-                      <td className="px-4 py-2.5 text-center text-[12px]">
-                        {totalPct != null
-                          ? <span className={totColor}>{totalPct}%</span>
-                          : '—'}
-                      </td>
+                      <td className="px-4 py-2.5 text-center">{pctBadge(totalPct)}</td>
                       <td colSpan={canUpload && isEditMode ? 3 : 2} />
                     </tr>
                   );
