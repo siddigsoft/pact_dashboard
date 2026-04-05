@@ -794,19 +794,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     try {
       const XLSXLib = await import('xlsx');
       const buf = await file.arrayBuffer();
-      const wbImp = XLSXLib.read(buf, { type: 'array' });
-      const ws = wbImp.Sheets[wbImp.SheetNames[0]];
-      const rows: Record<string, string>[] = XLSXLib.utils.sheet_to_json(ws, { defval: '' });
+      // cellStyles:true is required to read fill colours (green vs yellow rows)
+      const wbImp = XLSXLib.read(buf, { type: 'array', cellStyles: true });
 
-      const getCol = (row: Record<string, string>, ...candidates: string[]) => {
-        for (const c of candidates) {
-          const k = Object.keys(row).find(k2 => k2.toLowerCase().includes(c.toLowerCase()));
-          if (k) return String(row[k]).trim();
-        }
-        return '';
-      };
-
-      // Arabic → English locality name aliases (normalises names from file to table names)
+      // Arabic → English locality name aliases
       const LOC_ALIASES: Record<string, string> = {
         'بحري': 'Bahri', 'محلية بحري': 'Bahri',
         'شرق النيل': 'Sharg An Neel', 'شرق نيل': 'Sharg An Neel', 'شرق النيل ': 'Sharg An Neel',
@@ -827,33 +818,81 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       };
       const normLoc = (n: string) => LOC_ALIASES[n.trim()] || LOC_ALIASES[n.trim().toLowerCase()] || n.trim();
 
-      // Count planned HHs per stateCode → localityName (PRINCIPAL rows only)
+      // Green fill colours used in DCT Sample file for planned (PDM) rows
+      const GREEN_FILLS = new Set(['00B050', '84E291', '92D050', '00B0F0']);
+
+      const isGreenRow = (ws: ReturnType<typeof XLSXLib.utils.aoa_to_sheet>, rowIdx: number): boolean => {
+        // Check column A (index 0) fill colour — green = PDM planned, yellow = backup
+        const cellAddr = XLSXLib.utils.encode_cell({ r: rowIdx, c: 0 });
+        const cell = ws[cellAddr];
+        if (!cell || !cell.s) return true; // no style info → treat as planned
+        const fg = cell.s.fgColor?.rgb || '';
+        const patternType = cell.s.patternType || '';
+        if (patternType === 'solid' && fg) {
+          // Yellow (FFFF00) = backup/alternate → exclude
+          if (fg === 'FFFF00' || fg === 'FFC000' || fg === 'FF0000') return false;
+          // Known green shades → include
+          if (GREEN_FILLS.has(fg)) return true;
+          // Any other solid colour with no explicit green → exclude to be safe
+          return false;
+        }
+        // No solid fill (no colour) → treat as planned
+        return true;
+      };
+
+      // Count green (planned) HHs per stateCode → localityName across ALL sheets
       const plannedMap: Record<string, Record<string, number>> = {};
-      let skipped = 0;
+      let totalGreen = 0;
+      let totalSkipped = 0;
 
-      rows.forEach(row => {
-        // Count ONLY PRINCIPAL (green) rows — skip ALTERNATE (yellow) and any other type
-        const rowType = getCol(row, 'type', 'نوع', 'category', 'status', 'surveytype', 'row_type');
-        if (rowType.toUpperCase() !== 'PRINCIPAL') { skipped++; return; }
+      wbImp.SheetNames.forEach(sheetName => {
+        const ws = wbImp.Sheets[sheetName];
+        if (!ws || !ws['!ref']) return;
+        const range = XLSXLib.utils.decode_range(ws['!ref']);
+        if (range.e.r < 1) return; // no data rows
 
-        // Map state name → code (English or Arabic)
-        const stateRaw = getCol(row, 'state', 'ولاية', 'governorate', 'gov');
-        const stateCode = DCT_STATE_TO_CODE[stateRaw.toLowerCase()]
-          || DCT_STATE_TO_CODE[stateRaw]
-          || Object.entries(STATE_LABELS).find(([, v]) => v.toLowerCase() === stateRaw.toLowerCase())?.[0];
-        if (!stateCode) return;
+        // Find header row (row 0) to locate STATE and LOCALITY columns
+        const headerRow: string[] = [];
+        for (let c = 0; c <= range.e.c; c++) {
+          const cell = ws[XLSXLib.utils.encode_cell({ r: 0, c })];
+          headerRow.push(cell ? String(cell.v || '').trim().toUpperCase() : '');
+        }
+        const stateColIdx    = headerRow.findIndex(h => h === 'STATE' || h === 'ولاية' || h === 'GOVERNORATE');
+        const localityColIdx = headerRow.findIndex(h => h === 'LOCALITY' || h === 'محلية' || h === 'DISTRICT');
 
-        // Locality name — normalised through alias map (Arabic → English)
-        const locRaw = getCol(row, 'locality', 'محلية', 'localite', 'district', 'localit');
-        if (!locRaw) return;
-        const locName = normLoc(locRaw);
+        for (let r = 1; r <= range.e.r; r++) {
+          // Only count green rows (planned/PDM) — skip yellow (backup/alternate)
+          if (!isGreenRow(ws, r)) { totalSkipped++; continue; }
 
-        if (!plannedMap[stateCode]) plannedMap[stateCode] = {};
-        plannedMap[stateCode][locName] = (plannedMap[stateCode][locName] || 0) + 1;
+          const stateCell    = stateColIdx >= 0 ? ws[XLSXLib.utils.encode_cell({ r, c: stateColIdx })] : null;
+          const localityCell = localityColIdx >= 0 ? ws[XLSXLib.utils.encode_cell({ r, c: localityColIdx })] : null;
+          if (!stateCell && !localityCell) continue;
+
+          const stateRaw = stateCell ? String(stateCell.v || '').trim() : '';
+          const locRaw   = localityCell ? String(localityCell.v || '').trim() : '';
+          if (!stateRaw && !locRaw) continue;
+
+          const stateCode = DCT_STATE_TO_CODE[stateRaw.toLowerCase()]
+            || DCT_STATE_TO_CODE[stateRaw]
+            || Object.entries(STATE_LABELS).find(([, v]) => v.toLowerCase() === stateRaw.toLowerCase())?.[0];
+          if (!stateCode) continue;
+
+          const locName = normLoc(locRaw) || sheetName.replace(/^[A-Z]{2,3}\s+/i, '').trim();
+          if (!locName) continue;
+
+          if (!plannedMap[stateCode]) plannedMap[stateCode] = {};
+          // For states where one sheet covers multiple sub-localities (e.g. ND El Fasher),
+          // all green rows roll up into a single locality entry per state
+          const canonicalLoc = normLoc(locRaw) || locName;
+          // Group sub-localities of El Fasher (El Fasher, El Fasher Town, El Fasher Rural) → El Fasher
+          const loc = canonicalLoc.toLowerCase().startsWith('el fasher') ? 'El Fasher' : canonicalLoc;
+          plannedMap[stateCode][loc] = (plannedMap[stateCode][loc] || 0) + 1;
+          totalGreen++;
+        }
       });
 
       if (Object.keys(plannedMap).length === 0) {
-        alert('No PRINCIPAL rows found. Make sure the file has Locality, State, and Type columns with Type = PRINCIPAL for the green rows.');
+        alert('No green-highlighted rows found. Make sure you are uploading the correct DCT Sample Excel file.');
         return;
       }
 
@@ -895,8 +934,9 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       alert(
         `DCT Sample imported successfully!\n\n` +
         details.join('\n') +
-        `\n\n${skipped} non-PRINCIPAL rows excluded.\n` +
-        (addedCount > 0 ? `Note: ${addedCount} new locality name(s) were added. If they should match an existing row, use Edit Table to fix the name then re-upload.` : '')
+        `\n\n${totalGreen} green (planned) rows counted across all sheets.\n` +
+        `${totalSkipped} yellow/backup rows excluded.\n` +
+        (addedCount > 0 ? `Note: ${addedCount} new locality row(s) were added. If a name doesn't match an existing row, use Edit Table to correct it then re-upload.` : '')
       );
     } catch {
       alert('Could not read the file. Please upload a valid DCT Sample Excel file.');
