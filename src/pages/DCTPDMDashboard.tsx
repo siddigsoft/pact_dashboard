@@ -890,28 +890,214 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   };
 
   const handleExportProgress = async () => {
-    const XLSXLib = await import('xlsx');
-    const rows = allStateRows.map(r => {
-      const t = localityTargets[r.code];
-      const planned = t?.planned ? Number(t.planned) : null;
-      const backup = SAMPLE_BACKUP[r.code] ?? 0;
-      const dev = planned != null ? r.reached - planned : null;
-      return {
-        'State': r.name,
-        'Locality': t?.locality || '',
-        'Planned Number for PDM (Confirmed)': planned ?? '',
-        'Backup Sample': backup || '',
-        'Number Reached by PDM (up to date)': r.reached,
-        'Deviation': dev != null ? dev : '',
-        'Reason for Deviation (if any)': t?.deviation || '',
-        'Remarks': t?.remarks || '',
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'PACT Command Center';
+      const ws = wb.addWorksheet('PDM Progress by State');
+
+      // ── Column definitions ────────────────────────────────────────────────
+      ws.columns = [
+        { key: 'state',    width: 18 },
+        { key: 'locality', width: 22 },
+        { key: 'planned',  width: 28 },
+        { key: 'reached',  width: 28 },
+        { key: 'dev',      width: 14 },
+        { key: 'pct',      width: 14 },
+        { key: 'reason',   width: 40 },
+        { key: 'remarks',  width: 34 },
+      ];
+
+      // ── Style helpers ─────────────────────────────────────────────────────
+      const NAVY   = '0F2041';
+      const NAVY2  = '1D3461';
+      const WHITE  = 'FFFFFFFF';
+      const GREY_H = 'FFE8EDF4';
+      const EMERALD = 'FF059669';
+      const BLUE    = 'FF2563EB';
+      const AMBER   = 'FFD97706';
+      const ORANGE  = 'FFEA580C';
+      const RED     = 'FFDC2626';
+
+      const pctColor = (pct: number | null) => {
+        if (pct == null)  return null;
+        if (pct >= 100)   return EMERALD;
+        if (pct >= 90)    return BLUE;
+        if (pct >= 75)    return AMBER;
+        if (pct >= 50)    return ORANGE;
+        return RED;
       };
-    });
-    const ws = XLSXLib.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 30 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 34 }, { wch: 30 }];
-    const wb = XLSXLib.utils.book_new();
-    XLSXLib.utils.book_append_sheet(wb, ws, 'PDM Progress');
-    XLSXLib.writeFile(wb, 'pdm_progress_by_state.xlsx');
+
+      const applyBorder = (row: ExcelJS.Row, style: ExcelJS.BorderStyle = 'thin') => {
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.border = {
+            top:    { style, color: { argb: 'FFD1D5DB' } },
+            left:   { style, color: { argb: 'FFD1D5DB' } },
+            bottom: { style, color: { argb: 'FFD1D5DB' } },
+            right:  { style, color: { argb: 'FFD1D5DB' } },
+          };
+        });
+      };
+
+      // ── Title row ─────────────────────────────────────────────────────────
+      ws.mergeCells('A1:H1');
+      const titleCell = ws.getCell('A1');
+      titleCell.value = `DCT PDM Progress by State — ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+      titleCell.font  = { bold: true, size: 13, color: { argb: WHITE } };
+      titleCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY}` } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      ws.getRow(1).height = 28;
+
+      // ── Header row ────────────────────────────────────────────────────────
+      const headers = ['State', 'Locality', 'Planned for PDM (PRINCIPAL)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks'];
+      const hRow = ws.addRow(headers);
+      hRow.height = 22;
+      hRow.eachCell(cell => {
+        cell.font      = { bold: true, size: 10, color: { argb: WHITE } };
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY2}` } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border    = { bottom: { style: 'medium', color: { argb: 'FFD1D5DB' } } };
+      });
+      // Green header for Planned column to signal PRINCIPAL rows
+      const plannedHCell = hRow.getCell(3);
+      plannedHCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+
+      // ── Data rows ─────────────────────────────────────────────────────────
+      let totalPlanned = 0; let totalReached = 0;
+      const allExportRows: ExcelJS.Row[] = [];
+
+      groupedRows.forEach(group => {
+        const deviation = stateDeviations[group.code] || '';
+        const remarks   = stateRemarks[group.code] || '';
+        const locRows   = group.rows.length > 0 ? group.rows : [null];
+        let   statePlanned = 0; let stateReached = 0;
+        const stateDataRows: ExcelJS.Row[] = [];
+
+        locRows.forEach((row, ri) => {
+          const reached = row ? (localityReached[row.id] ?? 0) : 0;
+          const planned = row?.planned ? Number(row.planned) : null;
+          const dev     = planned != null ? reached - planned : null;
+          const devPct  = planned ? Math.round((reached / planned) * 100) : null;
+
+          if (planned) statePlanned += planned;
+          stateReached += reached;
+
+          const isOdd = (ri % 2 === 0);
+          const rowBg = isOdd ? 'FFFFFFFF' : GREY_H;
+
+          const dataRow = ws.addRow([
+            ri === 0 ? group.name : '',
+            row?.locality || '—',
+            planned ?? '',
+            reached,
+            dev != null ? dev : '',
+            devPct != null ? `${devPct}%` : '0%',
+            ri === 0 ? deviation : '',
+            ri === 0 ? remarks   : '',
+          ]);
+          dataRow.height = 18;
+          dataRow.eachCell({ includeEmpty: true }, cell => {
+            cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+            cell.font      = { size: 10 };
+            cell.alignment = { vertical: 'middle', wrapText: true };
+          });
+
+          // State column — bold
+          dataRow.getCell(1).font = { bold: ri === 0, size: 10, color: { argb: `FF${NAVY}` } };
+          dataRow.getCell(1).alignment = { vertical: 'top', wrapText: true };
+
+          // Planned — green tint (PRINCIPAL indicator)
+          if (planned) {
+            dataRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+            dataRow.getCell(3).font = { bold: true, size: 10, color: { argb: 'FF065F46' } };
+          }
+          dataRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+          dataRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+
+          // Deviation value — coloured
+          const devCell = dataRow.getCell(5);
+          devCell.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (dev != null && dev < 0) devCell.font = { size: 10, color: { argb: 'FFDC2626' } };
+          if (dev != null && dev >= 0) devCell.font = { size: 10, color: { argb: 'FF059669' } };
+
+          // % Reached — coloured
+          const pctCell = dataRow.getCell(6);
+          pctCell.alignment = { horizontal: 'center', vertical: 'middle' };
+          const pc = pctColor(devPct);
+          if (pc) pctCell.font = { bold: true, size: 10, color: { argb: pc } };
+
+          applyBorder(dataRow);
+          stateDataRows.push(dataRow);
+          allExportRows.push(dataRow);
+        });
+
+        // Merge State column for this group
+        if (stateDataRows.length > 1) {
+          const startRow = stateDataRows[0].number;
+          const endRow   = stateDataRows[stateDataRows.length - 1].number;
+          ws.mergeCells(startRow, 1, endRow, 1);
+          // Merge Reason for Deviation and Remarks columns too
+          ws.mergeCells(startRow, 7, endRow, 7);
+          ws.mergeCells(startRow, 8, endRow, 8);
+        }
+
+        // ── State subtotal row ────────────────────────────────────────────
+        const stateDev    = statePlanned ? stateReached - statePlanned : null;
+        const stateDevPct = statePlanned ? Math.round((stateReached / statePlanned) * 100) : null;
+        const subRow = ws.addRow([
+          '', 'State Subtotal', statePlanned || '', stateReached,
+          stateDev != null ? stateDev : '',
+          stateDevPct != null ? `${stateDevPct}%` : '0%',
+          '', '',
+        ]);
+        subRow.height = 16;
+        subRow.eachCell({ includeEmpty: true }, cell => {
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+          cell.font      = { bold: true, italic: true, size: 9, color: { argb: 'FF475569' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        subRow.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
+        const subPctCell = subRow.getCell(6);
+        const spc = pctColor(stateDevPct);
+        if (spc) subPctCell.font = { bold: true, italic: true, size: 9, color: { argb: spc } };
+        applyBorder(subRow);
+
+        totalPlanned += statePlanned;
+        totalReached += stateReached;
+      });
+
+      // ── TOTAL row ─────────────────────────────────────────────────────────
+      const totalDev    = totalPlanned ? totalReached - totalPlanned : null;
+      const totalDevPct = totalPlanned ? Math.round((totalReached / totalPlanned) * 100) : null;
+      const totRow = ws.addRow([
+        'TOTAL', '', totalPlanned || '', totalReached,
+        totalDev != null ? totalDev : '',
+        totalDevPct != null ? `${totalDevPct}%` : '',
+        '', '',
+      ]);
+      totRow.height = 22;
+      totRow.eachCell({ includeEmpty: true }, cell => {
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY}` } };
+        cell.font      = { bold: true, size: 11, color: { argb: WHITE } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+      totRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+      const totPctCell = totRow.getCell(6);
+      const tpc = pctColor(totalDevPct);
+      if (tpc) totPctCell.font = { bold: true, size: 11, color: { argb: tpc } };
+      applyBorder(totRow, 'medium');
+
+      // ── Download ──────────────────────────────────────────────────────────
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob   = new Blob([buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `PDM_Progress_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+    } catch (err) {
+      console.error('Progress export error:', err);
+      alert('Export failed. Please try again.');
+    }
   };
 
   // ── Beneficiary Feedback & Field Reports ──────────────────────────────────
@@ -1404,31 +1590,102 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // ── Export ───────────────────────────────────────────────────────────────
   const handleExport = async () => {
     try {
-      const XLSXLib = await import('xlsx');
-      const ws = XLSXLib.utils.json_to_sheet(filtered.map(r => ({
-        'Household ID': r.hhid,
-        'State': r.state ? (STATE_LABELS[r.state] || r.state) : '',
-        'Locality': r.locality,
-        'Sex': r.sex === 0 ? 'Female' : 'Male',
-        'HH Head Status': r.hhStatus ? STATUS_LABELS[r.hhStatus] : '',
-        'HH Total Members': r.hhTotal,
-        'Assistance Received': r.asstReceived === 1 ? 'Yes' : r.asstReceived === 2 ? 'Partial' : 'No',
-        'Amount Received (SDG)': r.asstAmtRec,
-        'Satisfaction (1–5)': r.satisfaction ?? '',
-        'CFM Aware': r.cfm === 1 ? 'Yes' : 'No',
-        'Market Access': r.marketAccess === 1 ? 'Yes' : r.marketAccess === 2 ? 'Partial' : r.marketAccess === 0 ? 'No' : '',
-        'Free Response': r.freeResponse ?? '',
-        'Interviewer': r.interviewer ?? '',
-      })));
-      ws['!cols'] = [
-        { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 8 }, { wch: 18 },
-        { wch: 16 }, { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 12 },
-        { wch: 14 }, { wch: 40 }, { wch: 20 },
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'PACT Command Center';
+      const ws = wb.addWorksheet('PDM Survey Data');
+
+      const NAVY  = '0F2041';
+      const NAVY2 = '1D3461';
+      const WHITE = 'FFFFFFFF';
+
+      ws.columns = [
+        { key: 'hhid',    width: 16 },
+        { key: 'state',   width: 18 },
+        { key: 'loc',     width: 20 },
+        { key: 'sex',     width: 10 },
+        { key: 'status',  width: 20 },
+        { key: 'hhtotal', width: 16 },
+        { key: 'asst',    width: 22 },
+        { key: 'amt',     width: 22 },
+        { key: 'sat',     width: 18 },
+        { key: 'cfm',     width: 14 },
+        { key: 'mkt',     width: 16 },
+        { key: 'free',    width: 44 },
+        { key: 'intvr',   width: 22 },
       ];
-      const wb = XLSXLib.utils.book_new();
-      XLSXLib.utils.book_append_sheet(wb, ws, 'PDM Survey Data');
-      XLSXLib.writeFile(wb, 'dct_pdm_export.xlsx');
-    } catch {
+
+      // Title row
+      ws.mergeCells('A1:M1');
+      const tc = ws.getCell('A1');
+      tc.value = `DCT PDM Survey Data Export — ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}  |  ${filtered.length} records`;
+      tc.font  = { bold: true, size: 12, color: { argb: WHITE } };
+      tc.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY}` } };
+      tc.alignment = { horizontal: 'center', vertical: 'middle' };
+      ws.getRow(1).height = 26;
+
+      // Header row
+      const cols = ['Household ID', 'State', 'Locality', 'Sex', 'HH Head Status', 'HH Total Members',
+                    'Assistance Received', 'Amount Received (SDG)', 'Satisfaction (1–5)', 'CFM Aware',
+                    'Market Access', 'Free Response', 'Interviewer'];
+      const hRow = ws.addRow(cols);
+      hRow.height = 20;
+      hRow.eachCell(cell => {
+        cell.font      = { bold: true, size: 10, color: { argb: WHITE } };
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${NAVY2}` } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border    = { bottom: { style: 'medium', color: { argb: 'FFD1D5DB' } } };
+      });
+
+      // Data rows
+      filtered.forEach((r, i) => {
+        const row = ws.addRow([
+          r.hhid ?? '',
+          r.state ? (STATE_LABELS[r.state] || r.state) : '',
+          r.locality ?? '',
+          r.sex === 0 ? 'Female' : 'Male',
+          r.hhStatus ? STATUS_LABELS[r.hhStatus] : '',
+          r.hhTotal ?? '',
+          r.asstReceived === 1 ? 'Yes' : r.asstReceived === 2 ? 'Partial' : 'No',
+          r.asstAmtRec ?? '',
+          r.satisfaction ?? '',
+          r.cfm === 1 ? 'Yes' : 'No',
+          r.marketAccess === 1 ? 'Yes' : r.marketAccess === 2 ? 'Partial' : r.marketAccess === 0 ? 'No' : '',
+          r.freeResponse ?? '',
+          r.interviewer ?? '',
+        ]);
+        row.height = 16;
+        const isOdd = i % 2 === 0;
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: isOdd ? 'FFFFFFFF' : 'FFF0F4F8' } };
+          cell.font      = { size: 9 };
+          cell.alignment = { vertical: 'middle', wrapText: false };
+          cell.border    = {
+            top:    { style: 'hair', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } },
+            left:   { style: 'hair', color: { argb: 'FFE5E7EB' } },
+            right:  { style: 'hair', color: { argb: 'FFE5E7EB' } },
+          };
+        });
+        // Colour-code assistance received
+        const asstCell = row.getCell(7);
+        if (r.asstReceived === 1) asstCell.font = { size: 9, color: { argb: 'FF059669' } };
+        if (r.asstReceived !== 1) asstCell.font = { size: 9, color: { argb: 'FFDC2626' } };
+        // Colour-code satisfaction
+        const satCell = row.getCell(9);
+        if (r.satisfaction != null) {
+          satCell.font = { size: 9, color: { argb: r.satisfaction >= 4 ? 'FF059669' : r.satisfaction <= 2 ? 'FFDC2626' : 'FFD97706' } };
+        }
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob   = new Blob([buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `PDM_Survey_Data_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+    } catch (err) {
+      console.error('Export error:', err);
       alert('Export failed. Please try again.');
     }
   };
