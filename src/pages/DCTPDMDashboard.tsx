@@ -776,7 +776,28 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         return '';
       };
 
-      // Count planned HHs per stateCode → localityName (PRINCIPAL + blank rows only)
+      // Arabic → English locality name aliases (normalises names from file to table names)
+      const LOC_ALIASES: Record<string, string> = {
+        'بحري': 'Bahri', 'محلية بحري': 'Bahri',
+        'شرق النيل': 'Sharg An Neel', 'شرق نيل': 'Sharg An Neel', 'شرق النيل ': 'Sharg An Neel',
+        'ربك': 'Rabak', 'محلية ربك': 'Rabak',
+        'كوستي': 'Kosti', 'محلية كوستي': 'Kosti',
+        'أم رمتة': 'Um Rimta', 'ام رمتة': 'Um Rimta', 'محلية أم رمتة': 'Um Rimta',
+        'شندي': 'Shendi', 'محلية شندي': 'Shendi',
+        'الفاشر': 'El Fasher', 'محلية الفاشر': 'El Fasher',
+        'كادقلي': 'Kadugli', 'محلية كادقلي': 'Kadugli',
+        'هبيلا': 'Habila', 'محلية هبيلا': 'Habila',
+        'الدلنج': 'Dilling', 'دلنج': 'Dilling',
+        'بورسودان': 'Port Sudan', 'بور سودان': 'Port Sudan',
+        'أم روابة': 'Um Rawaba', 'ام روابة': 'Um Rawaba',
+        'الأبيض': 'Sheikan', 'الأبيض (شيكان)': 'Sheikan',
+        'القولد': 'Al Golid', 'الجولد': 'Al Golid', 'قولد': 'Al Golid',
+        'السنوط': 'As Sunut', 'سنوط': 'As Sunut',
+        'اللقاوة': 'Al Lagowa', 'لقاوة': 'Al Lagowa',
+      };
+      const normLoc = (n: string) => LOC_ALIASES[n.trim()] || LOC_ALIASES[n.trim().toLowerCase()] || n.trim();
+
+      // Count planned HHs per stateCode → localityName (PRINCIPAL rows only)
       const plannedMap: Record<string, Record<string, number>> = {};
       let skipped = 0;
 
@@ -792,16 +813,17 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           || Object.entries(STATE_LABELS).find(([, v]) => v.toLowerCase() === stateRaw.toLowerCase())?.[0];
         if (!stateCode) return;
 
-        // Locality name (Arabic or English)
-        const locName = getCol(row, 'locality', 'محلية', 'localite', 'district', 'localit');
-        if (!locName) return;
+        // Locality name — normalised through alias map (Arabic → English)
+        const locRaw = getCol(row, 'locality', 'محلية', 'localite', 'district', 'localit');
+        if (!locRaw) return;
+        const locName = normLoc(locRaw);
 
         if (!plannedMap[stateCode]) plannedMap[stateCode] = {};
         plannedMap[stateCode][locName] = (plannedMap[stateCode][locName] || 0) + 1;
       });
 
       if (Object.keys(plannedMap).length === 0) {
-        alert('No matching data found. Make sure the file has Locality, State, and Type columns.');
+        alert('No PRINCIPAL rows found. Make sure the file has Locality, State, and Type columns with Type = PRINCIPAL for the green rows.');
         return;
       }
 
@@ -809,8 +831,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       let newRows = [...localityRows];
       let updatedCount = 0;
       let addedCount = 0;
+      const details: string[] = [];
 
       Object.entries(plannedMap).forEach(([stateCode, locMap]) => {
+        const stateName = STATE_LABELS[stateCode] || stateCode;
         // Remove the existing blank placeholder row for this state (if only one blank row)
         const existingRows = newRows.filter(r => r.stateCode === stateCode);
         const isOnlyBlank = existingRows.length === 1 && !existingRows[0].locality && !existingRows[0].planned;
@@ -825,10 +849,12 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           if (existing) {
             newRows = newRows.map(r => r.id === existing.id ? { ...r, planned: String(count) } : r);
             updatedCount++;
+            details.push(`  ✓ ${stateName} / ${locName}: ${count} planned`);
           } else {
             const id = `${stateCode}-${locName.replace(/\s+/g, '').slice(0, 6)}-${Date.now().toString(36)}`;
             newRows.push({ id, stateCode, locality: locName, planned: String(count), deviation: '', remarks: '' });
             addedCount++;
+            details.push(`  + ${stateName} / ${locName}: ${count} planned (new row added)`);
           }
         });
       });
@@ -837,8 +863,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       saveRows(newRows);
       localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
       alert(
-        `DCT Sample imported: ${updatedCount} localities updated, ${addedCount} localities added.\n` +
-        `${skipped} non-PRINCIPAL rows excluded (ALTERNATE / yellow rows skipped, only green rows counted).`
+        `DCT Sample imported successfully!\n\n` +
+        details.join('\n') +
+        `\n\n${skipped} non-PRINCIPAL rows excluded.\n` +
+        (addedCount > 0 ? `Note: ${addedCount} new locality name(s) were added. If they should match an existing row, use Edit Table to fix the name then re-upload.` : '')
       );
     } catch {
       alert('Could not read the file. Please upload a valid DCT Sample Excel file.');
