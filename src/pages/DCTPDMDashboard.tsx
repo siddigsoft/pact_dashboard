@@ -126,6 +126,21 @@ const STATE_LABELS: Record<string, string> = {
   SD04: 'West Darfur', SD18: 'West Kordofan',
 };
 
+const LOCALITY_LABELS: Record<string, string> = {
+  SD16010: 'Hosh Banga',
+  SD01003: 'Al Kadaro',
+  SD01004: 'Al-Ulayfun',
+  SD01002: 'Um Badda',
+  SD01006: 'Omdurman',
+  SD01007: 'Haj Yousif – Sq. 7',
+  SD17018: 'Montego (Sheikh Ismail)',
+  SD17017: 'Nawa',
+  SD17016: 'Komi Al-Jadida',
+  SD09047: 'Square 42',
+  SD09045: 'Wad Nimir – District 5',
+  SD09046: 'Rabak – Sq. 48',
+};
+
 const SATISFACTION_CFG = [
   { key: 1, label: 'Very Dissatisfied', color: '#ef4444' },
   { key: 2, label: 'Dissatisfied',      color: '#f97316' },
@@ -240,6 +255,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const [feedbackPage, setFeedbackPage]     = useState(0);
   const [feedbackExpanded, setFeedbackExpanded] = useState(false);
   const FEEDBACK_PAGE_SIZE = 10;
+
+  interface LocalityTarget { planned: string; deviation: string; remarks: string; }
+  const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
+    try { return JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}'); } catch { return {}; }
+  });
+  const updateTarget = (code: string, field: keyof LocalityTarget, val: string) => {
+    setLocalityTargets(prev => {
+      const next = { ...prev, [code]: { planned: '', deviation: '', remarks: '', ...prev[code], [field]: val } };
+      try { localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
@@ -406,6 +433,44 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     filtered.forEach(r => { if (r.interviewer) m[r.interviewer] = (m[r.interviewer] || 0) + 1; });
     return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
   }, [filtered]);
+
+  // ── Locality Progress Table ───────────────────────────────────────────────
+  const localityProgressData = useMemo(() => {
+    const m: Record<string, { state: string; count: number }> = {};
+    records.forEach(r => {  // use full records (not filtered) for true total
+      if (!r.locality) return;
+      if (!m[r.locality]) m[r.locality] = { state: r.state || '', count: 0 };
+      m[r.locality].count++;
+    });
+    return Object.entries(m).map(([code, v]) => ({
+      code,
+      name: LOCALITY_LABELS[code] || code,
+      state: STATE_LABELS[v.state] || v.state,
+      reached: v.count,
+    })).sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name));
+  }, [records]);
+
+  const handleExportProgress = async () => {
+    const XLSXLib = await import('xlsx');
+    const rows = localityProgressData.map(r => {
+      const t = localityTargets[r.code];
+      const planned = t?.planned ? Number(t.planned) : null;
+      const dev = planned != null ? r.reached - planned : null;
+      return {
+        'State': r.state,
+        'Locality': r.name,
+        'Planned Number for PDM': planned ?? '',
+        'Number Reached by PDM (up to date)': r.reached,
+        'Deviation': dev != null ? dev : '',
+        'Reason for Deviation': t?.deviation || '',
+        'Remarks': t?.remarks || '',
+      };
+    });
+    const ws = XLSXLib.utils.json_to_sheet(rows);
+    const wb = XLSXLib.utils.book_new();
+    XLSXLib.utils.book_append_sheet(wb, ws, 'PDM Progress');
+    XLSXLib.writeFile(wb, 'pdm_progress_by_locality.xlsx');
+  };
 
   // ── Beneficiary Feedback & Field Reports ──────────────────────────────────
   const trivialPhrases = ['لا', 'لا يوجد', 'شكرا', 'لا شيء', 'لاشيء', 'لايوجد', 'no', 'لا شي', 'شكرًا', 'شكراً', 'لا توجد'];
@@ -616,6 +681,142 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         <KpiCard label="Avg HH Size"    value={avgHHSize.toFixed(1)} sub="members / household" icon={Users} accent="bg-purple-600" />
         <KpiCard label="Market Access"  value={`${PCT(filtered.filter(r => r.marketAccess === 1).length, total)}%`} sub="Can access market" icon={ShoppingCart} accent="bg-teal-600" />
       </div>
+
+      {/* ── PDM Progress by Locality ── */}
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-2 pt-4 px-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <MapPin className="h-4 w-4 text-[#1D3461]" />
+                <h3 className="text-sm font-bold text-foreground">PDM Progress by Locality</h3>
+                <Badge variant="outline" className="text-[10px]">{localityProgressData.length} localities</Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per locality · {canUpload ? 'Click any cell to edit planned targets or remarks' : 'Read-only view'}</p>
+            </div>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExportProgress} data-testid="button-export-progress">
+              <Download className="h-3.5 w-3.5" />Export to Excel
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="px-0 pb-2">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-[#0F2041] text-white">
+                  <th className="text-left px-4 py-2.5 font-semibold">State</th>
+                  <th className="text-left px-4 py-2.5 font-semibold">Locality</th>
+                  <th className="text-center px-4 py-2.5 font-semibold whitespace-nowrap">Planned for PDM</th>
+                  <th className="text-center px-4 py-2.5 font-semibold whitespace-nowrap">Reached (up to date)</th>
+                  <th className="text-center px-4 py-2.5 font-semibold">Deviation</th>
+                  <th className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">Reason for Deviation</th>
+                  <th className="text-left px-4 py-2.5 font-semibold">Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {localityProgressData.map((row, i) => {
+                  const t = localityTargets[row.code];
+                  const planned = t?.planned ? Number(t.planned) : null;
+                  const dev = planned != null ? row.reached - planned : null;
+                  const devPct = planned ? Math.round((row.reached / planned) * 100) : null;
+                  const devColor = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
+                  return (
+                    <tr key={row.code} className={`border-b last:border-0 ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>
+                      <td className="px-4 py-2 font-medium text-[#1D3461] whitespace-nowrap">{row.state}</td>
+                      <td className="px-4 py-2 font-semibold whitespace-nowrap">{row.name}</td>
+
+                      <td className="px-4 py-2 text-center">
+                        {canUpload ? (
+                          <input
+                            type="number"
+                            min={0}
+                            className="w-20 text-center text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                            value={t?.planned ?? ''}
+                            placeholder="—"
+                            onChange={e => updateTarget(row.code, 'planned', e.target.value)}
+                            data-testid={`input-planned-${row.code}`}
+                          />
+                        ) : (
+                          <span className="font-medium">{planned ?? '—'}</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2 text-center">
+                        <span className="inline-flex items-center gap-1 font-bold text-[#1D3461]">
+                          {row.reached}
+                          {devPct != null && (
+                            <span className={`text-[10px] font-normal ${devColor}`}>({devPct}%)</span>
+                          )}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-2 text-center">
+                        {dev == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span className={`font-bold ${devColor}`}>
+                            {dev > 0 ? `+${dev}` : dev}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {canUpload ? (
+                          <input
+                            type="text"
+                            className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                            value={t?.deviation ?? ''}
+                            placeholder="Enter reason…"
+                            onChange={e => updateTarget(row.code, 'deviation', e.target.value)}
+                            data-testid={`input-deviation-${row.code}`}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">{t?.deviation || '—'}</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2">
+                        {canUpload ? (
+                          <input
+                            type="text"
+                            className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                            value={t?.remarks ?? ''}
+                            placeholder="Add remarks…"
+                            onChange={e => updateTarget(row.code, 'remarks', e.target.value)}
+                            data-testid={`input-remarks-${row.code}`}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">{t?.remarks || '—'}</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-muted/50 border-t-2 border-border font-bold">
+                  <td className="px-4 py-2.5 text-[11px] font-bold" colSpan={2}>TOTAL</td>
+                  <td className="px-4 py-2.5 text-center text-[12px]">
+                    {localityProgressData.reduce((s, r) => {
+                      const p = localityTargets[r.code]?.planned;
+                      return s + (p ? Number(p) : 0);
+                    }, 0) || '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-center text-[12px] text-[#1D3461]">{records.length}</td>
+                  <td className="px-4 py-2.5 text-center text-[12px]">
+                    {(() => {
+                      const totalPlanned = localityProgressData.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
+                      const dev = totalPlanned ? records.length - totalPlanned : null;
+                      return dev != null ? <span className={dev >= 0 ? 'text-emerald-600' : 'text-red-500'}>{dev > 0 ? `+${dev}` : dev}</span> : '—';
+                    })()}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── Row 1: Geographic + Timeline ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
