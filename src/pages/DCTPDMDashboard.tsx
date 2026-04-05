@@ -250,9 +250,23 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
    * would silently hide all upload controls for every user regardless of role.
    */
   const userRole = currentUser?.role ?? '';
+
+  /**
+   * canUpload  — full data management (file upload, planned numbers).
+   *              Restricted to admin / super_admin.
+   *
+   * canEditNotes — lighter edit right: Reason for Deviation + Remarks only.
+   *               Extended to supervisor so field leads can annotate the
+   *               table without touching raw planned numbers or uploading files.
+   */
   const canUpload =
     !publicMode &&
     ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'].includes(userRole);
+
+  const canEditNotes =
+    !publicMode &&
+    ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin',
+     'supervisor', 'Supervisor'].includes(userRole);
 
   const [records, setRecords]       = useState<PDMRecord[]>(STATIC_DATA);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
@@ -271,38 +285,66 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   interface LocalityTarget { planned: string; deviation: string; remarks: string; }
 
-  // State-level planned counts from WFP DCT sample file (green=confirmed, yellow=backup)
-  // SD01=Khartoum (KRT Bahri+ShargAnNeel), SD09=WhiteNile (Rabak+Kosti+UmRimta),
-  // SD16=RiverNile (Shendi), SD17=Northern (Al Golid)
+  // State-level planned counts from WFP DCT sample file (green=confirmed)
+  // SD01=Khartoum (Bahri / Sharg El-Neel), SD09=White Nile,
+  // SD16=River Nile (Shandi), SD17=Northern (Al Golid)
   const SAMPLE_PLANNED: Record<string, string> = {
-    SD01: '250', // Khartoum     — 250 confirmed HHs
-    SD09: '250', // White Nile   — 250 confirmed HHs
-    SD16: '150', // River Nile   — 150 confirmed HHs
-    SD17: '150', // Northern     — 150 confirmed HHs
+    SD01: '250', // Khartoum   — 250 confirmed HHs
+    SD09: '250', // White Nile — 250 confirmed HHs
+    SD16: '150', // River Nile — 150 confirmed HHs
+    SD17: '150', // Northern   — 150 confirmed HHs
   };
   const SAMPLE_BACKUP: Record<string, number> = {
     SD01: 40, SD09: 50, SD16: 20, SD17: 20,
   };
 
-  const SEED_VER = 'v4-state-level';
+  // Pre-seeded deviation reasons per state (updated Apr 2026)
+  const SAMPLE_DEVIATIONS: Record<string, { deviation: string; remarks: string }> = {
+    SD01: { deviation: '60 closed · 20 not reply · 7 wrong number', remarks: 'Bahri / Sharg El-Neel' },
+    SD09: { deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
+    SD16: { deviation: '37 closed · 9 not reply · 13 wrong number', remarks: 'Shandi' },
+    SD17: { deviation: '25 closed · 14 not reply · 1 wrong number', remarks: 'Al Golid' },
+  };
+
+  // Bump seed version whenever default deviation text changes so existing
+  // browsers pick up the new values while still preserving any manual edits
+  // the user makes after the initial seed.
+  const SEED_VER = 'v5-with-deviations';
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
       const seeded = localStorage.getItem('pact-pdm-locality-seed-ver');
       if (seeded !== SEED_VER) {
+        // New seed: keep any deviation/remarks the user already typed; fill
+        // blanks with the pre-seeded values above.
         const fresh: Record<string, LocalityTarget> = {};
         Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
-          fresh[code] = { planned, deviation: stored[code]?.deviation || '', remarks: stored[code]?.remarks || '' };
+          const def = SAMPLE_DEVIATIONS[code] ?? { deviation: '', remarks: '' };
+          fresh[code] = {
+            planned,
+            deviation: stored[code]?.deviation || def.deviation,
+            remarks:   stored[code]?.remarks   || def.remarks,
+          };
         });
         localStorage.setItem('pact-pdm-locality-seed-ver', SEED_VER);
         localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(fresh));
         return fresh;
       }
       Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
-        if (!stored[code]) stored[code] = { planned, deviation: '', remarks: '' };
+        if (!stored[code]) {
+          const def = SAMPLE_DEVIATIONS[code] ?? { deviation: '', remarks: '' };
+          stored[code] = { planned, ...def };
+        }
       });
       return stored;
-    } catch { return Object.fromEntries(Object.entries(SAMPLE_PLANNED).map(([k, v]) => [k, { planned: v, deviation: '', remarks: '' }])); }
+    } catch {
+      return Object.fromEntries(
+        Object.entries(SAMPLE_PLANNED).map(([k, v]) => {
+          const def = SAMPLE_DEVIATIONS[k] ?? { deviation: '', remarks: '' };
+          return [k, { planned: v, ...def }];
+        })
+      );
+    }
   });
   const updateTarget = (code: string, field: keyof LocalityTarget, val: string) => {
     setLocalityTargets(prev => {
@@ -1269,7 +1311,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 <h3 className="text-sm font-bold text-foreground">PDM Progress by State</h3>
                 <Badge variant="outline" className="text-[10px]">{localityProgressData.length} states</Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per state · {canUpload ? 'Click any cell to edit, or import from file' : 'Read-only view'}</p>
+              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per state · {canUpload ? 'Click any cell to edit, or import from file' : canEditNotes ? 'You can edit Reason for Deviation and Remarks' : 'Read-only view'}</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {canUpload && (
@@ -1365,10 +1407,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                       </td>
 
                       <td className="px-4 py-2">
-                        {canUpload ? (
+                        {canEditNotes ? (
                           <input
                             type="text"
-                            className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                            className="w-full min-w-[160px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
                             value={t?.deviation ?? ''}
                             placeholder="Enter reason…"
                             onChange={e => updateTarget(row.code, 'deviation', e.target.value)}
@@ -1380,7 +1422,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                       </td>
 
                       <td className="px-4 py-2">
-                        {canUpload ? (
+                        {canEditNotes ? (
                           <input
                             type="text"
                             className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
