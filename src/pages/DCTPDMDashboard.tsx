@@ -1,18 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart,
+  PieChart, Pie, Cell, Legend, Area, AreaChart,
 } from 'recharts';
 import {
-  Users, MapPin, CheckCircle2, Star, AlertTriangle, TrendingUp,
-  Download, Filter, RefreshCw, BarChart3, ShoppingCart, Wifi,
-  Phone, ThumbsUp, ChevronDown, X, FileSpreadsheet, Calendar,
+  Users, MapPin, CheckCircle2, TrendingUp,
+  Download, Filter, BarChart3, ShoppingCart,
+  Phone, ThumbsUp, X, FileSpreadsheet, Upload, RefreshCw,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import rawData from '@/data/pdm_data.json';
 
 // ── Types & Config ──────────────────────────────────────────────────────────
@@ -54,7 +54,55 @@ interface PDMRecord {
   submission: string | null;
 }
 
-const data = (rawData as any).processed as PDMRecord[];
+const STATIC_DATA = (rawData as any).processed as PDMRecord[];
+
+// ── Excel processing (mirrors the Node.js build-time script) ────────────────
+function processWorkbook(wb: XLSX.WorkBook): PDMRecord[] {
+  const sheetName = wb.SheetNames.find(n => n.toLowerCase() === 'data') || wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[sheetName], { header: 1, defval: null });
+  if (rows.length < 3) return [];
+  const headers: string[] = rows[0] as string[];
+  const idx = (col: string) => headers.indexOf(col);
+  const chalNums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 999];
+  return (rows.slice(2) as any[][]).map((row) => ({
+    id: row[idx('_id')],
+    date: row[idx('general_info/a_date')],
+    state: row[idx('general_info/a_state')],
+    locality: row[idx('general_info/locality')],
+    location: row[idx('general_info/location')],
+    interviewer: row[idx('identification/a_interviewer')],
+    hhid: row[idx('identification/hhid')],
+    org: row[idx('general_info/a_org')],
+    sex: row[idx('PDM_Demographic_module/RESPSex')],
+    hhStatus: row[idx('PDM_Demographic_module/HHRstatus')],
+    occupation: row[idx('PDM_Demographic_module/Hhoccupation')],
+    hhTotal: row[idx('PDM_Demographic_module/PDMHHTotal')],
+    hhChildren05: row[idx('PDM_Demographic_module/PDM_HHNumchild')],
+    hhChildren618: row[idx('PDM_Demographic_module/PDM_HHNumchild618')],
+    hhAdults: row[idx('PDM_Demographic_module/PDM_HHNuadult')],
+    hhElderly: row[idx('PDM_Demographic_module/PDM_HHNeldery')],
+    asstReceived: row[idx('PDM_Asst_verif/Asstreceived')],
+    asstAmtRec: row[idx('PDM_Asst_verif/HHAsstCBTRec')],
+    asstAmtExp: row[idx('PDM_Asst_verif/HHAsstCBTExp')],
+    paidFees: row[idx('PDM_Asst_verif/HHAsstPayEnt')],
+    usedAssistance: row[idx('Utilization/used_assitance')],
+    modeUsed: row[idx('Utilization/mode_used_assitance')],
+    priceHigher: row[idx('Utilization/price_higher')],
+    marketAccess: row[idx('Utilization/access_local_market')],
+    foodAvailable: row[idx('Utilization/food_available')],
+    expChallenge: row[idx('Utilization/Experiencechallenge')],
+    challenges: chalNums
+      .map((n) => (row[idx(`Utilization/Challenges/${n}`)] === 1 ? n : null))
+      .filter(Boolean) as number[],
+    propFood: row[idx('Utilization/PRPOPTIONfi')],
+    propNFI: row[idx('Utilization/PRPOPTIONnfi')],
+    sharing: row[idx('Utilization/HHAsstUsageShareGift')],
+    sharingPct: row[idx('Utilization/HHAsstUsageShareGiftSh')],
+    cfm: row[idx('PDM_other/PDM_HHAsstKnowCFM')],
+    satisfaction: row[idx('PDM_other/Satisfaction_self')],
+    submission: row[idx('_submission_time')],
+  }));
+}
 
 const STATE_LABELS: Record<string, string> = {
   SD01: 'Khartoum', SD09: 'White Nile', SD16: 'River Nile', SD17: 'Northern',
@@ -152,17 +200,66 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 // ── Main Dashboard ──────────────────────────────────────────────────────────
 
+interface DataSource { name: string; uploadedAt: string; count: number; }
+
 export default function DCTPDMDashboard() {
+  const [records, setRecords]     = useState<PDMRecord[]>(STATIC_DATA);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
+  const [uploading, setUploading]   = useState(false);
+  const [dragOver, setDragOver]     = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [stateFilter, setStateFilter] = useState('all');
   const [sexFilter,   setSexFilter]   = useState('all');
   const [rcvFilter,   setRcvFilter]   = useState('all');
 
-  const filtered = useMemo(() => data.filter(r => {
+  const handleFile = useCallback(async (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      alert('Please upload an Excel file (.xlsx or .xls)');
+      return;
+    }
+    setUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array' });
+      const parsed = processWorkbook(wb);
+      if (parsed.length === 0) {
+        alert('No data rows found. Make sure this is the PDM exported data file (not the XLSform).');
+        return;
+      }
+      setRecords(parsed);
+      setDataSource({ name: file.name, uploadedAt: new Date().toLocaleString(), count: parsed.length });
+      setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+    } catch (err) {
+      alert('Could not read the file. Please check it is a valid Excel export.');
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = '';
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  const resetToDefault = () => {
+    setRecords(STATIC_DATA); setDataSource(null);
+    setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+  };
+
+  const filtered = useMemo(() => records.filter(r => {
     if (stateFilter !== 'all' && r.state !== stateFilter) return false;
     if (sexFilter   !== 'all' && String(r.sex)   !== sexFilter)   return false;
     if (rcvFilter   !== 'all' && String(r.asstReceived) !== rcvFilter) return false;
     return true;
-  }), [stateFilter, sexFilter, rcvFilter]);
+  }), [records, stateFilter, sexFilter, rcvFilter]);
 
   const total = filtered.length;
   const hasFilter = stateFilter !== 'all' || sexFilter !== 'all' || rcvFilter !== 'all';
@@ -317,8 +414,23 @@ export default function DCTPDMDashboard() {
 
   return (
     <div className="p-4 space-y-5 max-w-[1400px] mx-auto">
+      {/* ── Hidden file input ── */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={onFileInput}
+        data-testid="input-pdm-upload"
+      />
+
       {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div
+        className={`flex items-start justify-between gap-4 flex-wrap rounded-xl p-3 transition-colors ${dragOver ? 'bg-blue-50 border-2 border-dashed border-blue-400 dark:bg-blue-900/20' : 'bg-transparent'}`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+      >
         <div>
           <div className="flex items-center gap-2 mb-1">
             <div className="w-8 h-8 rounded-lg bg-[#0F2041] flex items-center justify-center shrink-0">
@@ -329,7 +441,31 @@ export default function DCTPDMDashboard() {
               Digital Cash Transfer
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground ml-10">Post-Distribution Monitoring · {data.length} total submissions · 4 states</p>
+          <div className="flex items-center gap-2 ml-10 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              Post-Distribution Monitoring · {records.length} submissions
+            </p>
+            {dataSource ? (
+              <Badge variant="secondary" className="text-[10px] gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <Upload className="h-2.5 w-2.5" />
+                {dataSource.name} · {dataSource.count} records · {dataSource.uploadedAt}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-[10px] text-muted-foreground">
+                Built-in dataset (Apr 2026)
+              </Badge>
+            )}
+            {dataSource && (
+              <button onClick={resetToDefault} className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                reset to default
+              </button>
+            )}
+          </div>
+          {dragOver && (
+            <p className="text-xs font-semibold text-blue-600 mt-1 ml-10 animate-pulse">
+              Drop your Excel export here…
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {hasFilter && (
@@ -337,6 +473,17 @@ export default function DCTPDMDashboard() {
               <X className="h-3.5 w-3.5" />Clear filters
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            data-testid="button-upload-pdm"
+          >
+            {uploading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {uploading ? 'Processing…' : 'Upload New Data'}
+          </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport}>
             <Download className="h-3.5 w-3.5" />Export
           </Button>
@@ -354,7 +501,7 @@ export default function DCTPDMDashboard() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-xs">All States</SelectItem>
-            {Object.entries(STATE_LABELS).filter(([k]) => data.some(r => r.state === k)).map(([k, v]) => (
+            {Object.entries(STATE_LABELS).filter(([k]) => records.some(r => r.state === k)).map(([k, v]) => (
               <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>
             ))}
           </SelectContent>
@@ -384,7 +531,7 @@ export default function DCTPDMDashboard() {
         </Select>
         {hasFilter && (
           <Badge variant="secondary" className="text-[10px] ml-auto">
-            {total} / {data.length} records
+            {total} / {records.length} records
           </Badge>
         )}
       </div>
@@ -712,7 +859,7 @@ export default function DCTPDMDashboard() {
 
       {/* ── Footer note ── */}
       <p className="text-center text-[10px] text-muted-foreground pb-2">
-        Data source: 2026 DCT PDM Survey · {data.length} records · Generated {new Date().toLocaleDateString()}
+        Data source: {dataSource ? dataSource.name : '2026 DCT PDM Survey'} · {records.length} records · Generated {new Date().toLocaleDateString()}
       </p>
     </div>
   );
