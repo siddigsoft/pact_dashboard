@@ -240,25 +240,25 @@ interface LocalityTarget { planned: string; locality: string; deviation: string;
 interface LocalityRow { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string; }
 
 const FEEDBACK_PAGE_SIZE = 10;
-const LOCALITY_ROWS_VER = 'v7'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
+const LOCALITY_ROWS_VER = 'v8'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
 
-// State-level totals — PRINCIPAL only (ALTERNATE/yellow backup rows excluded)
-// v6: SD01 corrected 290→250 (Bahri backup 40 removed)
-// v7: SD09 297→247 (Rabak backup 50); SD16 170→150 (Shendi backup 20); SD17 170→150 (Al Golid backup 20)
+// State-level totals — GREEN rows only from DCT Sample Excel (Apr 2026)
+// v8: All localities corrected to green-highlighted HH counts from DCT Sample file
 const SAMPLE_PLANNED: Record<string, string> = {
-  SD01: '250', SD09: '247', SD16: '150', SD17: '150', // Khartoum / White Nile / River Nile / Northern
-  SD02: '139',                                          // North Darfur
-  SD07: '303',                                          // South Kordofan
-  SD10: '21',                                           // Red Sea
-  SD13: '287',                                          // North Kordofan
-  SD18: '90',                                           // West Kordofan
-  SD03: '', SD04: '', SD05: '', SD06: '',               // Darfur cluster (no data yet)
-  SD08: '', SD11: '', SD12: '',                         // East / Nile cluster (no data yet)
-  SD14: '', SD15: '',                                   // Kordofan / Jazirah (no data yet)
+  SD01: '250', // Khartoum:       Bahri 100 + Sharg An Neel 150
+  SD02: '150', // North Darfur:   El Fasher 116 + El Fasher Town 9 + El Fasher Rural 25
+  SD07: '339', // South Kordofan: Kadugli 150 + Habila 39 + Dilling 150
+  SD09: '250', // White Nile:     Rabak 100 + Kosti 100 + Um Rimta 50
+  SD10: '21',  // Red Sea:        Port Sudan 21
+  SD13: '250', // North Kordofan: Um Rawaba 100 + Sheikan 150
+  SD16: '150', // River Nile:     Shendi 150
+  SD17: '150', // Northern:       Al Golid 150
+  SD18: '100', // West Kordofan:  As Sunut 50 + Al Lagowa 50
+  SD03: '', SD04: '', SD05: '', SD06: '',
+  SD08: '', SD11: '', SD12: '',
+  SD14: '', SD15: '',
 };
-const SAMPLE_BACKUP: Record<string, number> = {
-  SD01: 40, SD09: 50, SD16: 20, SD17: 20,
-};
+const SAMPLE_BACKUP: Record<string, number> = {};
 const SAMPLE_DEFAULTS: Record<string, { locality: string; deviation: string; remarks: string }> = {
   SD01: { locality: 'Bahri / Sharg El-Neel', deviation: '60 closed · 20 not reply · 7 wrong number',   remarks: '' },
   SD09: { locality: '',                       deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
@@ -273,33 +273,34 @@ const SAMPLE_DEFAULTS: Record<string, { locality: string; deviation: string; rem
   SD15: { locality: '', deviation: '', remarks: '' }, SD18: { locality: '', deviation: '', remarks: '' },
 };
 
-// Per-locality seed — PRINCIPAL + blank-type counts from DCT Sample file (Apr 2026)
+// Per-locality seed — GREEN rows only from DCT Sample Excel (Apr 2026)
+// Each planned number = count of green-highlighted HHs in the respective sheet
 const SEED_LOCALITY_ROWS_V2: LocalityRow[] = [
-  // Khartoum (SD01)
-  { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '80',  deviation: '60 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
-  { id: 'SD01-1', stateCode: 'SD01', locality: 'Sharg An Neel', planned: '170', deviation: '', remarks: '' },
-  // North Darfur (SD02)
-  { id: 'SD02-0', stateCode: 'SD02', locality: 'El Fasher',     planned: '139', deviation: '', remarks: '' },
-  // South Kordofan (SD07)
-  { id: 'SD07-0', stateCode: 'SD07', locality: 'Kadugli',       planned: '147', deviation: '', remarks: '' },
-  { id: 'SD07-1', stateCode: 'SD07', locality: 'Habila',        planned: '34',  deviation: '', remarks: '' },
-  { id: 'SD07-2', stateCode: 'SD07', locality: 'Dilling',       planned: '122', deviation: '', remarks: '' },
-  // White Nile (SD09)
-  { id: 'SD09-0', stateCode: 'SD09', locality: 'Rabak',         planned: '70',  deviation: '100 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 40 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 14 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
-  { id: 'SD09-1', stateCode: 'SD09', locality: 'Kosti',         planned: '117', deviation: '', remarks: '' },
-  { id: 'SD09-2', stateCode: 'SD09', locality: 'Um Rimta',      planned: '60',  deviation: '', remarks: '' },
-  // Red Sea (SD10)
+  // Khartoum (SD01): KRT Bahri sheet 100 green; KRT Sharg An Neel sheet 150 green
+  { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '100', deviation: '60 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
+  { id: 'SD01-1', stateCode: 'SD01', locality: 'Sharg An Neel', planned: '150', deviation: '', remarks: '' },
+  // North Darfur (SD02): ND sheet — El Fasher 116 + El Fasher Town 9 + El Fasher Rural 25 = 150 green
+  { id: 'SD02-0', stateCode: 'SD02', locality: 'El Fasher',     planned: '150', deviation: '', remarks: '' },
+  // South Kordofan (SD07): SK Kadugli 150 + SK Habila 39 + SK Dilling 150 green
+  { id: 'SD07-0', stateCode: 'SD07', locality: 'Kadugli',       planned: '150', deviation: '', remarks: '' },
+  { id: 'SD07-1', stateCode: 'SD07', locality: 'Habila',        planned: '39',  deviation: '', remarks: '' },
+  { id: 'SD07-2', stateCode: 'SD07', locality: 'Dilling',       planned: '150', deviation: '', remarks: '' },
+  // White Nile (SD09): WN Rabak 100 + WN Kosti 100 + WN Um Rimta 50 green
+  { id: 'SD09-0', stateCode: 'SD09', locality: 'Rabak',         planned: '100', deviation: '100 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 40 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 14 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
+  { id: 'SD09-1', stateCode: 'SD09', locality: 'Kosti',         planned: '100', deviation: '', remarks: '' },
+  { id: 'SD09-2', stateCode: 'SD09', locality: 'Um Rimta',      planned: '50',  deviation: '', remarks: '' },
+  // Red Sea (SD10): RS sheet 21 green (no yellow rows)
   { id: 'SD10-0', stateCode: 'SD10', locality: 'Port Sudan',    planned: '21',  deviation: '', remarks: '' },
-  // North Kordofan (SD13)
-  { id: 'SD13-0', stateCode: 'SD13', locality: 'Um Rawaba',     planned: '117', deviation: '', remarks: '' },
-  { id: 'SD13-1', stateCode: 'SD13', locality: 'Sheikan',       planned: '170', deviation: '', remarks: '' },
-  // River Nile (SD16)
+  // North Kordofan (SD13): NK Um Rawaba 100 + NK Sheikan 150 green
+  { id: 'SD13-0', stateCode: 'SD13', locality: 'Um Rawaba',     planned: '100', deviation: '', remarks: '' },
+  { id: 'SD13-1', stateCode: 'SD13', locality: 'Sheikan',       planned: '150', deviation: '', remarks: '' },
+  // River Nile (SD16): RN Shendi 150 green
   { id: 'SD16-0', stateCode: 'SD16', locality: 'Shendi',        planned: '150', deviation: '37 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 9 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 13 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
-  // Northern (SD17)
+  // Northern (SD17): NS sheet 150 green
   { id: 'SD17-0', stateCode: 'SD17', locality: 'Al Golid',      planned: '150', deviation: '25 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 14 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 1 HH had an incorrect or invalid phone number that does not correspond to the registered beneficiary, confirmed after several verification attempts.', remarks: '' },
-  // West Kordofan (SD18)
-  { id: 'SD18-0', stateCode: 'SD18', locality: 'As Sunut',      planned: '41',  deviation: '', remarks: '' },
-  { id: 'SD18-1', stateCode: 'SD18', locality: 'Al Lagowa',     planned: '49',  deviation: '', remarks: '' },
+  // West Kordofan (SD18): WK As Sunut 50 + WK Al Lagowa 50 green
+  { id: 'SD18-0', stateCode: 'SD18', locality: 'As Sunut',      planned: '50',  deviation: '', remarks: '' },
+  { id: 'SD18-1', stateCode: 'SD18', locality: 'Al Lagowa',     planned: '50',  deviation: '', remarks: '' },
   // Remaining states — blank rows for admin entry when activated
   { id: 'SD03-0', stateCode: 'SD03', locality: '', planned: '', deviation: '', remarks: '' },
   { id: 'SD04-0', stateCode: 'SD04', locality: '', planned: '', deviation: '', remarks: '' },
@@ -372,7 +373,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const [feedbackExpanded, setFeedbackExpanded] = useState(false);
   // Bump seed version whenever defaults change — existing manual edits are
   // preserved; only blank fields are filled from the new defaults.
-  const SEED_VER = 'v9-principal-only'; // v9: SD09/SD16/SD17 backup subtracted
+  const SEED_VER = 'v10-green-only'; // v10: all localities corrected to green-row counts from DCT Sample Excel
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
@@ -426,23 +427,32 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       if (stored) {
         const prev: LocalityRow[] = JSON.parse(stored);
         const prevMap: Record<string, LocalityRow> = Object.fromEntries(prev.map(r => [r.id, r]));
-        // Seed correction map: rows whose planned value changed from old→new seed.
-        // If stored value still equals the old wrong default, auto-apply the fix.
-        // If user had already made a manual edit, the stored value differs → preserved.
-        const PLANNED_CORRECTIONS: Record<string, { from: string; to: string }> = {
-          'SD01-0': { from: '120', to: '80'  }, // Bahri:     removed 40 backup HHs (v6)
-          'SD09-0': { from: '120', to: '70'  }, // Rabak:     removed 50 backup HHs (v7)
-          'SD16-0': { from: '170', to: '150' }, // Shendi:    removed 20 backup HHs (v7)
-          'SD17-0': { from: '170', to: '150' }, // Al Golid:  removed 20 backup HHs (v7)
+        // Seed correction map: rows whose planned value changed → new green-only counts (v8).
+        // "from" lists ALL known wrong stored values so stored manual edits that happened to
+        // match an old wrong seed also get corrected automatically.
+        const PLANNED_CORRECTIONS: Record<string, { from: string[]; to: string }> = {
+          'SD01-0': { from: ['120','80'],              to: '100' }, // Bahri:     green=100
+          'SD01-1': { from: ['170'],                   to: '150' }, // Sharg:     green=150
+          'SD02-0': { from: ['139'],                   to: '150' }, // El Fasher: green=150
+          'SD07-0': { from: ['147'],                   to: '150' }, // Kadugli:   green=150
+          'SD07-1': { from: ['34'],                    to: '39'  }, // Habila:    green=39
+          'SD07-2': { from: ['122'],                   to: '150' }, // Dilling:   green=150
+          'SD09-0': { from: ['120','70','106','80'],   to: '100' }, // Rabak:     green=100
+          'SD09-1': { from: ['117'],                   to: '100' }, // Kosti:     green=100
+          'SD09-2': { from: ['60'],                    to: '50'  }, // Um Rimta:  green=50
+          'SD13-0': { from: ['117'],                   to: '100' }, // Um Rawaba: green=100
+          'SD13-1': { from: ['170'],                   to: '150' }, // Sheikan:   green=150
+          'SD18-0': { from: ['41'],                    to: '50'  }, // As Sunut:  green=50
+          'SD18-1': { from: ['49'],                    to: '50'  }, // Al Lagowa: green=50
         };
         const merged = SEED_LOCALITY_ROWS_V2.map(seedRow => {
           const p = prevMap[seedRow.id];
           if (!p) return seedRow;
           const correction = PLANNED_CORRECTIONS[seedRow.id];
           const plannedVal =
-            correction && p.planned === correction.from
-              ? correction.to                        // stored = old wrong seed → apply fix
-              : p.planned || seedRow.planned;        // stored = manual edit or already correct
+            correction && correction.from.includes(p.planned)
+              ? correction.to                        // stored = known old wrong value → fix
+              : p.planned || seedRow.planned;        // stored = manual edit → preserve
           return {
             ...seedRow,
             locality:  p.locality  || seedRow.locality,
