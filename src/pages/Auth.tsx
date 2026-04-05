@@ -49,6 +49,7 @@ const Auth = () => {
   const [resendLoading, setResendLoading] = useState(false);
 
   let currentUser = null;
+  let authReady = false;
   let emailVerificationPending = false;
   let verificationEmail: string | undefined = undefined;
   let resendVerificationEmail: (email?: string) => Promise<boolean> = async () => false;
@@ -57,6 +58,7 @@ const Auth = () => {
   try {
     const appContext = useAppContext();
     currentUser = appContext.currentUser;
+    authReady = appContext.authReady;
     emailVerificationPending = appContext.emailVerificationPending;
     verificationEmail = appContext.verificationEmail;
     resendVerificationEmail = appContext.resendVerificationEmail;
@@ -66,8 +68,12 @@ const Auth = () => {
   }
 
   useEffect(() => {
-    if (currentUser) navigate("/dashboard");
-  }, [currentUser, navigate]);
+    // Only redirect once auth state has fully settled (authReady) AND a user
+    // is confirmed. Without the authReady guard, a stale currentUser value
+    // from React 18 batching can fire this redirect right after logout,
+    // sending the user back to the dashboard instead of the login page.
+    if (authReady && currentUser) navigate("/dashboard");
+  }, [authReady, currentUser, navigate]);
 
   const securityFeatures = [
     { 
