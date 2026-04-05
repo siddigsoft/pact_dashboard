@@ -1080,10 +1080,12 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       });
 
       // ── TOTAL row ─────────────────────────────────────────────────────────
-      const totalDev    = totalPlanned ? totalReached - totalPlanned : null;
-      const totalDevPct = totalPlanned ? Math.round((totalReached / totalPlanned) * 100) : null;
+      // Reached = ALL surveys (matches dashboard badge), not just SUBCODE-mapped rows
+      const exportTotalReached = records.length;
+      const totalDev    = totalPlanned ? exportTotalReached - totalPlanned : null;
+      const totalDevPct = totalPlanned ? Math.round((exportTotalReached / totalPlanned) * 100) : null;
       const totRow = ws.addRow([
-        'TOTAL', '', totalPlanned || '', totalReached,
+        'TOTAL', '', totalPlanned || '', exportTotalReached,
         totalDev != null ? totalDev : '',
         totalDevPct != null ? `${totalDevPct}%` : '',
         '', '',
@@ -1274,7 +1276,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       // Only include PRINCIPAL states (those with non-empty planned data)
       const principalStateRows = allStateRows.filter(r => SAMPLE_PLANNED[r.code] !== '');
       const tpTot = principalStateRows.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
-      const trTot = principalStateRows.reduce((s, r) => s + r.reached, 0);
+      const trTot = records.length; // ALL surveys, not just PRINCIPAL states
 
       principalStateRows.forEach((lr, i) => {
         const t = localityTargets[lr.code];
@@ -2201,10 +2203,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               </tbody>
               <tfoot>
                 {(() => {
-                  // Sum only localities that have planned data (PRINCIPAL rows)
+                  // Planned: PRINCIPAL localities only
                   const totalPlanned = groupedRows.reduce((s, g) => s + g.rows.reduce((rs, r) => rs + (r.planned ? Number(r.planned) : 0), 0), 0);
-                  // Sum state-level reached (matches what each state subtotal row shows)
-                  const totalReached = groupedRows.reduce((s, g) => s + g.reached, 0);
+                  // Reached: ALL surveys completed (matches the card badges above the table)
+                  const totalReached = records.length;
                   const dev = totalPlanned > 0 ? totalReached - totalPlanned : null;
                   const totalPct = totalPlanned > 0 ? Math.round((totalReached / totalPlanned) * 100) : null;
                   return (
