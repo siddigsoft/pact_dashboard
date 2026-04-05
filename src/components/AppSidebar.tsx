@@ -494,6 +494,9 @@
     if (!isHidden('/questionnaire-analytics') && isSuperAdmin) {
       analyticsItems.push({ id: 'questionnaire-analytics', title: "Questionnaire Analytics", url: "/questionnaire-analytics", icon: BarChart3, priority: 7, isPinned: isPinned('/questionnaire-analytics') });
     }
+    if (!isHidden('/dct-pdm') && (isSuperAdmin || isAdmin || isICT)) {
+      analyticsItems.push({ id: 'dct-pdm', title: "DCT PDM Dashboard", url: "/dct-pdm", icon: BarChart3, priority: 8, isPinned: isPinned('/dct-pdm') });
+    }
     if (analyticsItems.length) groups.push({ id: 'analytics', label: "Analytics & Reports", order: 6, items: analyticsItems });
 
     // ── 10. Administration ────────────────────────────────────────────────────
