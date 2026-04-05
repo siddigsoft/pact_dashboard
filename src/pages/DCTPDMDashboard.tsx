@@ -240,7 +240,7 @@ interface LocalityTarget { planned: string; locality: string; deviation: string;
 interface LocalityRow { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string; }
 
 const FEEDBACK_PAGE_SIZE = 10;
-const LOCALITY_ROWS_VER = 'v4'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
+const LOCALITY_ROWS_VER = 'v5'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
 
 // State-level totals — PRINCIPAL + blank-type only (ALTERNATE/yellow rows excluded)
 const SAMPLE_PLANNED: Record<string, string> = {
@@ -406,11 +406,33 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       const stored = localStorage.getItem('pact-pdm-locality-rows');
       const ver    = localStorage.getItem('pact-pdm-locality-rows-ver');
       if (ver === LOCALITY_ROWS_VER && stored) return JSON.parse(stored);
-      // Seed from DCT Sample file data (per-locality, Apr 2026)
-      const rows: LocalityRow[] = SEED_LOCALITY_ROWS_V2;
-      localStorage.setItem('pact-pdm-locality-rows',     JSON.stringify(rows));
+      // Version changed — merge: preserve manual edits, fill empty fields from seed
+      if (stored) {
+        const prev: LocalityRow[] = JSON.parse(stored);
+        const prevMap: Record<string, LocalityRow> = Object.fromEntries(prev.map(r => [r.id, r]));
+        const merged = SEED_LOCALITY_ROWS_V2.map(seedRow => {
+          const p = prevMap[seedRow.id];
+          if (!p) return seedRow;
+          return {
+            ...seedRow,
+            locality:  p.locality  || seedRow.locality,
+            planned:   p.planned   || seedRow.planned,
+            deviation: p.deviation || seedRow.deviation, // keep manual text, fall back to seed
+            remarks:   p.remarks   || seedRow.remarks,
+          };
+        });
+        // Also keep any extra rows the user manually added (not in seed)
+        const seedIds = new Set(SEED_LOCALITY_ROWS_V2.map(r => r.id));
+        const extras  = prev.filter(r => !seedIds.has(r.id));
+        const result  = [...merged, ...extras];
+        localStorage.setItem('pact-pdm-locality-rows',     JSON.stringify(result));
+        localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
+        return result;
+      }
+      // No prior data — fresh seed
+      localStorage.setItem('pact-pdm-locality-rows',     JSON.stringify(SEED_LOCALITY_ROWS_V2));
       localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
-      return rows;
+      return SEED_LOCALITY_ROWS_V2;
     } catch {
       return SEED_LOCALITY_ROWS_V2;
     }
