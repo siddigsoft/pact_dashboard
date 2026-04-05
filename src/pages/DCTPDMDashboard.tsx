@@ -240,7 +240,7 @@ interface LocalityTarget { planned: string; locality: string; deviation: string;
 interface LocalityRow { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string; }
 
 const FEEDBACK_PAGE_SIZE = 10;
-const LOCALITY_ROWS_VER = 'v9'; // v9: SD16/SD17 added to PLANNED_CORRECTIONS (170→150)
+const LOCALITY_ROWS_VER = 'v10'; // v10: force re-migration to catch any stale Rabak/Shendi/Al Golid
 
 // State-level totals — GREEN rows only from DCT Sample Excel (Apr 2026)
 // v8: All localities corrected to green-highlighted HH counts from DCT Sample file
