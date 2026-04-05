@@ -478,11 +478,13 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     })).sort((a, b) => a.name.localeCompare(b.name));
   }, [records]);
 
-  // Groups all 18 states alphabetically; each state carries its matched locality rows
-  // and the reached count from the uploaded survey data.
+  // Groups only PRINCIPAL states (those with non-empty planned values) alphabetically.
+  // States with no planned data (empty SAMPLE_PLANNED entry) are excluded from both
+  // the table and the export — they are not part of the active sample.
   const groupedRows = useMemo(() => {
     const reachedMap = Object.fromEntries(allStateRows.map(r => [r.code, r.reached]));
     return Object.keys(SAMPLE_PLANNED)
+      .filter(code => SAMPLE_PLANNED[code] !== '')       // only states with active planned data
       .sort((a, b) => (STATE_LABELS[a] || a).localeCompare(STATE_LABELS[b] || b))
       .map(code => ({
         code,
@@ -1258,10 +1260,12 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       addBanner(ws1, 'PDM PROGRESS BY STATE', 8);
       addColHdr(ws1, ['State', 'Locality', 'Planned (Confirmed)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks']);
 
-      const tpTot = allStateRows.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
-      const trTot = allStateRows.reduce((s, r) => s + r.reached, 0);
+      // Only include PRINCIPAL states (those with non-empty planned data)
+      const principalStateRows = allStateRows.filter(r => SAMPLE_PLANNED[r.code] !== '');
+      const tpTot = principalStateRows.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
+      const trTot = principalStateRows.reduce((s, r) => s + r.reached, 0);
 
-      allStateRows.forEach((lr, i) => {
+      principalStateRows.forEach((lr, i) => {
         const t = localityTargets[lr.code];
         const planned = t?.planned ? Number(t.planned) : null;
         const dev = planned != null ? lr.reached - planned : null;
@@ -2186,8 +2190,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               </tbody>
               <tfoot>
                 {(() => {
-                  const totalPlanned = localityRows.reduce((s, r) => s + (r.planned ? Number(r.planned) : 0), 0);
-                  const totalReached = records.length;
+                  // Sum only localities that have planned data (PRINCIPAL rows)
+                  const totalPlanned = groupedRows.reduce((s, g) => s + g.rows.reduce((rs, r) => rs + (r.planned ? Number(r.planned) : 0), 0), 0);
+                  // Sum state-level reached (matches what each state subtotal row shows)
+                  const totalReached = groupedRows.reduce((s, g) => s + g.reached, 0);
                   const dev = totalPlanned > 0 ? totalReached - totalPlanned : null;
                   const totalPct = totalPlanned > 0 ? Math.round((totalReached / totalPlanned) * 100) : null;
                   return (
