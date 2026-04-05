@@ -838,7 +838,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
       alert(
         `DCT Sample imported: ${updatedCount} localities updated, ${addedCount} localities added.\n` +
-        `${skipped} ALTERNATE (yellow) rows excluded.`
+        `${skipped} non-PRINCIPAL rows excluded (ALTERNATE / yellow rows skipped, only green rows counted).`
       );
     } catch {
       alert('Could not read the file. Please upload a valid DCT Sample Excel file.');
