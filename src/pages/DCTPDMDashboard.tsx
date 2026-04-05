@@ -190,11 +190,18 @@ function KpiCard({ label, value, sub, icon: Icon, accent, trend }: {
   );
 }
 
-function SectionTitle({ title, sub }: { title: string; sub?: string }) {
+function SectionTitle({ title, sub, count }: { title: string; sub?: string; count?: number }) {
   return (
-    <div className="mb-3">
-      <h3 className="text-sm font-bold text-foreground">{title}</h3>
-      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+    <div className="mb-3 flex items-start justify-between gap-2">
+      <div>
+        <h3 className="text-sm font-bold text-foreground">{title}</h3>
+        {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+      </div>
+      {count !== undefined && (
+        <span className="shrink-0 mt-0.5 text-[11px] font-bold text-[#1D3461] bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 px-2 py-0.5 rounded-full leading-none">
+          {count.toLocaleString()}
+        </span>
+      )}
     </div>
   );
 }
@@ -614,7 +621,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Surveys by State" sub="Number of PDM interviews completed" />
+            <SectionTitle title="Surveys by State" sub="Number of PDM interviews completed" count={total} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={200}>
@@ -633,7 +640,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Submission Timeline" sub="Daily survey submissions" />
+            <SectionTitle title="Submission Timeline" sub="Daily survey submissions" count={total} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={200}>
@@ -659,7 +666,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="HH Head Sex" sub="Gender of household head" />
+            <SectionTitle title="HH Head Sex" sub="Gender of household head" count={sexData.reduce((a, b) => a + b.value, 0)} />
           </CardHeader>
           <CardContent className="pb-4">
             <ResponsiveContainer width="100%" height={160}>
@@ -676,7 +683,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Residence Status" sub="IDP / Refugee / Host" />
+            <SectionTitle title="Residence Status" sub="IDP / Refugee / Host" count={statusData.reduce((a, b) => a + b.value, 0)} />
           </CardHeader>
           <CardContent className="pb-4">
             <ResponsiveContainer width="100%" height={160}>
@@ -693,7 +700,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Household Size" sub="Distribution of members per HH" />
+            <SectionTitle title="Household Size" sub="Distribution of members per HH" count={hhSizeData.reduce((a, b) => a + b.count, 0)} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={160}>
@@ -713,7 +720,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Assistance Receipt" sub="Did household receive WFP transfer?" />
+            <SectionTitle title="Assistance Receipt" sub="Did household receive WFP transfer?" count={receivedData.reduce((a, b) => a + b.value, 0)} />
           </CardHeader>
           <CardContent className="pb-4">
             <ResponsiveContainer width="100%" height={180}>
@@ -730,7 +737,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Avg Amount by State" sub="Received vs Expected (SDG)" />
+            <SectionTitle title="Avg Amount by State" sub="Received vs Expected (SDG)" count={amountByState.reduce((a, b) => a + b.n, 0)} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={180}>
@@ -749,7 +756,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Payment Mode Used" sub="How transfer was accessed" />
+            <SectionTitle title="Payment Mode Used" sub="How transfer was accessed" count={modeData.reduce((a, b) => a + b.value, 0)} />
           </CardHeader>
           <CardContent className="pb-4">
             <ResponsiveContainer width="100%" height={180}>
@@ -769,7 +776,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Access & Utilization" sub="Key utilization indicators (Yes vs No)" />
+            <SectionTitle title="Access & Utilization" sub="Key utilization indicators (Yes vs No)" count={total} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={190}>
@@ -788,7 +795,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Challenges Faced" sub={`${filtered.filter(r => r.expChallenge === 1).length} HHs reported challenges`} />
+            <SectionTitle title="Challenges Faced" sub={`${filtered.filter(r => r.expChallenge === 1).length} HHs reported challenges`} count={total} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             {challengeData.length === 0 ? (
@@ -809,7 +816,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Food Expenditure %" sub="Proportion of transfer spent on food" />
+            <SectionTitle title="Food Expenditure %" sub="Proportion of transfer spent on food" count={foodPropData.reduce((a, b) => a + b.count, 0)} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={190}>
@@ -829,7 +836,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="border shadow-sm">
           <CardHeader className="pb-3 pt-4 px-5">
-            <SectionTitle title="Satisfaction with WFP Assistance" sub={`${satPct}% satisfied or very satisfied (scores 4–5)`} />
+            <SectionTitle title="Satisfaction with WFP Assistance" sub={`${satPct}% satisfied or very satisfied (scores 4–5)`} count={satData.reduce((a, b) => a + b.count, 0)} />
           </CardHeader>
           <CardContent className="px-5 pb-4 space-y-2">
             {satData.map(s => (
@@ -850,7 +857,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="border shadow-sm">
             <CardHeader className="pb-2 pt-4 px-5">
-              <SectionTitle title="CFM Awareness" sub="Knows WFP complaint channel" />
+              <SectionTitle title="CFM Awareness" sub="Knows WFP complaint channel" count={filtered.filter(r => r.cfm !== null).length} />
             </CardHeader>
             <CardContent className="pb-4">
               <ResponsiveContainer width="100%" height={150}>
@@ -874,7 +881,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
           <Card className="border shadow-sm">
             <CardHeader className="pb-2 pt-4 px-5">
-              <SectionTitle title="Transfer Sharing" sub="Shared entitlement outside HH" />
+              <SectionTitle title="Transfer Sharing" sub="Shared entitlement outside HH" count={filtered.filter(r => r.sharing !== null).length} />
             </CardHeader>
             <CardContent className="pb-4">
               <ResponsiveContainer width="100%" height={150}>
@@ -898,7 +905,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       {/* ── Row 6: Interviewers Table ── */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-2 pt-4 px-5">
-          <SectionTitle title="Top Interviewers" sub="Surveys submitted per data collector" />
+          <SectionTitle title="Top Interviewers" sub="Surveys submitted per data collector" count={total} />
         </CardHeader>
         <CardContent className="px-5 pb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
