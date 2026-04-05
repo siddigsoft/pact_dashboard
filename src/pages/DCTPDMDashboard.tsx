@@ -1477,7 +1477,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               <div className="flex items-center gap-2 mb-0.5">
                 <MapPin className="h-4 w-4 text-[#1D3461]" />
                 <h3 className="text-sm font-bold text-foreground">PDM Progress by State</h3>
-                <Badge variant="outline" className="text-[10px]">{localityRows.length} localities · {groupedRows.filter(g => g.rows.length > 0).length} states</Badge>
+                <Badge variant="outline" className="text-[10px]">{localityRows.filter(r => r.locality || r.planned).length} localities · {groupedRows.filter(g => g.rows.some(r => r.locality || r.planned)).length} states</Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per state · {canUpload ? 'Click any cell to edit, or import from file' : canEditNotes ? 'You can edit Reason for Deviation and Remarks' : 'Read-only view'}</p>
             </div>
@@ -1529,7 +1529,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 </tr>
               </thead>
               <tbody>
-                {groupedRows.map((group, gi) => {
+                {groupedRows.filter(g => g.rows.some(r => r.locality || r.planned)).map((group, gi) => {
                   const hasRows = group.rows.length > 0;
                   const addRowSpan = canUpload ? 1 : 0;
                   const stateRowSpan = hasRows ? group.rows.length + addRowSpan : 1;
