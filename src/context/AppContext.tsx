@@ -208,12 +208,13 @@ export const useAppContext = () => {
  * Safe version of useAppContext — returns undefined instead of throwing when
  * used outside of AppProviders (e.g., on a fully public page like /pdm-report).
  *
- * Uses React's native useContext (not use-context-selector's version) so that
- * it reliably returns undefined when no provider is present, regardless of the
- * internal subscription mechanism used by use-context-selector.
+ * Uses use-context-selector's useContext which correctly reads the actual context
+ * value (v.current from its internal wrapper) and returns undefined when no
+ * provider is present — unlike React.useContext which would return the raw
+ * subscription wrapper object instead of the real CompositeContextType value.
  */
 export const useSafeAppContext = (): CompositeContextType | undefined =>
-  React.useContext(AppContext as unknown as React.Context<CompositeContextType | undefined>);
+  useContext(AppContext);
 
 /**
  * Select only the context fields you need to avoid re-renders when unrelated context changes.
