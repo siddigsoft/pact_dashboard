@@ -1308,7 +1308,7 @@ export default function Employees() {
                         <TableHead>Bank Account</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Last Active</TableHead>
-                        <TableHead className="w-8"></TableHead>
+                        <TableHead className="w-24 text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1345,7 +1345,16 @@ export default function Employees() {
                               </div>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">{lastActive(p.last_activity, p.updated_at)}</TableCell>
-                            <TableCell><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
+                            <TableCell className="text-right">
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setSelected(p); }}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0F2041] dark:text-blue-400 border border-[#0F2041]/20 dark:border-blue-800 rounded-md px-2.5 py-1 hover:bg-[#0F2041] hover:text-white dark:hover:bg-blue-900/40 transition-colors"
+                                data-testid={`button-manage-${p.id}`}
+                              >
+                                <Pencil className="h-3 w-3" />Manage
+                              </button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
