@@ -285,40 +285,77 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   interface LocalityTarget { planned: string; locality: string; deviation: string; remarks: string; }
 
-  // All 18 Sudan states — active PDM states pre-filled; others start blank
-  // so admins can enter planned numbers for future rounds.
+  // State-level totals (sum of all locality planned counts from DCT sample file)
   const SAMPLE_PLANNED: Record<string, string> = {
-    SD01: '250', SD09: '250', SD16: '150', SD17: '150', // active (Apr 2026)
-    SD02: '', SD03: '', SD04: '', SD05: '', SD06: '',    // Darfur cluster
-    SD07: '', SD08: '', SD10: '', SD11: '', SD12: '',    // East / Nile cluster
-    SD13: '', SD14: '', SD15: '', SD18: '',              // Kordofan / Jazirah
+    SD01: '290', SD09: '300', SD16: '170', SD17: '170', // Khartoum / White Nile / River Nile / Northern
+    SD02: '170',                                          // North Darfur
+    SD07: '379',                                          // South Kordofan
+    SD10: '21',                                           // Red Sea
+    SD13: '290',                                          // North Kordofan
+    SD18: '118',                                          // West Kordofan
+    SD03: '', SD04: '', SD05: '', SD06: '',              // Darfur cluster (no data yet)
+    SD08: '', SD11: '', SD12: '',                        // East / Nile cluster (no data yet)
+    SD14: '', SD15: '',                                  // Kordofan / Jazirah (no data yet)
   };
   const SAMPLE_BACKUP: Record<string, number> = {
     SD01: 40, SD09: 50, SD16: 20, SD17: 20,
   };
 
-  // Pre-seeded locality names + deviation reasons (DCT sample file, Apr 2026)
+  // Pre-seeded SAMPLE_DEFAULTS kept for the legacy localityTargets state
   const SAMPLE_DEFAULTS: Record<string, { locality: string; deviation: string; remarks: string }> = {
     SD01: { locality: 'Bahri / Sharg El-Neel', deviation: '60 closed · 20 not reply · 7 wrong number',   remarks: '' },
     SD09: { locality: '',                       deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
     SD16: { locality: 'Shandi',                deviation: '37 closed · 9 not reply · 13 wrong number',   remarks: '' },
     SD17: { locality: 'Al Golid',              deviation: '25 closed · 14 not reply · 1 wrong number',   remarks: '' },
-    // remaining states — blank; filled by admin when activated
-    SD02: { locality: '', deviation: '', remarks: '' },
-    SD03: { locality: '', deviation: '', remarks: '' },
-    SD04: { locality: '', deviation: '', remarks: '' },
-    SD05: { locality: '', deviation: '', remarks: '' },
-    SD06: { locality: '', deviation: '', remarks: '' },
-    SD07: { locality: '', deviation: '', remarks: '' },
-    SD08: { locality: '', deviation: '', remarks: '' },
-    SD10: { locality: '', deviation: '', remarks: '' },
-    SD11: { locality: '', deviation: '', remarks: '' },
-    SD12: { locality: '', deviation: '', remarks: '' },
-    SD13: { locality: '', deviation: '', remarks: '' },
-    SD14: { locality: '', deviation: '', remarks: '' },
-    SD15: { locality: '', deviation: '', remarks: '' },
-    SD18: { locality: '', deviation: '', remarks: '' },
+    SD02: { locality: '', deviation: '', remarks: '' }, SD03: { locality: '', deviation: '', remarks: '' },
+    SD04: { locality: '', deviation: '', remarks: '' }, SD05: { locality: '', deviation: '', remarks: '' },
+    SD06: { locality: '', deviation: '', remarks: '' }, SD07: { locality: '', deviation: '', remarks: '' },
+    SD08: { locality: '', deviation: '', remarks: '' }, SD10: { locality: '', deviation: '', remarks: '' },
+    SD11: { locality: '', deviation: '', remarks: '' }, SD12: { locality: '', deviation: '', remarks: '' },
+    SD13: { locality: '', deviation: '', remarks: '' }, SD14: { locality: '', deviation: '', remarks: '' },
+    SD15: { locality: '', deviation: '', remarks: '' }, SD18: { locality: '', deviation: '', remarks: '' },
   };
+
+  // Per-locality seed data extracted from DCT Sample file (Apr 2026)
+  // Each row is one locality; planned = beneficiary count from that sheet.
+  type LocalityRowSeed = { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string };
+  const SEED_LOCALITY_ROWS_V2: LocalityRowSeed[] = [
+    // Khartoum (SD01)
+    { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '120', deviation: '60 closed · 20 not reply · 7 wrong number', remarks: '' },
+    { id: 'SD01-1', stateCode: 'SD01', locality: 'Sharg An Neel', planned: '170', deviation: '', remarks: '' },
+    // North Darfur (SD02)
+    { id: 'SD02-0', stateCode: 'SD02', locality: 'El Fasher',     planned: '170', deviation: '', remarks: '' },
+    // South Kordofan (SD07)
+    { id: 'SD07-0', stateCode: 'SD07', locality: 'Kadugli',       planned: '170', deviation: '', remarks: '' },
+    { id: 'SD07-1', stateCode: 'SD07', locality: 'Habila',        planned: '39',  deviation: '', remarks: '' },
+    { id: 'SD07-2', stateCode: 'SD07', locality: 'Dilling',       planned: '170', deviation: '', remarks: '' },
+    // White Nile (SD09)
+    { id: 'SD09-0', stateCode: 'SD09', locality: 'Rabak',         planned: '120', deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
+    { id: 'SD09-1', stateCode: 'SD09', locality: 'Kosti',         planned: '120', deviation: '', remarks: '' },
+    { id: 'SD09-2', stateCode: 'SD09', locality: 'Um Rimta',      planned: '60',  deviation: '', remarks: '' },
+    // Red Sea (SD10)
+    { id: 'SD10-0', stateCode: 'SD10', locality: 'Port Sudan',    planned: '21',  deviation: '', remarks: '' },
+    // North Kordofan (SD13)
+    { id: 'SD13-0', stateCode: 'SD13', locality: 'Um Rawaba',     planned: '120', deviation: '', remarks: '' },
+    { id: 'SD13-1', stateCode: 'SD13', locality: 'Sheikan',       planned: '170', deviation: '', remarks: '' },
+    // River Nile (SD16)
+    { id: 'SD16-0', stateCode: 'SD16', locality: 'Shendi',        planned: '170', deviation: '37 closed · 9 not reply · 13 wrong number', remarks: '' },
+    // Northern (SD17)
+    { id: 'SD17-0', stateCode: 'SD17', locality: 'Al Golid',      planned: '170', deviation: '25 closed · 14 not reply · 1 wrong number', remarks: '' },
+    // West Kordofan (SD18)
+    { id: 'SD18-0', stateCode: 'SD18', locality: 'As Sunut',      planned: '60',  deviation: '', remarks: '' },
+    { id: 'SD18-1', stateCode: 'SD18', locality: 'Al Lagowa',     planned: '58',  deviation: '', remarks: '' },
+    // Remaining states — blank rows so admins can fill when activated
+    { id: 'SD03-0', stateCode: 'SD03', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD04-0', stateCode: 'SD04', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD05-0', stateCode: 'SD05', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD06-0', stateCode: 'SD06', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD08-0', stateCode: 'SD08', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD11-0', stateCode: 'SD11', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD12-0', stateCode: 'SD12', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD14-0', stateCode: 'SD14', locality: '', planned: '', deviation: '', remarks: '' },
+    { id: 'SD15-0', stateCode: 'SD15', locality: '', planned: '', deviation: '', remarks: '' },
+  ];
 
   // Bump seed version whenever defaults change — existing manual edits are
   // preserved; only blank fields are filled from the new defaults.
@@ -376,25 +413,21 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     remarks: string;
   }
 
-  const LOCALITY_ROWS_VER = 'v1';
+  // Bump this version string any time SEED_LOCALITY_ROWS_V2 changes — existing
+  // manual edits are wiped and the new seed is applied.
+  const LOCALITY_ROWS_VER = 'v2';
   const [localityRows, setLocalityRows] = useState<LocalityRow[]>(() => {
     try {
       const stored = localStorage.getItem('pact-pdm-locality-rows');
       const ver    = localStorage.getItem('pact-pdm-locality-rows-ver');
       if (ver === LOCALITY_ROWS_VER && stored) return JSON.parse(stored);
-      // Seed one row per state from SAMPLE_PLANNED + SAMPLE_DEFAULTS
-      const rows: LocalityRow[] = Object.entries(SAMPLE_PLANNED).map(([code, planned]) => {
-        const def = SAMPLE_DEFAULTS[code] ?? { locality: '', deviation: '', remarks: '' };
-        return { id: `${code}-0`, stateCode: code, locality: def.locality, planned, deviation: def.deviation, remarks: def.remarks };
-      });
+      // Seed from DCT Sample file data (per-locality, Apr 2026)
+      const rows: LocalityRow[] = SEED_LOCALITY_ROWS_V2;
       localStorage.setItem('pact-pdm-locality-rows',     JSON.stringify(rows));
       localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
       return rows;
     } catch {
-      return Object.entries(SAMPLE_PLANNED).map(([code, planned]) => {
-        const def = SAMPLE_DEFAULTS[code] ?? { locality: '', deviation: '', remarks: '' };
-        return { id: `${code}-0`, stateCode: code, locality: def.locality, planned, deviation: def.deviation, remarks: def.remarks };
-      });
+      return SEED_LOCALITY_ROWS_V2;
     }
   });
 
