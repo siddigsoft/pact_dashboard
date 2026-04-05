@@ -1703,6 +1703,21 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     );
   };
 
+  const pctBadge = (pct: number | null) => {
+    if (pct == null) return <span className="text-muted-foreground text-[12px]">—</span>;
+    const [bg, text] =
+      pct >= 100 ? ['bg-emerald-100 dark:bg-emerald-900/40', 'text-emerald-700 dark:text-emerald-300'] :
+      pct >= 90  ? ['bg-blue-100 dark:bg-blue-900/40',    'text-blue-700 dark:text-blue-300']    :
+      pct >= 75  ? ['bg-amber-100 dark:bg-amber-900/40',  'text-amber-700 dark:text-amber-300']  :
+      pct >= 50  ? ['bg-orange-100 dark:bg-orange-900/40','text-orange-700 dark:text-orange-300']:
+                   ['bg-red-100 dark:bg-red-900/40',      'text-red-700 dark:text-red-300'];
+    return (
+      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${bg} ${text}`}>
+        {pct}%
+      </span>
+    );
+  };
+
   return (
     <div className="p-4 space-y-5 max-w-[1400px] mx-auto">
       {/* ── Hidden file input ── */}
@@ -1926,20 +1941,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   const stateRowSpan = hasRows ? group.rows.length + addRowSpan + subtotalSpan : 1;
                   const rowBg = gi % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20';
                   const extraCols = canUpload && isEditMode ? 8 : 7;
-                  const pctBadge = (pct: number | null) => {
-                    if (pct == null) return <span className="text-muted-foreground text-[12px]">—</span>;
-                    const [bg, text] =
-                      pct >= 100 ? ['bg-emerald-100 dark:bg-emerald-900/40', 'text-emerald-700 dark:text-emerald-300'] :
-                      pct >= 90  ? ['bg-blue-100 dark:bg-blue-900/40',    'text-blue-700 dark:text-blue-300']    :
-                      pct >= 75  ? ['bg-amber-100 dark:bg-amber-900/40',  'text-amber-700 dark:text-amber-300']  :
-                      pct >= 50  ? ['bg-orange-100 dark:bg-orange-900/40','text-orange-700 dark:text-orange-300']:
-                                   ['bg-red-100 dark:bg-red-900/40',      'text-red-700 dark:text-red-300'];
-                    return (
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${bg} ${text}`}>
-                        {pct}%
-                      </span>
-                    );
-                  };
 
                   if (!hasRows) {
                     return (
