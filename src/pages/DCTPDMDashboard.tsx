@@ -616,24 +616,35 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   }, [feedbackFiltered, feedbackPage]);
 
   // ── Export ───────────────────────────────────────────────────────────────
-  const handleExport = () => {
-    const XLSX = (window as any).XLSX;
-    if (!XLSX) { alert('Export not available'); return; }
-    const ws = XLSX.utils.json_to_sheet(filtered.map(r => ({
-      'Household ID': r.hhid,
-      'State': r.state ? (STATE_LABELS[r.state] || r.state) : '',
-      'Locality': r.locality,
-      'Sex': r.sex === 0 ? 'Female' : 'Male',
-      'HH Status': r.hhStatus ? STATUS_LABELS[r.hhStatus] : '',
-      'HH Total': r.hhTotal,
-      'Asst Received': r.asstReceived === 1 ? 'Yes' : r.asstReceived === 2 ? 'Partial' : 'No',
-      'Amount Received (SDG)': r.asstAmtRec,
-      'Satisfaction': r.satisfaction ? SATISFACTION_CFG.find(s => s.key === r.satisfaction)?.label : '',
-      'CFM Aware': r.cfm === 1 ? 'Yes' : 'No',
-    })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'PDM Data');
-    XLSX.writeFile(wb, 'dct_pdm_export.xlsx');
+  const handleExport = async () => {
+    try {
+      const XLSXLib = await import('xlsx');
+      const ws = XLSXLib.utils.json_to_sheet(filtered.map(r => ({
+        'Household ID': r.hhid,
+        'State': r.state ? (STATE_LABELS[r.state] || r.state) : '',
+        'Locality': r.locality,
+        'Sex': r.sex === 0 ? 'Female' : 'Male',
+        'HH Head Status': r.hhStatus ? STATUS_LABELS[r.hhStatus] : '',
+        'HH Total Members': r.hhTotal,
+        'Assistance Received': r.asstReceived === 1 ? 'Yes' : r.asstReceived === 2 ? 'Partial' : 'No',
+        'Amount Received (SDG)': r.asstAmtRec,
+        'Satisfaction (1–5)': r.satisfaction ?? '',
+        'CFM Aware': r.cfm === 1 ? 'Yes' : 'No',
+        'Market Access': r.marketAccess === 1 ? 'Yes' : r.marketAccess === 2 ? 'Partial' : r.marketAccess === 0 ? 'No' : '',
+        'Free Response': r.freeResponse ?? '',
+        'Interviewer': r.interviewer ?? '',
+      })));
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 8 }, { wch: 18 },
+        { wch: 16 }, { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 12 },
+        { wch: 14 }, { wch: 40 }, { wch: 20 },
+      ];
+      const wb = XLSXLib.utils.book_new();
+      XLSXLib.utils.book_append_sheet(wb, ws, 'PDM Survey Data');
+      XLSXLib.writeFile(wb, 'dct_pdm_export.xlsx');
+    } catch {
+      alert('Export failed. Please try again.');
+    }
   };
 
   const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) => {
