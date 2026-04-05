@@ -285,29 +285,44 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   interface LocalityTarget { planned: string; locality: string; deviation: string; remarks: string; }
 
-  // State-level planned counts from WFP DCT sample file (green=confirmed)
-  // SD01=Khartoum, SD09=White Nile, SD16=River Nile, SD17=Northern
+  // All 18 Sudan states — active PDM states pre-filled; others start blank
+  // so admins can enter planned numbers for future rounds.
   const SAMPLE_PLANNED: Record<string, string> = {
-    SD01: '250', // Khartoum   — 250 confirmed HHs
-    SD09: '250', // White Nile — 250 confirmed HHs
-    SD16: '150', // River Nile — 150 confirmed HHs
-    SD17: '150', // Northern   — 150 confirmed HHs
+    SD01: '250', SD09: '250', SD16: '150', SD17: '150', // active (Apr 2026)
+    SD02: '', SD03: '', SD04: '', SD05: '', SD06: '',    // Darfur cluster
+    SD07: '', SD08: '', SD10: '', SD11: '', SD12: '',    // East / Nile cluster
+    SD13: '', SD14: '', SD15: '', SD18: '',              // Kordofan / Jazirah
   };
   const SAMPLE_BACKUP: Record<string, number> = {
     SD01: 40, SD09: 50, SD16: 20, SD17: 20,
   };
 
-  // Pre-seeded locality names + deviation reasons per state (DCT sample file, Apr 2026)
+  // Pre-seeded locality names + deviation reasons (DCT sample file, Apr 2026)
   const SAMPLE_DEFAULTS: Record<string, { locality: string; deviation: string; remarks: string }> = {
-    SD01: { locality: 'Bahri / Sharg El-Neel',   deviation: '60 closed · 20 not reply · 7 wrong number',   remarks: '' },
-    SD09: { locality: '',                          deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
-    SD16: { locality: 'Shandi',                   deviation: '37 closed · 9 not reply · 13 wrong number',   remarks: '' },
-    SD17: { locality: 'Al Golid',                 deviation: '25 closed · 14 not reply · 1 wrong number',   remarks: '' },
+    SD01: { locality: 'Bahri / Sharg El-Neel', deviation: '60 closed · 20 not reply · 7 wrong number',   remarks: '' },
+    SD09: { locality: '',                       deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
+    SD16: { locality: 'Shandi',                deviation: '37 closed · 9 not reply · 13 wrong number',   remarks: '' },
+    SD17: { locality: 'Al Golid',              deviation: '25 closed · 14 not reply · 1 wrong number',   remarks: '' },
+    // remaining states — blank; filled by admin when activated
+    SD02: { locality: '', deviation: '', remarks: '' },
+    SD03: { locality: '', deviation: '', remarks: '' },
+    SD04: { locality: '', deviation: '', remarks: '' },
+    SD05: { locality: '', deviation: '', remarks: '' },
+    SD06: { locality: '', deviation: '', remarks: '' },
+    SD07: { locality: '', deviation: '', remarks: '' },
+    SD08: { locality: '', deviation: '', remarks: '' },
+    SD10: { locality: '', deviation: '', remarks: '' },
+    SD11: { locality: '', deviation: '', remarks: '' },
+    SD12: { locality: '', deviation: '', remarks: '' },
+    SD13: { locality: '', deviation: '', remarks: '' },
+    SD14: { locality: '', deviation: '', remarks: '' },
+    SD15: { locality: '', deviation: '', remarks: '' },
+    SD18: { locality: '', deviation: '', remarks: '' },
   };
 
   // Bump seed version whenever defaults change — existing manual edits are
   // preserved; only blank fields are filled from the new defaults.
-  const SEED_VER = 'v6-with-locality';
+  const SEED_VER = 'v7-all-states';
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
@@ -531,6 +546,19 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     })).sort((a, b) => a.name.localeCompare(b.name));
   }, [records]);
 
+  // All-states rows for the PDM Progress table — includes every state in
+  // SAMPLE_PLANNED (all 18), with actual reached counts merged in.
+  // States without uploaded data show reached=0 so admins can still fill in targets.
+  const allStateRows = useMemo(() => {
+    const reachedMap: Record<string, number> = {};
+    records.forEach(r => { if (r.state) reachedMap[r.state] = (reachedMap[r.state] || 0) + 1; });
+    return Object.keys(SAMPLE_PLANNED).map(code => ({
+      code,
+      name: STATE_LABELS[code] || code,
+      reached: reachedMap[code] || 0,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [records]);
+
   const importProgressRef = useRef<HTMLInputElement>(null);
 
   const ARABIC_TO_CODE: Record<string, string> = {
@@ -570,7 +598,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         const deviation = getCol('reason', 'deviation', 'سبب', 'انحراف');
         const remarks  = getCol('remark', 'ملاحظ', 'note', 'comment');
         if (!stateRaw) return;
-        const code = localityProgressData.find(r => r.name.toLowerCase() === stateRaw.toLowerCase())?.code
+        const code = allStateRows.find(r => r.name.toLowerCase() === stateRaw.toLowerCase())?.code
           || Object.entries(STATE_LABELS).find(([, v]) => v.toLowerCase() === stateRaw.toLowerCase())?.[0];
         if (!code) return;
         updated[code] = {
@@ -590,7 +618,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   const handleDownloadTemplate = async () => {
     const XLSXLib = await import('xlsx');
-    const rows = localityProgressData.map(r => ({
+    const rows = allStateRows.map(r => ({
       'State': r.name,
       'Locality': localityTargets[r.code]?.locality || '',
       'Planned Number for PDM (Confirmed)': localityTargets[r.code]?.planned || '',
@@ -606,7 +634,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   const handleExportProgress = async () => {
     const XLSXLib = await import('xlsx');
-    const rows = localityProgressData.map(r => {
+    const rows = allStateRows.map(r => {
       const t = localityTargets[r.code];
       const planned = t?.planned ? Number(t.planned) : null;
       const backup = SAMPLE_BACKUP[r.code] ?? 0;
@@ -787,10 +815,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       addBanner(ws1, 'PDM PROGRESS BY STATE', 8);
       addColHdr(ws1, ['State', 'Locality', 'Planned (Confirmed)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks']);
 
-      const tpTot = localityProgressData.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
-      const trTot = localityProgressData.reduce((s, r) => s + r.reached, 0);
+      const tpTot = allStateRows.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
+      const trTot = allStateRows.reduce((s, r) => s + r.reached, 0);
 
-      localityProgressData.forEach((lr, i) => {
+      allStateRows.forEach((lr, i) => {
         const t = localityTargets[lr.code];
         const planned = t?.planned ? Number(t.planned) : null;
         const dev = planned != null ? lr.reached - planned : null;
@@ -1308,7 +1336,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               <div className="flex items-center gap-2 mb-0.5">
                 <MapPin className="h-4 w-4 text-[#1D3461]" />
                 <h3 className="text-sm font-bold text-foreground">PDM Progress by State</h3>
-                <Badge variant="outline" className="text-[10px]">{localityProgressData.length} states</Badge>
+                <Badge variant="outline" className="text-[10px]">{allStateRows.length} states</Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per state · {canUpload ? 'Click any cell to edit, or import from file' : canEditNotes ? 'You can edit Reason for Deviation and Remarks' : 'Read-only view'}</p>
             </div>
@@ -1359,7 +1387,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 </tr>
               </thead>
               <tbody>
-                {localityProgressData.map((row, i) => {
+                {allStateRows.map((row, i) => {
                   const t = localityTargets[row.code];
                   const planned = t?.planned ? Number(t.planned) : null;
                   const dev = planned != null ? row.reached - planned : null;
@@ -1460,7 +1488,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   <td className="px-4 py-2.5 text-[11px] font-bold">TOTAL</td>
                   <td className="px-4 py-2.5" />
                   <td className="px-4 py-2.5 text-center text-[12px]">
-                    {localityProgressData.reduce((s, r) => {
+                    {allStateRows.reduce((s, r) => {
                       const p = localityTargets[r.code]?.planned;
                       return s + (p ? Number(p) : 0);
                     }, 0) || '—'}
@@ -1468,7 +1496,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   <td className="px-4 py-2.5 text-center text-[12px] text-[#1D3461]">{records.length}</td>
                   <td className="px-4 py-2.5 text-center text-[12px]">
                     {(() => {
-                      const totalPlanned = localityProgressData.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
+                      const totalPlanned = allStateRows.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
                       const dev = totalPlanned ? records.length - totalPlanned : null;
                       return dev != null ? <span className={dev >= 0 ? 'text-emerald-600' : 'text-red-500'}>{dev > 0 ? `+${dev}` : dev}</span> : '—';
                     })()}
