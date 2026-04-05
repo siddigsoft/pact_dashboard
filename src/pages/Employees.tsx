@@ -319,18 +319,38 @@ function EmployeeDetail({
                   </div>
                 </div>
               </div>
-              {!profile.is_employee && (
-                <p className="text-[10px] text-muted-foreground bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-2.5 py-2">
-                  To register as employee, open their full profile in <span className="font-semibold">User Management</span> and fill in the Employment Record section.
-                </p>
-              )}
-              <a
-                href={`/users/${profile.id}`}
-                className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-[#0F2041] dark:text-blue-400 hover:underline"
-                data-testid="link-user-management"
-              >
-                <ChevronRight className="h-3 w-3" />Open full profile in User Management
-              </a>
+              <div className="flex items-center gap-2 mt-1">
+                {profile.is_employee ? (
+                  <button
+                    type="button"
+                    disabled={savingEmp}
+                    onClick={() => saveEmployment(false)}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold border border-red-200 text-red-600 dark:text-red-400 dark:border-red-800 rounded-md px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
+                    data-testid="button-remove-employee"
+                  >
+                    {savingEmp ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                    Remove from Employees
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={savingEmp}
+                    onClick={() => saveEmployment(true)}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-emerald-600 text-white rounded-md px-3 py-2 hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                    data-testid="button-register-employee"
+                  >
+                    {savingEmp ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                    Register as Employee
+                  </button>
+                )}
+                <a
+                  href={`/users/${profile.id}`}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground hover:text-[#0F2041] dark:hover:text-blue-400 border border-border rounded-md px-2.5 py-2 hover:bg-muted/50 transition-colors whitespace-nowrap"
+                  data-testid="link-user-management"
+                >
+                  <ChevronRight className="h-3 w-3" />Full Profile
+                </a>
+              </div>
             </div>
           )}
 
