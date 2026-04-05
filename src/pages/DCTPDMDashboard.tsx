@@ -505,6 +505,28 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // Edit mode — table inputs only visible when toggled on
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // State-level Reason for Deviation (one per state, not per locality)
+  const [stateDeviations, setStateDeviations] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem('pact-pdm-state-deviations');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    // Seed from first non-empty deviation in each state's seed rows
+    const seeded: Record<string, string> = {};
+    SEED_LOCALITY_ROWS_V2.forEach(r => {
+      if (r.deviation && !seeded[r.stateCode]) seeded[r.stateCode] = r.deviation;
+    });
+    return seeded;
+  });
+
+  const updateStateDeviation = (code: string, val: string) => {
+    setStateDeviations(prev => {
+      const next = { ...prev, [code]: val };
+      try { localStorage.setItem('pact-pdm-state-deviations', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
       alert('Please upload an Excel file (.xlsx or .xls)');
@@ -742,9 +764,9 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       let skipped = 0;
 
       rows.forEach(row => {
-        // Skip ALTERNATE (yellow) rows — check Type / النوع / category columns
+        // Count ONLY PRINCIPAL (green) rows — skip ALTERNATE (yellow) and any other type
         const rowType = getCol(row, 'type', 'نوع', 'category', 'status', 'surveytype', 'row_type');
-        if (rowType.toUpperCase() === 'ALTERNATE') { skipped++; return; }
+        if (rowType.toUpperCase() !== 'PRINCIPAL') { skipped++; return; }
 
         // Map state name → code (English or Arabic)
         const stateRaw = getCol(row, 'state', 'ولاية', 'governorate', 'gov');
@@ -1696,21 +1718,28 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               )}
                             </td>
 
-                            {/* Reason for Deviation */}
-                            <td className="px-4 py-2">
-                              {canEditNotes && isEditMode ? (
-                                <input
-                                  type="text"
-                                  className="w-full min-w-[160px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
-                                  value={row.deviation}
-                                  placeholder="Enter reason…"
-                                  onChange={e => updateLocalityRow(row.id, 'deviation', e.target.value)}
-                                  data-testid={`input-deviation-${row.id}`}
-                                />
-                              ) : (
-                                <span className="text-muted-foreground">{row.deviation || '—'}</span>
-                              )}
-                            </td>
+                            {/* Reason for Deviation — merged cell per state, only in first row */}
+                            {isFirst && (
+                              <td
+                                rowSpan={group.rows.length + subtotalSpan}
+                                className="px-4 py-2 align-top border-l border-border/20"
+                              >
+                                {canEditNotes && isEditMode ? (
+                                  <textarea
+                                    className="w-full min-w-[200px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461] resize-y"
+                                    rows={Math.max(3, group.rows.length * 2)}
+                                    value={stateDeviations[group.code] || ''}
+                                    placeholder="Enter reason for deviation (applies to whole state)…"
+                                    onChange={e => updateStateDeviation(group.code, e.target.value)}
+                                    data-testid={`textarea-deviation-${group.code}`}
+                                  />
+                                ) : (
+                                  <span className="text-[12px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                                    {stateDeviations[group.code] || '—'}
+                                  </span>
+                                )}
+                              </td>
+                            )}
 
                             {/* Remarks */}
                             <td className="px-4 py-2">
@@ -1773,7 +1802,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                 <span className={`font-bold text-[12px] ${subColor}`}>{subDev > 0 ? `+${subDev}` : subDev}</span>
                               )}
                             </td>
-                            <td className="px-4 py-1.5" />
+                            {/* reason covered by rowspan from first locality row */}
                             <td className="px-4 py-1.5" />
                             {canUpload && isEditMode && <td className="px-2 py-1.5" />}
                           </tr>
