@@ -430,6 +430,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     setLocalityRows(prev => { const next = prev.filter(r => r.id !== id); saveRows(next); return next; });
   };
 
+  // All-states rows — every state in SAMPLE_PLANNED with actual reached counts merged in.
+  // Declared before groupedRows because groupedRows depends on it.
+  const allStateRows = useMemo(() => {
+    const reachedMap: Record<string, number> = {};
+    records.forEach(r => { if (r.state) reachedMap[r.state] = (reachedMap[r.state] || 0) + 1; });
+    return Object.keys(SAMPLE_PLANNED).map(code => ({
+      code,
+      name: STATE_LABELS[code] || code,
+      reached: reachedMap[code] || 0,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [records]);
+
   // Groups all 18 states alphabetically; each state carries its matched locality rows
   // and the reached count from the uploaded survey data.
   const groupedRows = useMemo(() => {
@@ -621,19 +633,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       code,
       name: STATE_LABELS[code] || code,
       reached: count,
-    })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [records]);
-
-  // All-states rows for the PDM Progress table — includes every state in
-  // SAMPLE_PLANNED (all 18), with actual reached counts merged in.
-  // States without uploaded data show reached=0 so admins can still fill in targets.
-  const allStateRows = useMemo(() => {
-    const reachedMap: Record<string, number> = {};
-    records.forEach(r => { if (r.state) reachedMap[r.state] = (reachedMap[r.state] || 0) + 1; });
-    return Object.keys(SAMPLE_PLANNED).map(code => ({
-      code,
-      name: STATE_LABELS[code] || code,
-      reached: reachedMap[code] || 0,
     })).sort((a, b) => a.name.localeCompare(b.name));
   }, [records]);
 
