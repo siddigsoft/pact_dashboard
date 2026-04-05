@@ -1703,6 +1703,14 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     );
   };
 
+  const pctColor = (pct: number | null): string =>
+    pct == null    ? 'text-muted-foreground' :
+    pct >= 100     ? 'text-emerald-700 dark:text-emerald-400' :
+    pct >= 90      ? 'text-blue-700 dark:text-blue-400'       :
+    pct >= 75      ? 'text-amber-700 dark:text-amber-400'     :
+    pct >= 50      ? 'text-orange-600 dark:text-orange-400'   :
+                     'text-red-600 dark:text-red-400';
+
   const pctBadge = (pct: number | null) => {
     if (pct == null) return <span className="text-muted-foreground text-[12px]">—</span>;
     const [bg, text] =
@@ -1970,7 +1978,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                         const planned    = row.planned ? Number(row.planned) : null;
                         const dev        = planned != null ? rowReached - planned : null;
                         const devPct     = planned ? Math.round((rowReached / planned) * 100) : null;
-                        const devColor   = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
                         const isFirst    = ri === 0;
 
                         // Left-border colour = progress traffic light
@@ -2031,13 +2038,13 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                   data-testid={`input-planned-${row.id}`}
                                 />
                               ) : (
-                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">{planned ?? '—'}</span>
+                                <span className="font-semibold">{planned ?? '—'}</span>
                               )}
                             </td>
 
                             {/* Reached — per-locality count from survey sub-code mapping */}
                             <td className="px-4 py-2 text-center">
-                              <span className="font-bold text-[#1D3461]">
+                              <span className={`font-bold ${pctColor(devPct)}`}>
                                 {rowReached > 0 ? rowReached : <span className="text-muted-foreground font-normal">0</span>}
                               </span>
                             </td>
@@ -2047,7 +2054,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               {dev == null ? (
                                 <span className="text-muted-foreground">—</span>
                               ) : (
-                                <span className={`font-bold ${devColor}`}>{dev > 0 ? `+${dev}` : dev}</span>
+                                <span className="font-bold">{dev > 0 ? `+${dev}` : dev}</span>
                               )}
                             </td>
 
@@ -2133,7 +2140,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                         const subReached = group.reached;
                         const subDev     = subPlanned > 0 ? subReached - subPlanned : null;
                         const subPct     = subPlanned > 0 ? Math.round((subReached / subPlanned) * 100) : null;
-                        const subColor   = subDev == null ? '' : subDev >= 0 ? 'text-emerald-600' : 'text-red-500';
                         return (
                           <tr className="border-b border-[#1D3461]/15 bg-[#0F2041]/[0.04] dark:bg-[#1D3461]/10">
                             <td className="px-4 py-1.5 text-[11px] font-semibold text-[#1D3461]/70 italic whitespace-nowrap">
@@ -2143,13 +2149,13 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               {subPlanned || '—'}
                             </td>
                             <td className="px-4 py-1.5 text-center">
-                              <span className="font-bold text-[#1D3461] text-[12px]">{subReached}</span>
+                              <span className={`font-bold text-[12px] ${pctColor(subPct)}`}>{subReached}</span>
                             </td>
                             <td className="px-4 py-1.5 text-center">
                               {subDev == null ? (
                                 <span className="text-muted-foreground text-[12px]">—</span>
                               ) : (
-                                <span className={`font-bold text-[12px] ${subColor}`}>{subDev > 0 ? `+${subDev}` : subDev}</span>
+                                <span className="font-bold text-[12px]">{subDev > 0 ? `+${subDev}` : subDev}</span>
                               )}
                             </td>
                             {/* % Reached */}
@@ -2184,16 +2190,17 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   const totalReached = records.length;
                   const dev = totalPlanned > 0 ? totalReached - totalPlanned : null;
                   const totalPct = totalPlanned > 0 ? Math.round((totalReached / totalPlanned) * 100) : null;
-                  const totColor = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
                   return (
                     <tr className="bg-muted/50 border-t-2 border-border font-bold">
                       <td className="px-4 py-2.5 text-[11px] font-bold">TOTAL</td>
                       <td className="px-4 py-2.5" />
                       <td className="px-4 py-2.5 text-center text-[12px]">{totalPlanned || '—'}</td>
-                      <td className="px-4 py-2.5 text-center text-[12px] text-[#1D3461]">{totalReached}</td>
+                      <td className="px-4 py-2.5 text-center text-[12px]">
+                        <span className={`font-bold ${pctColor(totalPct)}`}>{totalReached}</span>
+                      </td>
                       <td className="px-4 py-2.5 text-center text-[12px]">
                         {dev != null
-                          ? <span className={totColor}>{dev > 0 ? `+${dev}` : dev}</span>
+                          ? <span className="font-bold">{dev > 0 ? `+${dev}` : dev}</span>
                           : '—'}
                       </td>
                       <td className="px-4 py-2.5 text-center">{pctBadge(totalPct)}</td>
