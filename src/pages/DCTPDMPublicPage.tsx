@@ -24,7 +24,7 @@ export default function DCTPDMPublicPage() {
     e.preventDefault();
     setLoading(true); setError('');
     setTimeout(() => {
-      if (username.trim().toLowerCase() === GUEST_USER.toLowerCase() && password.trim() === GUEST_PASS) {
+      if (username === GUEST_USER && password === GUEST_PASS) {
         sessionStorage.setItem(SESSION_KEY, '1');
         setAuthed(true);
       } else {
