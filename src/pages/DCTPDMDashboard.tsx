@@ -833,7 +833,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                       <span>Planned for PDM</span>
                       <div className="flex items-center gap-1 text-[9px] font-normal opacity-80">
                         <span className="bg-green-500 rounded-full px-1.5 py-0 text-white">● confirmed</span>
-                        <span className="bg-yellow-400 rounded-full px-1.5 py-0 text-white">● backup</span>
                       </div>
                     </div>
                   </th>
@@ -868,11 +867,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                             />
                           ) : (
                             <span className="font-medium">{planned ?? '—'}</span>
-                          )}
-                          {SAMPLE_BACKUP[row.code] != null && (
-                            <span className="inline-flex items-center gap-0.5 text-[9.5px] font-semibold px-1.5 py-0 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-300 whitespace-nowrap">
-                              +{SAMPLE_BACKUP[row.code]} backup
-                            </span>
                           )}
                         </div>
                       </td>
