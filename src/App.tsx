@@ -533,22 +533,7 @@ function App() {
       disableTransitionOnChange
     >
       {isMounted && (
-        <ErrorBoundary
-          fallback={
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md">
-                <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-                <p className="mb-4">The application encountered an unexpected error. Please refresh the page to try again.</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
-                >
-                  Refresh Page
-                </button>
-              </div>
-            </div>
-          }
-        >
+        <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <Router>
               <NavigationProvider>
