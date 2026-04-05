@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Eye, EyeOff, Lock, BarChart3, LogOut } from 'lucide-react';
+import { Eye, EyeOff, Lock, LogOut } from 'lucide-react';
 import DCTPDMDashboard from './DCTPDMDashboard';
+
+const PACT_LOGO_URL = '/pact-logo.png';
 
 const GUEST_USER = 'WFP-Sudan';
 const GUEST_PASS = 'PACT@2026';
@@ -43,9 +45,11 @@ export default function DCTPDMPublicPage() {
         <div style={{ width: '100%', maxWidth: '420px', background: '#ffffff', borderRadius: '16px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)', padding: '40px 36px' }}>
           {/* Header */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '28px' }}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: '#0F2041', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
-              <BarChart3 style={{ width: '28px', height: '28px', color: '#ffffff' }} />
-            </div>
+            <img
+              src={PACT_LOGO_URL}
+              alt="PACT Logo"
+              style={{ height: '56px', width: 'auto', objectFit: 'contain', marginBottom: '16px' }}
+            />
             <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', margin: '0 0 4px 0' }}>DCT PDM Dashboard</h1>
             <p style={{ fontSize: '12px', color: '#6B7280', margin: '0 0 12px 0', textAlign: 'center' }}>
               2026 Digital Cash Transfer · Post-Distribution Monitoring
@@ -123,7 +127,7 @@ export default function DCTPDMPublicPage() {
     <div className="min-h-screen bg-background">
       <div className="bg-[#0F2041] text-white px-4 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4" />
+          <img src={PACT_LOGO_URL} alt="PACT" style={{ height: '22px', width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
           <span className="text-sm font-semibold">PACT · DCT PDM Dashboard 2026</span>
           <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">Public Report Access</span>
         </div>

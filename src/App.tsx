@@ -460,23 +460,41 @@ function App() {
   // intercepted by SessionGuard, AuthGuard, MobilePermissionGuard, or any
   // notification/broadcast overlay.
   if (window.location.pathname === '/pdm-report') {
+    // Auto-reload once if a stale chunk was the cause (common after Vercel deploys).
+    // Uses a session flag so we don't loop endlessly on genuine errors.
+    const PDMFallback = () => {
+      useEffect(() => {
+        const key = 'pdm_eb_reloaded';
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1');
+          window.location.reload();
+        }
+      }, []);
+      return (
+        <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0F2041,#1D3461)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '32px', borderRadius: '12px', textAlign: 'center', maxWidth: '360px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)' }}>
+            <p style={{ color: '#DC2626', fontWeight: '700', marginBottom: '12px', fontSize: '15px' }}>Failed to load the report.</p>
+            <p style={{ color: '#6B7280', fontSize: '12px', marginBottom: '16px' }}>This may be a temporary issue. Click Refresh to try again.</p>
+            <button
+              onClick={() => { sessionStorage.removeItem('pdm_eb_reloaded'); window.location.reload(); }}
+              style={{ padding: '10px 20px', background: '#1D3461', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      );
+    };
     return (
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
-        <ErrorBoundary
-          fallback={
-            <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', textAlign: 'center' }}>
-                <p style={{ color: '#DC2626', fontWeight: 'bold' }}>Something went wrong.</p>
-                <button onClick={() => window.location.reload()} style={{ marginTop: '12px', padding: '8px 16px', background: '#1D3461', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
-                  Refresh
-                </button>
-              </div>
-            </div>
-          }
-        >
+        <ErrorBoundary fallback={<PDMFallback />}>
           <QueryClientProvider client={queryClient}>
             <Router>
-              <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0F2041' }}><div style={{ color: '#fff', fontSize: '14px' }}>Loading…</div></div>}>
+              <Suspense fallback={
+                <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0F2041,#1D3461)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ color: '#fff', fontSize: '14px', opacity: 0.8 }}>Loading report…</div>
+                </div>
+              }>
                 <Routes>
                   <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
                 </Routes>
