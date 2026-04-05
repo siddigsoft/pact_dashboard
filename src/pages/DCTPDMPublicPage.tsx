@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Lock, BarChart3, LogOut } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import DCTPDMDashboard from './DCTPDMDashboard';
 
 const GUEST_USER = 'WFP-Sudan';
@@ -42,79 +39,82 @@ export default function DCTPDMPublicPage() {
 
   if (!authed) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0F2041] to-[#1D3461] flex flex-col items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl border-0">
-          <CardContent className="p-8">
-            <div className="flex flex-col items-center mb-7">
-              <div className="w-14 h-14 rounded-2xl bg-[#0F2041] flex items-center justify-center mb-4 shadow-lg">
-                <BarChart3 className="h-7 w-7 text-white" />
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0F2041 0%, #1D3461 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+        <div style={{ width: '100%', maxWidth: '420px', background: '#ffffff', borderRadius: '16px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)', padding: '40px 36px' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '28px' }}>
+            <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: '#0F2041', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+              <BarChart3 style={{ width: '28px', height: '28px', color: '#ffffff' }} />
+            </div>
+            <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', margin: '0 0 4px 0' }}>DCT PDM Dashboard</h1>
+            <p style={{ fontSize: '12px', color: '#6B7280', margin: '0 0 12px 0', textAlign: 'center' }}>
+              2026 Digital Cash Transfer · Post-Distribution Monitoring
+            </p>
+            <p style={{ fontSize: '11px', color: '#6B7280', background: '#F3F4F6', padding: '8px 12px', borderRadius: '8px', textAlign: 'center', margin: 0 }}>
+              This report is restricted. Enter your access credentials to continue.
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="e.g. WFP-Sudan"
+                autoComplete="username"
+                autoFocus
+                data-testid="input-pdm-username"
+                style={{ width: '100%', height: '40px', padding: '0 12px', fontSize: '14px', color: '#111827', background: '#ffffff', border: '1px solid #D1D5DB', borderRadius: '8px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', pointerEvents: 'auto' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#1D3461'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(29,52,97,0.15)'; }}
+                onBlur={e  => { e.currentTarget.style.borderColor = '#D1D5DB'; e.currentTarget.style.boxShadow = 'none'; }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  autoComplete="current-password"
+                  data-testid="input-pdm-password"
+                  style={{ width: '100%', height: '40px', padding: '0 40px 0 12px', fontSize: '14px', color: '#111827', background: '#ffffff', border: '1px solid #D1D5DB', borderRadius: '8px', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', pointerEvents: 'auto' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#1D3461'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(29,52,97,0.15)'; }}
+                  onBlur={e  => { e.currentTarget.style.borderColor = '#D1D5DB'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', padding: '4px', display: 'flex', alignItems: 'center' }}
+                >
+                  {showPw ? <EyeOff style={{ width: '16px', height: '16px' }} /> : <Eye style={{ width: '16px', height: '16px' }} />}
+                </button>
               </div>
-              <h1 className="text-xl font-bold text-foreground">DCT PDM Dashboard</h1>
-              <p className="text-xs text-muted-foreground mt-1 text-center">
-                2026 Digital Cash Transfer · Post-Distribution Monitoring
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-3 bg-muted px-3 py-1.5 rounded-lg text-center">
-                This report is restricted. Enter your access credentials to continue.
-              </p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Username</label>
-                <Input
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  placeholder="e.g. WFP-Sudan"
-                  autoComplete="username"
-                  className="h-10"
-                  data-testid="input-pdm-username"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Password</label>
-                <div className="relative">
-                  <Input
-                    type={showPw ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    autoComplete="current-password"
-                    className="h-10 pr-10"
-                    data-testid="input-pdm-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw(!showPw)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
+            {error && (
+              <p style={{ fontSize: '12px', color: '#DC2626', fontWeight: '500', margin: 0 }}>{error}</p>
+            )}
 
-              {error && (
-                <p className="text-xs text-red-500 font-medium">{error}</p>
-              )}
+            <button
+              type="submit"
+              disabled={loading || !username || !password}
+              data-testid="button-pdm-login"
+              style={{ width: '100%', height: '42px', background: (!loading && username && password) ? '#1D3461' : '#9CA3AF', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: (!loading && username && password) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontFamily: 'inherit', transition: 'background 0.2s' }}
+            >
+              <Lock style={{ width: '15px', height: '15px' }} />
+              {loading ? 'Verifying…' : 'Access Dashboard'}
+            </button>
+          </form>
 
-              <Button
-                type="submit"
-                className="w-full h-10 bg-[#1D3461] hover:bg-[#0F2041] text-white font-semibold"
-                disabled={loading || !username || !password}
-                data-testid="button-pdm-login"
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2"><Lock className="h-4 w-4 animate-pulse" />Verifying…</span>
-                ) : (
-                  <span className="flex items-center gap-2"><Lock className="h-4 w-4" />Access Dashboard</span>
-                )}
-              </Button>
-            </form>
-
-            <p className="text-center text-[10px] text-muted-foreground mt-5">
-              PACT Sudan · Field Operations · Confidential Report
-            </p>
-          </CardContent>
-        </Card>
+          <p style={{ textAlign: 'center', fontSize: '10px', color: '#9CA3AF', marginTop: '20px', marginBottom: 0 }}>
+            PACT Sudan · Field Operations · Confidential Report
+          </p>
+        </div>
       </div>
     );
   }
