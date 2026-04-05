@@ -8,7 +8,7 @@ import {
   Users, MapPin, CheckCircle2, TrendingUp,
   Download, Filter, BarChart3, ShoppingCart,
   Phone, ThumbsUp, X, FileSpreadsheet, Upload, FileDown, RefreshCw,
-  MessageSquare, AlertTriangle, ChevronDown, ChevronUp, Plus,
+  MessageSquare, AlertTriangle, ChevronDown, ChevronUp, Plus, Pencil, Check,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -310,6 +310,20 @@ const SEED_LOCALITY_ROWS_V2: LocalityRow[] = [
   { id: 'SD15-0', stateCode: 'SD15', locality: '', planned: '', deviation: '', remarks: '' },
 ];
 
+// Maps survey locality sub-codes → seed locality row IDs (derived from hhid patterns)
+// SD01: KH-BI→Bahri(SD01-0); KH_SH→Sharg An Neel(SD01-1)
+// SD09: WH_RK→Rabak(SD09-0); WH-KT→Kosti(SD09-1); WH-UR→Um Rimta(SD09-2)
+// SD16: all one locality (Shendi); SD17: all one locality (Al Golid)
+const SUBCODE_TO_ROW_ID: Record<string, string> = {
+  SD01003: 'SD01-0', SD01006: 'SD01-0', SD01002: 'SD01-0',
+  SD01004: 'SD01-1', SD01007: 'SD01-1',
+  SD09046: 'SD09-0',
+  SD09047: 'SD09-1',
+  SD09045: 'SD09-2',
+  SD16010: 'SD16-0',
+  SD17016: 'SD17-0', SD17017: 'SD17-0', SD17018: 'SD17-0',
+};
+
 export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: boolean } = {}) {
   const { currentUser } = useAppContext();
 
@@ -477,6 +491,19 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         rows: localityRows.filter(r => r.stateCode === code),
       }));
   }, [localityRows, allStateRows]);
+
+  // Per-locality reached counts (mapped from survey sub-codes via SUBCODE_TO_ROW_ID)
+  const localityReached = useMemo(() => {
+    const map: Record<string, number> = {};
+    records.forEach(r => {
+      const rowId = r.locality ? SUBCODE_TO_ROW_ID[r.locality as string] : undefined;
+      if (rowId) map[rowId] = (map[rowId] || 0) + 1;
+    });
+    return map;
+  }, [records]);
+
+  // Edit mode — table inputs only visible when toggled on
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
@@ -1501,9 +1528,24 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 <h3 className="text-sm font-bold text-foreground">PDM Progress by State</h3>
                 <Badge variant="outline" className="text-[10px]">{localityRows.filter(r => r.locality || r.planned).length} localities · {groupedRows.filter(g => g.rows.some(r => r.locality || r.planned)).length} states</Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground">Planned vs. actual PDM coverage per state · {canUpload ? 'Click any cell to edit, or import from file' : canEditNotes ? 'You can edit Reason for Deviation and Remarks' : 'Read-only view'}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {isEditMode
+                  ? 'Edit mode — click any cell to update values, then click Done when finished'
+                  : 'Read-only view · click Edit Table to make changes, or upload a file to update planned counts'}
+              </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {(canUpload || canEditNotes) && (
+                <Button
+                  variant={isEditMode ? 'default' : 'outline'}
+                  size="sm"
+                  className={`h-8 text-xs gap-1.5 ${isEditMode ? 'bg-[#1D3461] hover:bg-[#0F2041] text-white' : ''}`}
+                  onClick={() => setIsEditMode(v => !v)}
+                  data-testid="button-toggle-edit-mode"
+                >
+                  {isEditMode ? <><Check className="h-3.5 w-3.5" />Done</> : <><Pencil className="h-3.5 w-3.5" />Edit Table</>}
+                </Button>
+              )}
               {canUpload && (
                 <>
                   <input
@@ -1547,25 +1589,25 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   <th className="text-center px-4 py-2.5 font-semibold">Deviation</th>
                   <th className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">Reason for Deviation</th>
                   <th className="text-left px-4 py-2.5 font-semibold">Remarks</th>
-                  {canUpload && <th className="px-2 py-2.5" />}
+                  {canUpload && isEditMode && <th className="px-2 py-2.5" />}
                 </tr>
               </thead>
               <tbody>
                 {groupedRows.filter(g => g.rows.some(r => r.locality || r.planned)).map((group, gi) => {
                   const hasRows = group.rows.length > 0;
                   const showSubtotal = group.rows.length >= 1;
-                  const addRowSpan = canUpload ? 1 : 0;
+                  const addRowSpan = canUpload && isEditMode ? 1 : 0;
                   const subtotalSpan = showSubtotal ? 1 : 0;
                   const stateRowSpan = hasRows ? group.rows.length + addRowSpan + subtotalSpan : 1;
                   const rowBg = gi % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20';
-                  const extraCols = canUpload ? 7 : 6; // locality+planned+reached+dev+reason+remarks+(delete?)
+                  const extraCols = canUpload && isEditMode ? 7 : 6;
 
                   if (!hasRows) {
                     return (
                       <tr key={group.code} className={`border-b ${rowBg}`}>
                         <td className="px-4 py-2.5 font-bold text-[#1D3461] whitespace-nowrap text-[13px] border-r border-border/30">{group.name}</td>
                         <td colSpan={extraCols} className="px-4 py-2 text-center">
-                          {canUpload ? (
+                          {canUpload && isEditMode ? (
                             <button
                               onClick={() => addLocalityRow(group.code)}
                               className="text-[11px] text-[#1D3461]/50 hover:text-[#1D3461] flex items-center gap-1 mx-auto"
@@ -1584,11 +1626,12 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   return (
                     <Fragment key={group.code}>
                       {group.rows.map((row, ri) => {
-                        const planned  = row.planned ? Number(row.planned) : null;
-                        const dev      = planned != null ? group.reached - planned : null;
-                        const devPct   = planned ? Math.round((group.reached / planned) * 100) : null;
-                        const devColor = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
-                        const isFirst  = ri === 0;
+                        const rowReached = localityReached[row.id] ?? 0;
+                        const planned    = row.planned ? Number(row.planned) : null;
+                        const dev        = planned != null ? rowReached - planned : null;
+                        const devPct     = planned ? Math.round((rowReached / planned) * 100) : null;
+                        const devColor   = dev == null ? '' : dev >= 0 ? 'text-emerald-600' : 'text-red-500';
+                        const isFirst    = ri === 0;
 
                         return (
                           <tr key={row.id} className={`border-b ${rowBg}`}>
@@ -1603,7 +1646,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
                             {/* Locality */}
                             <td className="px-4 py-2">
-                              {canUpload ? (
+                              {canUpload && isEditMode ? (
                                 <input
                                   type="text"
                                   className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
@@ -1619,7 +1662,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
                             {/* Planned */}
                             <td className="px-4 py-2 text-center">
-                              {canUpload ? (
+                              {canUpload && isEditMode ? (
                                 <input
                                   type="number"
                                   min={0}
@@ -1634,11 +1677,11 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               )}
                             </td>
 
-                            {/* Reached — always the state total (survey records for that state) */}
+                            {/* Reached — per-locality count from survey sub-code mapping */}
                             <td className="px-4 py-2 text-center">
                               <span className="inline-flex items-center gap-1 font-bold text-[#1D3461]">
-                                {group.reached}
-                                {devPct != null && (
+                                {rowReached > 0 ? rowReached : <span className="text-muted-foreground font-normal">0</span>}
+                                {devPct != null && rowReached > 0 && (
                                   <span className={`text-[10px] font-normal ${devColor}`}>({devPct}%)</span>
                                 )}
                               </span>
@@ -1655,7 +1698,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
                             {/* Reason for Deviation */}
                             <td className="px-4 py-2">
-                              {canEditNotes ? (
+                              {canEditNotes && isEditMode ? (
                                 <input
                                   type="text"
                                   className="w-full min-w-[160px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
@@ -1671,7 +1714,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
                             {/* Remarks */}
                             <td className="px-4 py-2">
-                              {canEditNotes ? (
+                              {canEditNotes && isEditMode ? (
                                 <input
                                   type="text"
                                   className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
@@ -1685,8 +1728,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               )}
                             </td>
 
-                            {/* Delete row */}
-                            {canUpload && (
+                            {/* Delete row — edit mode only */}
+                            {canUpload && isEditMode && (
                               <td className="px-2 py-2 text-center">
                                 <button
                                   onClick={() => removeLocalityRow(row.id)}
@@ -1732,13 +1775,13 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                             </td>
                             <td className="px-4 py-1.5" />
                             <td className="px-4 py-1.5" />
-                            {canUpload && <td className="px-2 py-1.5" />}
+                            {canUpload && isEditMode && <td className="px-2 py-1.5" />}
                           </tr>
                         );
                       })()}
 
-                      {/* Add-locality button row (covered by state rowSpan) */}
-                      {canUpload && (
+                      {/* Add-locality button row (edit mode only) */}
+                      {canUpload && isEditMode && (
                         <tr className={`border-b ${rowBg}`}>
                           <td colSpan={extraCols} className="px-4 py-1">
                             <button
@@ -1771,7 +1814,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                           ? <span className={dev >= 0 ? 'text-emerald-600' : 'text-red-500'}>{dev > 0 ? `+${dev}` : dev}</span>
                           : '—'}
                       </td>
-                      <td colSpan={canUpload ? 3 : 2} />
+                      <td colSpan={canUpload && isEditMode ? 3 : 2} />
                     </tr>
                   );
                 })()}
