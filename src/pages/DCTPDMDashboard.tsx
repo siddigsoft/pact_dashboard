@@ -527,6 +527,23 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     });
   };
 
+  // State-level Remarks (one per state, merged cell — same pattern as stateDeviations)
+  const [stateRemarks, setStateRemarks] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem('pact-pdm-state-remarks');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return {};
+  });
+
+  const updateStateRemarks = (code: string, val: string) => {
+    setStateRemarks(prev => {
+      const next = { ...prev, [code]: val };
+      try { localStorage.setItem('pact-pdm-state-remarks', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
       alert('Please upload an Excel file (.xlsx or .xls)');
@@ -1741,21 +1758,28 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                               </td>
                             )}
 
-                            {/* Remarks */}
-                            <td className="px-4 py-2">
-                              {canEditNotes && isEditMode ? (
-                                <input
-                                  type="text"
-                                  className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
-                                  value={row.remarks}
-                                  placeholder="Add remarks…"
-                                  onChange={e => updateLocalityRow(row.id, 'remarks', e.target.value)}
-                                  data-testid={`input-remarks-${row.id}`}
-                                />
-                              ) : (
-                                <span className="text-muted-foreground">{row.remarks || '—'}</span>
-                              )}
-                            </td>
+                            {/* Remarks — merged per state, only in first row */}
+                            {isFirst && (
+                              <td
+                                rowSpan={group.rows.length + subtotalSpan}
+                                className="px-4 py-2 align-top border-l border-border/20"
+                              >
+                                {canEditNotes && isEditMode ? (
+                                  <textarea
+                                    className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461] resize-y"
+                                    rows={Math.max(3, group.rows.length * 2)}
+                                    value={stateRemarks[group.code] || ''}
+                                    placeholder="Add remarks…"
+                                    onChange={e => updateStateRemarks(group.code, e.target.value)}
+                                    data-testid={`textarea-remarks-${group.code}`}
+                                  />
+                                ) : (
+                                  <span className="text-[13px] font-bold text-foreground whitespace-pre-wrap leading-relaxed">
+                                    {stateRemarks[group.code] || '—'}
+                                  </span>
+                                )}
+                              </td>
+                            )}
 
                             {/* Delete row — edit mode only */}
                             {canUpload && isEditMode && (
@@ -1802,8 +1826,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                 <span className={`font-bold text-[12px] ${subColor}`}>{subDev > 0 ? `+${subDev}` : subDev}</span>
                               )}
                             </td>
-                            {/* reason covered by rowspan from first locality row */}
-                            <td className="px-4 py-1.5" />
+                            {/* reason + remarks both covered by rowspan from first locality row */}
                             {canUpload && isEditMode && <td className="px-2 py-1.5" />}
                           </tr>
                         );
