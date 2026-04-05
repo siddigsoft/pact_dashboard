@@ -641,9 +641,14 @@
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
         const stored = localStorage.getItem('pact-sidebar-collapsed');
-        if (stored !== null) return new Set(JSON.parse(stored));
+        if (stored !== null) {
+          const parsed: string[] = JSON.parse(stored);
+          // If the stored value was the old "everything collapsed" default, ignore it
+          if (parsed.length >= ALL_GROUP_IDS.length) return new Set();
+          return new Set(parsed);
+        }
       } catch {}
-      return new Set(ALL_GROUP_IDS);
+      return new Set(); // default: all groups open
     });
     const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(() => {
       try {
