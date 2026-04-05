@@ -283,11 +283,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const [feedbackExpanded, setFeedbackExpanded] = useState(false);
   const FEEDBACK_PAGE_SIZE = 10;
 
-  interface LocalityTarget { planned: string; deviation: string; remarks: string; }
+  interface LocalityTarget { planned: string; locality: string; deviation: string; remarks: string; }
 
   // State-level planned counts from WFP DCT sample file (green=confirmed)
-  // SD01=Khartoum (Bahri / Sharg El-Neel), SD09=White Nile,
-  // SD16=River Nile (Shandi), SD17=Northern (Al Golid)
+  // SD01=Khartoum, SD09=White Nile, SD16=River Nile, SD17=Northern
   const SAMPLE_PLANNED: Record<string, string> = {
     SD01: '250', // Khartoum   — 250 confirmed HHs
     SD09: '250', // White Nile — 250 confirmed HHs
@@ -298,30 +297,28 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     SD01: 40, SD09: 50, SD16: 20, SD17: 20,
   };
 
-  // Pre-seeded deviation reasons per state (updated Apr 2026)
-  const SAMPLE_DEVIATIONS: Record<string, { deviation: string; remarks: string }> = {
-    SD01: { deviation: '60 closed · 20 not reply · 7 wrong number', remarks: 'Bahri / Sharg El-Neel' },
-    SD09: { deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
-    SD16: { deviation: '37 closed · 9 not reply · 13 wrong number', remarks: 'Shandi' },
-    SD17: { deviation: '25 closed · 14 not reply · 1 wrong number', remarks: 'Al Golid' },
+  // Pre-seeded locality names + deviation reasons per state (DCT sample file, Apr 2026)
+  const SAMPLE_DEFAULTS: Record<string, { locality: string; deviation: string; remarks: string }> = {
+    SD01: { locality: 'Bahri / Sharg El-Neel',   deviation: '60 closed · 20 not reply · 7 wrong number',   remarks: '' },
+    SD09: { locality: '',                          deviation: '100 closed · 40 not reply · 14 wrong number', remarks: '' },
+    SD16: { locality: 'Shandi',                   deviation: '37 closed · 9 not reply · 13 wrong number',   remarks: '' },
+    SD17: { locality: 'Al Golid',                 deviation: '25 closed · 14 not reply · 1 wrong number',   remarks: '' },
   };
 
-  // Bump seed version whenever default deviation text changes so existing
-  // browsers pick up the new values while still preserving any manual edits
-  // the user makes after the initial seed.
-  const SEED_VER = 'v5-with-deviations';
+  // Bump seed version whenever defaults change — existing manual edits are
+  // preserved; only blank fields are filled from the new defaults.
+  const SEED_VER = 'v6-with-locality';
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
       const seeded = localStorage.getItem('pact-pdm-locality-seed-ver');
       if (seeded !== SEED_VER) {
-        // New seed: keep any deviation/remarks the user already typed; fill
-        // blanks with the pre-seeded values above.
         const fresh: Record<string, LocalityTarget> = {};
         Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
-          const def = SAMPLE_DEVIATIONS[code] ?? { deviation: '', remarks: '' };
+          const def = SAMPLE_DEFAULTS[code] ?? { locality: '', deviation: '', remarks: '' };
           fresh[code] = {
             planned,
+            locality:  stored[code]?.locality  || def.locality,
             deviation: stored[code]?.deviation || def.deviation,
             remarks:   stored[code]?.remarks   || def.remarks,
           };
@@ -332,7 +329,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       }
       Object.entries(SAMPLE_PLANNED).forEach(([code, planned]) => {
         if (!stored[code]) {
-          const def = SAMPLE_DEVIATIONS[code] ?? { deviation: '', remarks: '' };
+          const def = SAMPLE_DEFAULTS[code] ?? { locality: '', deviation: '', remarks: '' };
           stored[code] = { planned, ...def };
         }
       });
@@ -340,7 +337,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     } catch {
       return Object.fromEntries(
         Object.entries(SAMPLE_PLANNED).map(([k, v]) => {
-          const def = SAMPLE_DEVIATIONS[k] ?? { deviation: '', remarks: '' };
+          const def = SAMPLE_DEFAULTS[k] ?? { locality: '', deviation: '', remarks: '' };
           return [k, { planned: v, ...def }];
         })
       );
@@ -348,7 +345,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   });
   const updateTarget = (code: string, field: keyof LocalityTarget, val: string) => {
     setLocalityTargets(prev => {
-      const next = { ...prev, [code]: { planned: '', deviation: '', remarks: '', ...prev[code], [field]: val } };
+      const next = { ...prev, [code]: { planned: '', locality: '', deviation: '', remarks: '', ...prev[code], [field]: val } };
       try { localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(next)); } catch {}
       return next;
     });
@@ -595,12 +592,13 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     const XLSXLib = await import('xlsx');
     const rows = localityProgressData.map(r => ({
       'State': r.name,
+      'Locality': localityTargets[r.code]?.locality || '',
       'Planned Number for PDM (Confirmed)': localityTargets[r.code]?.planned || '',
       'Reason for Deviation': '',
       'Remarks': '',
     }));
     const ws = XLSXLib.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 34 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 28 }, { wch: 34 }, { wch: 30 }];
     const wbOut = XLSXLib.utils.book_new();
     XLSXLib.utils.book_append_sheet(wbOut, ws, 'PDM State Targets');
     XLSXLib.writeFile(wbOut, 'pdm_state_template.xlsx');
@@ -615,6 +613,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       const dev = planned != null ? r.reached - planned : null;
       return {
         'State': r.name,
+        'Locality': t?.locality || '',
         'Planned Number for PDM (Confirmed)': planned ?? '',
         'Backup Sample': backup || '',
         'Number Reached by PDM (up to date)': r.reached,
@@ -624,7 +623,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       };
     });
     const ws = XLSXLib.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 34 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 30 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 34 }, { wch: 30 }];
     const wb = XLSXLib.utils.book_new();
     XLSXLib.utils.book_append_sheet(wb, ws, 'PDM Progress');
     XLSXLib.writeFile(wb, 'pdm_progress_by_state.xlsx');
@@ -785,8 +784,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       ws1.addRow([]);
 
       // PDM Progress section
-      addBanner(ws1, 'PDM PROGRESS BY STATE', 7);
-      addColHdr(ws1, ['State', 'Planned (Confirmed)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks']);
+      addBanner(ws1, 'PDM PROGRESS BY STATE', 8);
+      addColHdr(ws1, ['State', 'Locality', 'Planned (Confirmed)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks']);
 
       const tpTot = localityProgressData.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
       const trTot = localityProgressData.reduce((s, r) => s + r.reached, 0);
@@ -796,21 +795,21 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         const planned = t?.planned ? Number(t.planned) : null;
         const dev = planned != null ? lr.reached - planned : null;
         const pct = planned ? Math.round((lr.reached / planned) * 100) : null;
-        const row = addData(ws1, [lr.name, planned ?? '—', lr.reached, dev != null ? dev : '—', pct != null ? `${pct}%` : '—', t?.deviation || '—', t?.remarks || '—'], i % 2 === 1);
+        const row = addData(ws1, [lr.name, t?.locality || '—', planned ?? '—', lr.reached, dev != null ? dev : '—', pct != null ? `${pct}%` : '—', t?.deviation || '—', t?.remarks || '—'], i % 2 === 1);
         if (dev != null) {
           const clr = dev >= 0 ? C.green : C.red;
-          row.getCell(4).font = { bold: true, size: 10, color: clr };
           row.getCell(5).font = { bold: true, size: 10, color: clr };
+          row.getCell(6).font = { bold: true, size: 10, color: clr };
         }
       });
 
       const totalDev2 = tpTot ? trTot - tpTot : null;
       const totalPct2 = tpTot ? Math.round((trTot / tpTot) * 100) : null;
-      const totRow = addData(ws1, ['TOTAL', tpTot || '—', trTot, totalDev2 != null ? totalDev2 : '—', totalPct2 != null ? `${totalPct2}%` : '—', '', ''], false, { bold: true, bg: C.total.argb });
+      const totRow = addData(ws1, ['TOTAL', '', tpTot || '—', trTot, totalDev2 != null ? totalDev2 : '—', totalPct2 != null ? `${totalPct2}%` : '—', '', ''], false, { bold: true, bg: C.total.argb });
       if (totalDev2 != null) {
         const clr = totalDev2 >= 0 ? C.green : C.red;
-        totRow.getCell(4).font = { bold: true, size: 10, color: clr };
         totRow.getCell(5).font = { bold: true, size: 10, color: clr };
+        totRow.getCell(6).font = { bold: true, size: 10, color: clr };
       }
 
       ws1.addRow([]);
@@ -1343,7 +1342,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-[#0F2041] text-white">
-                  <th className="text-left px-4 py-2.5 font-semibold">State</th>
+                  <th className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">State</th>
+                  <th className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">Locality</th>
                   <th className="text-center px-4 py-2.5 font-semibold">
                     <div className="flex flex-col items-center gap-0.5">
                       <span>Planned for PDM</span>
@@ -1368,6 +1368,22 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                   return (
                     <tr key={row.code} className={`border-b last:border-0 ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>
                       <td className="px-4 py-2.5 font-bold text-[#1D3461] whitespace-nowrap text-[13px]">{row.name}</td>
+
+                      {/* Locality — editable by admin/super_admin (same as Planned) */}
+                      <td className="px-4 py-2">
+                        {canUpload ? (
+                          <input
+                            type="text"
+                            className="w-full min-w-[140px] text-[12px] border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                            value={t?.locality ?? ''}
+                            placeholder="Enter locality…"
+                            onChange={e => updateTarget(row.code, 'locality', e.target.value)}
+                            data-testid={`input-locality-${row.code}`}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">{t?.locality || '—'}</span>
+                        )}
+                      </td>
 
                       <td className="px-4 py-2 text-center">
                         <div className="flex flex-col items-center gap-0.5">
@@ -1442,6 +1458,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               <tfoot>
                 <tr className="bg-muted/50 border-t-2 border-border font-bold">
                   <td className="px-4 py-2.5 text-[11px] font-bold">TOTAL</td>
+                  <td className="px-4 py-2.5" />
                   <td className="px-4 py-2.5 text-center text-[12px]">
                     {localityProgressData.reduce((s, r) => {
                       const p = localityTargets[r.code]?.planned;
