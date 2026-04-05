@@ -615,6 +615,191 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     return feedbackFiltered.slice(start, start + FEEDBACK_PAGE_SIZE);
   }, [feedbackFiltered, feedbackPage]);
 
+  // ── Formatted Report Export ───────────────────────────────────────────────
+  const handleExportReport = async () => {
+    try {
+      const XLSXLib = await import('xlsx');
+      const wb = XLSXLib.utils.book_new();
+      const now = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const filterDesc = [
+        stateFilter !== 'all' ? `State: ${STATE_LABELS[stateFilter] || stateFilter}` : null,
+        sexFilter   !== 'all' ? `HH Head Sex: ${sexFilter === '0' ? 'Female' : 'Male'}` : null,
+        rcvFilter   !== 'all' ? `Assistance: ${rcvFilter === '1' ? 'Received' : rcvFilter === '2' ? 'Partial' : 'Not Received'}` : null,
+      ].filter(Boolean).join('  |  ') || 'None (All Records)';
+      const marketAccessPct = PCT(filtered.filter(r => r.marketAccess === 1).length, total);
+
+      // ── Sheet 1: Dashboard Summary ────────────────────────────────────────
+      const summaryAoa: any[][] = [
+        ['2026 DCT PDM Dashboard — Post-Distribution Monitoring Report'],
+        [`Generated: ${now}    |    Applied Filters: ${filterDesc}`],
+        [],
+        ['KEY PERFORMANCE INDICATORS'],
+        ['Indicator', 'Value', 'Detail'],
+        ['Total Surveys', total, `${states.length} states covered`],
+        ['Assistance Received', `${receivedPct}%`, `${filtered.filter(r => r.asstReceived === 1).length} of ${total} households`],
+        ['Satisfaction Score', `${avgSat.toFixed(1)} / 5`, `${satPct}% rated Good or Excellent`],
+        ['CFM Awareness', `${cfmPct}%`, `${filtered.filter(r => r.cfm === 1).length} aware of complaint mechanism`],
+        ['Avg Household Size', `${avgHHSize.toFixed(1)}`, 'members per household'],
+        ['Market Access', `${marketAccessPct}%`, `${filtered.filter(r => r.marketAccess === 1).length} households can access market`],
+        [],
+        ['PDM PROGRESS BY STATE'],
+        ['State', 'Planned (Confirmed)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks'],
+        ...localityProgressData.map(r => {
+          const t = localityTargets[r.code];
+          const planned = t?.planned ? Number(t.planned) : null;
+          const dev = planned != null ? r.reached - planned : null;
+          const pct = planned ? Math.round((r.reached / planned) * 100) : null;
+          return [r.name, planned ?? '—', r.reached, dev != null ? dev : '—', pct != null ? `${pct}%` : '—', t?.deviation || '—', t?.remarks || '—'];
+        }),
+        (() => {
+          const totalPlanned = localityProgressData.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
+          const totalReached = localityProgressData.reduce((s, r) => s + r.reached, 0);
+          const totalDev = totalPlanned ? totalReached - totalPlanned : null;
+          const totalPct = totalPlanned ? Math.round((totalReached / totalPlanned) * 100) : null;
+          return ['TOTAL', totalPlanned || '—', totalReached, totalDev != null ? totalDev : '—', totalPct != null ? `${totalPct}%` : '—', '', ''];
+        })(),
+        [],
+        ['SURVEY SUBMISSIONS BY STATE'],
+        ['State', 'Submissions', '% of Total'],
+        ...byState.map(r => [r.state, r.count, `${PCT(r.count, total)}%`]),
+        [],
+        ['SUBMISSION TIMELINE'],
+        ['Date', 'Submissions'],
+        ...timeline.map(t => [t.date, t.count]),
+      ];
+      const wsSummary = XLSXLib.utils.aoa_to_sheet(summaryAoa);
+      wsSummary['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 34 }, { wch: 30 }];
+      wsSummary['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 6 } },
+        { s: { r: 12, c: 0 }, e: { r: 12, c: 6 } },
+      ];
+      XLSXLib.utils.book_append_sheet(wb, wsSummary, 'Dashboard Summary');
+
+      // ── Sheet 2: Demographics ─────────────────────────────────────────────
+      const demoAoa: any[][] = [
+        ['DEMOGRAPHICS'],
+        [],
+        ['HH HEAD SEX'],
+        ['Sex', 'Count', '% of Total'],
+        ...sexData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
+        [],
+        ['HH HEAD STATUS'],
+        ['Status', 'Count', '% of Total'],
+        ...statusData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
+        [],
+        ['HOUSEHOLD SIZE DISTRIBUTION'],
+        ['HH Size', 'Count', '% of Total'],
+        ...hhSizeData.map(d => [d.size, d.count, `${PCT(d.count, total)}%`]),
+      ];
+      const wsDemo = XLSXLib.utils.aoa_to_sheet(demoAoa);
+      wsDemo['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }];
+      XLSXLib.utils.book_append_sheet(wb, wsDemo, 'Demographics');
+
+      // ── Sheet 3: Assistance ───────────────────────────────────────────────
+      const asst = filtered.filter(r => r.asstAmtRec != null && r.asstAmtRec > 0);
+      const avgAmt = asst.length ? Math.round(asst.reduce((s, r) => s + (r.asstAmtRec ?? 0), 0) / asst.length) : 0;
+      const asstAoa: any[][] = [
+        ['ASSISTANCE RECEIVED'],
+        [],
+        ['RECEIPT STATUS'],
+        ['Status', 'Count', '% of Total'],
+        ...receivedData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
+        [],
+        ['MODE OF DELIVERY (DIGITAL CASH)'],
+        ['Mode', 'Count', '% of Total'],
+        ...modeData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
+        [],
+        ['AMOUNT RECEIVED BY STATE (avg SDG)'],
+        ['State', 'Avg Amount Received (SDG)', 'Avg Expected (SDG)'],
+        ...amountByState.map(d => [d.state, d.avgReceived, d.avgExpected ?? '—']),
+        [],
+        ['OVERALL AVERAGE', avgAmt, ''],
+        [],
+        ['UTILIZATION'],
+        ['Indicator', 'Yes', 'No', '% Yes'],
+        ...accessData.map(d => [d.category, d.yes, d.no, `${PCT(d.yes, d.yes + d.no)}%`]),
+      ];
+      const wsAsst = XLSXLib.utils.aoa_to_sheet(asstAoa);
+      wsAsst['!cols'] = [{ wch: 28 }, { wch: 24 }, { wch: 22 }, { wch: 10 }];
+      XLSXLib.utils.book_append_sheet(wb, wsAsst, 'Assistance & Utilization');
+
+      // ── Sheet 4: Challenges ───────────────────────────────────────────────
+      const propFoodData2 = (() => {
+        const bins = [{ range: '0-25%', lo: 0, hi: 25 }, { range: '26-50%', lo: 26, hi: 50 }, { range: '51-75%', lo: 51, hi: 75 }, { range: '76-100%', lo: 76, hi: 100 }];
+        return bins.map(b => ({ range: b.range, count: filtered.filter(r => r.propFood != null && r.propFood >= b.lo && r.propFood <= b.hi).length }));
+      })();
+      const chalAoa: any[][] = [
+        ['EXPENDITURE CHALLENGES & FOOD SECURITY'],
+        [],
+        ['TOP CHALLENGES REPORTED'],
+        ['Challenge', 'Count', '% of Total'],
+        ...challengeData.map(d => [d.name, d.count, `${PCT(d.count, total)}%`]),
+        [],
+        ['PROPORTION SPENT ON FOOD'],
+        ['Range', 'Count', '% of Respondents'],
+        ...propFoodData2.map(d => [d.range, d.count, `${PCT(d.count, total)}%`]),
+      ];
+      const wsChallenge = XLSXLib.utils.aoa_to_sheet(chalAoa);
+      wsChallenge['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 20 }];
+      XLSXLib.utils.book_append_sheet(wb, wsChallenge, 'Challenges & Food Security');
+
+      // ── Sheet 5: Satisfaction & CFM ───────────────────────────────────────
+      const satAoa: any[][] = [
+        ['SATISFACTION & CFM'],
+        [],
+        ['SATISFACTION RATING DISTRIBUTION'],
+        ['Rating', 'Label', 'Count', '% of Respondents'],
+        ...satData.map(d => [d.key, d.label, d.count, `${d.pct}%`]),
+        [],
+        ['Overall Average Score', avgSat.toFixed(2), '', ''],
+        ['Good or Excellent (≥4)', `${satPct}%`, `${filtered.filter(r => (r.satisfaction ?? 0) >= 4).length} respondents`, ''],
+        [],
+        ['CFM AWARENESS'],
+        ['Indicator', 'Count', '% of Total'],
+        ['Aware of Complaint Mechanism', filtered.filter(r => r.cfm === 1).length, `${cfmPct}%`],
+        ['Not Aware', filtered.filter(r => r.cfm === 0).length, `${PCT(filtered.filter(r => r.cfm === 0).length, total)}%`],
+      ];
+      const wsSat = XLSXLib.utils.aoa_to_sheet(satAoa);
+      wsSat['!cols'] = [{ wch: 36 }, { wch: 22 }, { wch: 14 }, { wch: 20 }];
+      XLSXLib.utils.book_append_sheet(wb, wsSat, 'Satisfaction & CFM');
+
+      // ── Sheet 6: Interviewers ─────────────────────────────────────────────
+      const wsInterviewers = XLSXLib.utils.json_to_sheet(interviewerData.map((d, i) => ({
+        'Rank': i + 1,
+        'Interviewer': d.name,
+        'Submissions': d.count,
+        '% of Total': `${PCT(d.count, total)}%`,
+      })));
+      wsInterviewers['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 14 }, { wch: 14 }];
+      XLSXLib.utils.book_append_sheet(wb, wsInterviewers, 'Interviewers');
+
+      // ── Sheet 7: Raw Survey Data ──────────────────────────────────────────
+      const wsRaw = XLSXLib.utils.json_to_sheet(filtered.map(r => ({
+        'Household ID': r.hhid,
+        'State': r.state ? (STATE_LABELS[r.state] || r.state) : '',
+        'Locality': r.locality,
+        'Sex': r.sex === 0 ? 'Female' : 'Male',
+        'HH Head Status': r.hhStatus ? STATUS_LABELS[r.hhStatus] : '',
+        'HH Total Members': r.hhTotal,
+        'Assistance Received': r.asstReceived === 1 ? 'Yes' : r.asstReceived === 2 ? 'Partial' : 'No',
+        'Amount Received (SDG)': r.asstAmtRec,
+        'Satisfaction (1–5)': r.satisfaction ?? '',
+        'CFM Aware': r.cfm === 1 ? 'Yes' : 'No',
+        'Market Access': r.marketAccess === 1 ? 'Yes' : r.marketAccess === 0 ? 'No' : '',
+        'Interviewer': r.interviewer ?? '',
+        'Submission Date': r.submission ? String(r.submission).slice(0, 10) : '',
+      })));
+      wsRaw['!cols'] = [{ wch: 14 },{ wch: 14 },{ wch: 18 },{ wch: 8 },{ wch: 18 },{ wch: 16 },{ wch: 20 },{ wch: 22 },{ wch: 16 },{ wch: 12 },{ wch: 14 },{ wch: 22 },{ wch: 16 }];
+      XLSXLib.utils.book_append_sheet(wb, wsRaw, 'Raw Survey Data');
+
+      XLSXLib.writeFile(wb, `PDM_Report_${now.replace(/ /g, '_')}.xlsx`);
+    } catch {
+      alert('Could not generate report. Please try again.');
+    }
+  };
+
   // ── Export ───────────────────────────────────────────────────────────────
   const handleExport = async () => {
     try {
@@ -735,7 +920,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
             </Button>
           )}
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport}>
-            <Download className="h-3.5 w-3.5" />Export
+            <Download className="h-3.5 w-3.5" />Export Data
+          </Button>
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-[#0F2041] hover:bg-[#1D3461] text-white" onClick={handleExportReport} data-testid="button-export-report">
+            <FileSpreadsheet className="h-3.5 w-3.5" />Export Report
           </Button>
         </div>
       </div>
