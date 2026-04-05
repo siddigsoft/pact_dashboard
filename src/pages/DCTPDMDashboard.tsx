@@ -285,14 +285,14 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   interface LocalityTarget { planned: string; locality: string; deviation: string; remarks: string; }
 
-  // State-level totals (sum of all locality planned counts from DCT sample file)
+  // State-level totals — PRINCIPAL + blank-type only (ALTERNATE/yellow rows excluded)
   const SAMPLE_PLANNED: Record<string, string> = {
-    SD01: '290', SD09: '300', SD16: '170', SD17: '170', // Khartoum / White Nile / River Nile / Northern
-    SD02: '170',                                          // North Darfur
-    SD07: '379',                                          // South Kordofan
+    SD01: '290', SD09: '297', SD16: '170', SD17: '170', // Khartoum / White Nile / River Nile / Northern
+    SD02: '139',                                          // North Darfur
+    SD07: '303',                                          // South Kordofan
     SD10: '21',                                           // Red Sea
-    SD13: '290',                                          // North Kordofan
-    SD18: '118',                                          // West Kordofan
+    SD13: '287',                                          // North Kordofan
+    SD18: '90',                                           // West Kordofan
     SD03: '', SD04: '', SD05: '', SD06: '',              // Darfur cluster (no data yet)
     SD08: '', SD11: '', SD12: '',                        // East / Nile cluster (no data yet)
     SD14: '', SD15: '',                                  // Kordofan / Jazirah (no data yet)
@@ -324,27 +324,27 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '120', deviation: '60 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
     { id: 'SD01-1', stateCode: 'SD01', locality: 'Sharg An Neel', planned: '170', deviation: '', remarks: '' },
     // North Darfur (SD02)
-    { id: 'SD02-0', stateCode: 'SD02', locality: 'El Fasher',     planned: '170', deviation: '', remarks: '' },
+    { id: 'SD02-0', stateCode: 'SD02', locality: 'El Fasher',     planned: '139', deviation: '', remarks: '' },
     // South Kordofan (SD07)
-    { id: 'SD07-0', stateCode: 'SD07', locality: 'Kadugli',       planned: '170', deviation: '', remarks: '' },
-    { id: 'SD07-1', stateCode: 'SD07', locality: 'Habila',        planned: '39',  deviation: '', remarks: '' },
-    { id: 'SD07-2', stateCode: 'SD07', locality: 'Dilling',       planned: '170', deviation: '', remarks: '' },
+    { id: 'SD07-0', stateCode: 'SD07', locality: 'Kadugli',       planned: '147', deviation: '', remarks: '' },
+    { id: 'SD07-1', stateCode: 'SD07', locality: 'Habila',        planned: '34',  deviation: '', remarks: '' },
+    { id: 'SD07-2', stateCode: 'SD07', locality: 'Dilling',       planned: '122', deviation: '', remarks: '' },
     // White Nile (SD09)
     { id: 'SD09-0', stateCode: 'SD09', locality: 'Rabak',         planned: '120', deviation: '100 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 40 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 14 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
-    { id: 'SD09-1', stateCode: 'SD09', locality: 'Kosti',         planned: '120', deviation: '', remarks: '' },
+    { id: 'SD09-1', stateCode: 'SD09', locality: 'Kosti',         planned: '117', deviation: '', remarks: '' },
     { id: 'SD09-2', stateCode: 'SD09', locality: 'Um Rimta',      planned: '60',  deviation: '', remarks: '' },
     // Red Sea (SD10)
     { id: 'SD10-0', stateCode: 'SD10', locality: 'Port Sudan',    planned: '21',  deviation: '', remarks: '' },
     // North Kordofan (SD13)
-    { id: 'SD13-0', stateCode: 'SD13', locality: 'Um Rawaba',     planned: '120', deviation: '', remarks: '' },
+    { id: 'SD13-0', stateCode: 'SD13', locality: 'Um Rawaba',     planned: '117', deviation: '', remarks: '' },
     { id: 'SD13-1', stateCode: 'SD13', locality: 'Sheikan',       planned: '170', deviation: '', remarks: '' },
     // River Nile (SD16)
     { id: 'SD16-0', stateCode: 'SD16', locality: 'Shendi',        planned: '170', deviation: '37 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 9 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 13 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
     // Northern (SD17)
     { id: 'SD17-0', stateCode: 'SD17', locality: 'Al Golid',      planned: '170', deviation: '25 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 14 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 1 HH had an incorrect or invalid phone number that does not correspond to the registered beneficiary, confirmed after several verification attempts.', remarks: '' },
     // West Kordofan (SD18)
-    { id: 'SD18-0', stateCode: 'SD18', locality: 'As Sunut',      planned: '60',  deviation: '', remarks: '' },
-    { id: 'SD18-1', stateCode: 'SD18', locality: 'Al Lagowa',     planned: '58',  deviation: '', remarks: '' },
+    { id: 'SD18-0', stateCode: 'SD18', locality: 'As Sunut',      planned: '41',  deviation: '', remarks: '' },
+    { id: 'SD18-1', stateCode: 'SD18', locality: 'Al Lagowa',     planned: '49',  deviation: '', remarks: '' },
     // Remaining states — blank rows so admins can fill when activated
     { id: 'SD03-0', stateCode: 'SD03', locality: '', planned: '', deviation: '', remarks: '' },
     { id: 'SD04-0', stateCode: 'SD04', locality: '', planned: '', deviation: '', remarks: '' },
@@ -415,7 +415,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   // Bump this version string any time SEED_LOCALITY_ROWS_V2 changes — existing
   // manual edits are wiped and the new seed is applied.
-  const LOCALITY_ROWS_VER = 'v3';
+  const LOCALITY_ROWS_VER = 'v4';
   const [localityRows, setLocalityRows] = useState<LocalityRow[]>(() => {
     try {
       const stored = localStorage.getItem('pact-pdm-locality-rows');
