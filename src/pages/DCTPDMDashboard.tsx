@@ -650,6 +650,25 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     Object.entries(LOCALITY_LABELS).map(([code, name]) => [name.toLowerCase(), code])
   );
 
+  // DCT Sample file parser — reads PRINCIPAL (green) rows only, skips ALTERNATE (yellow),
+  // counts planned HHs per (state, locality) and updates localityRows.
+  const DCT_STATE_TO_CODE: Record<string, string> = {
+    // English (lowercase)
+    'khartoum': 'SD01', 'north darfur': 'SD02', 'south darfur': 'SD03',
+    'west darfur': 'SD04', 'east darfur': 'SD05', 'central darfur': 'SD06',
+    'south kordofan': 'SD07', 'blue nile': 'SD08', 'white nile': 'SD09',
+    'red sea': 'SD10', 'kassala': 'SD11', 'gedaref': 'SD12',
+    'north kordofan': 'SD13', 'sennar': 'SD14', 'aj jazirah': 'SD15',
+    'river nile': 'SD16', 'northern': 'SD17', 'west kordofan': 'SD18',
+    // Arabic
+    'الخرطوم': 'SD01', 'شمال دارفور': 'SD02', 'جنوب دارفور': 'SD03',
+    'غرب دارفور': 'SD04', 'شرق دارفور': 'SD05', 'وسط دارفور': 'SD06',
+    'جنوب كردفان': 'SD07', 'النيل الأزرق': 'SD08', 'النيل الأبيض': 'SD09',
+    'البحر الأحمر': 'SD10', 'كسلا': 'SD11', 'القضارف': 'SD12',
+    'شمال كردفان': 'SD13', 'سنار': 'SD14', 'الجزيرة': 'SD15',
+    'نهر النيل': 'SD16', 'الشمالية': 'SD17', 'غرب كردفان': 'SD18',
+  };
+
   const handleImportProgress = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -660,36 +679,81 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       const wbImp = XLSXLib.read(buf, { type: 'array' });
       const ws = wbImp.Sheets[wbImp.SheetNames[0]];
       const rows: Record<string, string>[] = XLSXLib.utils.sheet_to_json(ws, { defval: '' });
-      const updated: Record<string, LocalityTarget> = { ...localityTargets };
-      let matched = 0;
+
+      const getCol = (row: Record<string, string>, ...candidates: string[]) => {
+        for (const c of candidates) {
+          const k = Object.keys(row).find(k2 => k2.toLowerCase().includes(c.toLowerCase()));
+          if (k) return String(row[k]).trim();
+        }
+        return '';
+      };
+
+      // Count planned HHs per stateCode → localityName (PRINCIPAL + blank rows only)
+      const plannedMap: Record<string, Record<string, number>> = {};
+      let skipped = 0;
+
       rows.forEach(row => {
-        const getCol = (...candidates: string[]) => {
-          for (const c of candidates) {
-            const k = Object.keys(row).find(k2 => k2.toLowerCase().includes(c));
-            if (k) return String(row[k]).trim();
-          }
-          return '';
-        };
-        const stateRaw = getCol('state', 'ولاية');
-        const planned  = getCol('planned', 'مخطط', 'target', 'confirmed');
-        const deviation = getCol('reason', 'deviation', 'سبب', 'انحراف');
-        const remarks  = getCol('remark', 'ملاحظ', 'note', 'comment');
-        if (!stateRaw) return;
-        const code = allStateRows.find(r => r.name.toLowerCase() === stateRaw.toLowerCase())?.code
+        // Skip ALTERNATE (yellow) rows — check Type / النوع / category columns
+        const rowType = getCol(row, 'type', 'نوع', 'category', 'status', 'surveytype', 'row_type');
+        if (rowType.toUpperCase() === 'ALTERNATE') { skipped++; return; }
+
+        // Map state name → code (English or Arabic)
+        const stateRaw = getCol(row, 'state', 'ولاية', 'governorate', 'gov');
+        const stateCode = DCT_STATE_TO_CODE[stateRaw.toLowerCase()]
+          || DCT_STATE_TO_CODE[stateRaw]
           || Object.entries(STATE_LABELS).find(([, v]) => v.toLowerCase() === stateRaw.toLowerCase())?.[0];
-        if (!code) return;
-        updated[code] = {
-          planned: planned || updated[code]?.planned || '',
-          deviation: deviation || updated[code]?.deviation || '',
-          remarks: remarks || updated[code]?.remarks || '',
-        };
-        matched++;
+        if (!stateCode) return;
+
+        // Locality name (Arabic or English)
+        const locName = getCol(row, 'locality', 'محلية', 'localite', 'district', 'localit');
+        if (!locName) return;
+
+        if (!plannedMap[stateCode]) plannedMap[stateCode] = {};
+        plannedMap[stateCode][locName] = (plannedMap[stateCode][locName] || 0) + 1;
       });
-      setLocalityTargets(updated);
-      try { localStorage.setItem('pact-pdm-locality-targets', JSON.stringify(updated)); } catch {}
-      alert(`Imported data for ${matched} state(s) successfully.`);
+
+      if (Object.keys(plannedMap).length === 0) {
+        alert('No matching data found. Make sure the file has Locality, State, and Type columns.');
+        return;
+      }
+
+      // Update or create locality rows
+      let newRows = [...localityRows];
+      let updatedCount = 0;
+      let addedCount = 0;
+
+      Object.entries(plannedMap).forEach(([stateCode, locMap]) => {
+        // Remove the existing blank placeholder row for this state (if only one blank row)
+        const existingRows = newRows.filter(r => r.stateCode === stateCode);
+        const isOnlyBlank = existingRows.length === 1 && !existingRows[0].locality && !existingRows[0].planned;
+        if (isOnlyBlank) {
+          newRows = newRows.filter(r => !(r.stateCode === stateCode && !r.locality));
+        }
+
+        Object.entries(locMap).forEach(([locName, count]) => {
+          const existing = newRows.find(
+            r => r.stateCode === stateCode && r.locality.toLowerCase() === locName.toLowerCase()
+          );
+          if (existing) {
+            newRows = newRows.map(r => r.id === existing.id ? { ...r, planned: String(count) } : r);
+            updatedCount++;
+          } else {
+            const id = `${stateCode}-${locName.replace(/\s+/g, '').slice(0, 6)}-${Date.now().toString(36)}`;
+            newRows.push({ id, stateCode, locality: locName, planned: String(count), deviation: '', remarks: '' });
+            addedCount++;
+          }
+        });
+      });
+
+      setLocalityRows(newRows);
+      saveRows(newRows);
+      localStorage.setItem('pact-pdm-locality-rows-ver', LOCALITY_ROWS_VER);
+      alert(
+        `DCT Sample imported: ${updatedCount} localities updated, ${addedCount} localities added.\n` +
+        `${skipped} ALTERNATE (yellow) rows excluded.`
+      );
     } catch {
-      alert('Could not read the file. Please use the Excel template format.');
+      alert('Could not read the file. Please upload a valid DCT Sample Excel file.');
     }
   };
 
@@ -1428,8 +1492,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                     onChange={handleImportProgress}
                     data-testid="input-import-progress"
                   />
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => importProgressRef.current?.click()} data-testid="button-import-progress">
-                    <Upload className="h-3.5 w-3.5" />Import from File
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => importProgressRef.current?.click()} data-testid="button-import-progress" title="Upload the DCT Sample Excel file to auto-populate Planned counts (green/PRINCIPAL rows only)">
+                    <Upload className="h-3.5 w-3.5" />Upload DCT Sample
                   </Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 text-muted-foreground" onClick={handleDownloadTemplate} data-testid="button-download-template">
                     <FileDown className="h-3.5 w-3.5" />Get Template
