@@ -8,11 +8,13 @@ import {
   Users, MapPin, CheckCircle2, TrendingUp,
   Download, Filter, BarChart3, ShoppingCart,
   Phone, ThumbsUp, X, FileSpreadsheet, Upload, RefreshCw,
+  MessageSquare, AlertTriangle, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAppContext } from '@/context/AppContext';
 
 // ── Types & Config ──────────────────────────────────────────────────────────
 
@@ -48,6 +50,8 @@ interface PDMRecord {
   propNFI: number | null;
   sharing: number | null;
   sharingPct: number | null;
+  securityChallenge: number | null;
+  freeResponse: string | null;
   cfm: number | null;
   satisfaction: number | null;
   submission: string | null;
@@ -97,6 +101,8 @@ function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
     propNFI: row[idx('Utilization/PRPOPTIONnfi')],
     sharing: row[idx('Utilization/HHAsstUsageShareGift')],
     sharingPct: row[idx('Utilization/HHAsstUsageShareGiftSh')],
+    securityChallenge: row[idx('Utilization/SECUchalleng')],
+    freeResponse: row[idx('PDM_other/FreeResp')] ?? null,
     cfm: row[idx('PDM_other/PDM_HHAsstKnowCFM')],
     satisfaction: row[idx('PDM_other/Satisfaction_self')],
     submission: row[idx('_submission_time')],
@@ -201,7 +207,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 interface DataSource { name: string; uploadedAt: string; count: number; }
 
-export default function DCTPDMDashboard() {
+export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: boolean } = {}) {
+  const { currentUserRole } = useAppContext();
+  const canUpload = !publicMode && ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'].includes(currentUserRole ?? '');
+
   const [records, setRecords]       = useState<PDMRecord[]>(STATIC_DATA);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [uploading, setUploading]   = useState(false);
@@ -211,6 +220,11 @@ export default function DCTPDMDashboard() {
   const [stateFilter, setStateFilter] = useState('all');
   const [sexFilter,   setSexFilter]   = useState('all');
   const [rcvFilter,   setRcvFilter]   = useState('all');
+
+  const [feedbackFilter, setFeedbackFilter] = useState('all');
+  const [feedbackPage, setFeedbackPage]     = useState(0);
+  const [feedbackExpanded, setFeedbackExpanded] = useState(false);
+  const FEEDBACK_PAGE_SIZE = 10;
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
@@ -378,6 +392,46 @@ export default function DCTPDMDashboard() {
     return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
   }, [filtered]);
 
+  // ── Beneficiary Feedback & Field Reports ──────────────────────────────────
+  const trivialPhrases = ['لا', 'لا يوجد', 'شكرا', 'لا شيء', 'لاشيء', 'لايوجد', 'no', 'لا شي', 'شكرًا', 'شكراً', 'لا توجد'];
+  const isTrivial = (s: string) => {
+    const clean = s.trim().toLowerCase();
+    return clean.length <= 4 || trivialPhrases.some(p => clean === p.toLowerCase());
+  };
+  const allFeedback = useMemo(() =>
+    filtered
+      .filter(r => r.freeResponse && String(r.freeResponse).trim().length > 1)
+      .map(r => ({
+        id: r.id,
+        state: r.state ? (STATE_LABELS[r.state] || r.state) : '—',
+        stateCode: r.state || '',
+        interviewer: r.interviewer || '—',
+        text: String(r.freeResponse!).trim(),
+        satisfaction: r.satisfaction,
+        trivial: isTrivial(String(r.freeResponse!)),
+      })),
+  [filtered]);
+
+  const feedbackFiltered = useMemo(() => {
+    let f = allFeedback;
+    if (feedbackFilter === 'substantive') f = f.filter(r => !r.trivial);
+    if (feedbackFilter === 'concerns')    f = f.filter(r => !r.trivial && (r.satisfaction ?? 5) <= 3);
+    if (feedbackFilter !== 'all')         f = f.filter(r => !r.trivial);
+    return f;
+  }, [allFeedback, feedbackFilter]);
+
+  const feedbackStats = useMemo(() => ({
+    total: allFeedback.length,
+    substantive: allFeedback.filter(r => !r.trivial).length,
+    concerns: allFeedback.filter(r => !r.trivial && (r.satisfaction ?? 5) <= 3).length,
+    positive: allFeedback.filter(r => !r.trivial && (r.satisfaction ?? 0) >= 4).length,
+  }), [allFeedback]);
+
+  const feedbackPagedData = useMemo(() => {
+    const start = feedbackPage * FEEDBACK_PAGE_SIZE;
+    return feedbackFiltered.slice(start, start + FEEDBACK_PAGE_SIZE);
+  }, [feedbackFiltered, feedbackPage]);
+
   // ── Export ───────────────────────────────────────────────────────────────
   const handleExport = () => {
     const XLSX = (window as any).XLSX;
@@ -473,17 +527,19 @@ export default function DCTPDMDashboard() {
               <X className="h-3.5 w-3.5" />Clear filters
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            data-testid="button-upload-pdm"
-          >
-            {uploading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-            {uploading ? 'Processing…' : 'Upload New Data'}
-          </Button>
+          {canUpload && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              data-testid="button-upload-pdm"
+            >
+              {uploading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {uploading ? 'Processing…' : 'Upload New Data'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleExport}>
             <Download className="h-3.5 w-3.5" />Export
           </Button>
@@ -855,6 +911,146 @@ export default function DCTPDMDashboard() {
             ))}
           </div>
         </CardContent>
+      </Card>
+
+      {/* ── Row 7: Beneficiary Feedback & Field Reports ── */}
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-0 pt-4 px-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <MessageSquare className="h-4 w-4 text-[#1D3461]" />
+                <h3 className="text-sm font-bold text-foreground">Beneficiary Feedback & Field Reports</h3>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Open-ended responses and compliance issues from Section 6.3</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                  <span className="text-muted-foreground">Total responses:</span>
+                  <span className="font-bold">{feedbackStats.total}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  <span className="text-muted-foreground">Substantive:</span>
+                  <span className="font-bold">{feedbackStats.substantive}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 text-amber-500" />
+                  <span className="text-muted-foreground">Concerns:</span>
+                  <span className="font-bold text-amber-600">{feedbackStats.concerns}</span>
+                </span>
+              </div>
+              <Select value={feedbackFilter} onValueChange={v => { setFeedbackFilter(v); setFeedbackPage(0); }}>
+                <SelectTrigger className="h-7 text-[11px] w-36" data-testid="select-feedback-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All responses</SelectItem>
+                  <SelectItem value="substantive">Substantive only</SelectItem>
+                  <SelectItem value="concerns">Issues & Concerns</SelectItem>
+                </SelectContent>
+              </Select>
+              <button
+                onClick={() => setFeedbackExpanded(v => !v)}
+                className="flex items-center gap-1 text-[11px] text-[#1D3461] font-semibold hover:underline"
+                data-testid="button-feedback-expand"
+              >
+                {feedbackExpanded ? <><ChevronUp className="h-3.5 w-3.5" />Collapse</> : <><ChevronDown className="h-3.5 w-3.5" />Expand</>}
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+
+        {feedbackExpanded && (
+          <CardContent className="px-5 pb-4 mt-3">
+            {feedbackFiltered.length === 0 ? (
+              <div className="flex items-center justify-center h-20 text-sm text-muted-foreground">
+                No responses found for the selected filter.
+              </div>
+            ) : (
+              <>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="bg-muted/50 border-b">
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground w-28">State</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground w-36">Data Collector</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Beneficiary Comment</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground w-24 text-center">Satisfaction</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {feedbackPagedData.map((fb, i) => (
+                        <tr key={fb.id ?? i} className={`border-b last:border-0 ${i % 2 === 0 ? '' : 'bg-muted/20'}`}>
+                          <td className="px-3 py-2">
+                            <span className="font-medium text-[#1D3461]">{fb.state}</span>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[140px]" dir="rtl">{fb.interviewer}</td>
+                          <td className="px-3 py-2" dir="rtl" style={{ textAlign: 'right', fontFamily: 'sans-serif', lineHeight: '1.6' }}>
+                            {fb.text}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {fb.satisfaction ? (
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                fb.satisfaction >= 4 ? 'bg-emerald-100 text-emerald-700' :
+                                fb.satisfaction === 3 ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-600'
+                              }`}>
+                                {SATISFACTION_CFG.find(s => s.key === fb.satisfaction)?.label ?? fb.satisfaction}
+                              </span>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {feedbackFiltered.length > FEEDBACK_PAGE_SIZE && (
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-[11px] text-muted-foreground">
+                      Showing {feedbackPage * FEEDBACK_PAGE_SIZE + 1}–{Math.min((feedbackPage + 1) * FEEDBACK_PAGE_SIZE, feedbackFiltered.length)} of {feedbackFiltered.length}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setFeedbackPage(p => Math.max(0, p - 1))} disabled={feedbackPage === 0}>
+                        Previous
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setFeedbackPage(p => p + 1)} disabled={(feedbackPage + 1) * FEEDBACK_PAGE_SIZE >= feedbackFiltered.length}>
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        )}
+
+        {!feedbackExpanded && (
+          <CardContent className="px-5 py-3">
+            <div className="flex gap-4 flex-wrap">
+              {allFeedback.filter(f => !f.trivial).slice(0, 3).map((fb, i) => (
+                <div key={i} className="flex-1 min-w-[200px] bg-muted/30 rounded-lg p-3 border">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-semibold text-[#1D3461]">{fb.state}</span>
+                    {fb.satisfaction && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fb.satisfaction >= 4 ? 'bg-emerald-100 text-emerald-700' : fb.satisfaction === 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}`}>
+                        {fb.satisfaction}/5
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-foreground leading-relaxed line-clamp-2" dir="rtl" style={{ textAlign: 'right' }}>{fb.text}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1.5" dir="rtl">{fb.interviewer}</p>
+                </div>
+              ))}
+              <div className="flex items-center justify-center min-w-[120px] text-[11px] text-muted-foreground">
+                +{Math.max(0, feedbackStats.substantive - 3)} more → click Expand
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* ── Footer note ── */}

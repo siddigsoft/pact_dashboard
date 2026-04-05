@@ -120,6 +120,7 @@ const MobileDocumentSync = lazy(() => import('./pages/MobileDocumentSync'));
 const ReconciliationDashboard = lazy(() => import('./pages/ReconciliationDashboard'));
 const QuestionnaireAnalytics = lazy(() => import('./pages/QuestionnaireAnalytics'));
 const DCTPDMDashboard = lazy(() => import('./pages/DCTPDMDashboard'));
+const DCTPDMPublicPage = lazy(() => import('./pages/DCTPDMPublicPage'));
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
@@ -262,7 +263,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
@@ -285,6 +286,7 @@ const AppRoutes = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
       <Route path="/email-preview" element={<EmailPreviewPage />} />
+      <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
