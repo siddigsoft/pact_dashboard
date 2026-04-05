@@ -240,11 +240,12 @@ interface LocalityTarget { planned: string; locality: string; deviation: string;
 interface LocalityRow { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string; }
 
 const FEEDBACK_PAGE_SIZE = 10;
-const LOCALITY_ROWS_VER = 'v5'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
+const LOCALITY_ROWS_VER = 'v6'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
 
-// State-level totals — PRINCIPAL + blank-type only (ALTERNATE/yellow rows excluded)
+// State-level totals — PRINCIPAL only (ALTERNATE/yellow backup rows excluded)
+// v6: SD01 corrected 290→250 (Bahri backup 40 removed)
 const SAMPLE_PLANNED: Record<string, string> = {
-  SD01: '290', SD09: '297', SD16: '170', SD17: '170', // Khartoum / White Nile / River Nile / Northern
+  SD01: '250', SD09: '297', SD16: '170', SD17: '170', // Khartoum / White Nile / River Nile / Northern
   SD02: '139',                                          // North Darfur
   SD07: '303',                                          // South Kordofan
   SD10: '21',                                           // Red Sea
@@ -274,7 +275,7 @@ const SAMPLE_DEFAULTS: Record<string, { locality: string; deviation: string; rem
 // Per-locality seed — PRINCIPAL + blank-type counts from DCT Sample file (Apr 2026)
 const SEED_LOCALITY_ROWS_V2: LocalityRow[] = [
   // Khartoum (SD01)
-  { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '120', deviation: '60 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
+  { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '80',  deviation: '60 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
   { id: 'SD01-1', stateCode: 'SD01', locality: 'Sharg An Neel', planned: '170', deviation: '', remarks: '' },
   // North Darfur (SD02)
   { id: 'SD02-0', stateCode: 'SD02', locality: 'El Fasher',     planned: '139', deviation: '', remarks: '' },
@@ -370,7 +371,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const [feedbackExpanded, setFeedbackExpanded] = useState(false);
   // Bump seed version whenever defaults change — existing manual edits are
   // preserved; only blank fields are filled from the new defaults.
-  const SEED_VER = 'v7-all-states';
+  const SEED_VER = 'v8-principal-only'; // v8: SD01 planned 290→250 (backup excluded)
   const [localityTargets, setLocalityTargets] = useState<Record<string, LocalityTarget>>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('pact-pdm-locality-targets') || '{}');
@@ -424,13 +425,23 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       if (stored) {
         const prev: LocalityRow[] = JSON.parse(stored);
         const prevMap: Record<string, LocalityRow> = Object.fromEntries(prev.map(r => [r.id, r]));
+        // v6 correction map: rows whose planned value changed from old→new seed.
+        // If the stored value still equals the old (wrong) seed default, adopt the correction.
+        const V6_PLANNED_CORRECTIONS: Record<string, { from: string; to: string }> = {
+          'SD01-0': { from: '120', to: '80' }, // Bahri: removed 40 backup HHs
+        };
         const merged = SEED_LOCALITY_ROWS_V2.map(seedRow => {
           const p = prevMap[seedRow.id];
           if (!p) return seedRow;
+          const correction = V6_PLANNED_CORRECTIONS[seedRow.id];
+          const plannedVal =
+            correction && p.planned === correction.from
+              ? correction.to                        // stored = old wrong seed → apply fix
+              : p.planned || seedRow.planned;        // stored = manual edit or already correct
           return {
             ...seedRow,
             locality:  p.locality  || seedRow.locality,
-            planned:   p.planned   || seedRow.planned,
+            planned:   plannedVal,
             deviation: p.deviation || seedRow.deviation, // keep manual text, fall back to seed
             remarks:   p.remarks   || seedRow.remarks,
           };
