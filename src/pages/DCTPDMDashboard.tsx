@@ -1779,9 +1779,21 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                     data-testid={`textarea-deviation-${group.code}`}
                                   />
                                 ) : (
-                                  <span className="text-[13px] font-bold text-foreground whitespace-pre-wrap leading-relaxed">
-                                    {stateDeviations[group.code] || '—'}
-                                  </span>
+                                  (() => {
+                                    const raw = stateDeviations[group.code] || '';
+                                    if (!raw.trim()) return <span className="text-[13px] font-bold text-foreground">—</span>;
+                                    const points = raw.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+                                    if (points.length <= 1) {
+                                      return <span className="text-[13px] font-bold text-foreground whitespace-pre-wrap leading-relaxed">{raw}</span>;
+                                    }
+                                    return (
+                                      <ul className="list-disc list-outside pl-4 space-y-1">
+                                        {points.map((pt, i) => (
+                                          <li key={i} className="text-[12px] font-bold text-foreground leading-snug">{pt}</li>
+                                        ))}
+                                      </ul>
+                                    );
+                                  })()
                                 )}
                               </td>
                             )}
