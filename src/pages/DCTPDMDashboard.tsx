@@ -1999,7 +1999,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                             {isFirst && (
                               <td
                                 rowSpan={stateRowSpan}
-                                className="px-4 py-2.5 font-bold text-[#1D3461] whitespace-nowrap text-[13px] border-r border-border/30 align-top"
+                                className="px-4 py-2.5 font-bold text-black dark:text-foreground whitespace-nowrap text-[13px] border-r border-border/30 align-top"
                               >
                                 {group.name}
                               </td>
@@ -2024,7 +2024,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                                       className="flex-shrink-0 h-2 w-2 rounded-full bg-emerald-500"
                                     />
                                   )}
-                                  <span className="text-muted-foreground">{row.locality || '—'}</span>
+                                  <span className="font-bold text-black dark:text-foreground">{row.locality || '—'}</span>
                                 </div>
                               )}
                             </td>
