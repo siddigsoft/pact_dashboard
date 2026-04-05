@@ -240,7 +240,7 @@ interface LocalityTarget { planned: string; locality: string; deviation: string;
 interface LocalityRow { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string; }
 
 const FEEDBACK_PAGE_SIZE = 10;
-const LOCALITY_ROWS_VER = 'v8'; // bump this whenever SEED_LOCALITY_ROWS_V2 changes
+const LOCALITY_ROWS_VER = 'v9'; // v9: SD16/SD17 added to PLANNED_CORRECTIONS (170→150)
 
 // State-level totals — GREEN rows only from DCT Sample Excel (Apr 2026)
 // v8: All localities corrected to green-highlighted HH counts from DCT Sample file
@@ -442,6 +442,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           'SD09-2': { from: ['60'],                    to: '50'  }, // Um Rimta:  green=50
           'SD13-0': { from: ['117'],                   to: '100' }, // Um Rawaba: green=100
           'SD13-1': { from: ['170'],                   to: '150' }, // Sheikan:   green=150
+          'SD16-0': { from: ['170'],                   to: '150' }, // Shendi:    green=150
+          'SD17-0': { from: ['170'],                   to: '150' }, // Al Golid:  green=150
           'SD18-0': { from: ['41'],                    to: '50'  }, // As Sunut:  green=50
           'SD18-1': { from: ['49'],                    to: '50'  }, // Al Lagowa: green=50
         };
