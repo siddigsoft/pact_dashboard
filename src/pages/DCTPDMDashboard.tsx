@@ -239,7 +239,20 @@ interface DataSource { name: string; uploadedAt: string; count: number; }
 
 export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: boolean } = {}) {
   const { currentUser } = useAppContext();
-  const canUpload = !publicMode && ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'].includes((currentUser as any)?.role ?? '');
+
+  /**
+   * Upload / edit access is granted only on the private route (/dct-pdm) and
+   * only to users whose role is admin or super_admin.
+   *
+   * NOTE: We read the role from `currentUser.role` — NOT from `currentUserRole`
+   * which exists as local state inside NotificationContext and is never
+   * forwarded through the shared AppContext object. Using that undefined key
+   * would silently hide all upload controls for every user regardless of role.
+   */
+  const userRole = currentUser?.role ?? '';
+  const canUpload =
+    !publicMode &&
+    ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'].includes(userRole);
 
   const [records, setRecords]       = useState<PDMRecord[]>(STATIC_DATA);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
