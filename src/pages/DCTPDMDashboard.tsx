@@ -2742,9 +2742,14 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       </Card>
 
       {/* ── Footer note ── */}
-      <p className="text-center text-[10px] text-muted-foreground pb-2">
-        Data source: {dataSource ? dataSource.name : '2026 DCT PDM Survey'} · {records.length} records · Generated {new Date().toLocaleDateString()}
-      </p>
+      <div className="text-center pb-4 space-y-1">
+        <p className="text-[10px] text-muted-foreground">
+          Data source: {dataSource ? dataSource.name : '2026 DCT PDM Survey'} · {records.length} records · Generated {new Date().toLocaleDateString()}
+        </p>
+        <p className="text-[11px] font-semibold text-[#1D3461]">
+          © {new Date().getFullYear()} PACT — All rights reserved.
+        </p>
+      </div>
     </div>
   );
 }
