@@ -1,5 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
-import * as XLSX from 'xlsx';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, Area, AreaChart,
@@ -13,7 +12,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import rawData from '@/data/pdm_data.json';
 
 // ── Types & Config ──────────────────────────────────────────────────────────
 
@@ -54,12 +52,12 @@ interface PDMRecord {
   submission: string | null;
 }
 
-const STATIC_DATA = (rawData as any).processed as PDMRecord[];
+const EMPTY: PDMRecord[] = [];
 
 // ── Excel processing (mirrors the Node.js build-time script) ────────────────
-function processWorkbook(wb: XLSX.WorkBook): PDMRecord[] {
-  const sheetName = wb.SheetNames.find(n => n.toLowerCase() === 'data') || wb.SheetNames[0];
-  const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[sheetName], { header: 1, defval: null });
+function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
+  const sheetName = (wb.SheetNames as string[]).find((n: string) => n.toLowerCase() === 'data') || wb.SheetNames[0];
+  const rows = XLSXLib.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null }) as any[][];
   if (rows.length < 3) return [];
   const headers: string[] = rows[0] as string[];
   const idx = (col: string) => headers.indexOf(col);
@@ -203,11 +201,20 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 interface DataSource { name: string; uploadedAt: string; count: number; }
 
 export default function DCTPDMDashboard() {
-  const [records, setRecords]     = useState<PDMRecord[]>(STATIC_DATA);
+  const [records, setRecords]       = useState<PDMRecord[]>(EMPTY);
+  const [loading, setLoading]       = useState(true);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [uploading, setUploading]   = useState(false);
   const [dragOver, setDragOver]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch built-in dataset from public folder on mount
+  useEffect(() => {
+    fetch('/pdm_data.json')
+      .then(r => r.json())
+      .then(d => { setRecords(d.processed || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
 
   const [stateFilter, setStateFilter] = useState('all');
   const [sexFilter,   setSexFilter]   = useState('all');
@@ -220,9 +227,10 @@ export default function DCTPDMDashboard() {
     }
     setUploading(true);
     try {
+      const XLSXLib = await import('xlsx');
       const buf = await file.arrayBuffer();
-      const wb  = XLSX.read(buf, { type: 'array' });
-      const parsed = processWorkbook(wb);
+      const wb  = XLSXLib.read(buf, { type: 'array' });
+      const parsed = processWorkbook(wb, XLSXLib);
       if (parsed.length === 0) {
         alert('No data rows found. Make sure this is the PDM exported data file (not the XLSform).');
         return;
@@ -250,8 +258,12 @@ export default function DCTPDMDashboard() {
   };
 
   const resetToDefault = () => {
-    setRecords(STATIC_DATA); setDataSource(null);
+    setLoading(true); setDataSource(null);
     setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+    fetch('/pdm_data.json')
+      .then(r => r.json())
+      .then(d => { setRecords(d.processed || []); setLoading(false); })
+      .catch(() => setLoading(false));
   };
 
   const filtered = useMemo(() => records.filter(r => {
@@ -411,6 +423,15 @@ export default function DCTPDMDashboard() {
       </text>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+        <RefreshCw className="h-8 w-8 animate-spin text-[#1D3461]" />
+        <p className="text-sm font-medium">Loading PDM data…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-5 max-w-[1400px] mx-auto">
