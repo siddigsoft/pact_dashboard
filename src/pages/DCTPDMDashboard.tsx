@@ -618,8 +618,9 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // ── Formatted Report Export ───────────────────────────────────────────────
   const handleExportReport = async () => {
     try {
-      const XLSXLib = await import('xlsx');
-      const wb = XLSXLib.utils.book_new();
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'PACT Command Center';
       const now = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
       const filterDesc = [
         stateFilter !== 'all' ? `State: ${STATE_LABELS[stateFilter] || stateFilter}` : null,
@@ -628,174 +629,272 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       ].filter(Boolean).join('  |  ') || 'None (All Records)';
       const marketAccessPct = PCT(filtered.filter(r => r.marketAccess === 1).length, total);
 
+      // ── Shared style helpers ──────────────────────────────────────────────
+      const C = {
+        navy:   { argb: 'FF0F2041' },
+        navy2:  { argb: 'FF1D3461' },
+        altRow: { argb: 'FFEEF3FA' },
+        white:  { argb: 'FFFFFFFF' },
+        total:  { argb: 'FFFFF9C4' },
+        green:  { argb: 'FF166534' },
+        red:    { argb: 'FFB91C1C' },
+        black:  { argb: 'FF1F2937' },
+        gray:   { argb: 'FFF3F4F6' },
+      };
+      const border = { style: 'thin' as const, color: { argb: 'FFD1D5DB' } };
+      const borders = { top: border, left: border, bottom: border, right: border };
+
+      const solidFill = (argb: string) => ({ type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb } });
+
+      const styleCell = (cell: any, bg?: string, fontOpts?: any, alignH: 'left'|'center'|'right' = 'left') => {
+        if (bg) cell.fill = solidFill(bg);
+        cell.font = { size: 10, color: C.black, ...fontOpts };
+        cell.alignment = { vertical: 'middle', horizontal: alignH, wrapText: alignH === 'left' };
+        cell.border = borders;
+      };
+
+      const addBanner = (ws: any, text: string, span: number) => {
+        const row = ws.addRow([text]);
+        row.height = 22;
+        const rn = row.number;
+        if (span > 1) ws.mergeCells(rn, 1, rn, span);
+        const cell = ws.getCell(rn, 1);
+        cell.fill = solidFill(C.navy.argb);
+        cell.font = { bold: true, size: 11, color: C.white };
+        cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        return row;
+      };
+
+      const addColHdr = (ws: any, headers: string[]) => {
+        const row = ws.addRow(headers);
+        row.height = 18;
+        row.eachCell((cell: any) => {
+          cell.fill = solidFill(C.navy2.argb);
+          cell.font = { bold: true, size: 10, color: C.white };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.border = borders;
+        });
+        return row;
+      };
+
+      const addData = (ws: any, values: any[], alt: boolean, opts?: { bold?: boolean; bg?: string; cols?: Array<'left'|'center'|'right'> }) => {
+        const row = ws.addRow(values);
+        row.height = 16;
+        row.eachCell({ includeEmpty: true }, (cell: any, c: number) => {
+          const align = opts?.cols?.[c - 1] ?? (c === 1 ? 'left' : 'center');
+          styleCell(cell, opts?.bg ?? (alt ? C.altRow.argb : C.white.argb), { bold: opts?.bold ?? false }, align);
+        });
+        return row;
+      };
+
       // ── Sheet 1: Dashboard Summary ────────────────────────────────────────
-      const summaryAoa: any[][] = [
-        ['2026 DCT PDM Dashboard — Post-Distribution Monitoring Report'],
-        [`Generated: ${now}    |    Applied Filters: ${filterDesc}`],
-        [],
-        ['KEY PERFORMANCE INDICATORS'],
-        ['Indicator', 'Value', 'Detail'],
-        ['Total Surveys', total, `${states.length} states covered`],
+      const ws1 = wb.addWorksheet('Dashboard Summary');
+      ws1.columns = [
+        { width: 32 }, { width: 22 }, { width: 30 }, { width: 14 },
+        { width: 12 }, { width: 36 }, { width: 30 },
+      ];
+
+      // Title
+      const titleRow = ws1.addRow(['2026 DCT PDM Dashboard — Post-Distribution Monitoring Report']);
+      titleRow.height = 32;
+      ws1.mergeCells(titleRow.number, 1, titleRow.number, 7);
+      const tc = ws1.getCell(titleRow.number, 1);
+      tc.fill = solidFill(C.navy.argb);
+      tc.font = { bold: true, size: 15, color: C.white };
+      tc.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Subtitle
+      const subRow = ws1.addRow([`Generated: ${now}    |    Filters: ${filterDesc}`]);
+      subRow.height = 18;
+      ws1.mergeCells(subRow.number, 1, subRow.number, 7);
+      const sc2 = ws1.getCell(subRow.number, 1);
+      sc2.fill = solidFill(C.gray.argb);
+      sc2.font = { italic: true, size: 10, color: { argb: 'FF374151' } };
+      sc2.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      ws1.addRow([]);
+
+      // KPI section
+      addBanner(ws1, 'KEY PERFORMANCE INDICATORS', 3);
+      addColHdr(ws1, ['Indicator', 'Value', 'Detail']);
+      const kpis = [
+        ['Total Surveys', total, `${states.length} state${states.length !== 1 ? 's' : ''} covered`],
         ['Assistance Received', `${receivedPct}%`, `${filtered.filter(r => r.asstReceived === 1).length} of ${total} households`],
         ['Satisfaction Score', `${avgSat.toFixed(1)} / 5`, `${satPct}% rated Good or Excellent`],
         ['CFM Awareness', `${cfmPct}%`, `${filtered.filter(r => r.cfm === 1).length} aware of complaint mechanism`],
-        ['Avg Household Size', `${avgHHSize.toFixed(1)}`, 'members per household'],
+        ['Avg Household Size', avgHHSize.toFixed(1), 'members per household'],
         ['Market Access', `${marketAccessPct}%`, `${filtered.filter(r => r.marketAccess === 1).length} households can access market`],
-        [],
-        ['PDM PROGRESS BY STATE'],
-        ['State', 'Planned (Confirmed)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks'],
-        ...localityProgressData.map(r => {
-          const t = localityTargets[r.code];
-          const planned = t?.planned ? Number(t.planned) : null;
-          const dev = planned != null ? r.reached - planned : null;
-          const pct = planned ? Math.round((r.reached / planned) * 100) : null;
-          return [r.name, planned ?? '—', r.reached, dev != null ? dev : '—', pct != null ? `${pct}%` : '—', t?.deviation || '—', t?.remarks || '—'];
-        }),
-        (() => {
-          const totalPlanned = localityProgressData.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
-          const totalReached = localityProgressData.reduce((s, r) => s + r.reached, 0);
-          const totalDev = totalPlanned ? totalReached - totalPlanned : null;
-          const totalPct = totalPlanned ? Math.round((totalReached / totalPlanned) * 100) : null;
-          return ['TOTAL', totalPlanned || '—', totalReached, totalDev != null ? totalDev : '—', totalPct != null ? `${totalPct}%` : '—', '', ''];
-        })(),
-        [],
-        ['SURVEY SUBMISSIONS BY STATE'],
-        ['State', 'Submissions', '% of Total'],
-        ...byState.map(r => [r.state, r.count, `${PCT(r.count, total)}%`]),
-        [],
-        ['SUBMISSION TIMELINE'],
-        ['Date', 'Submissions'],
-        ...timeline.map(t => [t.date, t.count]),
       ];
-      const wsSummary = XLSXLib.utils.aoa_to_sheet(summaryAoa);
-      wsSummary['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 34 }, { wch: 30 }];
-      wsSummary['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
-        { s: { r: 3, c: 0 }, e: { r: 3, c: 6 } },
-        { s: { r: 12, c: 0 }, e: { r: 12, c: 6 } },
-      ];
-      XLSXLib.utils.book_append_sheet(wb, wsSummary, 'Dashboard Summary');
+      kpis.forEach((kpi, i) => addData(ws1, kpi, i % 2 === 1, { cols: ['left', 'center', 'left'] }));
+
+      ws1.addRow([]);
+
+      // PDM Progress section
+      addBanner(ws1, 'PDM PROGRESS BY STATE', 7);
+      addColHdr(ws1, ['State', 'Planned (Confirmed)', 'Reached (up to date)', 'Deviation', '% Reached', 'Reason for Deviation', 'Remarks']);
+
+      const tpTot = localityProgressData.reduce((s, r) => s + (localityTargets[r.code]?.planned ? Number(localityTargets[r.code].planned) : 0), 0);
+      const trTot = localityProgressData.reduce((s, r) => s + r.reached, 0);
+
+      localityProgressData.forEach((lr, i) => {
+        const t = localityTargets[lr.code];
+        const planned = t?.planned ? Number(t.planned) : null;
+        const dev = planned != null ? lr.reached - planned : null;
+        const pct = planned ? Math.round((lr.reached / planned) * 100) : null;
+        const row = addData(ws1, [lr.name, planned ?? '—', lr.reached, dev != null ? dev : '—', pct != null ? `${pct}%` : '—', t?.deviation || '—', t?.remarks || '—'], i % 2 === 1);
+        if (dev != null) {
+          const clr = dev >= 0 ? C.green : C.red;
+          row.getCell(4).font = { bold: true, size: 10, color: clr };
+          row.getCell(5).font = { bold: true, size: 10, color: clr };
+        }
+      });
+
+      const totalDev2 = tpTot ? trTot - tpTot : null;
+      const totalPct2 = tpTot ? Math.round((trTot / tpTot) * 100) : null;
+      const totRow = addData(ws1, ['TOTAL', tpTot || '—', trTot, totalDev2 != null ? totalDev2 : '—', totalPct2 != null ? `${totalPct2}%` : '—', '', ''], false, { bold: true, bg: C.total.argb });
+      if (totalDev2 != null) {
+        const clr = totalDev2 >= 0 ? C.green : C.red;
+        totRow.getCell(4).font = { bold: true, size: 10, color: clr };
+        totRow.getCell(5).font = { bold: true, size: 10, color: clr };
+      }
+
+      ws1.addRow([]);
+
+      // By State section
+      addBanner(ws1, 'SURVEY SUBMISSIONS BY STATE', 3);
+      addColHdr(ws1, ['State', 'Submissions', '% of Total']);
+      byState.forEach((s, i) => addData(ws1, [s.state, s.count, `${PCT(s.count, total)}%`], i % 2 === 1));
+
+      ws1.addRow([]);
+
+      // Timeline section
+      addBanner(ws1, 'SUBMISSION TIMELINE', 2);
+      addColHdr(ws1, ['Date', 'Submissions']);
+      timeline.forEach((t, i) => addData(ws1, [t.date, t.count], i % 2 === 1));
+
+      ws1.views = [{ state: 'frozen', ySplit: 2 }];
 
       // ── Sheet 2: Demographics ─────────────────────────────────────────────
-      const demoAoa: any[][] = [
-        ['DEMOGRAPHICS'],
-        [],
-        ['HH HEAD SEX'],
-        ['Sex', 'Count', '% of Total'],
-        ...sexData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
-        [],
-        ['HH HEAD STATUS'],
-        ['Status', 'Count', '% of Total'],
-        ...statusData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
-        [],
-        ['HOUSEHOLD SIZE DISTRIBUTION'],
-        ['HH Size', 'Count', '% of Total'],
-        ...hhSizeData.map(d => [d.size, d.count, `${PCT(d.count, total)}%`]),
-      ];
-      const wsDemo = XLSXLib.utils.aoa_to_sheet(demoAoa);
-      wsDemo['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }];
-      XLSXLib.utils.book_append_sheet(wb, wsDemo, 'Demographics');
+      const ws2 = wb.addWorksheet('Demographics');
+      ws2.columns = [{ width: 28 }, { width: 14 }, { width: 16 }];
 
-      // ── Sheet 3: Assistance ───────────────────────────────────────────────
-      const asst = filtered.filter(r => r.asstAmtRec != null && r.asstAmtRec > 0);
-      const avgAmt = asst.length ? Math.round(asst.reduce((s, r) => s + (r.asstAmtRec ?? 0), 0) / asst.length) : 0;
-      const asstAoa: any[][] = [
-        ['ASSISTANCE RECEIVED'],
-        [],
-        ['RECEIPT STATUS'],
-        ['Status', 'Count', '% of Total'],
-        ...receivedData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
-        [],
-        ['MODE OF DELIVERY (DIGITAL CASH)'],
-        ['Mode', 'Count', '% of Total'],
-        ...modeData.map(d => [d.name, d.value, `${PCT(d.value, total)}%`]),
-        [],
-        ['AMOUNT RECEIVED BY STATE (avg SDG)'],
-        ['State', 'Avg Amount Received (SDG)', 'Avg Expected (SDG)'],
-        ...amountByState.map(d => [d.state, d.avgReceived, d.avgExpected ?? '—']),
-        [],
-        ['OVERALL AVERAGE', avgAmt, ''],
-        [],
-        ['UTILIZATION'],
-        ['Indicator', 'Yes', 'No', '% Yes'],
-        ...accessData.map(d => [d.category, d.yes, d.no, `${PCT(d.yes, d.yes + d.no)}%`]),
-      ];
-      const wsAsst = XLSXLib.utils.aoa_to_sheet(asstAoa);
-      wsAsst['!cols'] = [{ wch: 28 }, { wch: 24 }, { wch: 22 }, { wch: 10 }];
-      XLSXLib.utils.book_append_sheet(wb, wsAsst, 'Assistance & Utilization');
+      addBanner(ws2, 'HH HEAD SEX', 3);
+      addColHdr(ws2, ['Sex', 'Count', '% of Total']);
+      sexData.forEach((d, i) => addData(ws2, [d.name, d.value, `${PCT(d.value, total)}%`], i % 2 === 1));
+      ws2.addRow([]);
 
-      // ── Sheet 4: Challenges ───────────────────────────────────────────────
-      const propFoodData2 = (() => {
-        const bins = [{ range: '0-25%', lo: 0, hi: 25 }, { range: '26-50%', lo: 26, hi: 50 }, { range: '51-75%', lo: 51, hi: 75 }, { range: '76-100%', lo: 76, hi: 100 }];
-        return bins.map(b => ({ range: b.range, count: filtered.filter(r => r.propFood != null && r.propFood >= b.lo && r.propFood <= b.hi).length }));
-      })();
-      const chalAoa: any[][] = [
-        ['EXPENDITURE CHALLENGES & FOOD SECURITY'],
-        [],
-        ['TOP CHALLENGES REPORTED'],
-        ['Challenge', 'Count', '% of Total'],
-        ...challengeData.map(d => [d.name, d.count, `${PCT(d.count, total)}%`]),
-        [],
-        ['PROPORTION SPENT ON FOOD'],
-        ['Range', 'Count', '% of Respondents'],
-        ...propFoodData2.map(d => [d.range, d.count, `${PCT(d.count, total)}%`]),
+      addBanner(ws2, 'HH HEAD STATUS', 3);
+      addColHdr(ws2, ['Status', 'Count', '% of Total']);
+      statusData.forEach((d, i) => addData(ws2, [d.name, d.value, `${PCT(d.value, total)}%`], i % 2 === 1));
+      ws2.addRow([]);
+
+      addBanner(ws2, 'HOUSEHOLD SIZE DISTRIBUTION', 3);
+      addColHdr(ws2, ['HH Size', 'Count', '% of Total']);
+      hhSizeData.forEach((d, i) => addData(ws2, [d.size, d.count, `${PCT(d.count, total)}%`], i % 2 === 1));
+
+      // ── Sheet 3: Assistance & Utilization ────────────────────────────────
+      const ws3 = wb.addWorksheet('Assistance & Utilization');
+      ws3.columns = [{ width: 30 }, { width: 26 }, { width: 22 }, { width: 12 }];
+      const asstRecs = filtered.filter(r => r.asstAmtRec != null && r.asstAmtRec > 0);
+      const avgAmt = asstRecs.length ? Math.round(asstRecs.reduce((s, r) => s + (r.asstAmtRec ?? 0), 0) / asstRecs.length) : 0;
+
+      addBanner(ws3, 'RECEIPT STATUS', 3);
+      addColHdr(ws3, ['Status', 'Count', '% of Total']);
+      receivedData.forEach((d, i) => addData(ws3, [d.name, d.value, `${PCT(d.value, total)}%`], i % 2 === 1));
+      ws3.addRow([]);
+
+      addBanner(ws3, 'MODE OF DELIVERY (DIGITAL CASH)', 3);
+      addColHdr(ws3, ['Mode', 'Count', '% of Total']);
+      modeData.forEach((d, i) => addData(ws3, [d.name, d.value, `${PCT(d.value, total)}%`], i % 2 === 1));
+      ws3.addRow([]);
+
+      addBanner(ws3, 'AMOUNT RECEIVED BY STATE (avg SDG)', 3);
+      addColHdr(ws3, ['State', 'Avg Amount Received (SDG)', 'Avg Expected (SDG)']);
+      amountByState.forEach((d, i) => addData(ws3, [d.state, d.avgReceived, d.avgExpected ?? '—'], i % 2 === 1));
+      addData(ws3, ['Overall Average', avgAmt, ''], false, { bold: true, bg: C.total.argb });
+      ws3.addRow([]);
+
+      addBanner(ws3, 'UTILIZATION INDICATORS', 4);
+      addColHdr(ws3, ['Indicator', 'Yes', 'No', '% Yes']);
+      accessData.forEach((d, i) => addData(ws3, [d.category, d.yes, d.no, `${PCT(d.yes, d.yes + d.no)}%`], i % 2 === 1));
+
+      // ── Sheet 4: Challenges & Food Security ──────────────────────────────
+      const ws4 = wb.addWorksheet('Challenges & Food Security');
+      ws4.columns = [{ width: 38 }, { width: 10 }, { width: 20 }];
+      const foodBins = [
+        { range: '0–25%', lo: 0, hi: 25 }, { range: '26–50%', lo: 26, hi: 50 },
+        { range: '51–75%', lo: 51, hi: 75 }, { range: '76–100%', lo: 76, hi: 100 },
       ];
-      const wsChallenge = XLSXLib.utils.aoa_to_sheet(chalAoa);
-      wsChallenge['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 20 }];
-      XLSXLib.utils.book_append_sheet(wb, wsChallenge, 'Challenges & Food Security');
+
+      addBanner(ws4, 'TOP CHALLENGES REPORTED', 3);
+      addColHdr(ws4, ['Challenge', 'Count', '% of Total']);
+      challengeData.forEach((d, i) => addData(ws4, [d.name, d.count, `${PCT(d.count, total)}%`], i % 2 === 1));
+      ws4.addRow([]);
+
+      addBanner(ws4, 'PROPORTION OF AID SPENT ON FOOD', 3);
+      addColHdr(ws4, ['Range', 'Count', '% of Respondents']);
+      foodBins.forEach((b, i) => {
+        const cnt = filtered.filter(r => r.propFood != null && r.propFood >= b.lo && r.propFood <= b.hi).length;
+        addData(ws4, [b.range, cnt, `${PCT(cnt, total)}%`], i % 2 === 1);
+      });
 
       // ── Sheet 5: Satisfaction & CFM ───────────────────────────────────────
-      const satAoa: any[][] = [
-        ['SATISFACTION & CFM'],
-        [],
-        ['SATISFACTION RATING DISTRIBUTION'],
-        ['Rating', 'Label', 'Count', '% of Respondents'],
-        ...satData.map(d => [d.key, d.label, d.count, `${d.pct}%`]),
-        [],
-        ['Overall Average Score', avgSat.toFixed(2), '', ''],
-        ['Good or Excellent (≥4)', `${satPct}%`, `${filtered.filter(r => (r.satisfaction ?? 0) >= 4).length} respondents`, ''],
-        [],
-        ['CFM AWARENESS'],
-        ['Indicator', 'Count', '% of Total'],
-        ['Aware of Complaint Mechanism', filtered.filter(r => r.cfm === 1).length, `${cfmPct}%`],
-        ['Not Aware', filtered.filter(r => r.cfm === 0).length, `${PCT(filtered.filter(r => r.cfm === 0).length, total)}%`],
-      ];
-      const wsSat = XLSXLib.utils.aoa_to_sheet(satAoa);
-      wsSat['!cols'] = [{ wch: 36 }, { wch: 22 }, { wch: 14 }, { wch: 20 }];
-      XLSXLib.utils.book_append_sheet(wb, wsSat, 'Satisfaction & CFM');
+      const ws5 = wb.addWorksheet('Satisfaction & CFM');
+      ws5.columns = [{ width: 36 }, { width: 22 }, { width: 14 }, { width: 20 }];
+
+      addBanner(ws5, 'SATISFACTION RATING DISTRIBUTION', 4);
+      addColHdr(ws5, ['Rating', 'Label', 'Count', '% of Respondents']);
+      satData.forEach((d, i) => addData(ws5, [d.key, d.label, d.count, `${d.pct}%`], i % 2 === 1));
+      addData(ws5, ['Overall Average Score', avgSat.toFixed(2), '', ''], false, { bold: true, bg: C.total.argb });
+      addData(ws5, ['Good or Excellent (≥4)', `${satPct}%`, `${filtered.filter(r => (r.satisfaction ?? 0) >= 4).length} respondents`, ''], false, { bold: true, bg: C.total.argb });
+      ws5.addRow([]);
+
+      addBanner(ws5, 'CFM AWARENESS', 3);
+      addColHdr(ws5, ['Indicator', 'Count', '% of Total']);
+      addData(ws5, ['Aware of Complaint Mechanism', filtered.filter(r => r.cfm === 1).length, `${cfmPct}%`], false);
+      addData(ws5, ['Not Aware', filtered.filter(r => r.cfm === 0).length, `${PCT(filtered.filter(r => r.cfm === 0).length, total)}%`], true);
 
       // ── Sheet 6: Interviewers ─────────────────────────────────────────────
-      const wsInterviewers = XLSXLib.utils.json_to_sheet(interviewerData.map((d, i) => ({
-        'Rank': i + 1,
-        'Interviewer': d.name,
-        'Submissions': d.count,
-        '% of Total': `${PCT(d.count, total)}%`,
-      })));
-      wsInterviewers['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 14 }, { wch: 14 }];
-      XLSXLib.utils.book_append_sheet(wb, wsInterviewers, 'Interviewers');
+      const ws6 = wb.addWorksheet('Interviewers');
+      ws6.columns = [{ width: 8 }, { width: 32 }, { width: 16 }, { width: 16 }];
+      addBanner(ws6, 'INTERVIEWER SUBMISSIONS', 4);
+      addColHdr(ws6, ['Rank', 'Interviewer', 'Submissions', '% of Total']);
+      interviewerData.forEach((d, i) => addData(ws6, [i + 1, d.name, d.count, `${PCT(d.count, total)}%`], i % 2 === 1));
 
       // ── Sheet 7: Raw Survey Data ──────────────────────────────────────────
-      const wsRaw = XLSXLib.utils.json_to_sheet(filtered.map(r => ({
-        'Household ID': r.hhid,
-        'State': r.state ? (STATE_LABELS[r.state] || r.state) : '',
-        'Locality': r.locality,
-        'Sex': r.sex === 0 ? 'Female' : 'Male',
-        'HH Head Status': r.hhStatus ? STATUS_LABELS[r.hhStatus] : '',
-        'HH Total Members': r.hhTotal,
-        'Assistance Received': r.asstReceived === 1 ? 'Yes' : r.asstReceived === 2 ? 'Partial' : 'No',
-        'Amount Received (SDG)': r.asstAmtRec,
-        'Satisfaction (1–5)': r.satisfaction ?? '',
-        'CFM Aware': r.cfm === 1 ? 'Yes' : 'No',
-        'Market Access': r.marketAccess === 1 ? 'Yes' : r.marketAccess === 0 ? 'No' : '',
-        'Interviewer': r.interviewer ?? '',
-        'Submission Date': r.submission ? String(r.submission).slice(0, 10) : '',
-      })));
-      wsRaw['!cols'] = [{ wch: 14 },{ wch: 14 },{ wch: 18 },{ wch: 8 },{ wch: 18 },{ wch: 16 },{ wch: 20 },{ wch: 22 },{ wch: 16 },{ wch: 12 },{ wch: 14 },{ wch: 22 },{ wch: 16 }];
-      XLSXLib.utils.book_append_sheet(wb, wsRaw, 'Raw Survey Data');
+      const ws7 = wb.addWorksheet('Raw Survey Data');
+      ws7.columns = [
+        { width: 16 }, { width: 14 }, { width: 18 }, { width: 8 }, { width: 18 },
+        { width: 16 }, { width: 20 }, { width: 22 }, { width: 16 }, { width: 12 },
+        { width: 14 }, { width: 22 }, { width: 16 },
+      ];
+      const rawHdrs = ['Household ID','State','Locality','Sex','HH Head Status','HH Total','Assistance Received','Amount Received (SDG)','Satisfaction (1–5)','CFM Aware','Market Access','Interviewer','Submission Date'];
+      addColHdr(ws7, rawHdrs);
+      filtered.forEach((rec, i) => {
+        addData(ws7, [
+          rec.hhid, rec.state ? (STATE_LABELS[rec.state] || rec.state) : '', rec.locality,
+          rec.sex === 0 ? 'Female' : 'Male', rec.hhStatus ? STATUS_LABELS[rec.hhStatus] : '',
+          rec.hhTotal, rec.asstReceived === 1 ? 'Yes' : rec.asstReceived === 2 ? 'Partial' : 'No',
+          rec.asstAmtRec, rec.satisfaction ?? '', rec.cfm === 1 ? 'Yes' : 'No',
+          rec.marketAccess === 1 ? 'Yes' : rec.marketAccess === 0 ? 'No' : '',
+          rec.interviewer ?? '', rec.submission ? String(rec.submission).slice(0, 10) : '',
+        ], i % 2 === 1);
+      });
+      ws7.views = [{ state: 'frozen', ySplit: 1 }];
 
-      XLSXLib.writeFile(wb, `PDM_Report_${now.replace(/ /g, '_')}.xlsx`);
-    } catch {
+      // ── Download ─────────────────────────────────────────────────────────
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PDM_Report_${now.replace(/ /g, '_')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Report export error:', err);
       alert('Could not generate report. Please try again.');
     }
   };
