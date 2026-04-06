@@ -386,6 +386,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const [feedbackFilter, setFeedbackFilter] = useState('all');
   const [feedbackPage, setFeedbackPage]     = useState(0);
   const [feedbackExpanded, setFeedbackExpanded] = useState(false);
+  const [showAllInterviewers, setShowAllInterviewers] = useState(false);
   // Bump seed version whenever defaults change — existing manual edits are
   // preserved; only blank fields are filled from the new defaults.
   const SEED_VER = 'v10-green-only'; // v10: all localities corrected to green-row counts from DCT Sample Excel
@@ -762,7 +763,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const interviewerData = useMemo(() => {
     const m: Record<string, number> = {};
     filtered.forEach(r => { if (r.interviewer) m[r.interviewer] = (m[r.interviewer] || 0) + 1; });
-    return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+    return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
   }, [filtered]);
 
   // ── State Progress Table ─────────────────────────────────────────────────
@@ -2624,11 +2625,21 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       {/* ── Row 6: Interviewers Table ── */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-2 pt-4 px-5">
-          <SectionTitle title="Top Interviewers" sub="Surveys submitted per data collector" count={total} />
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <SectionTitle title="Interviewers" sub="Surveys submitted per data collector" count={interviewerData.length} />
+            {interviewerData.length > 10 && (
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0"
+                onClick={() => setShowAllInterviewers(v => !v)}>
+                {showAllInterviewers
+                  ? <><ChevronUp className="h-3.5 w-3.5" />Show Top 10</>
+                  : <><ChevronDown className="h-3.5 w-3.5" />Show All {interviewerData.length}</>}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="px-5 pb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {interviewerData.map((d, i) => (
+            {(showAllInterviewers ? interviewerData : interviewerData.slice(0, 10)).map((d, i) => (
               <div key={i} className="flex items-center gap-3 py-1.5">
                 <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">{i + 1}</span>
                 <div className="flex-1 min-w-0">
@@ -2644,6 +2655,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
               </div>
             ))}
           </div>
+          {!showAllInterviewers && interviewerData.length > 10 && (
+            <p className="text-center text-[11px] text-muted-foreground mt-3">
+              Showing top 10 of {interviewerData.length} interviewers —{' '}
+              <button className="text-[#1D3461] font-semibold underline underline-offset-2"
+                onClick={() => setShowAllInterviewers(true)}>
+                show all
+              </button>
+            </p>
+          )}
         </CardContent>
       </Card>
 
