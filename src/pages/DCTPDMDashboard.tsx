@@ -1152,13 +1152,35 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   // ── Interviewers ─────────────────────────────────────────────────────────
   const interviewerData = useMemo(() => {
-    const m: Record<string, number> = {};
+    // Group by device ID so each physical device gets its own row.
+    // This correctly separates two phones that share a name (e.g. two "Shams Mohammed" devices).
+    const devMap: Record<string, { name: string; count: number }> = {};
     filtered.forEach(r => {
-      const key = r.interviewer || '__unassigned__';
-      m[key] = (m[key] || 0) + 1;
+      const dev  = r.deviceid  || '__nodev__';
+      const name = r.interviewer || '';
+      if (!devMap[dev]) devMap[dev] = { name, count: 0 };
+      devMap[dev].count += 1;
+      // Keep the most common name for this device
+      if (name) devMap[dev].name = name;
     });
-    const rows = Object.entries(m)
-      .map(([name, count]) => ({ name: name === '__unassigned__' ? '— Unassigned' : name, count, unassigned: name === '__unassigned__' }))
+
+    // Count how many devices share the same display name (to disambiguate)
+    const nameCounts: Record<string, number> = {};
+    Object.values(devMap).forEach(d => { const n = d.name || '__unassigned__'; nameCounts[n] = (nameCounts[n] || 0) + 1; });
+    const nameSeq: Record<string, number> = {};
+
+    const rows = Object.entries(devMap)
+      .map(([dev, { name, count }]) => {
+        const displayKey = name || '__unassigned__';
+        nameSeq[displayKey] = (nameSeq[displayKey] || 0) + 1;
+        const suffix = nameCounts[displayKey] > 1 ? ` (${nameSeq[displayKey]})` : '';
+        return {
+          name: name ? name + suffix : '— Unassigned',
+          count,
+          unassigned: !name,
+          deviceId: dev,
+        };
+      })
       .sort((a, b) => a.unassigned ? 1 : b.unassigned ? -1 : b.count - a.count);
     return rows;
   }, [filtered]);
