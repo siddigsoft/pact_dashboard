@@ -25,6 +25,7 @@ interface PDMRecord {
   locality: string | null;
   location: string | null;
   interviewer: string | null;
+  deviceid: string | null;
   hhid: string | null;
   org: number | null;
   sex: number | null;
@@ -68,6 +69,35 @@ const toNum = (v: any): number | null => {
 const toStr = (v: any): string | null =>
   (v !== null && v !== undefined && String(v).trim() !== '') ? String(v).trim() : null;
 
+// ── Canonical-name helper: for each deviceid keep the longest, most-frequent name ──
+// Records with no deviceid are left unchanged so static/pre-processed data is safe.
+function canonicaliseInterviewers(recs: PDMRecord[]): PDMRecord[] {
+  // Step 1: per non-null device, accumulate all name → count
+  const devNameFreq: Record<string, Record<string, number>> = {};
+  for (const r of recs) {
+    if (!r.deviceid) continue;                     // skip records with no deviceid
+    const name = r.interviewer?.trim();
+    if (!name) continue;
+    if (!devNameFreq[r.deviceid]) devNameFreq[r.deviceid] = {};
+    devNameFreq[r.deviceid][name] = (devNameFreq[r.deviceid][name] || 0) + 1;
+  }
+  // Step 2: per device, pick canonical = longest name; break ties by frequency
+  const devCanonical: Record<string, string> = {};
+  for (const [dev, freq] of Object.entries(devNameFreq)) {
+    const sorted = Object.entries(freq).sort((a, b) => {
+      const lenDiff = b[0].length - a[0].length;    // longer name wins
+      return lenDiff !== 0 ? lenDiff : b[1] - a[1]; // then more frequent
+    });
+    devCanonical[dev] = sorted[0][0];
+  }
+  // Step 3: replace each record's interviewer with its device's canonical name
+  return recs.map(r => {
+    if (!r.deviceid) return r;                       // no deviceid → untouched
+    const canonical = devCanonical[r.deviceid];
+    return canonical ? { ...r, interviewer: canonical } : r;
+  });
+}
+
 function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
   const sheetName = (wb.SheetNames as string[]).find((n: string) => n.toLowerCase() === 'data') || wb.SheetNames[0];
   const rows = XLSXLib.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null }) as any[][];
@@ -75,13 +105,14 @@ function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
   const headers: string[] = rows[0] as string[];
   const idx = (col: string) => headers.indexOf(col);
   const chalNums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 999];
-  return (rows.slice(2) as any[][]).map((row) => ({
+  const raw = (rows.slice(2) as any[][]).map((row) => ({
     id:             toNum(row[idx('_id')]),
     date:           row[idx('general_info/a_date')],
     state:          toStr(row[idx('general_info/a_state')]),
     locality:       toStr(row[idx('general_info/locality')]),
     location:       toStr(row[idx('general_info/location')]),
     interviewer:    toStr(row[idx('identification/a_interviewer')]),
+    deviceid:       toStr(row[idx('deviceid')]),
     hhid:           toStr(row[idx('identification/hhid')]),
     org:            toNum(row[idx('general_info/a_org')]),
     sex:            toNum(row[idx('PDM_Demographic_module/RESPSex')]),
@@ -115,6 +146,8 @@ function processWorkbook(wb: any, XLSXLib: any): PDMRecord[] {
     satisfaction: toNum(row[idx('PDM_other/Satisfaction_self')]),
     submission:   toStr(row[idx('_submission_time')]),
   }));
+  // Merge name variants that share the same deviceid → single canonical full name
+  return canonicaliseInterviewers(raw);
 }
 
 const STATE_LABELS: Record<string, string> = {
