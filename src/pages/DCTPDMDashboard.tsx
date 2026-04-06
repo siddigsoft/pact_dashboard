@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, Fragment, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import rawData from '@/data/pdm_data.json';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -678,7 +679,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
      'supervisor', 'Supervisor'].includes(userRole);
 
   const [records, setRecords] = useState<PDMRecord[]>(() => {
-    // Step 1: load raw data — localStorage first, fall back to static
+    // Fast sync init: localStorage cache → static fallback
     let base: PDMRecord[] = STATIC_DATA;
     try {
       const saved = localStorage.getItem('pact-pdm-uploaded-records');
@@ -687,7 +688,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         if (Array.isArray(parsed) && parsed.length > 0) base = parsed;
       }
     } catch { /* invalid JSON — stay on static */ }
-    // Step 2: apply name canonicalisation; if it somehow throws, keep raw data
     try { return canonicaliseInterviewers(base); } catch { return base; }
   });
   const [dataSource, setDataSource] = useState<DataSource | null>(() => {
@@ -698,6 +698,35 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     return null;
   });
   const [uploading, setUploading]   = useState(false);
+
+  // On mount: always fetch latest upload from server (overrides localStorage/static)
+  useEffect(() => {
+    supabase
+      .from('pdm_uploads')
+      .select('filename, record_count, records, uploaded_at')
+      .order('uploaded_at', { ascending: false })
+      .limit(1)
+      .then(({ data, error }) => {
+        if (error || !data || data.length === 0) return;
+        const row = data[0];
+        const parsed = row.records as PDMRecord[];
+        if (!Array.isArray(parsed) || parsed.length === 0) return;
+        const ds: DataSource = {
+          name: row.filename,
+          uploadedAt: new Date(row.uploaded_at).toLocaleString(),
+          count: row.record_count,
+        };
+        let canonicalised = parsed;
+        try { canonicalised = canonicaliseInterviewers(parsed); } catch {}
+        setRecords(canonicalised);
+        setDataSource(ds);
+        // Update local cache
+        try {
+          localStorage.setItem('pact-pdm-uploaded-records', JSON.stringify(parsed));
+          localStorage.setItem('pact-pdm-datasource', JSON.stringify(ds));
+        } catch {}
+      });
+  }, []);
   const [dragOver, setDragOver]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -923,9 +952,21 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         return;
       }
       const ds: DataSource = { name: file.name, uploadedAt: new Date().toLocaleString(), count: parsed.length };
-      setRecords(parsed);
-      setDataSource(ds);
       setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+      // Save to Supabase (server-side, available to all devices)
+      try {
+        await supabase.from('pdm_uploads').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('pdm_uploads').insert({
+          filename: file.name,
+          record_count: parsed.length,
+          records: parsed as any,
+        });
+      } catch { /* save failed silently */ }
+      // Update local state and cache
+      let canonicalised = parsed;
+      try { canonicalised = canonicaliseInterviewers(parsed); } catch {}
+      setRecords(canonicalised);
+      setDataSource(ds);
       try {
         localStorage.setItem('pact-pdm-uploaded-records', JSON.stringify(parsed));
         localStorage.setItem('pact-pdm-datasource', JSON.stringify(ds));
@@ -949,13 +990,20 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     if (file) handleFile(file);
   };
 
-  const resetToDefault = () => {
-    setRecords(STATIC_DATA); setDataSource(null);
-    setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+  const resetToDefault = async () => {
+    // Remove from Supabase so all devices revert to built-in data
+    try {
+      await supabase.from('pdm_uploads').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch {}
     try {
       localStorage.removeItem('pact-pdm-uploaded-records');
       localStorage.removeItem('pact-pdm-datasource');
     } catch {}
+    let canon = STATIC_DATA;
+    try { canon = canonicaliseInterviewers(STATIC_DATA); } catch {}
+    setRecords(canon);
+    setDataSource(null);
+    setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
   };
 
   const filtered = useMemo(() => records.filter(r => {
