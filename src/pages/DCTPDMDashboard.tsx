@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, Fragment } from 'react';
+import { useState, useMemo, useRef, useCallback, Fragment, useEffect } from 'react';
 import rawData from '@/data/pdm_data.json';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -368,6 +368,155 @@ const SUBCODE_TO_ROW_ID: Record<string, string> = {
   SD16010: 'SD16-0',
   SD17016: 'SD17-0', SD17017: 'SD17-0', SD17018: 'SD17-0',
 };
+
+// ── Heartbeat Ticker ────────────────────────────────────────────────────────
+
+const PDM_TICKER_MESSAGES: { text: string; urgency: 'high' | 'medium' | 'low' }[] = [
+  { urgency: 'high',   text: 'MMP Cycle 4 closes 15 Apr — all field teams must submit reports before end of day' },
+  { urgency: 'medium', text: 'New deviation: Khartoum locality sample adjusted — submit updated deviation report to supervisor' },
+  { urgency: 'medium', text: 'White Nile data collection extended to 20 Apr due to access constraints in southern zones' },
+  { urgency: 'low',    text: 'River Nile: 463 / 500 HHs reached — follow-up visits scheduled for remaining 37 households' },
+  { urgency: 'low',    text: 'PDM Dashboard updated — upload latest survey data to reflect current coverage totals' },
+];
+
+const URGENCY_COLOR: Record<string, string> = {
+  high:   '#ef4444',
+  medium: '#f5c842',
+  low:    '#60a5fa',
+};
+
+type TickerPhase = 'collapsed' | 'expanding' | 'open' | 'collapsing';
+
+function PDMHeartbeatTicker() {
+  const [phase, setPhase]   = useState<TickerPhase>('collapsed');
+  const [msgIdx, setMsgIdx] = useState(0);
+  const timerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const COLLAPSED_H = 4;
+  const OPEN_H      = 52;
+  const OPEN_MS     = 8000;
+  const ANIM_MS     = 360;
+  const PAUSE_MS    = 4000;
+
+  const clear = () => { if (timerRef.current) clearTimeout(timerRef.current); };
+
+  const advance = useCallback((nextIdx: number) => {
+    clear();
+    const idx = nextIdx % PDM_TICKER_MESSAGES.length;
+    setMsgIdx(idx);
+    setPhase('expanding');
+    timerRef.current = setTimeout(() => {
+      setPhase('open');
+      timerRef.current = setTimeout(() => {
+        setPhase('collapsing');
+        timerRef.current = setTimeout(() => {
+          setPhase('collapsed');
+          timerRef.current = setTimeout(() => advance(idx + 1), PAUSE_MS);
+        }, ANIM_MS);
+      }, OPEN_MS);
+    }, ANIM_MS);
+  }, []);
+
+  useEffect(() => {
+    timerRef.current = setTimeout(() => advance(0), PAUSE_MS);
+    return clear;
+  }, [advance]);
+
+  const dismiss = () => {
+    clear();
+    setPhase('collapsing');
+    timerRef.current = setTimeout(() => {
+      setPhase('collapsed');
+      timerRef.current = setTimeout(() => advance(msgIdx + 1), PAUSE_MS);
+    }, ANIM_MS);
+  };
+
+  const msg         = PDM_TICKER_MESSAGES[msgIdx];
+  const accentColor = URGENCY_COLOR[msg.urgency];
+  const isOpen      = phase === 'expanding' || phase === 'open' || phase === 'collapsing';
+  const barHeight   = isOpen ? OPEN_H : COLLAPSED_H;
+  const contentOpacity = phase === 'open' ? 1 : 0;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 50,
+        height: `${barHeight}px`,
+        background: isOpen ? '#0F2041' : accentColor,
+        borderTop: isOpen ? `1px solid ${accentColor}30` : 'none',
+        boxShadow: isOpen ? `0 -6px 24px ${accentColor}25` : 'none',
+        transition: `height ${ANIM_MS}ms cubic-bezier(0.34,1.56,0.64,1), background 220ms ease, box-shadow 220ms ease`,
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        fontFamily: 'inherit',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          width: '100%',
+          height: '100%',
+          opacity: contentOpacity,
+          transition: `opacity ${ANIM_MS * 0.55}ms ease`,
+          overflow: 'hidden',
+        }}
+      >
+        {/* PACT anchor */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '0 16px',
+            height: '100%',
+            flexShrink: 0,
+            borderRight: `1px solid ${accentColor}30`,
+            background: '#08152e',
+          }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.2em', color: '#f5c842' }}>PACT</span>
+          <span style={{ width: 1, height: 14, background: accentColor, opacity: 0.45 }} />
+          <span style={{ fontSize: 8, fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase', color: accentColor }}>
+            {msg.urgency === 'high' ? 'URGENT' : msg.urgency === 'medium' ? 'NOTICE' : 'UPDATE'}
+          </span>
+        </div>
+
+        {/* Message text */}
+        <div style={{ flex: 1, padding: '0 18px', overflow: 'hidden' }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {msg.text}
+          </p>
+        </div>
+
+        {/* Accent dot + dismiss */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 14, flexShrink: 0 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: accentColor, display: 'inline-block' }} />
+          <button
+            onClick={dismiss}
+            aria-label="Dismiss announcement"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#64748b', fontSize: 18, lineHeight: 1, padding: '2px 4px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#e2e8f0')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#64748b')}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: boolean } = {}) {
   const { currentUser } = useSafeAppContext() ?? {};
@@ -1895,7 +2044,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   };
 
   return (
-    <div className="p-4 space-y-5 max-w-[1400px] mx-auto">
+    <div className="p-4 pb-8 space-y-5 max-w-[1400px] mx-auto">
       {/* ── Hidden file input ── */}
       <input
         ref={fileInputRef}
@@ -2863,6 +3012,9 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           © {new Date().getFullYear()} PACT — All rights reserved.
         </p>
       </div>
+
+      {/* ── Heartbeat Ticker ── */}
+      <PDMHeartbeatTicker />
     </div>
   );
 }
