@@ -442,7 +442,7 @@ function PDMHeartbeatTicker({ dataSource, records }: TickerProps) {
     msgs.push({
       urgency: 'high',
       label:   'DEADLINE',
-      text:    `MMP Cycle 4 closes 15 Apr 2026 — all field teams must submit reports before end of day`,
+      text:    `MMP Cycle 4 closes 10 Apr 2026 — all field teams must submit reports before end of day`,
     });
 
     return msgs;
