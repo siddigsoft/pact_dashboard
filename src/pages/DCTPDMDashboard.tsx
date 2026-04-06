@@ -678,15 +678,17 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
      'supervisor', 'Supervisor'].includes(userRole);
 
   const [records, setRecords] = useState<PDMRecord[]>(() => {
+    // Step 1: load raw data — localStorage first, fall back to static
+    let base: PDMRecord[] = STATIC_DATA;
     try {
       const saved = localStorage.getItem('pact-pdm-uploaded-records');
       if (saved) {
         const parsed = JSON.parse(saved) as PDMRecord[];
-        if (Array.isArray(parsed) && parsed.length > 0)
-          return canonicaliseInterviewers(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) base = parsed;
       }
-    } catch {}
-    return canonicaliseInterviewers(STATIC_DATA);
+    } catch { /* invalid JSON — stay on static */ }
+    // Step 2: apply name canonicalisation; if it somehow throws, keep raw data
+    try { return canonicaliseInterviewers(base); } catch { return base; }
   });
   const [dataSource, setDataSource] = useState<DataSource | null>(() => {
     try {
