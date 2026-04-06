@@ -1024,7 +1024,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     if (stateFilter     !== 'all' && r.state            !== stateFilter)            return false;
     if (sexFilter       !== 'all' && String(r.sex)      !== sexFilter)               return false;
     if (rcvFilter       !== 'all' && String(r.asstReceived) !== rcvFilter)           return false;
-    if (collectorFilter !== 'all' && r.interviewer      !== collectorFilter)         return false;
+    if (collectorFilter === '__unassigned__' && r.interviewer) return false;
+    if (collectorFilter !== 'all' && collectorFilter !== '__unassigned__' && r.interviewer !== collectorFilter) return false;
     return true;
   }), [records, stateFilter, sexFilter, rcvFilter, collectorFilter]);
 
@@ -1152,8 +1153,14 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // ── Interviewers ─────────────────────────────────────────────────────────
   const interviewerData = useMemo(() => {
     const m: Record<string, number> = {};
-    filtered.forEach(r => { if (r.interviewer) m[r.interviewer] = (m[r.interviewer] || 0) + 1; });
-    return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+    filtered.forEach(r => {
+      const key = r.interviewer || '__unassigned__';
+      m[key] = (m[key] || 0) + 1;
+    });
+    const rows = Object.entries(m)
+      .map(([name, count]) => ({ name: name === '__unassigned__' ? '— Unassigned' : name, count, unassigned: name === '__unassigned__' }))
+      .sort((a, b) => a.unassigned ? 1 : b.unassigned ? -1 : b.count - a.count);
+    return rows;
   }, [filtered]);
 
   // ── State Progress Table ─────────────────────────────────────────────────
@@ -2369,6 +2376,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
             {collectorOptions.map(name => (
               <SelectItem key={name} value={name} className="text-xs" dir="auto">{name}</SelectItem>
             ))}
+            <SelectItem value="__unassigned__" className="text-xs text-muted-foreground">— Unassigned (no name)</SelectItem>
           </SelectContent>
         </Select>
         {hasFilter && (
@@ -3042,16 +3050,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         <CardContent className="px-5 pb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {(showAllInterviewers ? interviewerData : interviewerData.slice(0, 10)).map((d, i) => (
-              <div key={i} className="flex items-center gap-3 py-1.5">
-                <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">{i + 1}</span>
+              <div key={i} className={`flex items-center gap-3 py-1.5 ${d.unassigned ? 'opacity-60' : ''}`}>
+                <span className="text-[10px] font-bold text-muted-foreground w-5 text-right">
+                  {d.unassigned ? '–' : i + 1}
+                </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-xs font-medium truncate">{d.name}</span>
-                    <span className="text-[11px] font-bold text-[#1D3461] ml-2 shrink-0">{d.count}</span>
+                    <span className={`text-xs truncate ${d.unassigned ? 'italic text-muted-foreground' : 'font-medium'}`}>{d.name}</span>
+                    <span className={`text-[11px] font-bold ml-2 shrink-0 ${d.unassigned ? 'text-muted-foreground' : 'text-[#1D3461]'}`}>{d.count}</span>
                   </div>
                   <div className="w-full bg-muted rounded-full h-1.5">
-                    <div className="h-full rounded-full bg-[#1D3461]"
-                      style={{ width: `${PCT(d.count, interviewerData[0]?.count || 1)}%` }} />
+                    <div className={`h-full rounded-full ${d.unassigned ? 'bg-muted-foreground/40' : 'bg-[#1D3461]'}`}
+                      style={{ width: `${PCT(d.count, interviewerData.filter(x => !x.unassigned)[0]?.count || 1)}%` }} />
                   </div>
                 </div>
               </div>
@@ -3059,7 +3069,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           </div>
           {!showAllInterviewers && interviewerData.length > 10 && (
             <p className="text-center text-[11px] text-muted-foreground mt-3">
-              Showing top 10 of {interviewerData.length} interviewers —{' '}
+              Showing top 10 of {interviewerData.length} collectors —{' '}
               <button className="text-[#1D3461] font-semibold underline underline-offset-2"
                 onClick={() => setShowAllInterviewers(true)}>
                 show all
