@@ -730,9 +730,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const [dragOver, setDragOver]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [stateFilter, setStateFilter] = useState('all');
-  const [sexFilter,   setSexFilter]   = useState('all');
-  const [rcvFilter,   setRcvFilter]   = useState('all');
+  const [stateFilter,     setStateFilter]     = useState('all');
+  const [sexFilter,       setSexFilter]       = useState('all');
+  const [rcvFilter,       setRcvFilter]       = useState('all');
+  const [collectorFilter, setCollectorFilter] = useState('all');
 
   const [feedbackFilter, setFeedbackFilter] = useState('all');
   const [feedbackPage, setFeedbackPage]     = useState(0);
@@ -952,7 +953,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         return;
       }
       const ds: DataSource = { name: file.name, uploadedAt: new Date().toLocaleString(), count: parsed.length };
-      setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+      setStateFilter('all'); setSexFilter('all'); setRcvFilter('all'); setCollectorFilter('all');
       // Save to Supabase — server-side so ALL devices see the same data
       const { error: delErr } = await supabase
         .from('pdm_uploads')
@@ -1011,18 +1012,24 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     try { canon = canonicaliseInterviewers(STATIC_DATA); } catch {}
     setRecords(canon);
     setDataSource(null);
-    setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+    setStateFilter('all'); setSexFilter('all'); setRcvFilter('all'); setCollectorFilter('all');
   };
 
+  // Sorted unique data collector names for the filter dropdown
+  const collectorOptions = useMemo(() =>
+    Array.from(new Set(records.map(r => r.interviewer).filter(Boolean) as string[])).sort(),
+  [records]);
+
   const filtered = useMemo(() => records.filter(r => {
-    if (stateFilter !== 'all' && r.state !== stateFilter) return false;
-    if (sexFilter   !== 'all' && String(r.sex)   !== sexFilter)   return false;
-    if (rcvFilter   !== 'all' && String(r.asstReceived) !== rcvFilter) return false;
+    if (stateFilter     !== 'all' && r.state            !== stateFilter)            return false;
+    if (sexFilter       !== 'all' && String(r.sex)      !== sexFilter)               return false;
+    if (rcvFilter       !== 'all' && String(r.asstReceived) !== rcvFilter)           return false;
+    if (collectorFilter !== 'all' && r.interviewer      !== collectorFilter)         return false;
     return true;
-  }), [records, stateFilter, sexFilter, rcvFilter]);
+  }), [records, stateFilter, sexFilter, rcvFilter, collectorFilter]);
 
   const total = filtered.length;
-  const hasFilter = stateFilter !== 'all' || sexFilter !== 'all' || rcvFilter !== 'all';
+  const hasFilter = stateFilter !== 'all' || sexFilter !== 'all' || rcvFilter !== 'all' || collectorFilter !== 'all';
 
   // Per-locality reached counts — uses `filtered` so it stays in sync with
   // every other section (Top Interviewers, charts, KPIs) when filters are active.
@@ -2352,6 +2359,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
             <SelectItem value="3" className="text-xs">Not Received</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={collectorFilter} onValueChange={setCollectorFilter}>
+          <SelectTrigger className="h-8 w-auto text-xs gap-1.5 min-w-[160px]" data-testid="filter-collector">
+            <Users className="h-3 w-3 text-muted-foreground" />
+            <SelectValue placeholder="All Data Collectors" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All — Data Collectors</SelectItem>
+            {collectorOptions.map(name => (
+              <SelectItem key={name} value={name} className="text-xs" dir="auto">{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {hasFilter && (
           <Badge variant="secondary" className="text-[10px] ml-auto">
             {total} / {records.length} records
@@ -3009,7 +3028,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       <Card className="border shadow-sm">
         <CardHeader className="pb-2 pt-4 px-5">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <SectionTitle title="Interviewers" sub="Surveys submitted per data collector" count={interviewerData.length} />
+            <SectionTitle title="Data Collectors" sub="Surveys submitted per data collector" count={interviewerData.length} />
             {interviewerData.length > 10 && (
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0"
                 onClick={() => setShowAllInterviewers(v => !v)}>
