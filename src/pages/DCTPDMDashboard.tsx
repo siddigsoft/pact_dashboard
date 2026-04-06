@@ -358,8 +358,23 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin',
      'supervisor', 'Supervisor'].includes(userRole);
 
-  const [records, setRecords]       = useState<PDMRecord[]>(STATIC_DATA);
-  const [dataSource, setDataSource] = useState<DataSource | null>(null);
+  const [records, setRecords] = useState<PDMRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('pact-pdm-uploaded-records');
+      if (saved) {
+        const parsed = JSON.parse(saved) as PDMRecord[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return STATIC_DATA;
+  });
+  const [dataSource, setDataSource] = useState<DataSource | null>(() => {
+    try {
+      const saved = localStorage.getItem('pact-pdm-datasource');
+      if (saved) return JSON.parse(saved) as DataSource;
+    } catch {}
+    return null;
+  });
   const [uploading, setUploading]   = useState(false);
   const [dragOver, setDragOver]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -579,9 +594,14 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         alert('No data rows found. Make sure this is the PDM exported data file (not the XLSform).');
         return;
       }
+      const ds: DataSource = { name: file.name, uploadedAt: new Date().toLocaleString(), count: parsed.length };
       setRecords(parsed);
-      setDataSource({ name: file.name, uploadedAt: new Date().toLocaleString(), count: parsed.length });
+      setDataSource(ds);
       setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+      try {
+        localStorage.setItem('pact-pdm-uploaded-records', JSON.stringify(parsed));
+        localStorage.setItem('pact-pdm-datasource', JSON.stringify(ds));
+      } catch { /* quota exceeded — fail silently */ }
     } catch (err) {
       alert('Could not read the file. Please check it is a valid Excel export.');
     } finally {
@@ -604,6 +624,10 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const resetToDefault = () => {
     setRecords(STATIC_DATA); setDataSource(null);
     setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
+    try {
+      localStorage.removeItem('pact-pdm-uploaded-records');
+      localStorage.removeItem('pact-pdm-datasource');
+    } catch {}
   };
 
   const filtered = useMemo(() => records.filter(r => {
