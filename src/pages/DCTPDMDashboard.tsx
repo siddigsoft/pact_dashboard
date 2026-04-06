@@ -3013,8 +3013,8 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         </p>
       </div>
 
-      {/* ── Heartbeat Ticker ── */}
-      <PDMHeartbeatTicker />
+      {/* ── Heartbeat Ticker — internal staff view only ── */}
+      {!publicMode && <PDMHeartbeatTicker />}
     </div>
   );
 }
