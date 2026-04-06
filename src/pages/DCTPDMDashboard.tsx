@@ -522,16 +522,6 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       }));
   }, [localityRows, allStateRows]);
 
-  // Per-locality reached counts (mapped from survey sub-codes via SUBCODE_TO_ROW_ID)
-  const localityReached = useMemo(() => {
-    const map: Record<string, number> = {};
-    records.forEach(r => {
-      const rowId = r.locality ? SUBCODE_TO_ROW_ID[r.locality as string] : undefined;
-      if (rowId) map[rowId] = (map[rowId] || 0) + 1;
-    });
-    return map;
-  }, [records]);
-
   // Edit mode — table inputs only visible when toggled on
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -625,6 +615,17 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   const total = filtered.length;
   const hasFilter = stateFilter !== 'all' || sexFilter !== 'all' || rcvFilter !== 'all';
+
+  // Per-locality reached counts — uses `filtered` so it stays in sync with
+  // every other section (Top Interviewers, charts, KPIs) when filters are active.
+  const localityReached = useMemo(() => {
+    const map: Record<string, number> = {};
+    filtered.forEach(r => {
+      const rowId = r.locality ? SUBCODE_TO_ROW_ID[r.locality as string] : undefined;
+      if (rowId) map[rowId] = (map[rowId] || 0) + 1;
+    });
+    return map;
+  }, [filtered]);
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
   const consentRate = PCT(filtered.filter(r => r.satisfaction != null).length, total);
