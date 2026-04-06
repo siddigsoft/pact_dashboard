@@ -87,7 +87,10 @@ function normName(s: string): string {
 //            and prefix names ("نفيسة" → "نفيسة محمد", "Shams" → "Shams Mohammed")
 // Works on records with OR without a deviceid, so static data is also cleaned.
 function canonicaliseInterviewers(recs: PDMRecord[]): PDMRecord[] {
-  // ── Phase 1: per-device deduplication ──────────────────────────────────────
+  // ── Phase 1: fill BLANK names only from same-device records ────────────────
+  // IMPORTANT: never overwrite an existing name — multiple people can share
+  // the same device (tablet passed between collectors). Only use device lookup
+  // to fill in records where identification/a_interviewer was left empty.
   const devFreq: Record<string, Record<string, number>> = {};
   for (const r of recs) {
     if (!r.deviceid) continue;
@@ -98,12 +101,11 @@ function canonicaliseInterviewers(recs: PDMRecord[]): PDMRecord[] {
   }
   const devCanonical: Record<string, string> = {};
   for (const [dev, freq] of Object.entries(devFreq)) {
-    devCanonical[dev] = Object.entries(freq).sort((a, b) => {
-      const ld = b[0].length - a[0].length;
-      return ld !== 0 ? ld : b[1] - a[1];
-    })[0][0];
+    devCanonical[dev] = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
   }
   const phase1 = recs.map(r => {
+    // Only fill blank names — never overwrite a name that is already set
+    if (r.interviewer?.trim()) return r;
     if (!r.deviceid) return r;
     const c = devCanonical[r.deviceid];
     return c ? { ...r, interviewer: c } : r;
@@ -1152,37 +1154,20 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
 
   // ── Interviewers ─────────────────────────────────────────────────────────
   const interviewerData = useMemo(() => {
-    // Group by device ID so each physical device gets its own row.
-    // This correctly separates two phones that share a name (e.g. two "Shams Mohammed" devices).
-    const devMap: Record<string, { name: string; count: number }> = {};
+    // Group by name — each unique collector name = one row.
+    // Phase 1 fix ensures names are never overwritten, so this is now accurate.
+    const m: Record<string, number> = {};
     filtered.forEach(r => {
-      const dev  = r.deviceid  || '__nodev__';
-      const name = r.interviewer || '';
-      if (!devMap[dev]) devMap[dev] = { name, count: 0 };
-      devMap[dev].count += 1;
-      // Keep the most common name for this device
-      if (name) devMap[dev].name = name;
+      const key = r.interviewer?.trim() || '__unassigned__';
+      m[key] = (m[key] || 0) + 1;
     });
-
-    // Count how many devices share the same display name (to disambiguate)
-    const nameCounts: Record<string, number> = {};
-    Object.values(devMap).forEach(d => { const n = d.name || '__unassigned__'; nameCounts[n] = (nameCounts[n] || 0) + 1; });
-    const nameSeq: Record<string, number> = {};
-
-    const rows = Object.entries(devMap)
-      .map(([dev, { name, count }]) => {
-        const displayKey = name || '__unassigned__';
-        nameSeq[displayKey] = (nameSeq[displayKey] || 0) + 1;
-        const suffix = nameCounts[displayKey] > 1 ? ` (${nameSeq[displayKey]})` : '';
-        return {
-          name: name ? name + suffix : '— Unassigned',
-          count,
-          unassigned: !name,
-          deviceId: dev,
-        };
-      })
+    return Object.entries(m)
+      .map(([name, count]) => ({
+        name: name === '__unassigned__' ? '— Unassigned' : name,
+        count,
+        unassigned: name === '__unassigned__',
+      }))
       .sort((a, b) => a.unassigned ? 1 : b.unassigned ? -1 : b.count - a.count);
-    return rows;
   }, [filtered]);
 
   // ── State Progress Table ─────────────────────────────────────────────────
