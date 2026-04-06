@@ -2,6 +2,11 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/cost-group/GroupedList.tsx": () => import("../components/mockups/cost-group/GroupedList.tsx"),
+  "./components/mockups/pdm-ticker/AmberAlert.tsx": () => import("../components/mockups/pdm-ticker/AmberAlert.tsx"),
+  "./components/mockups/pdm-ticker/BreakingNews.tsx": () => import("../components/mockups/pdm-ticker/BreakingNews.tsx"),
+  "./components/mockups/pdm-ticker/FadeCards.tsx": () => import("../components/mockups/pdm-ticker/FadeCards.tsx"),
+  "./components/mockups/pdm-ticker/PACTMarquee.tsx": () => import("../components/mockups/pdm-ticker/PACTMarquee.tsx"),
+  "./components/mockups/pdm-ticker/SplitPanel.tsx": () => import("../components/mockups/pdm-ticker/SplitPanel.tsx"),
   "./components/mockups/mmp-card/OptionA.tsx": () => import("../components/mockups/mmp-card/OptionA.tsx"),
   "./components/mockups/mmp-card/OptionB.tsx": () => import("../components/mockups/mmp-card/OptionB.tsx"),
   "./components/mockups/mmp-card/OptionC.tsx": () => import("../components/mockups/mmp-card/OptionC.tsx"),
