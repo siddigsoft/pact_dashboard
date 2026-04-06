@@ -371,13 +371,8 @@ const SUBCODE_TO_ROW_ID: Record<string, string> = {
 
 // ── Heartbeat Ticker ────────────────────────────────────────────────────────
 
-const PDM_TICKER_MESSAGES: { text: string; urgency: 'high' | 'medium' | 'low' }[] = [
-  { urgency: 'high',   text: 'MMP Cycle 4 closes 15 Apr — all field teams must submit reports before end of day' },
-  { urgency: 'medium', text: 'New deviation: Khartoum locality sample adjusted — submit updated deviation report to supervisor' },
-  { urgency: 'medium', text: 'White Nile data collection extended to 20 Apr due to access constraints in southern zones' },
-  { urgency: 'low',    text: 'River Nile: 463 / 500 HHs reached — follow-up visits scheduled for remaining 37 households' },
-  { urgency: 'low',    text: 'PDM Dashboard updated — upload latest survey data to reflect current coverage totals' },
-];
+const TICKER_TOTAL_PLANNED = Object.values(SAMPLE_PLANNED)
+  .reduce((sum, v) => sum + (v ? parseInt(v, 10) : 0), 0); // 1660
 
 const URGENCY_COLOR: Record<string, string> = {
   high:   '#ef4444',
@@ -386,15 +381,80 @@ const URGENCY_COLOR: Record<string, string> = {
 };
 
 type TickerPhase = 'collapsed' | 'expanding' | 'open' | 'collapsing';
+type TickerMsg   = { text: string; label: string; urgency: 'high' | 'medium' | 'low' };
 
-function PDMHeartbeatTicker() {
+interface TickerProps { dataSource: DataSource | null; records: PDMRecord[]; }
+
+function PDMHeartbeatTicker({ dataSource, records }: TickerProps) {
+  const messages = useMemo((): TickerMsg[] => {
+    const msgs: TickerMsg[] = [];
+
+    // ① Batch / upload info
+    if (dataSource) {
+      msgs.push({
+        urgency: 'low',
+        label:   'BATCH',
+        text:    `${dataSource.name} · ${dataSource.count.toLocaleString()} records · Uploaded: ${dataSource.uploadedAt}`,
+      });
+    } else {
+      msgs.push({
+        urgency: 'low',
+        label:   'DATA',
+        text:    `Showing built-in static dataset · Upload an Excel file to load live survey data`,
+      });
+    }
+
+    // ② Coverage summary
+    const reached = records.length;
+    const pct     = TICKER_TOTAL_PLANNED > 0 ? Math.round((reached / TICKER_TOTAL_PLANNED) * 100) : 0;
+    msgs.push({
+      urgency: pct < 50 ? 'high' : pct < 85 ? 'medium' : 'low',
+      label:   'COVERAGE',
+      text:    `${reached.toLocaleString()} / ${TICKER_TOTAL_PLANNED.toLocaleString()} HHs surveyed · ${pct}% of DCT planned target`,
+    });
+
+    // ③ State breakdown — active states + top performer
+    const stateMap: Record<string, number> = {};
+    records.forEach(r => { if (r.state) stateMap[r.state] = (stateMap[r.state] || 0) + 1; });
+    const activeStates = Object.keys(stateMap).length;
+    const sorted = Object.entries(stateMap).sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 0) {
+      const [topCode, topCount] = sorted[0];
+      const topName = STATE_LABELS[topCode] || topCode;
+      msgs.push({
+        urgency: 'low',
+        label:   'STATES',
+        text:    `${activeStates} state${activeStates !== 1 ? 's' : ''} active · Top: ${topName} (${topCount.toLocaleString()} surveys) · ${sorted.length} / ${Object.keys(SAMPLE_PLANNED).filter(k => SAMPLE_PLANNED[k]).length} planned states`,
+      });
+    }
+
+    // ④ Interviewer count from live records
+    const interviewers = new Set(records.map(r => r.interviewer).filter(Boolean));
+    if (interviewers.size > 0) {
+      msgs.push({
+        urgency: 'low',
+        label:   'TEAM',
+        text:    `${interviewers.size} data collector${interviewers.size !== 1 ? 's' : ''} active · ${records.length} total submissions across ${activeStates} state${activeStates !== 1 ? 's' : ''}`,
+      });
+    }
+
+    // ⑤ Cycle deadline — always last
+    msgs.push({
+      urgency: 'high',
+      label:   'DEADLINE',
+      text:    `MMP Cycle 4 closes 15 Apr 2026 — all field teams must submit reports before end of day`,
+    });
+
+    return msgs;
+  }, [dataSource, records]);
+
   const [phase, setPhase]   = useState<TickerPhase>('collapsed');
   const [msgIdx, setMsgIdx] = useState(0);
   const timerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const COLLAPSED_H = 4;
   const OPEN_H      = 52;
-  const OPEN_MS     = 8000;
+  const OPEN_MS     = 9000;
   const ANIM_MS     = 360;
   const PAUSE_MS    = 4000;
 
@@ -402,7 +462,7 @@ function PDMHeartbeatTicker() {
 
   const advance = useCallback((nextIdx: number) => {
     clear();
-    const idx = nextIdx % PDM_TICKER_MESSAGES.length;
+    const idx = nextIdx % messages.length;
     setMsgIdx(idx);
     setPhase('expanding');
     timerRef.current = setTimeout(() => {
@@ -415,11 +475,13 @@ function PDMHeartbeatTicker() {
         }, ANIM_MS);
       }, OPEN_MS);
     }, ANIM_MS);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   useEffect(() => {
     timerRef.current = setTimeout(() => advance(0), PAUSE_MS);
     return clear;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advance]);
 
   const dismiss = () => {
@@ -431,10 +493,10 @@ function PDMHeartbeatTicker() {
     }, ANIM_MS);
   };
 
-  const msg         = PDM_TICKER_MESSAGES[msgIdx];
-  const accentColor = URGENCY_COLOR[msg.urgency];
-  const isOpen      = phase === 'expanding' || phase === 'open' || phase === 'collapsing';
-  const barHeight   = isOpen ? OPEN_H : COLLAPSED_H;
+  const msg            = messages[Math.min(msgIdx, messages.length - 1)];
+  const accentColor    = URGENCY_COLOR[msg.urgency];
+  const isOpen         = phase === 'expanding' || phase === 'open' || phase === 'collapsing';
+  const barHeight      = isOpen ? OPEN_H : COLLAPSED_H;
   const contentOpacity = phase === 'open' ? 1 : 0;
 
   return (
@@ -467,42 +529,45 @@ function PDMHeartbeatTicker() {
           overflow: 'hidden',
         }}
       >
-        {/* PACT anchor */}
+        {/* PACT · label anchor */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            padding: '0 16px',
+            padding: '0 14px',
             height: '100%',
             flexShrink: 0,
             borderRight: `1px solid ${accentColor}30`,
             background: '#08152e',
           }}
         >
-          <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.2em', color: '#f5c842' }}>PACT</span>
-          <span style={{ width: 1, height: 14, background: accentColor, opacity: 0.45 }} />
+          <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.2em', color: '#f5c842' }}>PACT</span>
+          <span style={{ width: 1, height: 12, background: accentColor, opacity: 0.45 }} />
           <span style={{ fontSize: 8, fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase', color: accentColor }}>
-            {msg.urgency === 'high' ? 'URGENT' : msg.urgency === 'medium' ? 'NOTICE' : 'UPDATE'}
+            {msg.label}
           </span>
         </div>
 
         {/* Message text */}
-        <div style={{ flex: 1, padding: '0 18px', overflow: 'hidden' }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ flex: 1, padding: '0 16px', overflow: 'hidden' }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {msg.text}
           </p>
         </div>
 
-        {/* Accent dot + dismiss */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 14, flexShrink: 0 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: accentColor, display: 'inline-block' }} />
+        {/* Counter + dismiss */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 12, flexShrink: 0, borderLeft: `1px solid ${accentColor}20` }}>
+          <span style={{ fontSize: 9, color: '#64748b', fontFamily: 'monospace', paddingLeft: 10 }}>
+            {Math.min(msgIdx, messages.length - 1) + 1}/{messages.length}
+          </span>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, display: 'inline-block' }} />
           <button
             onClick={dismiss}
-            aria-label="Dismiss announcement"
+            aria-label="Dismiss"
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              color: '#64748b', fontSize: 18, lineHeight: 1, padding: '2px 4px',
+              color: '#64748b', fontSize: 17, lineHeight: 1, padding: '2px 2px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
             onMouseEnter={e => (e.currentTarget.style.color = '#e2e8f0')}
@@ -3014,7 +3079,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       </div>
 
       {/* ── Heartbeat Ticker — internal staff view only ── */}
-      {!publicMode && <PDMHeartbeatTicker />}
+      {!publicMode && <PDMHeartbeatTicker dataSource={dataSource} records={records} />}
     </div>
   );
 }
