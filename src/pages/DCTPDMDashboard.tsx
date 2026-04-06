@@ -2151,7 +2151,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 Built-in dataset (Apr 2026)
               </Badge>
             )}
-            {dataSource && (
+            {dataSource && !publicMode && (
               <button onClick={resetToDefault} className="text-[10px] text-muted-foreground hover:text-foreground underline">
                 reset to default
               </button>
