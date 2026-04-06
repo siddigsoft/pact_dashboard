@@ -240,7 +240,16 @@ interface LocalityTarget { planned: string; locality: string; deviation: string;
 interface LocalityRow { id: string; stateCode: string; locality: string; planned: string; deviation: string; remarks: string; }
 
 const FEEDBACK_PAGE_SIZE = 10;
-const LOCALITY_ROWS_VER = 'v10'; // v10: force re-migration to catch any stale Rabak/Shendi/Al Golid
+const LOCALITY_ROWS_VER  = 'v10'; // v10: force re-migration to catch any stale Rabak/Shendi/Al Golid
+const DEVIATIONS_VER    = 'v2';  // v2: SD01 corrected from 60 HHs → 45 HHs
+
+// ── State-level Reason for Deviation — edit here, bump DEVIATIONS_VER, push to deploy ─
+const SEED_STATE_DEVIATIONS: Record<string, string> = {
+  SD01: '45 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.',
+  SD09: '100 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 40 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 14 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.',
+  SD16: '37 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 9 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 13 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.',
+  SD17: '25 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 14 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 1 HH had an incorrect or invalid phone number that does not correspond to the registered beneficiary, confirmed after several verification attempts.',
+};
 
 // State-level totals — GREEN rows only from DCT Sample Excel (Apr 2026)
 // v8: All localities corrected to green-highlighted HH counts from DCT Sample file
@@ -277,7 +286,7 @@ const SAMPLE_DEFAULTS: Record<string, { locality: string; deviation: string; rem
 // Each planned number = count of green-highlighted HHs in the respective sheet
 const SEED_LOCALITY_ROWS_V2: LocalityRow[] = [
   // Khartoum (SD01): KRT Bahri sheet 100 green; KRT Sharg An Neel sheet 150 green
-  { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '100', deviation: '60 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
+  { id: 'SD01-0', stateCode: 'SD01', locality: 'Bahri',         planned: '100', deviation: '45 HHs phone numbers were found closed — multiple contact attempts were made at different times and dates throughout the data collection period with no success; 20 HHs did not respond despite repeated calls placed at different times of day and on separate dates, with all attempts exhausted and no answer received; 7 HHs had incorrect or invalid phone numbers that do not correspond to the registered beneficiaries, confirmed after several verification attempts.', remarks: '' },
   { id: 'SD01-1', stateCode: 'SD01', locality: 'Sharg An Neel', planned: '150', deviation: '', remarks: '' },
   // North Darfur (SD02): ND sheet — El Fasher 116 + El Fasher Town 9 + El Fasher Rural 25 = 150 green
   { id: 'SD02-0', stateCode: 'SD02', locality: 'El Fasher',     planned: '150', deviation: '', remarks: '' },
@@ -541,24 +550,29 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // Edit mode — table inputs only visible when toggled on
   const [isEditMode, setIsEditMode] = useState(false);
 
-  // State-level Reason for Deviation (one per state, not per locality)
+  // State-level Reason for Deviation — versioned so code changes deploy everywhere.
+  // To update: edit SEED_STATE_DEVIATIONS above, bump DEVIATIONS_VER, push to GitHub.
   const [stateDeviations, setStateDeviations] = useState<Record<string, string>>(() => {
     try {
+      const ver    = localStorage.getItem('pact-pdm-state-deviations-ver');
       const stored = localStorage.getItem('pact-pdm-state-deviations');
-      if (stored) return JSON.parse(stored);
+      if (ver === DEVIATIONS_VER && stored) return JSON.parse(stored);
     } catch {}
-    // Seed from first non-empty deviation in each state's seed rows
-    const seeded: Record<string, string> = {};
-    SEED_LOCALITY_ROWS_V2.forEach(r => {
-      if (r.deviation && !seeded[r.stateCode]) seeded[r.stateCode] = r.deviation;
-    });
-    return seeded;
+    // Version mismatch or fresh browser → write seed to localStorage and return it
+    try {
+      localStorage.setItem('pact-pdm-state-deviations', JSON.stringify(SEED_STATE_DEVIATIONS));
+      localStorage.setItem('pact-pdm-state-deviations-ver', DEVIATIONS_VER);
+    } catch {}
+    return { ...SEED_STATE_DEVIATIONS };
   });
 
   const updateStateDeviation = (code: string, val: string) => {
     setStateDeviations(prev => {
       const next = { ...prev, [code]: val };
-      try { localStorage.setItem('pact-pdm-state-deviations', JSON.stringify(next)); } catch {}
+      try {
+        localStorage.setItem('pact-pdm-state-deviations', JSON.stringify(next));
+        localStorage.setItem('pact-pdm-state-deviations-ver', DEVIATIONS_VER);
+      } catch {}
       return next;
     });
   };
