@@ -69,32 +69,95 @@ const toNum = (v: any): number | null => {
 const toStr = (v: any): string | null =>
   (v !== null && v !== undefined && String(v).trim() !== '') ? String(v).trim() : null;
 
-// ── Canonical-name helper: for each deviceid keep the longest, most-frequent name ──
-// Records with no deviceid are left unchanged so static/pre-processed data is safe.
+// ── Name normaliser: folds Arabic vowel/spelling variants + Latin case/spacing ──
+function normName(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآٱ]/g, 'ا')   // alef variants → plain alef
+    .replace(/ة/g, 'ه')          // ta marbuta → ha
+    .replace(/ى/g, 'ي')          // alef maqsura → ya
+    .replace(/\s+/g, ' ');       // collapse multi-space
+}
+
+// ── Canonical-name helper ────────────────────────────────────────────────────
+// Phase 1 — per deviceid: pick longest/most-frequent name per device
+// Phase 2 — cross-name: merge spelling variants (Arabic vowels, case, spacing)
+//            and prefix names ("نفيسة" → "نفيسة محمد", "Shams" → "Shams Mohammed")
+// Works on records with OR without a deviceid, so static data is also cleaned.
 function canonicaliseInterviewers(recs: PDMRecord[]): PDMRecord[] {
-  // Step 1: per non-null device, accumulate all name → count
-  const devNameFreq: Record<string, Record<string, number>> = {};
+  // ── Phase 1: per-device deduplication ──────────────────────────────────────
+  const devFreq: Record<string, Record<string, number>> = {};
   for (const r of recs) {
-    if (!r.deviceid) continue;                     // skip records with no deviceid
-    const name = r.interviewer?.trim();
-    if (!name) continue;
-    if (!devNameFreq[r.deviceid]) devNameFreq[r.deviceid] = {};
-    devNameFreq[r.deviceid][name] = (devNameFreq[r.deviceid][name] || 0) + 1;
+    if (!r.deviceid) continue;
+    const n = r.interviewer?.trim();
+    if (!n) continue;
+    if (!devFreq[r.deviceid]) devFreq[r.deviceid] = {};
+    devFreq[r.deviceid][n] = (devFreq[r.deviceid][n] || 0) + 1;
   }
-  // Step 2: per device, pick canonical = longest name; break ties by frequency
   const devCanonical: Record<string, string> = {};
-  for (const [dev, freq] of Object.entries(devNameFreq)) {
-    const sorted = Object.entries(freq).sort((a, b) => {
-      const lenDiff = b[0].length - a[0].length;    // longer name wins
-      return lenDiff !== 0 ? lenDiff : b[1] - a[1]; // then more frequent
-    });
-    devCanonical[dev] = sorted[0][0];
+  for (const [dev, freq] of Object.entries(devFreq)) {
+    devCanonical[dev] = Object.entries(freq).sort((a, b) => {
+      const ld = b[0].length - a[0].length;
+      return ld !== 0 ? ld : b[1] - a[1];
+    })[0][0];
   }
-  // Step 3: replace each record's interviewer with its device's canonical name
-  return recs.map(r => {
-    if (!r.deviceid) return r;                       // no deviceid → untouched
-    const canonical = devCanonical[r.deviceid];
-    return canonical ? { ...r, interviewer: canonical } : r;
+  const phase1 = recs.map(r => {
+    if (!r.deviceid) return r;
+    const c = devCanonical[r.deviceid];
+    return c ? { ...r, interviewer: c } : r;
+  });
+
+  // ── Phase 2: cross-name normalisation (handles static data + uploaded) ─────
+  // Build frequency map across ALL records
+  const freq: Record<string, number> = {};
+  phase1.forEach(r => {
+    const n = r.interviewer?.trim();
+    if (n) freq[n] = (freq[n] || 0) + 1;
+  });
+
+  // 2a — Group exact-normalized matches; canonical = most-frequent (tie: longer)
+  const normGroups: Record<string, string[]> = {};
+  Object.keys(freq).forEach(n => {
+    const k = normName(n);
+    (normGroups[k] = normGroups[k] || []).push(n);
+  });
+  const nameMap: Record<string, string> = {};
+  for (const group of Object.values(normGroups)) {
+    group.sort((a, b) => {
+      const fd = (freq[b] || 0) - (freq[a] || 0);
+      return fd !== 0 ? fd : b.length - a.length;
+    });
+    const canon = group[0];
+    group.forEach(n => { nameMap[n] = canon; });
+  }
+
+  // 2b — Prefix merging: if norm(A) words are a strict prefix of norm(B) words,
+  //      merge A → B (e.g. "نفيسة محمد" ← "نفيسة"; "Shams Mohammed" ← "Shams")
+  //      Require A to have ≥ 1 word (single Arabic first-names are common prefixes).
+  const canonicals = Array.from(new Set(Object.values(nameMap)));
+  const prefixMap: Record<string, string> = {};
+  for (const a of canonicals) {
+    const wa = normName(a).split(' ');
+    let best = '';
+    let bestLen = wa.length;
+    for (const b of canonicals) {
+      if (a === b) continue;
+      const wb = normName(b).split(' ');
+      if (wb.length <= bestLen) continue;
+      if (wa.every((w, i) => w === wb[i])) { best = b; bestLen = wb.length; }
+    }
+    if (best) prefixMap[a] = best;
+  }
+  // Resolve chains: A→B→C becomes A→C
+  const resolve = (n: string, d = 0): string =>
+    d > 5 ? n : prefixMap[n] ? resolve(prefixMap[n], d + 1) : n;
+
+  // Apply both maps to every record
+  return phase1.map(r => {
+    const n = r.interviewer?.trim();
+    if (!n) return r;
+    return { ...r, interviewer: resolve(nameMap[n] || n) };
   });
 }
 
@@ -619,10 +682,11 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       const saved = localStorage.getItem('pact-pdm-uploaded-records');
       if (saved) {
         const parsed = JSON.parse(saved) as PDMRecord[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0)
+          return canonicaliseInterviewers(parsed);
       }
     } catch {}
-    return STATIC_DATA;
+    return canonicaliseInterviewers(STATIC_DATA);
   });
   const [dataSource, setDataSource] = useState<DataSource | null>(() => {
     try {
