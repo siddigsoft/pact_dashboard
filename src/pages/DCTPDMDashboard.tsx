@@ -953,15 +953,23 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       }
       const ds: DataSource = { name: file.name, uploadedAt: new Date().toLocaleString(), count: parsed.length };
       setStateFilter('all'); setSexFilter('all'); setRcvFilter('all');
-      // Save to Supabase (server-side, available to all devices)
-      try {
-        await supabase.from('pdm_uploads').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('pdm_uploads').insert({
+      // Save to Supabase — server-side so ALL devices see the same data
+      const { error: delErr } = await supabase
+        .from('pdm_uploads')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (delErr) {
+        alert(`⚠️ Server save failed (clear): ${delErr.message}\nData will only be visible on this browser.`);
+      } else {
+        const { error: insErr } = await supabase.from('pdm_uploads').insert({
           filename: file.name,
           record_count: parsed.length,
           records: parsed as any,
         });
-      } catch { /* save failed silently */ }
+        if (insErr) {
+          alert(`⚠️ Server save failed (insert): ${insErr.message}\nData will only be visible on this browser.`);
+        }
+      }
       // Update local state and cache
       let canonicalised = parsed;
       try { canonicalised = canonicaliseInterviewers(parsed); } catch {}
@@ -970,7 +978,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       try {
         localStorage.setItem('pact-pdm-uploaded-records', JSON.stringify(parsed));
         localStorage.setItem('pact-pdm-datasource', JSON.stringify(ds));
-      } catch { /* quota exceeded — fail silently */ }
+      } catch { /* quota exceeded */ }
     } catch (err) {
       alert('Could not read the file. Please check it is a valid Excel export.');
     } finally {
