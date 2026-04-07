@@ -14,12 +14,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Users, Wifi, WifiOff, Search, Building2, MapPin, Landmark,
+  Users, Wifi, WifiOff, Search, Building2, MapPin,
   Shield, RefreshCw, LayoutGrid, List, ChevronRight,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
-  FileText, FileDown, GitBranch, UserCheck, UserX,
-  TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle
+  FileText, FileDown, GitBranch,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
@@ -61,6 +60,7 @@ interface StaffProfile {
   updated_at: string; created_at: string; bank_account: BankAccount | null;
   last_activity: string | null; device_info: string | null; app_version: string | null;
   department_id: string | null; department_name?: string | null;
+  contract_type: 'salary' | 'retainer' | 'both' | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -107,7 +107,6 @@ function avBadge(presence: 'online' | 'away' | 'offline') {
   if (presence === 'away')   return { dot: 'bg-amber-500',  label: 'Away',   labelColor: 'text-amber-700 dark:text-amber-400',  ring: 'ring-amber-400'  };
   return { dot: 'bg-slate-300 dark:bg-slate-600', label: 'Offline', labelColor: 'text-slate-500 dark:text-slate-400', ring: 'ring-slate-300' };
 }
-function maskAcc(n?: string) { if (!n) return '—'; return n.length <= 4 ? n : '•••• ' + n.slice(-4); }
 function initials(name: string | null) { if (!name) return '?'; return name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase(); }
 function lastActive(d: string | null, fallback?: string): string {
   const s = d || fallback; if (!s) return 'Unknown';
@@ -126,7 +125,8 @@ function toExportProfiles(profiles: StaffProfile[], hubList: { id: string; name:
       hub_name: hub?.name || 'Unassigned',
       state_name: state?.name || 'Unassigned',
       locality_name: (locality as any)?.name || '—',
-      availability: p.availability, bank_account: p.bank_account,
+      availability: p.availability, contract_type: p.contract_type ?? null,
+      bank_account: p.bank_account,
       last_activity: p.last_activity, device_info: p.device_info,
       app_version: p.app_version, location_sharing: p.location_sharing,
     };
@@ -173,115 +173,8 @@ function ProfileDetail({
   const state    = sudanStates.find(s => s.id === profile.state_id);
   const locality = state?.localities?.find((l: any) => l.id === profile.locality_id);
   const av       = avBadge(profile.presence);
-  const ba       = profile.bank_account;
-  const hasBank  = !!(ba?.accountNumber || ba?.accountName);
 
   const copy = (t: string, l: string) => { navigator.clipboard.writeText(t); toast({ title: `${l} copied` }); };
-
-  /* ── Per-user financial data (with individual records) ── */
-  const [finRequested, setFinRequested] = useState(false);
-  const [finKey,       setFinKey]       = useState(0);
-  const [finLoading, setFinLoading] = useState(false);
-  const [advanceRows,    setAdvanceRows]    = useState<any[]>([]);
-  const [costRows,       setCostRows]       = useState<any[]>([]);
-  const [withdrawalRows, setWithdrawalRows] = useState<any[]>([]);
-  const [mmpRows,        setMmpRows]        = useState<any[]>([]);
-  const [finOpen, setFinOpen] = useState<'advances' | 'costs' | 'withdrawals' | 'mmp' | null>(null);
-
-  useEffect(() => {
-    if (!finRequested) return;
-    const fetchUserFin = async () => {
-      setFinLoading(true);
-      const [dpRes, ocRes, wrRes, mseRes] = await Promise.all([
-        supabase.from('down_payment_requests')
-          .select('id,status,requested_amount,requested_at,justification,hub_name,site_name')
-          .eq('requested_by', profile.id)
-          .order('requested_at', { ascending: false })
-          .limit(100),
-        supabase.from('operational_cost_submissions')
-          .select('id,tier1_status,tier2_status,amount_cents,expense_category,description,submitted_at,created_at')
-          .eq('submitted_by', profile.id)
-          .order('created_at', { ascending: false })
-          .limit(100),
-        supabase.from('withdrawal_requests')
-          .select('id,status,amount,currency,request_reason,fund_receipt_confirmed,fund_receipt_confirmed_at,fund_receipt_notes,admin_processed_at,created_at')
-          .eq('user_id', profile.id)
-          .order('created_at', { ascending: false })
-          .limit(100),
-        (supabase as any).from('mmp_site_entries')
-          .select('id,mmp_file_id,cost,enumerator_fee,transport_fee,status,site_name,state,main_activity')
-          .or(`claimed_by.eq.${profile.id},completed_by_user_id.eq.${profile.id},forwarded_to_user_id.eq.${profile.id}`)
-          .limit(500),
-      ]);
-      if (dpRes.error)  console.error('[StaffDirectory] down_payment_requests error:', dpRes.error);
-      if (ocRes.error)  console.error('[StaffDirectory] operational_cost_submissions error:', ocRes.error);
-      if (wrRes.error)  console.error('[StaffDirectory] withdrawal_requests error:', wrRes.error);
-      if (mseRes.error) console.error('[StaffDirectory] mmp_site_entries error:', mseRes.error);
-      setAdvanceRows(dpRes.data || []);
-      setCostRows(ocRes.data || []);
-      setWithdrawalRows(wrRes.data || []);
-
-      /* ── Group mmp_site_entries by mmp_file_id ── */
-      const entries: any[] = mseRes.data || [];
-      const mmpFileIds = [...new Set(entries.map((e: any) => e.mmp_file_id).filter(Boolean))];
-      if (mmpFileIds.length > 0) {
-        const { data: mmpFilesData } = await (supabase as any)
-          .from('mmp_files')
-          .select('id,name,mmp_id,month,status')
-          .in('id', mmpFileIds);
-        const fileMap: Record<string, any> = {};
-        (mmpFilesData || []).forEach((f: any) => { fileMap[f.id] = f; });
-        const grouped: Record<string, any> = {};
-        entries.forEach((e: any) => {
-          const fid = e.mmp_file_id;
-          if (!fid) return;
-          if (!grouped[fid]) {
-            const f = fileMap[fid] || {};
-            grouped[fid] = {
-              mmpFileId: fid, mmpName: f.name || fid, mmpId: f.mmp_id || '',
-              month: f.month, mmpStatus: f.status || '', siteCount: 0,
-              totalCost: 0, enumFee: 0, transportFee: 0,
-            };
-          }
-          grouped[fid].siteCount += 1;
-          grouped[fid].totalCost    += Math.abs(Number(e.cost) || 0);
-          grouped[fid].enumFee      += Math.abs(Number(e.enumerator_fee) || 0);
-          grouped[fid].transportFee += Math.abs(Number(e.transport_fee) || 0);
-        });
-        setMmpRows(Object.values(grouped).sort((a, b) => b.totalCost - a.totalCost));
-      } else {
-        setMmpRows([]);
-      }
-      setFinLoading(false);
-    };
-    fetchUserFin();
-  }, [finRequested, finKey, profile.id]);
-
-  const dpSummary = useMemo(() => ({
-    total:     advanceRows.length,
-    pending:   advanceRows.filter(r => ['pending','pending_supervisor','pending_admin'].includes(r.status)).length,
-    approved:  advanceRows.filter(r => r.status === 'approved' || r.status === 'paid').length,
-    rejected:  advanceRows.filter(r => r.status === 'rejected').length,
-    amountSDG: Math.round(advanceRows.reduce((s, r) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
-  }), [advanceRows]);
-
-  const ocSummary = useMemo(() => ({
-    total:     costRows.length,
-    pending:   costRows.filter(r => !r.tier2_status || !['approved','rejected'].includes(r.tier2_status)).length,
-    approved:  costRows.filter(r => r.tier2_status === 'approved').length,
-    rejected:  costRows.filter(r => r.tier2_status === 'rejected' || r.tier1_status === 'rejected').length,
-    amountSDG: Math.round(costRows.reduce((s, r) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
-  }), [costRows]);
-
-  const wrSummary = useMemo(() => ({
-    total:       withdrawalRows.length,
-    pending:     withdrawalRows.filter(r => r.status === 'pending').length,
-    approved:    withdrawalRows.filter(r => r.status === 'approved').length,
-    rejected:    withdrawalRows.filter(r => r.status === 'rejected').length,
-    amountSDG:   Math.round(withdrawalRows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
-    confirmed:   withdrawalRows.filter(r => r.status === 'approved' && r.fund_receipt_confirmed).length,
-    unconfirmed: withdrawalRows.filter(r => r.status === 'approved' && !r.fund_receipt_confirmed).length,
-  }), [withdrawalRows]);
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
@@ -418,56 +311,6 @@ function ProfileDetail({
             )}
           </div>
 
-          {/* ── Bank Account ── */}
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <Landmark className="h-3 w-3" />Bank Account
-              </p>
-              {hasBank
-                ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><CheckCircle className="h-3 w-3" />Registered</span>
-                : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600"><XCircle className="h-3 w-3" />Missing</span>}
-            </div>
-            {hasBank ? (
-              <div className="rounded-md border bg-gradient-to-br from-slate-50 to-slate-50/0 dark:from-slate-900 dark:to-slate-900/0 p-4">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  {([
-                    ['Account Name', ba?.accountName],
-                    ['Account Number', ba?.accountNumber, true],
-                    ['Bank Name', ba?.bankName],
-                    ['Branch', ba?.branch],
-                  ] as [string, string | undefined, boolean?][]).map(([label, val, mono]) => (
-                    <div key={label}>
-                      <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
-                      <div className="flex items-center gap-1.5 group">
-                        <p className={`text-sm ${mono ? 'font-mono font-bold text-[#0F2041] dark:text-blue-300' : 'font-medium'} truncate`}>
-                          {val || <span className="text-muted-foreground font-normal text-xs">—</span>}
-                        </p>
-                        {val && (
-                          <button
-                            type="button"
-                            onClick={() => copy(val, label)}
-                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-3">
-                <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-red-800 dark:text-red-300">No bank account registered</p>
-                  <p className="text-xs text-red-600/70 dark:text-red-400/70">Payments cannot be processed for this staff member.</p>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* ── Activity & Device ── */}
           <div className="px-6 py-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-1.5">
@@ -508,302 +351,6 @@ function ProfileDetail({
             )}
           </div>
 
-          {/* ── Financial Activity ── */}
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <Banknote className="h-3 w-3" />Financial Activity — النشاط المالي
-              </p>
-              {finRequested && !finLoading && (
-                <button
-                  type="button"
-                  onClick={() => setFinKey(k => k + 1)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  title="Reload financial data"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            {!finRequested ? (
-              <button
-                type="button"
-                onClick={() => setFinRequested(true)}
-                className="w-full rounded-lg border border-dashed border-muted-foreground/30 py-4 text-xs text-muted-foreground hover:bg-muted/40 hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-2"
-              >
-                <Banknote className="h-3.5 w-3.5" />
-                Load Financial Activity
-              </button>
-            ) : finLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-14 w-full" />
-                <Skeleton className="h-14 w-full" />
-                <Skeleton className="h-14 w-full" />
-              </div>
-            ) : (
-              <div className="space-y-2">
-
-                {/* ── Transportation Advances ── */}
-                <div className="rounded-lg border overflow-hidden">
-                  {/* summary header — clickable to expand */}
-                  <button
-                    type="button"
-                    onClick={() => setFinOpen(o => o === 'advances' ? null : 'advances')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 transition-colors text-left"
-                  >
-                    <TrendingDown className="h-4 w-4 text-indigo-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">Transportation Advances</span>
-                        <span className="text-[10px] text-muted-foreground">سلف النقل</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{dpSummary.total} total</span>
-                        {dpSummary.pending > 0  && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {dpSummary.pending} pending</span>}
-                        {dpSummary.approved > 0 && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {dpSummary.approved} approved</span>}
-                        {dpSummary.rejected > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">✗ {dpSummary.rejected} rejected</span>}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-indigo-700 dark:text-indigo-400">SDG {dpSummary.amountSDG.toLocaleString()}</p>
-                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'advances' ? 'rotate-180' : ''}`} />
-                    </div>
-                  </button>
-                  {/* expanded rows */}
-                  {finOpen === 'advances' && (
-                    <div className="divide-y divide-border max-h-56 overflow-y-auto">
-                      {advanceRows.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-4">No advance requests found</p>
-                      ) : advanceRows.map(r => {
-                        const isPending  = ['pending','pending_supervisor','pending_admin'].includes(r.status);
-                        const isApproved = r.status === 'approved' || r.status === 'paid';
-                        const isRejected = r.status === 'rejected';
-                        return (
-                          <div key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isPending ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-muted text-muted-foreground'}`}>
-                                  {r.status}
-                                </span>
-                                {r.hub_name && <span className="text-[10px] text-muted-foreground">{r.hub_name}</span>}
-                                {r.site_name && <span className="text-[10px] text-muted-foreground">· {r.site_name}</span>}
-                              </div>
-                              {r.justification && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.justification}</p>}
-                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.requested_at ? format(parseISO(r.requested_at), 'dd MMM yyyy') : '—'}</p>
-                            </div>
-                            <p className="text-xs font-bold text-foreground shrink-0">SDG {Number(r.requested_amount || 0).toLocaleString()}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Cost Submissions ── */}
-                <div className="rounded-lg border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setFinOpen(o => o === 'costs' ? null : 'costs')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-950/50 transition-colors text-left"
-                  >
-                    <FileText className="h-4 w-4 text-orange-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">Cost Submissions</span>
-                        <span className="text-[10px] text-muted-foreground">طلبات التكاليف</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{ocSummary.total} total</span>
-                        {ocSummary.pending > 0  && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {ocSummary.pending} pending</span>}
-                        {ocSummary.approved > 0 && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {ocSummary.approved} approved</span>}
-                        {ocSummary.rejected > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">✗ {ocSummary.rejected} rejected</span>}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-orange-700 dark:text-orange-400">SDG {ocSummary.amountSDG.toLocaleString()}</p>
-                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'costs' ? 'rotate-180' : ''}`} />
-                    </div>
-                  </button>
-                  {finOpen === 'costs' && (
-                    <div className="divide-y divide-border max-h-56 overflow-y-auto">
-                      {costRows.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-4">No cost submissions found</p>
-                      ) : costRows.map(r => {
-                        const effStatus = r.tier2_status === 'approved' ? 'approved' : (r.tier2_status === 'rejected' || r.tier1_status === 'rejected') ? 'rejected' : r.tier1_status === 'approved' ? 'under review' : 'pending';
-                        const isApproved = effStatus === 'approved';
-                        const isRejected = effStatus === 'rejected';
-                        return (
-                          <div key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'}`}>
-                                  {effStatus}
-                                </span>
-                                {r.expense_category && <span className="text-[10px] text-muted-foreground">{r.expense_category}</span>}
-                              </div>
-                              {r.description && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.description}</p>}
-                              <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
-                            </div>
-                            <p className="text-xs font-bold text-foreground shrink-0">SDG {(Math.abs(Number(r.amount_cents) || 0) / 100).toLocaleString()}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Withdrawal Requests ── */}
-                <div className="rounded-lg border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setFinOpen(o => o === 'withdrawals' ? null : 'withdrawals')}
-                    className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors text-left"
-                  >
-                    <Landmark className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">Withdrawal Requests</span>
-                        <span className="text-[10px] text-muted-foreground">طلبات السحب</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{wrSummary.total} total</span>
-                        {wrSummary.pending > 0     && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded px-1.5 py-0.5">⏳ {wrSummary.pending} pending</span>}
-                        {wrSummary.approved > 0    && <span className="text-[10px] bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded px-1.5 py-0.5">✓ {wrSummary.approved} approved</span>}
-                        {wrSummary.unconfirmed > 0 && <span className="text-[10px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5">⚠ {wrSummary.unconfirmed} unacknowledged</span>}
-                        {wrSummary.confirmed > 0   && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 rounded px-1.5 py-0.5">📄 {wrSummary.confirmed} receipt confirmed</span>}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">SDG {wrSummary.amountSDG.toLocaleString()}</p>
-                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'withdrawals' ? 'rotate-180' : ''}`} />
-                    </div>
-                  </button>
-                  {finOpen === 'withdrawals' && (
-                    <div className="divide-y divide-border max-h-64 overflow-y-auto">
-                      {withdrawalRows.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-4">No withdrawal requests found</p>
-                      ) : withdrawalRows.map(r => {
-                        const isApproved = r.status === 'approved';
-                        const isRejected = r.status === 'rejected';
-                        const confirmed  = isApproved && r.fund_receipt_confirmed;
-                        return (
-                          <div key={r.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isApproved ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'}`}>
-                                    {r.status}
-                                  </span>
-                                  {r.currency && <span className="text-[10px] text-muted-foreground">{r.currency}</span>}
-                                </div>
-                                {r.request_reason && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{r.request_reason}</p>}
-                                <p className="text-[10px] text-muted-foreground mt-0.5">{r.created_at ? format(parseISO(r.created_at), 'dd MMM yyyy') : '—'}</p>
-                              </div>
-                              <p className="text-xs font-bold text-foreground shrink-0">SDG {Number(r.amount || 0).toLocaleString()}</p>
-                            </div>
-                            {/* Fund receipt confirmation row */}
-                            {isApproved && (
-                              <div className={`mt-2 flex items-start gap-2 rounded px-2 py-1.5 text-[10px] ${confirmed ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'}`}>
-                                {confirmed ? (
-                                  <>
-                                    <CheckCircle className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                                    <div>
-                                      <span className="font-semibold text-blue-700 dark:text-blue-400">Fund receipt confirmed</span>
-                                      {r.fund_receipt_confirmed_at && <span className="text-blue-500 ml-1">· {format(parseISO(r.fund_receipt_confirmed_at), 'dd MMM yyyy')}</span>}
-                                      {r.fund_receipt_notes && <p className="text-blue-500 mt-0.5 italic">"{r.fund_receipt_notes}"</p>}
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <XCircle className="h-3 w-3 text-red-500 shrink-0 mt-0.5" />
-                                    <div>
-                                      <span className="font-semibold text-red-600 dark:text-red-400">Awaiting fund receipt acknowledgment</span>
-                                      {r.admin_processed_at && <span className="text-red-400 ml-1">· disbursed {format(parseISO(r.admin_processed_at), 'dd MMM yyyy')}</span>}
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── MMP Cost Summary ── */}
-                <div className="rounded-lg border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setFinOpen(o => o === 'mmp' ? null : 'mmp')}
-                    className="w-full flex items-center gap-3 px-4 py-4 bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors text-left"
-                  >
-                    <MapPin className="h-5 w-5 text-violet-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-semibold text-foreground">MMP Site Costs</span>
-                        <span className="text-xs text-muted-foreground">تكاليف مواقع خطة الرصد</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="text-xs bg-slate-200 dark:bg-slate-700 text-foreground rounded px-1.5 py-0.5">{mmpRows.length} MMP{mmpRows.length !== 1 ? 's' : ''}</span>
-                        <span className="text-xs bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">
-                          {mmpRows.reduce((s, r) => s + r.siteCount, 0)} sites
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-base font-bold text-violet-700 dark:text-violet-400">
-                        SDG {Math.round(mmpRows.reduce((s, r) => s + r.totalCost, 0)).toLocaleString()}
-                      </p>
-                      <ChevronDown className={`h-4 w-4 text-muted-foreground ml-auto mt-0.5 transition-transform ${finOpen === 'mmp' ? 'rotate-180' : ''}`} />
-                    </div>
-                  </button>
-                  {finOpen === 'mmp' && (
-                    <div className="divide-y divide-border max-h-96 overflow-y-auto">
-                      {mmpRows.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">No MMP site entries found</p>
-                      ) : mmpRows.map(r => (
-                        <div key={r.mmpFileId} className="px-4 py-4 hover:bg-muted/30 transition-colors">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-bold text-foreground">{r.mmpName}</span>
-                                {r.mmpId && <span className="text-xs text-muted-foreground font-mono">{r.mmpId}</span>}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                {r.month && <span className="text-xs bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 rounded px-1.5 py-0.5">Month {r.month}</span>}
-                                <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded px-1.5 py-0.5">{r.siteCount} sites</span>
-                                {r.mmpStatus && <span className="text-xs text-muted-foreground capitalize">{r.mmpStatus.replace(/_/g, ' ')}</span>}
-                              </div>
-                              {(r.enumFee > 0 || r.transportFee > 0) && (
-                                <div className="flex flex-wrap gap-4 mt-2">
-                                  {r.enumFee > 0 && (
-                                    <span className="text-xs text-muted-foreground">
-                                      👤 <span className="font-medium">Enum:</span> SDG {Math.round(r.enumFee).toLocaleString()}
-                                    </span>
-                                  )}
-                                  {r.transportFee > 0 && (
-                                    <span className="text-xs text-muted-foreground">
-                                      🚗 <span className="font-medium">Transport:</span> SDG {Math.round(r.transportFee).toLocaleString()}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            <p className="text-sm font-bold text-violet-700 dark:text-violet-400 shrink-0">
-                              SDG {Math.round(r.totalCost).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            )}
-          </div>
-
           {/* ── Timestamps ── */}
           <div className="px-6 py-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -834,7 +381,7 @@ function ExportMenu({
     setBusy(true);
     try {
       const ep = toExportProfiles(profiles, dbHubs);
-      const pdfTab = tab === 'bank_accounts' ? 'bank_accounts' : tab === 'capacity' ? 'capacity' : 'directory';
+      const pdfTab = tab === 'capacity' ? 'capacity' : 'directory';
       if (type === 'excel') await exportStaffToExcel(ep, label);
       else if (type === 'pdf') exportStaffToPDF(ep, pdfTab, label);
       else exportStaffToCSV(ep, pdfTab);
@@ -869,7 +416,7 @@ function ExportMenu({
 }
 
 /* ─── Capacity Bar Row ───────────────────────────────────── */
-function CapRow({ label, total, online, withBank, max }: { label: string; total: number; online: number; withBank: number; max: number }) {
+function CapRow({ label, total, online, max }: { label: string; total: number; online: number; max: number }) {
   const pct = max > 0 ? Math.round((total / max) * 100) : 0;
   return (
     <div className="space-y-1.5">
@@ -880,9 +427,6 @@ function CapRow({ label, total, online, withBank, max }: { label: string; total:
           <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
             <Wifi className="h-2.5 w-2.5" />{online}
           </span>
-          <span className={`inline-flex items-center gap-1 ${withBank < total ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
-            <Landmark className="h-2.5 w-2.5" />{withBank}
-          </span>
         </div>
       </div>
       <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
@@ -892,87 +436,6 @@ function CapRow({ label, total, online, withBank, max }: { label: string; total:
         />
       </div>
     </div>
-  );
-}
-
-/* ─── Financial Summary Card ─────────────────────────────── */
-interface FinRow    { total: number; approved: number; amountSDG: number }
-interface FinMonth  { current: FinRow; prev: FinRow }
-
-function FinSummaryCard({
-  title, titleAr, icon: Icon, data, accentBg, accentText, accentBorder, loading, awaitingAck,
-}: {
-  title: string; titleAr: string; icon: React.ElementType;
-  data: FinMonth;
-  accentBg: string; accentText: string; accentBorder: string;
-  loading: boolean;
-  awaitingAck?: number;
-}) {
-  const diff = data.current.amountSDG - data.prev.amountSDG;
-  const up   = diff >= 0;
-  return (
-    <Card className="overflow-hidden">
-      <div className={`h-1 ${accentBorder}`} />
-      <CardContent className="pt-3 pb-4 px-4 space-y-3">
-        {/* Header */}
-        <div className="flex items-center gap-2">
-          <div className={`rounded-md p-1.5 ${accentBg}`}>
-            <Icon className={`h-3.5 w-3.5 ${accentText}`} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-foreground leading-tight">{title}</p>
-            <p className="text-[10px] text-muted-foreground leading-tight">{titleAr}</p>
-          </div>
-          {!loading && diff !== 0 && (
-            <span className={`ml-auto flex items-center gap-0.5 text-[10px] font-semibold ${up ? 'text-red-500' : 'text-green-600'}`}>
-              {up ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {up ? '+' : ''}{diff.toLocaleString()} SDG
-            </span>
-          )}
-        </div>
-        {/* This month / Last month columns */}
-        {loading ? (
-          <div className="grid grid-cols-2 gap-2">
-            <Skeleton className="h-14" />
-            <Skeleton className="h-14" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 divide-x divide-border">
-            {/* This month */}
-            <div className="pr-3 space-y-1">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">This Month</p>
-              <p className={`text-2xl font-bold leading-none ${accentText}`}>{data.current.total}</p>
-              <p className="text-[10px] text-muted-foreground">
-                <span className="font-semibold text-foreground">{data.current.approved}</span> approved
-              </p>
-              <p className="text-[10px] font-medium text-foreground">
-                SDG {data.current.amountSDG.toLocaleString()}
-              </p>
-            </div>
-            {/* Last month */}
-            <div className="pl-3 space-y-1">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Last Month</p>
-              <p className="text-2xl font-bold leading-none text-muted-foreground">{data.prev.total}</p>
-              <p className="text-[10px] text-muted-foreground">
-                <span className="font-semibold">{data.prev.approved}</span> approved
-              </p>
-              <p className="text-[10px] font-medium text-muted-foreground">
-                SDG {data.prev.amountSDG.toLocaleString()}
-              </p>
-            </div>
-          </div>
-        )}
-        {/* Awaiting acknowledgment alert (only for Withdrawal Requests card) */}
-        {!loading && awaitingAck !== undefined && awaitingAck > 0 && (
-          <div className="flex items-center gap-1.5 rounded-md bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 px-2.5 py-1.5">
-            <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-              {awaitingAck} awaiting acknowledgment
-            </span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -1003,65 +466,6 @@ export default function StaffDirectory() {
     }
   }, []);
 
-  /* ── Financial summary state ── */
-  const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
-  const [finLoading, setFinLoading] = useState(true);
-  const [awaitingAck, setAwaitingAck] = useState(0);
-  const [finData, setFinData] = useState<{
-    advances:    FinMonth;
-    costs:       FinMonth;
-    withdrawals: FinMonth;
-  }>({
-    advances:    { current: emptyFinRow(), prev: emptyFinRow() },
-    costs:       { current: emptyFinRow(), prev: emptyFinRow() },
-    withdrawals: { current: emptyFinRow(), prev: emptyFinRow() },
-  });
-
-  useEffect(() => {
-    const fetchFin = async () => {
-      setFinLoading(true);
-      const now = new Date();
-      const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-      const prevEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
-
-      const [dpCur, dpPrv, ocCur, ocPrv, wtCur, wtPrv, ackRes] = await Promise.all([
-        supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', thisStart),
-        supabase.from('down_payment_requests').select('requested_amount,status').gte('created_at', prevStart).lte('created_at', prevEnd),
-        supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', thisStart),
-        supabase.from('operational_cost_submissions').select('amount_cents,tier2_status').gte('created_at', prevStart).lte('created_at', prevEnd),
-        supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', thisStart).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
-        supabase.from('wallet_transactions').select('amount,type,transaction_type').gte('created_at', prevStart).lte('created_at', prevEnd).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal'),
-        supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'approved').neq('fund_receipt_confirmed', true),
-      ]);
-
-      const calcDp = (rows: any[]): FinRow => ({
-        total:     rows.length,
-        approved:  rows.filter(r => r.status === 'approved' || r.status === 'paid').length,
-        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.requested_amount) || 0), 0)),
-      });
-      const calcOc = (rows: any[]): FinRow => ({
-        total:     rows.length,
-        approved:  rows.filter(r => r.tier2_status === 'approved').length,
-        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.amount_cents) || 0) / 100, 0)),
-      });
-      const calcWt = (rows: any[]): FinRow => ({
-        total:     rows.length,
-        approved:  rows.length,
-        amountSDG: Math.round(rows.reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0)),
-      });
-
-      setAwaitingAck(ackRes.count ?? 0);
-      setFinData({
-        advances:    { current: calcDp(dpCur.data || []), prev: calcDp(dpPrv.data || []) },
-        costs:       { current: calcOc(ocCur.data || []), prev: calcOc(ocPrv.data || []) },
-        withdrawals: { current: calcWt(wtCur.data || []), prev: calcWt(wtPrv.data || []) },
-      });
-      setFinLoading(false);
-    };
-    fetchFin();
-  }, []);
-
   /* Filters */
   const [search, setSearch]              = useState('');
   const [hubFilter, setHubFilter]        = useState('all');
@@ -1069,7 +473,6 @@ export default function StaffDirectory() {
   const [localityFilter, setLocalFilter] = useState('all');
   const [roleFilter, setRoleFilter]      = useState('all');
   const [statusFilter, setStatusFilter]  = useState('all');
-  const [bankFilter, setBankFilter]      = useState('all');
   const [viewMode, setViewMode]          = useState<'cards' | 'table'>('cards');
   const [activeTab, setActiveTab]        = useState('directory');
 
@@ -1116,7 +519,7 @@ export default function StaffDirectory() {
 
       const { data: pData, error: pErr } = await (supabase as any)
         .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id')
+        .select('id, full_name, email, phone, role, employee_id, hub_id, state_id, locality_id, availability, status, location, location_sharing, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
         .order('full_name');
       if (pErr) throw pErr;
 
@@ -1222,30 +625,27 @@ export default function StaffDirectory() {
       if (statusFilter === 'online'  && p.presence !== 'online')  return false;
       if (statusFilter === 'away'    && p.presence !== 'away')    return false;
       if (statusFilter === 'offline' && p.presence !== 'offline') return false;
-      if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
-      if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       return true;
     });
-  }, [enrichedProfiles, search, hubFilter, stateFilter, localityFilter, roleFilter, statusFilter, bankFilter]);
+  }, [enrichedProfiles, search, hubFilter, stateFilter, localityFilter, roleFilter, statusFilter]);
 
   /* ── Summary stats — always over enrichedProfiles so online count is live ── */
   const stats = useMemo(() => ({
-    total:       enrichedProfiles.length,
-    online:      enrichedProfiles.filter(p => p.presence === 'online').length,
-    busy:        enrichedProfiles.filter(p => p.presence === 'away').length,
-    withBank:    enrichedProfiles.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
-    missingBank: enrichedProfiles.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+    total:        enrichedProfiles.length,
+    online:       enrichedProfiles.filter(p => p.presence === 'online').length,
+    busy:         enrichedProfiles.filter(p => p.presence === 'away').length,
+    withHub:      enrichedProfiles.filter(p => !!p.hub_id).length,
+    withLocation: enrichedProfiles.filter(p => !!p.location_sharing).length,
   }), [enrichedProfiles]);
 
   /* ── Capacity groups ── */
   const mkMap = (key: (p: StaffProfile) => string) => {
-    const m: Record<string, { total: number; online: number; withBank: number }> = {};
+    const m: Record<string, { total: number; online: number }> = {};
     filtered.forEach(p => {
       const k = key(p);
-      if (!m[k]) m[k] = { total: 0, online: 0, withBank: 0 };
+      if (!m[k]) m[k] = { total: 0, online: 0 };
       m[k].total++;
       if (p.presence === 'online') m[k].online++;
-      if (p.bank_account?.accountNumber || p.bank_account?.accountName) m[k].withBank++;
     });
     return Object.entries(m)
       .map(([name, v]) => ({ name, ...v }))
@@ -1259,8 +659,8 @@ export default function StaffDirectory() {
   const capRole  = useMemo(() => mkMap(p => ROLE_LABELS[p.role || ''] || p.role || 'Unknown'), [filtered]);
   const capState = useMemo(() => mkMap(p => sudanStates.find(s => s.id === p.state_id)?.name || 'Unassigned'), [filtered]);
 
-  const clearFilters = () => { setSearch(''); setHubFilter('all'); setStateFilter('all'); setLocalFilter('all'); setRoleFilter('all'); setStatusFilter('all'); setBankFilter('all'); };
-  const hasFilters = !!(search || hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || roleFilter !== 'all' || statusFilter !== 'all' || bankFilter !== 'all');
+  const clearFilters = () => { setSearch(''); setHubFilter('all'); setStateFilter('all'); setLocalFilter('all'); setRoleFilter('all'); setStatusFilter('all'); };
+  const hasFilters = !!(search || hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || roleFilter !== 'all' || statusFilter !== 'all');
 
   const exportLabel = useMemo(() => {
     const parts: string[] = [];
@@ -1268,11 +668,9 @@ export default function StaffDirectory() {
     if (stateFilter !== 'all') parts.push(sudanStates.find(s => s.id === stateFilter)?.name || '');
     if (roleFilter !== 'all') parts.push(ROLE_LABELS[roleFilter] || roleFilter);
     if (statusFilter !== 'all') parts.push(statusFilter);
-    if (bankFilter === 'has') parts.push('With Bank Account');
-    if (bankFilter === 'missing') parts.push('Missing Bank Account');
     if (search) parts.push(`"${search}"`);
     return parts.filter(Boolean).join(', ');
-  }, [hubFilter, stateFilter, roleFilter, statusFilter, bankFilter, search]);
+  }, [hubFilter, stateFilter, roleFilter, statusFilter, search]);
 
   /* ── Stat card ── */
   /**
@@ -1316,7 +714,6 @@ export default function StaffDirectory() {
     const hub   = dbHubs.find(h => h.id === p.hub_id);
     const state = sudanStates.find(s => s.id === p.state_id);
     const av    = avBadge(p.presence);
-    const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
     return (
       <Card
         className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 border hover:border-blue-200 dark:hover:border-blue-800 group overflow-hidden"
@@ -1353,6 +750,16 @@ export default function StaffDirectory() {
             {/* Role + status row */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <RoleBadge role={p.role} />
+              {p.contract_type === 'retainer' && (
+                <span className="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800">
+                  Retainer
+                </span>
+              )}
+              {p.contract_type === 'both' && (
+                <span className="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800">
+                  Salary+Retainer
+                </span>
+              )}
               {/* WhatsApp-style inline status dot + label */}
               <span className="inline-flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
@@ -1385,32 +792,18 @@ export default function StaffDirectory() {
               </div>
             )}
 
-            {/* Divider */}
-            <Separator />
-
-            {/* Bank + last active footer */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs">
-                  <Landmark className="h-3 w-3 text-muted-foreground shrink-0" />
-                  {hasBank
-                    ? <span className="font-mono text-foreground">{maskAcc(p.bank_account?.accountNumber)}</span>
-                    : <span className="text-red-500 font-medium">No account</span>}
-                </div>
-                {hasBank
-                  ? <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                  : <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
-              </div>
-              {/* Device info row — "last seen" already shown above in status */}
-              {p.device_info && (
+            {/* Device info footer */}
+            {p.device_info && (
+              <>
+                <Separator />
                 <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                   {(p.device_info.includes('Android') || p.device_info.includes('iPhone') || p.device_info.toLowerCase().includes('mobile'))
                     ? <Smartphone className="h-3 w-3 shrink-0" />
                     : <Monitor className="h-3 w-3 shrink-0" />}
                   <span className="truncate">{p.device_info}</span>
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1503,18 +896,6 @@ export default function StaffDirectory() {
           </SelectContent>
         </Select>
 
-        {/* Bank */}
-        <Select value={bankFilter} onValueChange={setBankFilter}>
-          <SelectTrigger className="h-8 w-[125px] text-xs" data-testid="select-bank">
-            <SelectValue placeholder="All Accounts" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Accounts</SelectItem>
-            <SelectItem value="has">Has Account</SelectItem>
-            <SelectItem value="missing">Missing</SelectItem>
-          </SelectContent>
-        </Select>
-
         {/* Clear */}
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs gap-1 text-muted-foreground" data-testid="button-clear-filters">
@@ -1570,7 +951,7 @@ export default function StaffDirectory() {
               </div>
             </div>
             <p className="text-white/60 text-xs mt-2 max-w-lg">
-              Profiles · Bank accounts · Online presence · Capacity overview
+              Field team profiles · Online presence · Capacity overview
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1595,8 +976,8 @@ export default function StaffDirectory() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <PageInfoBanner
             title="Staff Directory"
-            description="View all staff profiles across field operations. The Directory tab shows live online status and device info. Bank Accounts shows full payment details (both web and mobile entries). Capacity shows headcount breakdown by Hub, State, and Role. Online Now shows who is currently active."
-            descriptionAr="عرض جميع ملفات تعريف الموظفين عبر العمليات الميدانية. يعرض حساباتهم البنكية وحالتهم الإلكترونية ومعلومات الجهاز وتفاصيل التحصيل."
+            description="View field team profiles across all operations. Directory tab shows live online status and device info. Capacity shows headcount breakdown by Hub, State, and Role. Online Now shows who is currently active. For bank accounts and employment details, see the Employees page."
+            descriptionAr="عرض ملفات تعريف الفريق الميداني عبر جميع العمليات. يعرض الحضور المباشر ومعلومات الجهاز وتوزيع القدرات. للاطلاع على تفاصيل التوظيف والحسابات البنكية، راجع صفحة الموظفين."
           />
           {canAccessDepts && (
             <Link
@@ -1633,61 +1014,18 @@ export default function StaffDirectory() {
             onClick={() => { setStatusFilter('away'); setActiveTab('directory'); }}
           />
           <StatCard
-            label="With Bank Account"
-            value={stats.withBank}
-            icon={UserCheck}
+            label="Assigned to Hub"
+            value={stats.withHub}
+            icon={Building2}
             accent={{ border: 'bg-blue-500', iconBg: 'bg-blue-100 dark:bg-blue-900/40', iconColor: 'text-blue-600 dark:text-blue-400', numColor: 'text-blue-700 dark:text-blue-400' }}
-            onClick={() => { setBankFilter('has'); setActiveTab('bank_accounts'); }}
+            onClick={() => setActiveTab('capacity')}
           />
           <StatCard
-            label="Missing Account"
-            value={stats.missingBank}
-            icon={UserX}
-            accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
-            onClick={() => { setBankFilter('missing'); setActiveTab('bank_accounts'); }}
+            label="Location Active"
+            value={stats.withLocation}
+            icon={MapPin}
+            accent={{ border: 'bg-teal-500', iconBg: 'bg-teal-100 dark:bg-teal-900/40', iconColor: 'text-teal-600 dark:text-teal-400', numColor: 'text-teal-700 dark:text-teal-400' }}
           />
-        </div>
-
-        {/* ── Financial Summary ── */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold text-foreground">Financial Overview</h2>
-            <span className="text-xs text-muted-foreground">— ملخص مالي</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FinSummaryCard
-              title="Transportation Advances"
-              titleAr="سلف النقل"
-              icon={TrendingDown}
-              data={finData.advances}
-              accentBorder="bg-indigo-500"
-              accentBg="bg-indigo-100 dark:bg-indigo-900/40"
-              accentText="text-indigo-600 dark:text-indigo-400"
-              loading={finLoading}
-            />
-            <FinSummaryCard
-              title="Cost Submissions"
-              titleAr="طلبات التكاليف"
-              icon={FileText}
-              data={finData.costs}
-              accentBorder="bg-orange-500"
-              accentBg="bg-orange-100 dark:bg-orange-900/40"
-              accentText="text-orange-600 dark:text-orange-400"
-              loading={finLoading}
-            />
-            <FinSummaryCard
-              title="Withdrawal Requests"
-              titleAr="طلبات السحب"
-              icon={Banknote}
-              data={finData.withdrawals}
-              accentBorder="bg-emerald-500"
-              accentBg="bg-emerald-100 dark:bg-emerald-900/40"
-              accentText="text-emerald-600 dark:text-emerald-400"
-              loading={finLoading}
-              awaitingAck={awaitingAck}
-            />
-          </div>
         </div>
 
         {/* ── Tabs ── */}
@@ -1699,14 +1037,6 @@ export default function StaffDirectory() {
                 {!loading && (
                   <span className="ml-0.5 rounded-full bg-current/10 px-1.5 py-0 text-[10px] font-bold data-[state=active]:bg-white/20">
                     {filtered.length}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="bank_accounts" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
-                <Landmark className="h-3.5 w-3.5" />Bank Accounts
-                {!loading && stats.missingBank > 0 && (
-                  <span className="ml-0.5 rounded-full bg-red-500 text-white px-1.5 py-0 text-[10px] font-bold">
-                    {stats.missingBank}
                   </span>
                 )}
               </TabsTrigger>
@@ -1750,7 +1080,6 @@ export default function StaffDirectory() {
                         <TableHead>Status</TableHead>
                         <TableHead>Hub</TableHead>
                         <TableHead>State</TableHead>
-                        <TableHead>Bank Account</TableHead>
                         <TableHead>Last Active</TableHead>
                         <TableHead>Device</TableHead>
                         <TableHead className="w-8"></TableHead>
@@ -1761,7 +1090,6 @@ export default function StaffDirectory() {
                         const hub   = dbHubs.find(h => h.id === p.hub_id);
                         const state = sudanStates.find(s => s.id === p.state_id);
                         const av    = avBadge(p.presence);
-                        const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
                         return (
                           <TableRow
                             key={p.id}
@@ -1787,11 +1115,6 @@ export default function StaffDirectory() {
                             </TableCell>
                             <TableCell className="text-xs">{hub?.name || '—'}</TableCell>
                             <TableCell className="text-xs">{state?.name || '—'}</TableCell>
-                            <TableCell>
-                              {hasBank
-                                ? <span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span>
-                                : <span className="text-xs text-red-500 font-medium">Missing</span>}
-                            </TableCell>
                             <TableCell className="text-xs text-muted-foreground">{lastActive(p.last_activity, p.updated_at)}</TableCell>
                             <TableCell className="text-xs text-muted-foreground">{p.device_info || '—'}</TableCell>
                             <TableCell><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
@@ -1803,112 +1126,6 @@ export default function StaffDirectory() {
                 </div>
               </Card>
             )}
-          </TabsContent>
-
-          {/* ── Bank Accounts tab ── */}
-          <TabsContent value="bank_accounts" className="mt-0 space-y-3">
-            {/* Alert banner */}
-            {stats.missingBank > 0 && (
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-full bg-red-100 dark:bg-red-900/50 p-1.5">
-                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-red-800 dark:text-red-300">
-                      {stats.missingBank} staff member{stats.missingBank !== 1 ? 's' : ''} missing bank account
-                    </p>
-                    <p className="text-xs text-red-600/70 dark:text-red-400/70">Payments cannot be processed for these members</p>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" className="border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 shrink-0" onClick={() => setBankFilter('missing')}>
-                  View Missing
-                </Button>
-              </div>
-            )}
-
-            <Card className="overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Bank Account Registry
-                </p>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold">
-                    <CheckCircle className="h-3 w-3" />{filtered.filter(p => p.bank_account?.accountNumber || p.bank_account?.accountName).length} registered
-                  </span>
-                  <span className="text-muted-foreground/50">·</span>
-                  <span className="flex items-center gap-1 text-red-500 font-semibold">
-                    <XCircle className="h-3 w-3" />{filtered.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length} missing
-                  </span>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30 hover:bg-muted/30">
-                      <TableHead>Staff Member</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Hub / State</TableHead>
-                      <TableHead>Account Name</TableHead>
-                      <TableHead>Account Number</TableHead>
-                      <TableHead>Bank</TableHead>
-                      <TableHead>Branch</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      Array(5).fill(0).map((_, i) => (
-                        <TableRow key={i}>
-                          {Array(8).fill(0).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
-                        </TableRow>
-                      ))
-                    ) : filtered.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">No profiles match your filters</TableCell>
-                      </TableRow>
-                    ) : filtered.map(p => {
-                      const hub   = dbHubs.find(h => h.id === p.hub_id);
-                      const state = sudanStates.find(s => s.id === p.state_id);
-                      const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
-                      return (
-                        <TableRow
-                          key={p.id}
-                          className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-                          onClick={() => setSelected(p)}
-                          data-testid={`row-bank-${p.id}`}
-                        >
-                          <TableCell>
-                            <div className="flex items-center gap-2.5">
-                              <Avatar name={p.full_name} size="sm" availability={p.presence} />
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
-                                <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell><RoleBadge role={p.role} /></TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{[hub?.name, state?.name].filter(Boolean).join(' / ') || '—'}</TableCell>
-                          <TableCell className="text-sm font-medium">{p.bank_account?.accountName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
-                          <TableCell>
-                            {p.bank_account?.accountNumber
-                              ? <span className="text-sm font-mono font-bold text-[#0F2041] dark:text-blue-300">{p.bank_account.accountNumber}</span>
-                              : <span className="text-muted-foreground text-xs">—</span>}
-                          </TableCell>
-                          <TableCell className="text-sm">{p.bank_account?.bankName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
-                          <TableCell className="text-sm">{p.bank_account?.branch || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
-                          <TableCell>
-                            {hasBank
-                              ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><CheckCircle className="h-3 w-3" />Registered</span>
-                              : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" />Missing</span>}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
           </TabsContent>
 
           {/* ── Capacity tab ── */}
@@ -1927,7 +1144,6 @@ export default function StaffDirectory() {
                     <CardDescription className="text-xs">{desc}</CardDescription>
                     <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1">
                       <span className="flex items-center gap-1"><Wifi className="h-2.5 w-2.5 text-green-500" />Online</span>
-                      <span className="flex items-center gap-1"><Landmark className="h-2.5 w-2.5 text-blue-500" />Banked</span>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-3 space-y-3 max-h-72 overflow-y-auto">
@@ -1936,7 +1152,7 @@ export default function StaffDirectory() {
                     ) : data.length === 0 ? (
                       <p className="text-xs text-muted-foreground text-center py-4">No data</p>
                     ) : data.map(r => (
-                      <CapRow key={r.name} label={r.name} total={r.total} online={r.online} withBank={r.withBank} max={data[0].total} />
+                      <CapRow key={r.name} label={r.name} total={r.total} online={r.online} max={data[0].total} />
                     ))}
                   </CardContent>
                 </Card>

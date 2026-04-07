@@ -9,7 +9,11 @@ const IDLE_THRESHOLD = 60 * 1000; // 1 minute — detect idle sooner
 const DEBOUNCE_MS = 2000;
 const RECOVERY_COOLDOWN_MS = 30 * 1000;
 
+// Public routes that have no Supabase session — skip all session checks here
+const PUBLIC_PATHS = ['/pdm-report', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password'];
+
 export function SessionGuard({ children }: { children: React.ReactNode }) {
+  const isPublicPath = PUBLIC_PATHS.some(p => window.location.pathname === p || window.location.pathname.startsWith(p + '/'));
   const { toast } = useToast();
   const lastActivityRef = useRef(Date.now());
   const checkInProgressRef = useRef(false);
@@ -67,6 +71,8 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
   }, [toast]);
 
   useEffect(() => {
+    // Do not attach any session listeners on public pages (no Supabase session expected)
+    if (isPublicPath) return;
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
     events.forEach(e => document.addEventListener(e, trackActivity, { passive: true }));
 

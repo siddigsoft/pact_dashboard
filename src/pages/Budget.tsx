@@ -115,9 +115,7 @@ const BudgetPage = () => {
     fetchActualSpend();
   }, []);
 
-  const canManageBudgets = hasGranularPermission('finances', 'update') || 
-                           currentUser?.role === 'admin' || 
-                           currentUser?.role === 'fom';
+  const canManageBudgets = hasGranularPermission('finances', 'update') || isAdminOrSuperUser;
 
   // PROJECT TEAM MEMBERSHIP FILTER
   // Filter budgets to only show projects the user belongs to (admins see all)

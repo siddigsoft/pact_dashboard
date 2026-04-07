@@ -11,6 +11,26 @@ interface ErrorBoundaryState {
   errorInfo?: ErrorInfo;
 }
 
+function clearSessionAndReload() {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('sb-') ||
+        key.startsWith('supabase') ||
+        key.startsWith('PACT') ||
+        key === 'theme'
+      )) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+    sessionStorage.clear();
+  } catch (_) {}
+  window.location.href = '/auth';
+}
+
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -36,33 +56,61 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       if (this.props.fallback) {
         return this.props.fallback;
       }
-      
+
+      const msg = this.state.error?.message ?? '';
+      const isChunkError = /loading chunk|failed to fetch|dynamically imported module/i.test(msg);
+      const isAuthError = /jwt|auth|session|token|unauthorized|forbidden/i.test(msg);
+
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
-          <div className="max-w-lg w-full bg-card border rounded-lg p-6 text-center">
+          <div className="max-w-lg w-full bg-card border rounded-lg p-6 text-center shadow-lg">
             <h2 className="text-xl font-semibold text-destructive mb-2">Something went wrong</h2>
-            <p className="text-muted-foreground mb-4">The application encountered an unexpected error.</p>
-            
-            {this.state.error && (
-              <div className="mb-4 p-3 bg-muted rounded text-left text-sm overflow-auto max-h-32">
-                <p className="font-mono text-destructive break-words">{this.state.error.message}</p>
+
+            {isChunkError && (
+              <p className="text-muted-foreground text-sm mb-3">
+                A page resource failed to load (stale cache). Click <strong>Refresh</strong> to fix it.
+              </p>
+            )}
+            {isAuthError && (
+              <p className="text-muted-foreground text-sm mb-3">
+                Your session appears to be invalid or expired. Click <strong>Clear Session</strong> to sign in again.
+              </p>
+            )}
+            {!isChunkError && !isAuthError && (
+              <p className="text-muted-foreground text-sm mb-3">
+                The application encountered an unexpected error.
+              </p>
+            )}
+
+            {msg && (
+              <div className="mb-4 p-3 bg-muted rounded text-left text-xs overflow-auto max-h-28">
+                <p className="font-mono text-destructive break-all">{msg}</p>
               </div>
             )}
-            
-            <button
-              onClick={this.handleRetry}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
-              data-testid="button-refresh-page"
-            >
-              Refresh Page
-            </button>
-            
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={this.handleRetry}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors text-sm"
+                data-testid="button-refresh-page"
+              >
+                Refresh Page
+              </button>
+              <button
+                onClick={clearSessionAndReload}
+                className="px-4 py-2 bg-destructive/10 text-destructive border border-destructive/20 rounded hover:bg-destructive/20 transition-colors text-sm"
+                data-testid="button-clear-session"
+              >
+                Clear Session &amp; Sign In Again
+              </button>
+            </div>
+
             {this.state.errorInfo && (
               <details className="mt-4 text-left">
                 <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
                   Show technical details
                 </summary>
-                <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-40 font-mono">
+                <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-40 font-mono whitespace-pre-wrap">
                   {this.state.errorInfo.componentStack}
                 </pre>
               </details>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MMPStage } from "@/types";
 import { useAppContext } from "@/context/AppContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -21,9 +22,10 @@ export function MMPStageChangeDialog({ currentStage, mmpId, onStageChange }: MMP
   const [selectedStage, setSelectedStage] = useState<MMPStage>(currentStage);
   const [isUpdating, setIsUpdating] = useState(false);
   const { currentUser } = useAppContext();
+  const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();
 
-  const canChangeStage = currentUser?.role === 'admin' || currentUser?.role === 'ict';
+  const canChangeStage = hasAnyRole(['admin', 'ict']);
   const currentStageIndex = STAGE_ORDER.indexOf(currentStage);
   const availableStages = STAGE_ORDER.slice(currentStageIndex);
 

@@ -4,6 +4,7 @@ import { MapPin, Navigation, Clock, Activity } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { User } from '@/types';
+import { normalizeRole } from '@/utils/roleMapping';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface TeamMemberLocationProps {
@@ -74,7 +75,7 @@ const TeamMemberLocation: React.FC<TeamMemberLocationProps> = ({ user }) => {
           <div className="flex items-center gap-2">
             <span className="font-medium">{user.name}</span>
             <Badge variant="outline" className="bg-background/80">
-              {user.role === 'coordinator' ? 'Coordinator' : 'Data Collector'}
+              {normalizeRole(user.role) === 'coordinator' ? 'Coordinator' : 'Data Collector'}
             </Badge>
           </div>
           <div className="flex items-center gap-2">

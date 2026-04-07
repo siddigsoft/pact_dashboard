@@ -103,6 +103,7 @@ const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 const EmailManagement = lazy(() => import('./pages/EmailManagement'));
 const AdminBroadcast = lazy(() => import('./pages/AdminBroadcast'));
 const StaffDirectory = lazy(() => import('./pages/StaffDirectory'));
+const Employees = lazy(() => import('./pages/Employees'));
 const Departments = lazy(() => import('./pages/Departments'));
 const TaskAdmin = lazy(() => import('./pages/TaskAdmin'));
 const TransactionScanner = lazy(() => import('./pages/TransactionScanner'));
@@ -118,6 +119,8 @@ const MobileCallScheduling = lazy(() => import('./pages/MobileCallScheduling'));
 const MobileDocumentSync = lazy(() => import('./pages/MobileDocumentSync'));
 const ReconciliationDashboard = lazy(() => import('./pages/ReconciliationDashboard'));
 const QuestionnaireAnalytics = lazy(() => import('./pages/QuestionnaireAnalytics'));
+const DCTPDMDashboard = lazy(() => import('./pages/DCTPDMDashboard'));
+const DCTPDMPublicPage = lazy(() => import('./pages/DCTPDMPublicPage'));
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
@@ -127,8 +130,14 @@ const SafetyHub = lazy(() => import('./pages/SafetyHub'));
 const IncidentReports = lazy(() => import('./pages/IncidentReports'));
 const EquipmentPage = lazy(() => import('./pages/Equipment'));
 const MonitoringForm = lazy(() => import('./pages/MonitoringForm'));
+const CRMPartners = lazy(() => import('./pages/CRMPartners'));
+const CRMDashboard = lazy(() => import('./pages/CRMDashboard'));
+const CRMContacts = lazy(() => import('./pages/CRMContacts'));
+const CRMEngagements = lazy(() => import('./pages/CRMEngagements'));
+const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasks'));
+const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -254,7 +263,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
@@ -277,6 +286,7 @@ const AppRoutes = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
       <Route path="/email-preview" element={<EmailPreviewPage />} />
+      <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
@@ -323,6 +333,7 @@ const AppRoutes = () => {
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/payroll" element={<PayrollPage />} />
         <Route path="/hr" element={<HRHub />} />
+        <Route path="/leave" element={<LeaveRequests />} />
         <Route path="/admin/wallets" element={<AdminWallets />} />
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
@@ -338,6 +349,7 @@ const AppRoutes = () => {
         <Route path="/cost-submission" element={<CostSubmission />} />
         <Route path="/cost-submission/reports" element={<CostSubmissionReports />} />
         <Route path="/questionnaire-analytics" element={<QuestionnaireAnalytics />} />
+        <Route path="/dct-pdm" element={<DCTPDMDashboard />} />
         <Route path="/mobile-cost-submission" element={<MobileCostSubmission />} />
         <Route path="/site-visits" element={<SiteVisits />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
@@ -378,6 +390,7 @@ const AppRoutes = () => {
         <Route path="/email-management" element={<EmailManagement />} />
         <Route path="/admin/broadcast" element={<AdminBroadcast />} />
         <Route path="/admin/staff-profiles" element={<StaffDirectory />} />
+        <Route path="/employees" element={<Employees />} />
         <Route path="/departments" element={<Departments />} />
         <Route path="/task-admin" element={<TaskAdmin />} />
         <Route path="/admin/transaction-scanner" element={<TransactionScanner />} />
@@ -395,6 +408,11 @@ const AppRoutes = () => {
         <Route path="/equipment" element={<EquipmentPage />} />
         <Route path="/monitoring-form" element={<MonitoringForm />} />
         <Route path="/helpline" element={<Helpline />} />
+        <Route path="/crm" element={<CRMDashboard />} />
+        <Route path="/crm/partners" element={<CRMPartners />} />
+        <Route path="/crm/contacts" element={<CRMContacts />} />
+        <Route path="/crm/engagements" element={<CRMEngagements />} />
+        <Route path="/crm/opportunities" element={<CRMOpportunities />} />
       </Route>
 
       {/* Redirects */}
@@ -437,6 +455,57 @@ function App() {
     }
   }, []);
 
+  // ── Public PDM Report — bypass ALL session/auth/mobile guards ──────────────
+  // This route has its own login gate (DCTPDMPublicPage) and must NEVER be
+  // intercepted by SessionGuard, AuthGuard, MobilePermissionGuard, or any
+  // notification/broadcast overlay.
+  if (window.location.pathname === '/pdm-report') {
+    // Auto-reload once if a stale chunk was the cause (common after Vercel deploys).
+    // Uses a session flag so we don't loop endlessly on genuine errors.
+    const PDMFallback = () => {
+      useEffect(() => {
+        const key = 'pdm_eb_reloaded';
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1');
+          window.location.reload();
+        }
+      }, []);
+      return (
+        <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0F2041,#1D3461)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '32px', borderRadius: '12px', textAlign: 'center', maxWidth: '360px', boxShadow: '0 25px 50px rgba(0,0,0,0.4)' }}>
+            <p style={{ color: '#DC2626', fontWeight: '700', marginBottom: '12px', fontSize: '15px' }}>Failed to load the report.</p>
+            <p style={{ color: '#6B7280', fontSize: '12px', marginBottom: '16px' }}>This may be a temporary issue. Click Refresh to try again.</p>
+            <button
+              onClick={() => { sessionStorage.removeItem('pdm_eb_reloaded'); window.location.reload(); }}
+              style={{ padding: '10px 20px', background: '#1D3461', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      );
+    };
+    return (
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+        <ErrorBoundary fallback={<PDMFallback />}>
+          <QueryClientProvider client={queryClient}>
+            <Router>
+              <Suspense fallback={
+                <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg,#0F2041,#1D3461)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ color: '#fff', fontSize: '14px', opacity: 0.8 }}>Loading report…</div>
+                </div>
+              }>
+                <Routes>
+                  <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
+                </Routes>
+              </Suspense>
+            </Router>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </ThemeProvider>
+    );
+  }
+
   // If Supabase is not configured, show the configuration error screen
   // This prevents the app from crashing and gives a clear error message
   if (!isSupabaseConfigured) {
@@ -464,22 +533,7 @@ function App() {
       disableTransitionOnChange
     >
       {isMounted && (
-        <ErrorBoundary
-          fallback={
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md">
-                <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-                <p className="mb-4">The application encountered an unexpected error. Please refresh the page to try again.</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
-                >
-                  Refresh Page
-                </button>
-              </div>
-            </div>
-          }
-        >
+        <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <Router>
               <NavigationProvider>

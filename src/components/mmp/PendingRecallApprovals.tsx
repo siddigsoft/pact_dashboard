@@ -91,7 +91,7 @@ function getSlaStatus(createdAt: string): { color: string; label: string; urgent
 }
 
 export function PendingRecallApprovals() {
-  const { currentUser } = useAuthorization();
+  const { currentUser, hasAnyRole } = useAuthorization();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [pendingRecalls, setPendingRecalls] = useState<PendingRecall[]>([]);
@@ -109,9 +109,9 @@ export function PendingRecallApprovals() {
   const [bulkNotes, setBulkNotes] = useState('');
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
-  const isSuperAdmin = currentUser?.role === 'super_admin';
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ict';
-  const isFOM = currentUser?.role === 'fom';
+  const isSuperAdmin = hasAnyRole(['superAdmin']);
+  const isAdmin = hasAnyRole(['admin', 'ict']);
+  const isFOM = hasAnyRole(['fom']);
   const canApprove = isSuperAdmin || isAdmin || isFOM;
 
   const filteredRecalls = useMemo(() => {

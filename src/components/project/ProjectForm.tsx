@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarIcon, Plus, X, UserCircle, GitBranch, ChevronDown, ChevronUp, Handshake } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { getProjectFlow } from '@/config/projectFlows';
 
 import { Project, ProjectType, ProjectStatus, ProjectTeamMember } from '@/types/project';
@@ -82,6 +83,7 @@ const createFormSchema = (isEditing: boolean) => z.object({
   locality: z.string().optional(),
   clientType: z.enum(['internal', 'customer']),
   clientName: z.string().optional(),
+  partnerId: z.string().optional(),
 }).refine(
   (data) => data.endDate > data.startDate,
   {
@@ -170,6 +172,11 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   );
   const [relatedMMPs, setRelatedMMPs] = useState<string[]>(initialData?.relatedMMPs ?? []);
   const [relatedSiteVisits, setRelatedSiteVisits] = useState<string[]>(initialData?.relatedSiteVisits ?? []);
+  const [crmPartners, setCrmPartners] = useState<{ id: string; name: string; type: string }[]>([]);
+  useEffect(() => {
+    supabase.from('crm_partners').select('id, name, type').eq('status', 'active').order('name')
+      .then(({ data }) => { if (data) setCrmPartners(data); });
+  }, []);
   
   const formSchema = createFormSchema(isEditing);
   const form = useForm<FormSchema>({
@@ -194,6 +201,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       locality: initialData?.location?.locality || '',
       clientType: (initialData?.clientType as 'internal' | 'customer') || 'internal',
       clientName: initialData?.clientName || '',
+      partnerId: initialData?.partnerId || '',
     },
   });
 
@@ -242,6 +250,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         relatedSiteVisits,
         clientType: values.clientType,
         clientName: values.clientType === 'customer' ? (values.clientName || undefined) : undefined,
+        partnerId: values.partnerId || undefined,
         createdAt: initialData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -444,6 +453,39 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                   )}
                 />
               )}
+
+              <FormField
+                control={form.control}
+                name="partnerId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5">
+                      <Handshake className="h-4 w-4" />
+                      Linked Partner / Donor (CRM)
+                    </FormLabel>
+                    <Select
+                      onValueChange={v => field.onChange(v === 'none' ? '' : v)}
+                      value={field.value || 'none'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select from CRM partners…" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">— No partner linked —</SelectItem>
+                        {crmPartners.map(p => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                            <span className="ml-2 text-xs text-muted-foreground capitalize">({p.type.replace('_', ' ')})</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

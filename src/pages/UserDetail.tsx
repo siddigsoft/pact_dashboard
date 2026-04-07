@@ -223,6 +223,8 @@ const UserDetail: React.FC = () => {
       // so that consecutive saves in the same session compare against the right value.
       const prevDepartmentId = savedDepartmentIdRef.current;
 
+      // When employment record is saved, automatically mark as employee
+      const hasEmploymentData = !!(empType || empContractStart || empDepartmentId);
       const { error } = await supabase.from("profiles").update({
         department_id: empDepartmentId || null,
         employment_type: empType || null,
@@ -230,6 +232,7 @@ const UserDetail: React.FC = () => {
         contract_end_date: empContractEnd || null,
         reports_to: empReportsTo || null,
         task_digest_opt_out: taskDigestOptOut,
+        is_employee: hasEmploymentData,
         updated_at: new Date().toISOString(),
       }).eq("id", user.id);
       if (error) throw error;

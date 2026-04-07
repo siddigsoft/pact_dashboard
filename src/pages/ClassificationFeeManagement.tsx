@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/context/user/UserContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { 
   ArrowLeft, 
   Save, 
@@ -102,6 +103,7 @@ const ClassificationFeeManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useUser();
+  const { hasAnyRole } = useAuthorization();
   
   // All fee structures for all role scopes
   const [allFeeStructures, setAllFeeStructures] = useState<FeeStructure[]>([]);
@@ -127,7 +129,7 @@ const ClassificationFeeManagement = () => {
     details: Array<{ userName: string; oldEarned: number; newEarned: number; oldBalance: number; newBalance: number }>;
   } | null>(null);
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.roles?.includes('admin' as any);
+  const isAdmin = hasAnyRole(['admin', 'superAdmin', 'ict']);
 
   // Get fee structures for current role scope
   const feeStructures = useMemo(() => {

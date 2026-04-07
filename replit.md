@@ -1,7 +1,7 @@
 # PACT Command Center
 
 ## Overview
-PACT Command Center is a centralized platform for managing humanitarian and development field operations, specifically Monthly Monitoring Plans (MMPs) and site visits. It aims to enhance efficiency, transparency, and accountability through tools for planning, coordination, execution, and monitoring. Key features include multi-tier user management, real-time collaboration, detailed workflows, GPS location sharing, advanced financial tracking, comprehensive reporting, and a mobile-responsive Mission Control Dashboard with full offline functionality. The project's ambition is to streamline field operations and improve humanitarian aid delivery.
+PACT Command Center is a centralized platform designed to streamline humanitarian and development field operations, specifically focusing on Monthly Monitoring Plans (MMPs) and site visits. Its primary goal is to enhance efficiency, transparency, and accountability through robust tools for planning, coordination, execution, and monitoring. Key capabilities include multi-tier user management, real-time collaboration, advanced financial tracking, comprehensive reporting, and a mobile-responsive Mission Control Dashboard with full offline functionality. The project aims to significantly improve humanitarian aid delivery by optimizing field operations.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -9,51 +9,29 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### UI/UX Decisions
-The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, adhering to mobile-first and responsive design principles. It features a component-based structure, dual-theme support, a custom color palette, touch-friendly UI, and PWA readiness.
+The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, prioritizing mobile-first and responsive design. It utilizes a component-based structure, offers dual-theme support, features a custom color palette, provides a touch-friendly interface, and is PWA-ready.
 
 ### Technical Implementations
-*   **Frontend:** React 18, React Router DOM v6, Vite, React Context API, TanStack Query, and Supabase Realtime.
-*   **Backend:** PostgreSQL via Supabase with Row Level Security (RLS) and real-time capabilities. Supabase Auth for authentication, sessions, role-based access control, and TOTP-based 2FA.
-*   **Mobile Offline Infrastructure:** IndexedDB, Sync Manager, and Service Worker for offline workflows. The Android app is Flutter-based, featuring Hive for offline caching and Shorebird for OTA updates.
-*   **Authorization System:** Resource-action based permission model with various user roles.
-*   **File Processing:** MMP Upload Workflow with Zod validation, Excel Upload Parser, and Partial MMP Update system.
-*   **Real-Time Capabilities:** Live Dashboard, notifications via Supabase Realtime, and real-time GPS location sharing.
-*   **Financial Management:** Advanced transportation cost and down-payment systems with two-tier approval, operational cost submission with two-tier approval, digital signatures, PDF certificate generation, aging reports, budget vs. actual comparison, duplicate payment detection, cash flow forecasting, period close management, and reconciliation. Includes a Reclaim Financial Gap System.
-*   **Hub & Field Operations Structure:** Management of geographical structures, master sites registry, and interactive Leaflet maps.
-*   **Site Visits Enhancements:** Redesigned interface, data collector-specific views, geographic filtering, GPS proximity matching, first-claim dispatch, and Unified Site Management System.
-*   **Signature & Transaction Module:** Digital signature system for wallet transactions and documents.
-*   **Task-Level Budget Tracking:** Granular budget management with variance analysis and utilization alerts.
-*   **Communication Systems:** Custom password management with OTP, email verification and notification system via IONOS SMTP.
-*   **MMP and Visit Management:** Multi-tier MMP Recall, MMP Reclaim from Coordinators, Visit Postponement, Date Range Visits, and Auto-Release systems. Includes auto-flagging uncovered sites, daily reminders, cycle comparison, follow-up action tracking, cycle close approval, and predictive coverage alerts.
-*   **Site Integration & Normalization:** MoDa Webhook Integration and Site Normalization System.
-*   **Dispatch & Coverage:** Smart Dispatch System and Coverage Gap Notification System.
-*   **Workflow Management:** Flexible Locality Permit Requirement Workflow and MMP Verification Workflow.
-*   **Document Management:** Document Registry & Indexing System.
-*   **Super Admin Data Management Center:** Interface for managing site visits, wallets, transactions, and MMPs, with advanced search, audit logging, and a Role Perspective Viewer. Includes a monitoring dashboard aggregating pending and historical actions across all system modules.
-*   **Security & Tracking:** Security-Hardened Activity Tracking System.
-*   **Dashboard Global MMP Filter:** Persistent multi-select MMP filter.
-*   **Reporting & Analytics:** Comprehensive Coverage Analytics Dashboard, Site Visit Quality Scoring analytics, and Data Export Center.
-*   **Mobile Specific Features:** Bilingual welcome screen, Admin-Managed Support Contacts, Mobile Admin Dashboard, Help & Support System, Unified Communications Screen (WebRTC), Mobile Digital Signatures, Mobile Field Team Map, and Mobile Operational Cost Submission System.
-*   **Cross-Platform Feature Parity (Web ↔ Mobile):** Both platforms support Safety Hub (SOS alerts, emergency contacts, safety checklist), Incident Reports, Equipment Tracking, Comprehensive Monitoring Form, and Helpline. Mobile features include shimmer skeleton loaders, paginated lists, and role-gated navigation.
-*   **Project Flow Engine UI:** Full lifecycle UI for 10 project types with `FlowStrip` (horizontal stepper), `FlowTab` (stage cards), and `FlowStageBanner`. Stage advance sends in-app notifications. Includes project archiving, PDF export, health score widgets, stalled project alerts, and enhanced `ProjectDetail` screens on mobile.
-*   **Transaction Screenshot Scanner:** AI-powered OCR tool using Gemini 2.0 Flash with Groq fallback via a Supabase Edge Function.
-*   **Staff Directory:** Admin page with staff profiles, bank accounts, capacity, and online status. Includes department badge per staff card and a "View Departments" link.
-*   **Departments & Org Hierarchy:** New `departments` table (nested sub-departments, manager, color) and extended `profiles` with `department_id`, `employment_type`, `contract_start_date`, `contract_end_date`, `reports_to`. Departments page at `/departments` provides CRUD, org-tree view, member panels, and employee move. UserDetail has an Employment Record tab. Notifications + IONOS emails are sent on manager assignment, employee department change, and contract expiry (employee + manager).
-*   **Sidebar Favorites System:** User-customizable sidebar.
-*   **Retainer Management System:** Retainer payment tracking and processing.
-*   **HR & Finance Hub:** Unified admin page at `/hr` with four tabs — My Payroll, Payroll Admin, Retainer, and HR Tools. The Payroll Admin tab provides: (1) Employee Salary Setup with per-employee base salary, allowances (fixed/percent), and deductions (fixed/percent) stored in `employee_salary_config` table, with salary change history tracked in `salary_history` JSONB column and displayed in the edit dialog; (2) Run Payroll with period selection, gross→net calculation, per-employee one-time adjustments (bonuses/deductions via `AdjustmentDialog`), optional task rewards inclusion (fetches completed personal_tasks with rewards), full approval workflow (Draft → Submit → Approve → Lock) with visual stepper and status banners, saved in `payroll_runs.status`; (3) Payslips & History with per-employee PDF payslip generation (jsPDF + autoTable) and bulk download; (4) Reports (7 sub-tabs): Payroll Breakdown, Contract Expiry, Headcount, Year-to-Date, Month Comparison, Statutory Filing (tax/SS totals per employee for regulatory submission), Budget vs. Actual (inline per-dept budget targets vs. actual run, variance + progress bars); (5) Advances tab — track salary advances per employee (payroll_advances table), partial/full recovery flow, outstanding balance tracking with KPIs. Employee Salaries tab includes Onboarding Status column with clickable 4-item checklist (salary, dept, contract type, start date) and "Incomplete onboarding" filter. My Payroll (employee view) includes a "My Payslips" tab showing all payroll runs for the current user with expand/collapse and PDF download. HR Tools tab contains: Staff Cost Projection calculator (headcount × salary grade estimator with monthly/annual totals) and Org Chart view (expandable tree from reports_to hierarchy with search). DB columns added: `employee_salary_config.salary_history` (JSONB), `payroll_run_items.adjustments` (JSONB), `payroll_runs.submitted_at/submitted_by/approved_at/approved_by`. New tables: `payroll_advances`, `payroll_department_budgets`. Accessible to super_admin, admin, and finance roles only.
-*   **Payments & Finance Organization:** Unified section with collapsible sub-categories.
-*   **Financial System Enhancements:** Period Close management, budget page project selector, shared exchange rate service, Consolidated Statement, Approval Audit Summary, Wallet Reports pagination, financial trend indicators, reconciliation auto-matching, and Unified Financial Alerts center.
-*   **Notification System:** Robust system with in-app, WhatsApp-style, and persistent notifications. Email notifications via IONOS SMTP. Includes Broadcast Center for admin announcements.
-*   **Daily Coordinator Digest:** Enhanced system for daily coordinator summaries, covering various pending actions and escalations, with deep-links and bilingual support.
-*   **Stage Assignment Acknowledgment:** Allows assignees to acknowledge stage assignments, with visual indicators for confirmed/pending status.
-*   **Flow Stage Status Color Coding:** Visual language using distinct colors for completed, current, skipped, and upcoming stages.
-*   **Outlook Calendar Integration:** Integration for viewing and managing calendar events within project details, including MSAL OAuth and Microsoft Graph API.
-*   **Project Field Tasks System:** Lightweight field task tracker within projects, managing tasks with priority, status, assignments, due dates, and location details.
-*   **Hierarchical Task & Daily Work System (Task #10):** Extended `personal_tasks` with subtask support (parent_task_id), department-wide bulk assignment, completion reward crediting to wallets, and recurring task recurrence fields. New `daily_task_definitions` table with admin-managed recurring task templates (daily/weekly, role/dept filtering, reward amounts). `materialiseDailyTasks()` runs on My Tasks mount to create today's tasks from templates. `TaskAdmin` page at `/task-admin` provides: Task Overview by Department (progress bars, overdue alerts), Daily Task Templates CRUD panel, and Payroll Calculation Panel with PDF/Excel export and email-members functionality. New `task-daily-digest` edge function sends daily per-user task summaries via email + in-app notification. `task_digest_opt_out` flag added to profiles. My Tasks New Task dialog updated: 3-mode assignment (Myself / Someone else / Entire Department), optional completion reward field.
+*   **Frontend:** React 18, React Router DOM v6, Vite, React Context API, TanStack Query, and Supabase Realtime for dynamic interactions.
+*   **Backend:** PostgreSQL powered by Supabase, leveraging Row Level Security (RLS) and real-time features. Supabase Auth handles authentication, sessions, role-based access control, and TOTP-based 2FA.
+*   **Mobile Offline Infrastructure:** Utilizes IndexedDB, Sync Manager, and Service Worker for robust offline capabilities. The Android application is Flutter-based, employing Hive for efficient offline caching and Shorebird for over-the-air updates.
+*   **Authorization System:** Implements a resource-action based permission model supporting various user roles.
+*   **Financial Management:** Includes advanced systems for transportation costs, down-payments, operational cost submission with two-tier approvals, digital signatures, PDF certificate generation, aging reports, budget vs. actual comparisons, duplicate payment detection, cash flow forecasting, period close management, and reconciliation. A Reclaim Financial Gap System is also integrated.
+*   **Hub & Field Operations:** Manages geographical structures, a master sites registry, and interactive Leaflet maps.
+*   **Site Visits & MMP Management:** Features a redesigned interface for site visits, data collector-specific views, geographic filtering, GPS proximity matching, first-claim dispatch, and a Unified Site Management System. MMP management includes multi-tier recall, reclaim, visit postponement, date range visits, auto-release systems, auto-flagging of uncovered sites, daily reminders, cycle comparison, follow-up action tracking, cycle close approval, and predictive coverage alerts.
+*   **Workflow Management:** Supports flexible Locality Permit Requirement and MMP Verification Workflows.
+*   **CRM Module:** A five-page CRM for managing partners, engagements, contacts, and opportunities, visible to specific admin and management roles.
+*   **HR & Finance Hub:** A unified admin interface for payroll management (including salary setup, run payroll with approval workflow, payslips, and various reports like payroll breakdown, contract expiry, budget vs. actual), retainer management, staff cost projection, and organizational hierarchy visualization.
+*   **Hierarchical Task & Daily Work System:** Extends `personal_tasks` with subtask support, department-wide bulk assignment, completion rewards, and recurring task definitions. Includes an admin page for task overview, template management, and payroll calculation.
+*   **Project Flow Engine UI:** Provides a full lifecycle UI for 10 project types with visual progress indicators (`FlowStrip`, `FlowTab`, `FlowStageBanner`), in-app notifications on stage advance, project archiving, PDF export, health score widgets, and stalled project alerts.
+*   **Transaction Screenshot Scanner:** AI-powered OCR using Gemini 2.0 Flash (with Groq fallback) via a Supabase Edge Function.
+*   **Notification System:** A robust system delivering in-app, WhatsApp-style, persistent, and email notifications. Includes a Broadcast Center for admin announcements.
+*   **Outlook Calendar Integration:** Integrates with Outlook Calendar for event viewing and management within project details, utilizing MSAL OAuth and Microsoft Graph API.
+*   **Project Field Tasks:** A lightweight tracker for tasks within projects, managing priority, status, assignments, due dates, and location details.
+*   **Leave Request System:** Manages leave requests with various types, approval workflows, and historical tracking for employees and administrators.
 
 ### System Design Choices
-The project uses a unified Supabase client and integrates the complete Sudan administrative structure. Multiple concurrent sessions are supported for the same user across devices/browsers.
+The project utilizes a unified Supabase client and integrates the complete Sudan administrative structure. It supports multiple concurrent sessions for the same user across different devices and browsers.
 
 ## External Dependencies
 *   **Supabase:** PostgreSQL database, Authentication, Realtime, Storage, Row Level Security, Edge Functions.
@@ -61,15 +39,14 @@ The project uses a unified Supabase client and integrates the complete Sudan adm
 *   **Recharts:** For data visualization.
 *   **Lucide React:** For iconography.
 *   **Vite:** Build tool.
-*   **ESLint, TypeScript:** For code quality and typing.
+*   **ESLint, TypeScript:** For code quality.
 *   **React Hook Form, Zod:** For form management and validation.
-*   **date-fns, uuid, clsx/class-variance-authority:** Utility libraries.
 *   **Leaflet:** For map components.
-*   **jspdf, jspdf-autotable, xlsx:** For PDF and Excel export functionalities.
+*   **jspdf, jspdf-autotable, xlsx:** For PDF and Excel export.
 *   **Vercel:** Production hosting.
 *   **Capacitor:** For mobile deployment.
 *   **Flutter Mobile:** Dart/Flutter framework with Supabase Flutter, flutter_webrtc, Hive, flutter_map, Google Fonts, and Shorebird for OTA updates.
-*   **Firebase Cloud Messaging (FCM):** Push notification delivery to mobile devices.
+*   **Firebase Cloud Messaging (FCM):** For push notifications.
 *   **IONOS SMTP:** For email notifications.
-*   **Gemini 2.0 Flash with Groq:** For AI-powered OCR in transaction scanning.
+*   **Gemini 2.0 Flash with Groq:** For AI-powered OCR.
 *   **Microsoft Graph API:** For Outlook Calendar integration.

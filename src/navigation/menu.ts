@@ -27,9 +27,11 @@ import {
   Phone,
   Bell,
   Eye,
+  Handshake,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
+import { normalizeRole } from '@/utils/roleMapping';
 
 export interface MenuGroup {
   id: string;
@@ -52,22 +54,20 @@ export const getWorkflowMenuGroups = (
   isSuperAdmin: boolean = false,
   menuPrefs: MenuPreferences = DEFAULT_MENU_PREFERENCES
 ): MenuGroup[] => {
-  const isAdmin = roles.includes('admin' as AppRole) || defaultRole === 'admin';
-  const isICT = roles.includes('ict' as AppRole) || defaultRole === 'ict';
-  const isFinancialAdmin = roles.includes('financialAdmin' as AppRole) || defaultRole === 'financialAdmin';
-  const isDataCollector = roles.includes('DataCollector' as AppRole) || roles.includes('dataCollector' as AppRole) || defaultRole === 'dataCollector' || defaultRole === 'DataCollector';
-  const isCoordinator = roles.includes('Coordinator' as AppRole) || roles.includes('coordinator' as AppRole) || defaultRole === 'coordinator' || defaultRole === 'Coordinator';
-  const isFOM = roles.includes('fom' as AppRole) || 
-                roles.includes('Field Operation Manager (FOM)' as AppRole) ||
-                defaultRole === 'fom' || 
-                defaultRole?.toLowerCase() === 'fom' ||
-                defaultRole === 'Field Operation Manager (FOM)';
-  const isSupervisor = roles.includes('supervisor' as AppRole) || defaultRole === 'supervisor';
-  const isProjectManager = roles.includes('projectManager' as AppRole) || defaultRole === 'projectManager';
-  const isCountryDirector = roles.includes('CountryDirector' as AppRole) || 
-                            roles.includes('countryDirector' as AppRole) || 
-                            defaultRole === 'countryDirector' || 
-                            defaultRole === 'CountryDirector';
+  const normalizedDefault = normalizeRole(defaultRole);
+  const normalizedRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
+  const allNormalized = normalizedDefault ? [normalizedDefault, ...normalizedRoles] : normalizedRoles;
+  const hasRole = (code: string) => allNormalized.includes(code as any);
+
+  const isAdmin = hasRole('admin');
+  const isICT = hasRole('ict');
+  const isFinancialAdmin = hasRole('financialAdmin');
+  const isDataCollector = hasRole('dataCollector');
+  const isCoordinator = hasRole('coordinator');
+  const isFOM = hasRole('fom');
+  const isSupervisor = hasRole('supervisor');
+  const isProjectManager = hasRole('projectManager');
+  const isCountryDirector = hasRole('countryDirector');
 
   const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
   const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -197,6 +197,12 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/settings') && ((isAdmin || perms.settings) && !isDataCollector)) {
     adminItems.push({ id: 'settings', title: 'Settings', url: '/settings', icon: Settings, priority: 10, isPinned: isPinned('/settings') });
   }
+  const crmItems: MenuGroup['items'] = [];
+  if (!isHidden('/crm/partners') && (isAdmin || isSuperAdmin || isFOM || isProjectManager || isCountryDirector)) {
+    crmItems.push({ id: 'crm-partners', title: 'Partners & Donors', url: '/crm/partners', icon: Handshake, priority: 1, isPinned: isPinned('/crm/partners') });
+  }
+  if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
+
   if (adminItems.length) groups.push({ id: 'admin', label: 'Administration', order: 6, items: adminItems });
 
   groups.forEach(group => {

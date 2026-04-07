@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { SiteVisit, User } from '@/types';
+import { normalizeRole } from '@/utils/roleMapping';
 import { useUser } from '@/context/user/UserContext'; 
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { DynamicFieldTeamMap } from '@/components/map/DynamicFieldTeamMap';
@@ -33,7 +34,7 @@ export const AssignmentMap: React.FC<AssignmentMapProps> = ({
   const eligibleCollectors = useMemo(() => {
     // Get all data collectors regardless of location
     const collectors = users.filter(user => 
-      user.role === 'dataCollector' || user.role === 'datacollector'
+      normalizeRole(user.role) === 'dataCollector'
     );
     
     // Sort by proximity (closest first) - collectors without location go to the end

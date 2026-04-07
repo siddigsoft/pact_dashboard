@@ -67,9 +67,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [verifiedByName, setVerifiedByName] = useState<string | null>(null);
   const [classificationFee, setClassificationFee] = useState<number | null>(null);
 
-  const isFieldWorker = currentUser?.role === 'dataCollector' || 
-                        currentUser?.role === 'datacollector' || 
-                        currentUser?.role === 'coordinator';
+  const isFieldWorker = hasAnyRole(['dataCollector', 'coordinator']);
   
   const canSeeBreakdown = !isFieldWorker;
 

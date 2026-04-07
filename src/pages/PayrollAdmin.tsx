@@ -3,6 +3,7 @@
  * 3 sub-tabs: Employee Salaries · Run Payroll · Payslips & History
  */
 import { useState, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -45,6 +46,7 @@ interface EmployeeRow {
   id: string; full_name: string | null; role: string | null;
   department_name: string | null; department_id: string | null; email: string | null;
   employment_type: string | null; contract_start_date: string | null; contract_end_date: string | null;
+  contract_type: string | null;
   salary_config: SalaryConfig | null;
 }
 interface Adjustment { name: string; amount: number; type: 'bonus' | 'deduction'; }
@@ -232,7 +234,7 @@ export default function PayrollAdmin() {
     ...PA_CACHE,
     queryFn: async () => {
       const [{ data: profs }, { data: depts }, { data: configs }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date, contract_end_date').order('full_name'),
+        supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date, contract_end_date, contract_type, is_employee').order('full_name'),
         supabase.from('departments').select('id, name'),
         supabase.from('employee_salary_config').select('*'),
       ]);
@@ -241,12 +243,14 @@ export default function PayrollAdmin() {
       const cfgMap: Record<string, SalaryConfig> = {};
       (configs ?? []).forEach((c: any) => { cfgMap[c.user_id] = { ...c, allowances: Array.isArray(c.allowances) ? c.allowances : [], deductions: Array.isArray(c.deductions) ? c.deductions : [] }; });
       return (profs ?? [])
-        .filter((p: any) => p.employment_type != null && p.employment_type !== '')
+        .filter((p: any) => p.is_employee === true)
+        .filter((p: any) => !p.contract_type || p.contract_type !== 'retainer')
         .map((p: any) => ({
           id: p.id, full_name: p.full_name, role: p.role, email: p.email,
           department_id: p.department_id, department_name: deptMap[p.department_id] ?? null,
           employment_type: p.employment_type, contract_start_date: p.contract_start_date,
           contract_end_date: p.contract_end_date ?? null,
+          contract_type: p.contract_type ?? null,
           salary_config: cfgMap[p.id] ?? null,
         }));
     },
@@ -934,7 +938,11 @@ function deptBreakdown(items: RunItem[]): DeptSummary[] {
 }
 
 function PayrollReportsTab({ runs, employees, currentUserId }: { runs: PayrollRun[]; employees: EmployeeRow[]; currentUserId: string }) {
-  const [reportTab, setReportTab] = useState<'breakdown' | 'contracts' | 'headcount' | 'ytd' | 'compare' | 'statutory' | 'budget'>('breakdown');
+  const [searchParams] = useSearchParams();
+  const validReportTabs = ['breakdown', 'contracts', 'headcount', 'ytd', 'compare', 'statutory', 'budget'] as const;
+  type ReportTab = typeof validReportTabs[number];
+  const initialReportTab = (validReportTabs.includes(searchParams.get('report') as ReportTab) ? searchParams.get('report') : 'breakdown') as ReportTab;
+  const [reportTab, setReportTab] = useState<ReportTab>(initialReportTab);
 
   return (
     <div className="space-y-4">

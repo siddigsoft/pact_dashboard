@@ -1156,6 +1156,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       const bulkMmps = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
       const mmpLabel = bulkMmps.length > 0 ? bulkMmps.join(', ') : groupLabel;
       const projectLabel = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+      const previewBreakdowns = [
+        { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+      ].filter(b => b.rows.length > 0);
       return buildEnhancedPaymentEmailHTML({
         recipientName,
         approverName,
@@ -1172,6 +1178,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         isBulk: true,
         currency: 'SDG',
         usdRate: effectiveRate,
+        breakdowns: previewBreakdowns,
       });
     } else if (req) {
       const amount = req.approvedAmount || req.requestedAmount;
@@ -1238,17 +1245,44 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             generatedBy: approverName,
           };
 
-          // Generate one Excel workbook with 4 sheets: Statement, Full Details, By State, By Enumerator.
+          // Generate both Excel (6 sheets) and signed PDF certificates, attach both to the email.
           const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-          let excelAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
+          const PDF_MIME  = 'application/pdf';
+          let bothAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
           try {
             const generated = await generateAllSheetsStatementExcelBase64(statementRows, config);
-            if (generated) excelAttachments = [{ ...generated, mimeType: XLSX_MIME }];
-          } catch { /* continue without attachment */ }
+            if (generated) bothAttachments.push({ ...generated, mimeType: XLSX_MIME });
+          } catch { /* continue without Excel */ }
+          if (bulkRequests.length <= 100) {
+            try {
+              // Chunk signature fetching in groups of 10 to avoid browser OOM
+              const CHUNK = 10;
+              const certDataList: ReturnType<typeof buildCertData>[] = [];
+              for (let i = 0; i < bulkRequests.length; i += CHUNK) {
+                const slice = bulkRequests.slice(i, i + CHUNK);
+                const chunk = await Promise.all(
+                  slice.map(async (bReq) => {
+                    const sig = await getSignatureImageData(bReq);
+                    return buildCertData(bReq, sig);
+                  })
+                );
+                certDataList.push(...chunk);
+              }
+              const pdfGen = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+              if (pdfGen) bothAttachments.push({ ...pdfGen, mimeType: PDF_MIME });
+            } catch { /* continue without PDF */ }
+          }
+          const excelAttachments = bothAttachments; // kept for variable name compatibility below
 
           const bulkMmps1 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
           const mmpLabel1 = bulkMmps1.length > 0 ? bulkMmps1.join(', ') : groupLabel || 'All Approved';
           const projectLabel1 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+          const sendBreakdowns = [
+            { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+            { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+            { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+            { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          ].filter(b => b.rows.length > 0);
           const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
             selectedRecipients,
             approverName,
@@ -1267,7 +1301,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             excelAttachments.length > 0 ? excelAttachments : undefined,
             ccEmails,
             mmpLabel1,
-            effectiveRate
+            effectiveRate,
+            sendBreakdowns
           );
 
           const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -1275,8 +1310,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
           if (result.success && !result.error) {
             toast({
-              title: 'Bulk Excel Sent / تم إرسال Excel الجماعي',
-              description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with the formatted Excel report attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم مع ملف Excel المنسق.`,
+              title: 'Sent with Both Attachments / تم الإرسال مع المرفقين',
+              description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with Excel report (6 sheets) + signed PDF certificates attached. / تم إرسال ${bulkRequests.length} طلب مع ملف Excel (6 أوراق) وشهادات PDF الموقعة.`,
             });
           } else if (result.success && result.error) {
             toast({
@@ -1294,59 +1329,99 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           return;
         }
 
-        // ── PDF MODE (default) ─────────────────────────────────────────────
-        // Always generate the full PDF (all requests as pages in one file).
-        // For large batches the PDF is uploaded to storage and shared as a download link
-        // instead of being attached directly (which would exceed email size limits).
-        const PDF_ATTACH_LIMIT = 30;
-        const pdfTooLarge = bulkRequests.length > PDF_ATTACH_LIMIT;
+        // ── PDF + EXCEL MODE (always attach both) ──────────────────────────
+        // PDF: batches ≤ 30 are attached directly; 31–100 are uploaded to storage
+        //      and a 7-day download link is included; > 100 in-browser PDF
+        //      generation is skipped entirely to avoid browser OOM — Finance
+        //      can use the "Bulk PDF" button in the portal instead.
+        // Excel: always generated and attached regardless of batch size.
+        const PDF_ATTACH_LIMIT  = 30;   // attach directly up to here
+        const PDF_GENERATE_LIMIT = 100; // skip in-browser PDF generation above here
+        const pdfTooLarge  = bulkRequests.length > PDF_ATTACH_LIMIT;
+        const pdfSkipGen   = bulkRequests.length > PDF_GENERATE_LIMIT;
 
         let summaryPdf: { base64: string; filename: string } | undefined;
         let pdfDownloadUrl: string | undefined;
 
-        try {
-          const certDataList = await Promise.all(
-            bulkRequests.map(async (bReq) => {
-              const sig = await getSignatureImageData(bReq);
-              return buildCertData(bReq, sig);
-            })
-          );
-          const generated = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+        if (!pdfSkipGen) {
+          try {
+            // Chunk signature fetching to avoid firing hundreds of concurrent requests
+            const CHUNK = 10;
+            const certDataList: ReturnType<typeof buildCertData>[] = [];
+            for (let i = 0; i < bulkRequests.length; i += CHUNK) {
+              const slice = bulkRequests.slice(i, i + CHUNK);
+              const chunk = await Promise.all(
+                slice.map(async (bReq) => {
+                  const sig = await getSignatureImageData(bReq);
+                  return buildCertData(bReq, sig);
+                })
+              );
+              certDataList.push(...chunk);
+            }
+            const generated = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
 
-          if (!pdfTooLarge) {
-            summaryPdf = generated;
-          } else {
-            // Upload to storage and get a signed download link (expires in 7 days)
-            const batchFileName = generated.filename;
-            const pdfBlob = new Blob(
-              [Uint8Array.from(atob(generated.base64), c => c.charCodeAt(0))],
-              { type: 'application/pdf' }
-            );
-            const uploadPath = `bulk-payment-pdfs/${batchFileName}`;
-            const { error: uploadError } = await supabase.storage
-              .from('mmp-files')
-              .upload(uploadPath, pdfBlob, { contentType: 'application/pdf', upsert: true });
-
-            if (!uploadError) {
-              const { data: signedData } = await supabase.storage
+            if (!pdfTooLarge) {
+              summaryPdf = generated;
+            } else {
+              // Upload to storage and get a signed download link (expires in 7 days)
+              const batchFileName = generated.filename;
+              const pdfBlob = new Blob(
+                [Uint8Array.from(atob(generated.base64), c => c.charCodeAt(0))],
+                { type: 'application/pdf' }
+              );
+              const uploadPath = `bulk-payment-pdfs/${batchFileName}`;
+              const { error: uploadError } = await supabase.storage
                 .from('mmp-files')
-                .createSignedUrl(uploadPath, 60 * 60 * 24 * 7); // 7 days
-              if (signedData?.signedUrl) {
-                pdfDownloadUrl = signedData.signedUrl;
+                .upload(uploadPath, pdfBlob, { contentType: 'application/pdf', upsert: true });
+
+              if (!uploadError) {
+                const { data: signedData } = await supabase.storage
+                  .from('mmp-files')
+                  .createSignedUrl(uploadPath, 60 * 60 * 24 * 7); // 7 days
+                if (signedData?.signedUrl) {
+                  pdfDownloadUrl = signedData.signedUrl;
+                }
               }
             }
-          }
-        } catch { /* continue without PDF */ }
+          } catch { /* continue without PDF */ }
+        }
 
-        const pdfNote = pdfTooLarge
-          ? pdfDownloadUrl
-            ? `\n\nBULK PDF DOWNLOAD: This batch contains ${bulkRequests.length} requests. The full PDF (all ${bulkRequests.length} pages) is available for download here (link valid for 7 days):\n${pdfDownloadUrl}\n\nتنزيل PDF: الملف الكامل (${bulkRequests.length} صفحة) متاح للتنزيل عبر الرابط أعلاه (صالح لمدة 7 أيام).`
-            : `\n\nNOTE: This batch contains ${bulkRequests.length} requests. Please log in to PACT Command Center → Processing tab → "Bulk PDF" to download the full PDF.\nملاحظة: يرجى تسجيل الدخول إلى PACT وتنزيل ملف PDF الكامل من تبويب المعالجة.`
-          : '';
+        // Always generate Excel and attach alongside the PDF
+        const pdfModeExcelAttachments: Array<{ base64: string; filename: string; mimeType: string }> = [];
+        try {
+          const pdfStatementRows: StatementRow[] = bulkRequests.map(mapRequestToStatementRow);
+          const pdfExcelConfig: StatementConfig = {
+            title: 'Transportation Advance',
+            titleAr: 'سلفة النقل',
+            statementType: 'transport_advance',
+            statusFilter: groupLabel || 'All Approved',
+            statusFilterAr: groupLabel ? groupLabel : 'الكل',
+            currency: 'SDG',
+            generatedBy: approverName,
+          };
+          const pdfModeExcel = await generateAllSheetsStatementExcelBase64(pdfStatementRows, pdfExcelConfig);
+          if (pdfModeExcel) {
+            pdfModeExcelAttachments.push({ ...pdfModeExcel, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          }
+        } catch { /* continue without Excel */ }
+
+        const pdfNote = pdfSkipGen
+          ? `\n\nNOTE: This batch (${bulkRequests.length} requests) is too large to generate the PDF in-browser. Please log in to PACT Command Center → Down Payment Approval → "Bulk PDF" button to download the full signed PDF.\nملاحظة: الدفعة كبيرة جداً لتوليد PDF في المتصفح. يرجى تسجيل الدخول إلى PACT وتنزيل PDF الكامل الموقع من زر "PDF الجماعي".`
+          : pdfTooLarge
+            ? pdfDownloadUrl
+              ? `\n\nBULK PDF DOWNLOAD: This batch contains ${bulkRequests.length} requests. The full PDF (all ${bulkRequests.length} pages) is available for download here (link valid for 7 days):\n${pdfDownloadUrl}\n\nتنزيل PDF: الملف الكامل (${bulkRequests.length} صفحة) متاح للتنزيل عبر الرابط أعلاه (صالح لمدة 7 أيام).`
+              : `\n\nNOTE: This batch contains ${bulkRequests.length} requests. Please log in to PACT Command Center → Processing tab → "Bulk PDF" to download the full PDF.\nملاحظة: يرجى تسجيل الدخول إلى PACT وتنزيل ملف PDF الكامل من تبويب المعالجة.`
+            : '';
 
         const bulkMmps2 = [...new Set(bulkRequests.map(r => r.mmpName).filter(Boolean))];
         const mmpLabel2 = bulkMmps2.length > 0 ? bulkMmps2.join(', ') : groupLabel || 'All Approved';
         const projectLabel2 = bulkRequests[0]?.wfpProjectName || bulkRequests[0]?.projectName || 'WFP TPM';
+        const pdfModeBreakdowns = [
+          { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        ].filter(b => b.rows.length > 0);
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
           approverName,
@@ -1359,13 +1434,18 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           'advance',
           projectLabel2,
           'SDG',
-          `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.${pdfNote}`,
+          (() => {
+            const preview = bulkRequests.slice(0, 20).map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ');
+            const overflow = bulkRequests.length > 20 ? ` … and ${bulkRequests.length - 20} more (see attached Excel for full list)` : '';
+            return `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${preview}${overflow}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.${pdfNote}`;
+          })(),
           '/down-payment-approval',
           summaryPdf,
-          undefined,
+          pdfModeExcelAttachments.length > 0 ? pdfModeExcelAttachments : undefined,
           ccEmails.length > 0 ? ccEmails : undefined,
           mmpLabel2,
-          effectiveRate
+          effectiveRate,
+          pdfModeBreakdowns
         );
 
         const sentCount = result.success ? selectedRecipients.length - (result.error ? parseInt(result.error) || 0 : 0) : 0;
@@ -1373,12 +1453,14 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
         if (result.success && !result.error) {
           toast({
-            title: "Bulk Payment Request Sent / تم إرسال طلبات الدفع الجماعية",
-            description: pdfTooLarge
-              ? pdfDownloadUrl
-                ? `${bulkRequests.length} requests sent. Full PDF (all ${bulkRequests.length} pages) uploaded — download link included in the email (valid 7 days). / تم الإرسال. رابط تنزيل PDF مرفق في البريد.`
-                : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s). Use "Bulk PDF" button to download the full PDF. / تم الإرسال. استخدم زر PDF لتنزيل الملف الكامل.`
-              : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with full PDF attached. / تم إرسال ${bulkRequests.length} طلب مع ملف PDF كامل.`,
+            title: "Sent / تم الإرسال",
+            description: pdfSkipGen
+              ? `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with Excel (6 sheets) attached. PDF is too large for in-browser generation — use the "Bulk PDF" button in the portal. / تم الإرسال مع ملف Excel. استخدم زر PDF الجماعي لتنزيل الشهادات.`
+              : pdfTooLarge
+                ? pdfDownloadUrl
+                  ? `${bulkRequests.length} requests sent with Excel + PDF download link (valid 7 days) in email body. / تم الإرسال مع Excel ورابط تنزيل PDF.`
+                  : `${bulkRequests.length} requests sent with Excel attached. Use "Bulk PDF" to download the full PDF. / تم الإرسال مع Excel. استخدم زر PDF لتنزيل الملف الكامل.`
+                : `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with Excel + signed PDF certificates attached. / تم إرسال ${bulkRequests.length} طلب مع Excel وشهادات PDF الموقعة.`,
           });
         } else if (result.success && result.error) {
           toast({
@@ -4162,15 +4244,15 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                         }`}
                       >
                         <FileSpreadsheet className="h-3.5 w-3.5" />
-                        Excel (4 sheets)
+                        Excel (6 sheets)
                       </button>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       {paymentRequestDialog.sendMode === 'excel'
-                        ? `Excel workbook with 4 sheets (Statement, Full Details, By State, By Enumerator) covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached.`
+                        ? `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkRequests.length} requests will both be attached.`
                         : paymentRequestDialog.bulkRequests.length > 30
-                          ? `${paymentRequestDialog.bulkRequests.length} requests — PDF is too large to attach directly. A download link will be included in the email body instead. Consider switching to Excel for a direct attachment.`
-                          : `A summary PDF covering all ${paymentRequestDialog.bulkRequests.length} requests will be attached to the email.`
+                          ? `Excel (6 sheets) will be attached. PDF is too large for direct attachment — a download link will be included in the email body.`
+                          : `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkRequests.length} requests will both be attached.`
                       }
                     </p>
                   </div>
@@ -4279,7 +4361,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
                     : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    Attached: {paymentRequestDialog.sendMode === 'excel' ? '1 Excel file · 4 sheets (Statement, Full Details, By State, By Enumerator)' : 'PDF Certificate (.pdf)'}
+                    Attached: {paymentRequestDialog.bulkRequests.length > 30 ? 'Excel (6 sheets) + PDF download link in body' : 'Excel (6 sheets) + Signed PDF Certificates'}
                   </span>
                 </div>
               </div>

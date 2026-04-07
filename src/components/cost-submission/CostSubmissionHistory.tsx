@@ -28,6 +28,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAppContext } from "@/context/AppContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { useUser } from "@/context/user/UserContext";
 import { useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,7 @@ interface CostSubmissionHistoryProps {
 
 const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
   const { currentUser, roles } = useAppContext();
+  const { hasAnyRole } = useAuthorization();
   const { users } = useUser();
   const context = useCostSubmissionContext();
   const { mutate: reviewSubmission, isPending: isReviewing } = context.useReviewSubmission();
@@ -63,11 +65,8 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
   const [sortBy, setSortBy] = useState<'date' | 'amount' | 'age'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
-  const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
-  const isSupervisor = roles?.includes('hubSupervisor' as AppRole) || 
-                       roles?.includes('supervisor' as AppRole) ||
-                       currentUser?.role === 'hubSupervisor' || 
-                       currentUser?.role === 'supervisor';
+  const isAdmin = hasAnyRole(['admin', 'ict']);
+  const isSupervisor = hasAnyRole(['supervisor']);
   const canApprove = isAdmin || isSupervisor;
   
   const getSubmitterName = (submitterId: string) => {

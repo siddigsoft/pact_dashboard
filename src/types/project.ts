@@ -92,6 +92,7 @@ export interface Project {
   archived?: boolean;
   clientType?: 'internal' | 'customer';
   clientName?: string;
+  partnerId?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

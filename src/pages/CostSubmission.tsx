@@ -1541,7 +1541,9 @@ const CostSubmission = () => {
     }));
   };
 
-  const openBulkCostEmailDialog = async (forceSubmission?: OperationalCostSubmission) => {
+  const openBulkCostEmailDialog = async (forceSubmission?: OperationalCostSubmission, groupItems?: OperationalCostSubmission[]) => {
+    console.log('[BulkEmail] OPEN called | forceSubmission id:', forceSubmission?.id ?? 'none', '| expense_category:', forceSubmission?.expense_category ?? 'N/A', '| amount_cents:', forceSubmission?.amount_cents ?? 'N/A', '| selectedCostIds.size:', selectedCostIds.size, '| operationalCosts.length:', operationalCosts.length);
+
     // Open dialog immediately in loading state so the user sees instant feedback
     setBulkCostEmailDialog({ step: 'rate', open: true, usdRate: '', totalSdg: 0, count: 0, approvedSubmissions: [], availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: true, sending: false });
 
@@ -1549,6 +1551,7 @@ const CostSubmission = () => {
     let freshCosts: OperationalCostSubmission[] = [];
     try {
       const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
+      console.log('[BulkEmail] RPC result: error=', rpcResult.error?.message ?? 'none', '| data count=', (rpcResult.data as any[])?.length ?? 'null');
       if (!rpcResult.error && rpcResult.data && (rpcResult.data as any[]).length > 0) {
         freshCosts = rpcResult.data as OperationalCostSubmission[];
       } else {
@@ -1556,29 +1559,47 @@ const CostSubmission = () => {
           .from('operational_cost_submissions')
           .select('*')
           .order('created_at', { ascending: false });
+        console.log('[BulkEmail] Direct query result: error=', directResult.error?.message ?? 'none', '| data count=', directResult.data?.length ?? 'null');
         freshCosts = (directResult.data as OperationalCostSubmission[]) || [];
       }
       // Update the global state with the fresh data too
       if (freshCosts.length > 0) setOperationalCosts(freshCosts);
-    } catch {
+    } catch (err) {
       // Fall back to current state if fetch fails
+      console.log('[BulkEmail] CATCH error:', err);
       freshCosts = operationalCosts;
     }
 
+    console.log('[BulkEmail] freshCosts total:', freshCosts.length, '| sample keys:', freshCosts[0] ? Object.keys(freshCosts[0]).join(', ') : 'none');
+    console.log('[BulkEmail] sample record:', freshCosts[0]);
+
     const allApproved = freshCosts.filter(o => getOperationalDerivedStatus(o) === 'approved');
+    console.log('[BulkEmail] allApproved:', allApproved.length, '| selectedCostIds:', selectedCostIds.size, '| forceSubmission id:', forceSubmission?.id ?? 'none');
 
     let approvedSubs: OperationalCostSubmission[];
     if (forceSubmission) {
       // Prefer the freshly-fetched version of the record so the dialog always shows current data
       const freshVersion = freshCosts.find(o => o.id === forceSubmission.id);
+      console.log('[BulkEmail] forceSubmission freshVersion:', freshVersion ? 'found' : 'not found (using original)', '| amount_cents:', (freshVersion || forceSubmission).amount_cents, '| category:', (freshVersion || forceSubmission).expense_category);
       approvedSubs = [freshVersion || forceSubmission];
+    } else if (groupItems && groupItems.length > 0) {
+      // Group-level "Send to Finance": use approved items from that specific group
+      const groupIds = new Set(groupItems.map(i => i.id));
+      const freshGroup = freshCosts.filter(o => groupIds.has(o.id));
+      const pool = freshGroup.length > 0 ? freshGroup : groupItems;
+      approvedSubs = pool.filter(o => getOperationalDerivedStatus(o) === 'approved');
+      // If none are approved yet, include all from the group so the dialog opens with context
+      if (approvedSubs.length === 0) approvedSubs = pool;
+      console.log('[BulkEmail] groupItems mode: pool=', pool.length, '→ approvedSubs=', approvedSubs.length);
     } else if (selectedCostIds.size > 0) {
       const filtered = allApproved.filter(o => selectedCostIds.has(o.id));
       // If selection doesn't overlap with approved records (e.g., user selected pending ones), fall back to ALL approved
       approvedSubs = filtered.length > 0 ? filtered : allApproved;
+      console.log('[BulkEmail] selectedCostIds filtered:', filtered.length, '→ using', approvedSubs.length, 'subs');
     } else {
       approvedSubs = allApproved;
     }
+    console.log('[BulkEmail] final approvedSubs:', approvedSubs.length, '| first amount_cents:', approvedSubs[0]?.amount_cents, '| first category:', approvedSubs[0]?.expense_category);
     const totalSdg = approvedSubs.reduce((sum, oc) => {
       const cents = Number((oc as any).amount_cents) || 0;
       const direct = (oc as any).total_amount || (oc as any).amount || 0;
@@ -2078,7 +2099,7 @@ const CostSubmission = () => {
             {(isAdmin || isSuperAdmin) && !isFOM && (
               <Button
                 size="default"
-                onClick={openBulkCostEmailDialog}
+                onClick={() => openBulkCostEmailDialog()}
                 className="bg-[#0F2041] hover:bg-[#1D3461] text-white shrink-0 font-semibold shadow-md"
                 data-testid="button-bulk-cost-email"
               >
@@ -3131,7 +3152,7 @@ const CostSubmission = () => {
                 <Button
                   size="sm"
                   type="button"
-                  onClick={openBulkCostEmailDialog}
+                  onClick={() => openBulkCostEmailDialog()}
                   disabled={approvedCount === 0}
                   className={`shrink-0 font-semibold gap-1.5 ${approvedCount > 0 ? 'bg-white text-[#0F2041] hover:bg-white/90 shadow-lg shadow-black/20' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
                   data-testid="button-bulk-cost-email-bar"
@@ -3379,23 +3400,30 @@ const CostSubmission = () => {
                   {ocGroups.map(({ groupId, items: groupItems }) => {
                     const isMultiItem = groupItems.length > 1;
 
+                    // Outer-scope group stats (reused by GroupHeader, item rows, and footer)
+                    const groupTitle = groupItems[0].request_title
+                      || groupItems[0].description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')
+                      || 'Grouped Request';
+                    const grpApprovedCnt = groupItems.filter(o => { const ds = getOperationalDerivedStatus(o); return ds === 'approved' || ds === 'paid' || ds === 'reconciled'; }).length;
+                    const grpRejectedCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'rejected').length;
+                    const grpPendingCnt = groupItems.length - grpApprovedCnt - grpRejectedCnt;
+                    const grpApprovableTier: 1 | 2 | 3 | null = isMultiItem ? (
+                      groupItems.some(o => canTier1Approve(o)) ? 1 :
+                      groupItems.some(o => canTier2Approve(o)) ? 2 :
+                      groupItems.some(o => canTier3Approve(o)) ? 3 : null
+                    ) : null;
+
                     // GROUP HEADER (only for multi-item groups) — navy gradient with collapse/expand
                     const GroupHeader = isMultiItem ? (() => {
                       const totalCents = groupItems.reduce((s, o) => s + o.amount_cents, 0);
                       const currency = groupItems[0].currency;
-                      const groupTitle = groupItems[0].request_title
-                        || groupItems[0].description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')
-                        || 'Grouped Request';
                       const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
                       const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
                       const projPalette = getProjectPalette(groupItems[0].project_id);
-                      const groupApprovableTier: 1 | 2 | 3 | null =
-                        groupItems.some(o => canTier1Approve(o)) ? 1 :
-                        groupItems.some(o => canTier2Approve(o)) ? 2 :
-                        groupItems.some(o => canTier3Approve(o)) ? 3 : null;
-                      const approvedCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'approved' || getOperationalDerivedStatus(o) === 'paid').length;
-                      const rejectedCnt = groupItems.filter(o => getOperationalDerivedStatus(o) === 'rejected').length;
-                      const pendingCnt = groupItems.length - approvedCnt - rejectedCnt;
+                      const approvedCnt = grpApprovedCnt;
+                      const rejectedCnt = grpRejectedCnt;
+                      const pendingCnt = grpPendingCnt;
+                      const groupApprovableTier = grpApprovableTier;
                       const isExpanded = expandedGroups.has(groupId!);
 
                       return (
@@ -3469,6 +3497,25 @@ const CostSubmission = () => {
                             </div>
                           </button>
 
+                          {/* Send to Finance — visible when approved items exist in this group */}
+                          {(isSuperAdmin || isAdmin) && !isFOM && approvedCnt > 0 && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628]/60 border-b border-blue-900/30">
+                              <Mail className="h-3.5 w-3.5 text-blue-400 flex-none" />
+                              <span className="text-[11px] text-blue-300 flex-1">
+                                {approvedCnt} approved item{approvedCnt !== 1 ? 's' : ''} ready to send to Finance
+                              </span>
+                              <Button
+                                size="sm"
+                                className="h-7 px-3 text-xs bg-blue-900 hover:bg-blue-800 text-blue-100 border border-blue-700/50"
+                                onClick={(e) => { e.stopPropagation(); openBulkCostEmailDialog(undefined, groupItems); }}
+                                data-testid={`button-group-send-finance-${groupId}`}
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                Send to Finance
+                              </Button>
+                            </div>
+                          )}
+
                           {/* Approve All / Reject All — shown when expanded */}
                           {isExpanded && groupApprovableTier !== null && groupId && (
                             <div className="flex items-center gap-2 px-4 py-2.5 bg-[#0F2041]/5 border-b border-[#1D3461]/10 flex-wrap">
@@ -3489,7 +3536,7 @@ const CostSubmission = () => {
                       );
                     })() : null;
 
-                    const itemElements = groupItems.map((oc) => {
+                    const itemElements = groupItems.map((oc, idx) => {
                     const catMeta = EXPENSE_CATEGORY_MAP[oc.expense_category];
                     const CatIcon = catMeta?.icon;
                     const statusColors: Record<string, string> = {
@@ -3523,6 +3570,146 @@ const CostSubmission = () => {
                     const tier3Approver = oc.tier3_approved_by ? users.find(u => u.id === oc.tier3_approved_by) : null;
                     const hasSig = oc.tier2_notes?.includes('[Signed:') || (oc as any).tier3_notes?.includes('[Signed:') || oc.tier1_notes?.includes('[Signed:');
 
+                    // ── COMPACT ROW (inside a multi-item group — mockup design) ──────────────
+                    if (isMultiItem) {
+                      const isApproved = derivedStatus === 'approved' || derivedStatus === 'paid' || derivedStatus === 'reconciled';
+                      const isRejected = derivedStatus === 'rejected';
+                      return (
+                        <div key={oc.id} data-testid={`operational-cost-${oc.id}`}
+                          className={`border-b border-[#1D3461]/10 last:border-b-0 ${isApproved ? 'bg-green-50/60 dark:bg-green-950/20' : isRejected ? 'bg-red-50/40 dark:bg-red-950/20' : 'bg-white dark:bg-background'}`}>
+                          <div className="flex items-start gap-2.5 px-4 py-3">
+                            {/* Row number */}
+                            <div className="w-5 flex-none text-center pt-1">
+                              <span className="text-[10px] font-bold text-gray-400">{idx + 1}</span>
+                            </div>
+                            {/* Category icon */}
+                            <div className="flex-none h-7 w-7 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                              {CatIcon && <CatIcon className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />}
+                            </div>
+                            {/* Main content */}
+                            <div className="flex-1 min-w-0">
+                              {(() => {
+                                const raw = oc.description || '';
+                                // Extract request title from <<...>>
+                                const titleMatch = raw.match(/<<([^>>]+)>>/);
+                                const reqTitle = titleMatch ? titleMatch[1].trim() : '';
+                                // Remove the [ADVANCE] <<...>> prefix line
+                                const bodyLines = raw.split('\n').filter(l => !l.includes('<<') && !l.startsWith('[ADVANCE]'));
+                                // Split into description (before Justification:) and justification (after)
+                                const justIdx = bodyLines.findIndex(l => l.trim().startsWith('Justification:'));
+                                const descLines = justIdx >= 0 ? bodyLines.slice(0, justIdx) : bodyLines;
+                                const justLines = justIdx >= 0 ? bodyLines.slice(justIdx) : [];
+                                const descText = descLines.join('\n').trim();
+                                const justText = justLines.join('\n').replace(/^Justification:\s*/i, '').trim();
+                                return (
+                                  <div className="space-y-1">
+                                    {descText && (
+                                      <div>
+                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Description</span>
+                                        <p className="text-[12px] text-gray-800 dark:text-gray-200 leading-snug whitespace-pre-line">{descText}</p>
+                                      </div>
+                                    )}
+                                    {justText && (
+                                      <div>
+                                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Justification</span>
+                                        <p className="text-[12px] text-gray-600 dark:text-gray-300 leading-snug whitespace-pre-line">{justText}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900">
+                                  {catMeta?.label || oc.expense_category}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                                <span className="flex items-center gap-0.5"><FileText className="h-3 w-3" />ID: {requestId}</span>
+                                <span className="flex items-center gap-0.5"><Calendar className="h-3 w-3" />{oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : format(new Date(oc.created_at), 'MMM d, yyyy')}</span>
+                                {oc.vendor && <span className="flex items-center gap-0.5"><Building2 className="h-3 w-3" />{oc.vendor}</span>}
+                              </p>
+                              {isRejected && oc.rejection_reason && (
+                                <p className="text-[11px] text-red-500 mt-0.5 italic">↩ {oc.rejection_reason}</p>
+                              )}
+                              <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusColors[derivedStatus] || statusColors.pending}`}>
+                                  {statusLabels[derivedStatus] || derivedStatus}
+                                </span>
+                                {canTier1Approve(oc) && (
+                                  <>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
+                                      onClick={() => openApprovalDialog(oc, 'approve', 1)} data-testid={`button-tier1-approve-${oc.id}`}>
+                                      <ThumbsUp className="h-2.5 w-2.5" /> Approve T1
+                                    </button>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                      onClick={() => openApprovalDialog(oc, 'reject', 1)} data-testid={`button-tier1-reject-${oc.id}`}>
+                                      <ThumbsDown className="h-2.5 w-2.5" /> Reject
+                                    </button>
+                                  </>
+                                )}
+                                {canTier2Approve(oc) && (
+                                  <>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
+                                      onClick={() => openApprovalDialog(oc, 'approve', 2)} data-testid={`button-tier2-approve-${oc.id}`}>
+                                      <ThumbsUp className="h-2.5 w-2.5" /> {hasThreeTiers(oc) ? 'Approve T2' : 'Final Approve'}
+                                    </button>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                      onClick={() => openApprovalDialog(oc, 'reject', 2)} data-testid={`button-tier2-reject-${oc.id}`}>
+                                      <ThumbsDown className="h-2.5 w-2.5" /> Reject
+                                    </button>
+                                  </>
+                                )}
+                                {canTier3Approve(oc) && (
+                                  <>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700"
+                                      onClick={() => openApprovalDialog(oc, 'approve', 3)} data-testid={`button-tier3-approve-${oc.id}`}>
+                                      <ThumbsUp className="h-2.5 w-2.5" /> Final Approve T3
+                                    </button>
+                                    <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                      onClick={() => openApprovalDialog(oc, 'reject', 3)} data-testid={`button-tier3-reject-${oc.id}`}>
+                                      <ThumbsDown className="h-2.5 w-2.5" /> Reject
+                                    </button>
+                                  </>
+                                )}
+                                {canFOMBypass(oc) && (
+                                  <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-violet-300 dark:border-violet-600 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/20"
+                                    onClick={() => openFOMBypassDialog(oc)} data-testid={`button-fom-bypass-${oc.id}`}>
+                                    <Unlock className="h-2.5 w-2.5" /> Direct Approve
+                                  </button>
+                                )}
+                                {canEditSubmission(oc) && (
+                                  <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                    onClick={() => handleEditSubmission(oc)} data-testid={`button-edit-submission-${oc.id}`}>
+                                    <Pencil className="h-2.5 w-2.5" /> Edit
+                                  </button>
+                                )}
+                                {canResubmitSubmission(oc) && (
+                                  <button className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700"
+                                    onClick={() => handleEditSubmission(oc)} data-testid={`button-resubmit-submission-${oc.id}`}>
+                                    <SendHorizonal className="h-2.5 w-2.5" /> Resubmit
+                                  </button>
+                                )}
+                                {isApproved && !canTier1Approve(oc) && !canTier2Approve(oc) && !canTier3Approve(oc) && !canFOMBypass(oc) && (
+                                  <span className="text-[10px] text-green-600 font-medium">✓ All tiers approved</span>
+                                )}
+                              </div>
+                            </div>
+                            {/* Amount + View */}
+                            <div className="flex-none text-right space-y-1 ml-1">
+                              <p className="text-sm font-bold tabular-nums text-gray-900 dark:text-white" data-testid={`text-amount-${oc.id}`}>
+                                {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
+                              </p>
+                              <button className="flex items-center gap-0.5 text-[11px] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto"
+                                onClick={() => setViewingSubmission(oc)} data-testid={`button-view-details-${oc.id}`}>
+                                <Eye className="h-3 w-3" /> View
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // ── FULL CARD (standalone / non-grouped items) ───────────────────────────
                     return (
                       <div
                         key={oc.id}
@@ -3981,7 +4168,29 @@ const CostSubmission = () => {
                         <div key={groupId} className="rounded-xl border border-[#1D3461]/20 shadow-sm overflow-hidden">
                           {GroupHeader}
                           {expandedGroups.has(groupId!) && (
-                            <div className="divide-y">{itemElements}</div>
+                            <>
+                              <div>{itemElements}</div>
+                              {/* Group footer */}
+                              <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-[#0F2041]/5 border-t border-[#1D3461]/10 flex-wrap">
+                                <span className="text-[11px] text-muted-foreground font-medium">
+                                  {grpApprovedCnt}/{groupItems.length} items approved
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs"
+                                    onClick={() => setViewingSubmission(groupItems[0])}
+                                    data-testid={`button-group-view-${groupId}`}>
+                                    <Eye className="h-3 w-3 mr-1" /> View Details
+                                  </Button>
+                                  {grpApprovableTier !== null && (
+                                    <Button size="sm" className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                      onClick={() => openGroupApprovalDialog(groupId!, groupTitle, groupItems, 'approve', grpApprovableTier!)}
+                                      data-testid={`button-group-approve-all-footer-${groupId}`}>
+                                      <ThumbsUp className="h-3 w-3 mr-1" /> Approve All Pending
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </>
                           )}
                         </div>
                       );

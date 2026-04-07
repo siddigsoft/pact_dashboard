@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { normalizeRole } from "@/utils/roleMapping";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,9 +56,7 @@ export function NearestEnumeratorsCard({
 
     return allUsers
       .filter(user => {
-        const isDataCollector = user.role === 'dataCollector' || 
-                                user.role === 'datacollector' ||
-                                user.role === 'DataCollector';
+        const isDataCollector = normalizeRole(user.role) === 'dataCollector';
         const isActive = user.status === 'active';
         const hasLocation = user.location?.latitude && user.location?.longitude;
         

@@ -1955,7 +1955,7 @@ export default function HubOperations() {
           </div>
 
           {/* GPS Bulk Upload Section */}
-          {(isSuperAdmin || currentUser?.role === 'admin' || currentUser?.role === 'fom') && (
+          {(isSuperAdmin || canManage) && (
             <GPSSitesUpload onUploadComplete={loadSites} />
           )}
 

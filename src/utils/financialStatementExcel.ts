@@ -216,30 +216,48 @@ function buildStatementWorkbook(
     stateSectionRow.height = 22;
     ws.mergeCells(stateSectionRow.number, 1, stateSectionRow.number, totalCols);
 
-    const stateHdrData = ['State', 'Requests', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`];
+    // Shift one column right so State name lands in col B (width 22) instead of col A (width 5/#)
+    const stateHdrData = ['', 'State', 'Requests', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`];
     const stateHdr = ws.addRow([...stateHdrData, ...Array(totalCols - stateHdrData.length).fill('')]);
     stateHdr.eachCell((cell, ci) => {
       cell.fill = subHeaderFill();
       cell.font = headerFont(10);
       cell.border = thinBorder();
-      cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+      cell.alignment = { horizontal: ci <= 2 ? 'left' : 'center', vertical: 'middle' };
     });
     stateHdr.height = 20;
 
     stateEntries.forEach(([stateName, s], i) => {
       const rowData: (string | number)[] = [
-        stateName, s.count, fmtCurrency(s.requested, cur), fmtCurrency(s.approved, cur), fmtCurrency(s.paid, cur),
-        ...Array(totalCols - 5).fill(''),
+        '', stateName, s.count, fmtCurrency(s.requested, cur), fmtCurrency(s.approved, cur), fmtCurrency(s.paid, cur),
+        ...Array(totalCols - 6).fill(''),
       ];
       const row = ws.addRow(rowData);
       row.eachCell((cell, ci) => {
         cell.border = thinBorder();
-        cell.alignment = { horizontal: ci === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.alignment = { horizontal: ci <= 2 ? 'left' : 'center', vertical: 'middle' };
         cell.font = bodyFont(10);
         if (i % 2 === 1) cell.fill = altFill();
       });
       row.height = 18;
     });
+
+    // Grand total row for STATE SUMMARY
+    const sGrandReq  = Array.from(stateMap.values()).reduce((s, v) => s + v.requested, 0);
+    const sGrandApp  = Array.from(stateMap.values()).reduce((s, v) => s + v.approved, 0);
+    const sGrandPaid = Array.from(stateMap.values()).reduce((s, v) => s + v.paid, 0);
+    const stateGrandData: (string | number)[] = [
+      '', 'GRAND TOTAL', rows.length, fmtCurrency(sGrandReq, cur), fmtCurrency(sGrandApp, cur), fmtCurrency(sGrandPaid, cur),
+      ...Array(totalCols - 6).fill(''),
+    ];
+    const stateGrandRow = ws.addRow(stateGrandData);
+    stateGrandRow.eachCell((cell, ci) => {
+      cell.fill = sectionFill();
+      cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: WHITE } };
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci <= 2 ? 'left' : 'center', vertical: 'middle' };
+    });
+    stateGrandRow.height = 20;
 
     ws.addRow([]).height = 6;
   }
@@ -427,7 +445,7 @@ function addGroupedSheet(
   wb: ExcelJS.Workbook,
   rows: StatementRow[],
   config: StatementConfig,
-  groupBy: 'state' | 'enumerator'
+  groupBy: 'state' | 'enumerator' | 'hub' | 'locality'
 ): void {
   if (rows.length === 0) return;
 
@@ -436,11 +454,19 @@ function addGroupedSheet(
   const totalCols = isTransport ? 12 : 10;
   const refNum = `STMT-${format(new Date(), 'yyyyMMdd-HHmm')}`;
 
-  const groupLabel = groupBy === 'state' ? 'By State' : 'By Enumerator';
+  const groupLabel =
+    groupBy === 'state' ? 'By State' :
+    groupBy === 'hub' ? 'By Hub' :
+    groupBy === 'locality' ? 'By Locality' : 'By Enumerator';
+  const entityLabel =
+    groupBy === 'state' ? 'state' :
+    groupBy === 'hub' ? 'hub' :
+    groupBy === 'locality' ? 'locality' : 'enumerator';
   const groupKey = (r: StatementRow): string =>
-    groupBy === 'state'
-      ? (r.state || 'Unknown State')
-      : (r.requester || 'Unknown Enumerator');
+    groupBy === 'state' ? (r.state || 'Unknown State') :
+    groupBy === 'hub' ? (r.hub || 'Unknown Hub') :
+    groupBy === 'locality' ? (r.locality || 'Unknown Locality') :
+    (r.requester || 'Unknown Enumerator');
 
   const groupMap = new Map<string, StatementRow[]>();
   rows.forEach(r => {
@@ -474,7 +500,7 @@ function addGroupedSheet(
   ws.addRow([]).height = 6;
 
   // ── Overall summary ──────────────────────────────────────────────────────
-  const summSectionRow = ws.addRow([`OVERALL SUMMARY  (${groups.length} ${groupLabel === 'By State' ? 'state' : 'enumerator'}s)`]);
+  const summSectionRow = ws.addRow([`OVERALL SUMMARY  (${groups.length} ${entityLabel}s)`]);
   for (let c = 1; c <= totalCols; c++) {
     const cell = summSectionRow.getCell(c);
     cell.fill = sectionFill(); cell.font = headerFont(12); cell.border = thinBorder();
@@ -518,7 +544,7 @@ function addGroupedSheet(
     const gApp  = groupRows.reduce((s, r) => s + r.approvedAmount, 0);
     const gPaid = groupRows.reduce((s, r) => s + r.paidAmount, 0);
 
-    const groupHeaderRow = ws.addRow([`${groupLabel === 'By State' ? 'State' : 'Enumerator'}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
+    const groupHeaderRow = ws.addRow([`${groupLabel.replace('By ', '')}: ${groupName}   (${groupRows.length} request${groupRows.length !== 1 ? 's' : ''})`]);
     for (let c = 1; c <= totalCols; c++) {
       const cell = groupHeaderRow.getCell(c);
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GROUP_BAND } };
@@ -594,6 +620,8 @@ function buildAllSheetsWorkbook(
   const base = buildStatementWorkbook(rows, config);
   if (!base) return null;
   addGroupedSheet(base.wb, rows, config, 'state');
+  addGroupedSheet(base.wb, rows, config, 'hub');
+  addGroupedSheet(base.wb, rows, config, 'locality');
   addGroupedSheet(base.wb, rows, config, 'enumerator');
   const isTransport = config.statementType === 'transport_advance';
   const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';

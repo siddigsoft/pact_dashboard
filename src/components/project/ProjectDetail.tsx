@@ -36,6 +36,8 @@ import {
   LayoutGrid,
   LayoutList,
   Table2,
+  Handshake,
+  Flag,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -51,6 +53,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import ProjectCommentsPanel from './ProjectCommentsPanel';
 import ProjectDocumentsPanel from './ProjectDocumentsPanel';
 import { ProjectFieldTasksPanel } from './ProjectFieldTasksPanel';
+import { ProjectMilestonesPanel } from './ProjectMilestonesPanel';
 import { OutlookCalendarPanel } from './OutlookCalendarPanel';
 
 import { Project } from '@/types/project';
@@ -253,6 +256,26 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   const [isArchiving, setIsArchiving] = useState(false);
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list' | 'table'>('grid');
+  const [partnerName, setPartnerName] = useState<string | null>(null);
+  const [milestoneStats, setMilestoneStats] = useState<{ total: number; completed: number; overdue: number } | null>(null);
+
+  useEffect(() => {
+    if (!project.partnerId) { setPartnerName(null); return; }
+    supabase.from('crm_partners').select('name').eq('id', project.partnerId).single()
+      .then(({ data }) => setPartnerName(data?.name ?? null));
+  }, [project.partnerId]);
+
+  useEffect(() => {
+    supabase.from('project_milestones').select('status, due_date').eq('project_id', project.id)
+      .then(({ data }) => {
+        if (!data) return;
+        const today = new Date().toISOString().split('T')[0];
+        const total = data.length;
+        const completed = data.filter((m: any) => m.status === 'completed').length;
+        const overdue = data.filter((m: any) => m.status !== 'completed' && m.due_date && m.due_date < today).length;
+        setMilestoneStats({ total, completed, overdue });
+      });
+  }, [project.id]);
 
   // Stalled detection: find days since last stage advance
   const stalledDays = (() => {
@@ -599,6 +622,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     {project.location.state && `, ${project.location.state}`}
                   </span>
                 )}
+                {partnerName && (
+                  <span className="flex items-center gap-1">
+                    <Handshake className="h-3.5 w-3.5" />
+                    {partnerName}
+                  </span>
+                )}
               </div>
 
               {/* Quick stats row */}
@@ -804,6 +833,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <TabsTrigger value="calendar" data-testid="tab-calendar">
             <Calendar className="h-3.5 w-3.5 mr-1" />Calendar
           </TabsTrigger>
+          <TabsTrigger value="milestones" data-testid="tab-milestones">
+            <Flag className="h-3.5 w-3.5 mr-1" />Milestones
+          </TabsTrigger>
         </TabsList>
         </div>
 
@@ -953,6 +985,28 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                             : 0;
                         })()} 
                         className="h-2" 
+                      />
+                    </div>
+                  )}
+
+                  {milestoneStats !== null && milestoneStats.total > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-sm items-center">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <Flag className="h-3.5 w-3.5" />Milestones
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="font-medium">{milestoneStats.completed}/{milestoneStats.total}</span>
+                          {milestoneStats.overdue > 0 && (
+                            <span className="text-[10px] bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full px-1.5 py-0 font-semibold">
+                              {milestoneStats.overdue} overdue
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <Progress
+                        value={milestoneStats.total > 0 ? Math.round((milestoneStats.completed / milestoneStats.total) * 100) : 0}
+                        className="h-2"
                       />
                     </div>
                   )}
@@ -1340,6 +1394,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
         <TabsContent value="calendar" className="mt-4">
           <OutlookCalendarPanel projectId={project.id} />
+        </TabsContent>
+
+        <TabsContent value="milestones" className="mt-4">
+          <ProjectMilestonesPanel projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>

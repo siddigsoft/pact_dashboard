@@ -606,53 +606,236 @@ export async function generateBulkCostExcelBase64(
   det2Widths.forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
 
   // ════════════════════════════════════════════════════════════════════════
-  // SHEET 3 — By Submitter
+  // SHEET 3 — By Submitter  (individual rows + subtotal per submitter)
   // ════════════════════════════════════════════════════════════════════════
-  if (Object.keys(userMap).length > 0) {
+  {
+    const BY_COLS = hasUsd ? 7 : 6;
     const ws3 = wb.addWorksheet('By Submitter');
+
+    // Title
     const subTitleRow = ws3.addRow(['PACT Command Center  |  Submissions by Submitter']);
     subTitleRow.font = xlFont(true, 14, NAVY);
     subTitleRow.height = 28;
-    const BY_COLS = hasUsd ? 5 : 4;
     ws3.mergeCells(subTitleRow.number, 1, subTitleRow.number, BY_COLS);
-    ws3.addRow([]).height = 6;
+    ws3.addRow([]).height = 4;
 
-    const byHdrs = ['Submitter Name', 'Email', 'Submissions', `Total (SDG)`, ...(hasUsd ? ['Total (USD)'] : [])];
-    const byHdrRow = ws3.addRow(byHdrs);
-    byHdrRow.eachCell(cell => {
+    // Group submissions by submitter preserving order of first appearance
+    const submitterOrder: string[] = [];
+    const submitterGroups: Record<string, BulkSubmission[]> = {};
+    submissions.forEach(s => {
+      if (!submitterGroups[s.submitted_by]) {
+        submitterOrder.push(s.submitted_by);
+        submitterGroups[s.submitted_by] = [];
+      }
+      submitterGroups[s.submitted_by].push(s);
+    });
+
+    let grandTotal = 0;
+    let grandCount = 0;
+
+    submitterOrder.forEach(uid => {
+      const subs = submitterGroups[uid];
+      const u = userMap[uid];
+      const uName = u?.name || '—';
+      const uEmail = u?.email || '—';
+      const subTotal = subs.reduce((s, r) => s + (Number(r.amount_cents) || 0) / 100, 0);
+      grandTotal += subTotal;
+      grandCount += subs.length;
+
+      // ── Submitter banner ──────────────────────────────────────────────
+      const bannerRow = ws3.addRow([`${uName}   ·   ${uEmail}   ·   ${subs.length} submission${subs.length !== 1 ? 's' : ''}`]);
+      ws3.mergeCells(bannerRow.number, 1, bannerRow.number, BY_COLS);
+      for (let c = 1; c <= BY_COLS; c++) {
+        const cell = bannerRow.getCell(c);
+        cell.fill = xlFill(NAVY);
+        cell.font = xlFont(true, 10, WHITE_XL);
+        cell.border = xlThin();
+      }
+      bannerRow.getCell(1).alignment = xlAlign('left');
+      bannerRow.height = 20;
+
+      // ── Column headers ────────────────────────────────────────────────
+      const hdrs = ['#', 'Ref', 'Category', 'Project', 'Date', 'Amount (SDG)', ...(hasUsd ? ['USD Equiv.'] : [])];
+      const hdrRow = ws3.addRow(hdrs);
+      hdrRow.eachCell(cell => {
+        cell.fill = xlFill(NAVY_MID);
+        cell.font = xlFont(true, 9, WHITE_XL);
+        cell.border = xlThin();
+        cell.alignment = xlAlign('left');
+      });
+      hdrRow.height = 18;
+
+      // ── Individual rows ───────────────────────────────────────────────
+      subs.forEach((s, idx) => {
+        const amtSdg = (Number(s.amount_cents) || 0) / 100;
+        const projName = s.project_id ? (projectMap[s.project_id] || '—') : '—';
+        const rowData = [
+          idx + 1,
+          s.reference_number || s.id.slice(0, 8).toUpperCase(),
+          EXPENSE_LABELS[s.expense_category] || s.expense_category || '—',
+          projName,
+          fmtDate(s.expense_date),
+          fmtCurrency(amtSdg),
+          ...(hasUsd ? [`USD ${(amtSdg / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
+        ];
+        const r = ws3.addRow(rowData);
+        const bg = idx % 2 === 1 ? xlFill(LIGHT_BG) : undefined;
+        r.eachCell((cell, ci) => {
+          cell.border = xlThin();
+          cell.font = xlFont(false, 9);
+          cell.alignment = xlAlign(ci === 6 || ci === 7 ? 'right' : 'left');
+          if (bg) cell.fill = bg;
+        });
+        r.height = 17;
+      });
+
+      // ── Subtotal row ──────────────────────────────────────────────────
+      const stCols: (string | number)[] = ['', '', '', '', 'Subtotal', fmtCurrency(subTotal), ...(hasUsd ? [`USD ${(subTotal / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : [])];
+      const stRow = ws3.addRow(stCols);
+      ws3.mergeCells(stRow.number, 1, stRow.number, 4);
+      stRow.eachCell((cell, ci) => {
+        cell.fill = xlFill(AMBER_BG);
+        cell.font = xlFont(true, 9, AMBER_XL);
+        cell.border = xlThin();
+        cell.alignment = xlAlign(ci >= 5 ? 'right' : 'left');
+      });
+      stRow.getCell(5).alignment = xlAlign('right');
+      stRow.height = 18;
+
+      // ── Spacer ────────────────────────────────────────────────────────
+      ws3.addRow([]).height = 5;
+    });
+
+    // ── Grand Total row ───────────────────────────────────────────────────
+    const gtCols: (string | number)[] = ['', '', '', '', `GRAND TOTAL  (${grandCount} submissions)`, fmtCurrency(grandTotal), ...(hasUsd ? [`USD ${(grandTotal / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : [])];
+    const gtRow = ws3.addRow(gtCols);
+    ws3.mergeCells(gtRow.number, 1, gtRow.number, 4);
+    gtRow.eachCell((cell, ci) => {
       cell.fill = xlFill(NAVY);
       cell.font = xlFont(true, 10, WHITE_XL);
       cell.border = xlThin();
-      cell.alignment = xlAlign('left');
+      cell.alignment = xlAlign(ci >= 5 ? 'right' : 'left');
     });
-    byHdrRow.height = 22;
+    gtRow.height = 22;
 
-    const submitterSummary: Record<string, { name: string; email: string; count: number; totalSdg: number }> = {};
+    // Column widths
+    [6, 18, 26, 28, 14, 20, ...(hasUsd ? [18] : [])].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // SHEET 4 — By Project  (individual rows + subtotal per project)
+  // ════════════════════════════════════════════════════════════════════════
+  {
+    const BY_COLS = hasUsd ? 7 : 6;
+    const ws4 = wb.addWorksheet('By Project');
+
+    // Title
+    const projTitleRow = ws4.addRow(['PACT Command Center  |  Submissions by Project']);
+    projTitleRow.font = xlFont(true, 14, NAVY);
+    projTitleRow.height = 28;
+    ws4.mergeCells(projTitleRow.number, 1, projTitleRow.number, BY_COLS);
+    ws4.addRow([]).height = 4;
+
+    // Group submissions by project preserving order of first appearance
+    const projectOrder: string[] = [];
+    const projectGroups: Record<string, BulkSubmission[]> = {};
     submissions.forEach(s => {
-      const u = userMap[s.submitted_by];
-      if (!submitterSummary[s.submitted_by]) {
-        submitterSummary[s.submitted_by] = { name: u?.name || '—', email: u?.email || '—', count: 0, totalSdg: 0 };
+      const key = s.project_id || '__none__';
+      if (!projectGroups[key]) {
+        projectOrder.push(key);
+        projectGroups[key] = [];
       }
-      submitterSummary[s.submitted_by].count += 1;
-      submitterSummary[s.submitted_by].totalSdg += s.amount_cents / 100;
+      projectGroups[key].push(s);
     });
 
-    Object.values(submitterSummary).forEach((row, i) => {
-      const r = ws3.addRow([
-        row.name, row.email, row.count, fmtCurrency(row.totalSdg),
-        ...(hasUsd ? [`USD ${(row.totalSdg / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
-      ]);
-      const bg = i % 2 === 1 ? xlFill(LIGHT_BG) : undefined;
-      r.eachCell(cell => {
+    let projGrandTotal = 0;
+    let projGrandCount = 0;
+
+    projectOrder.forEach(pid => {
+      const subs = projectGroups[pid];
+      const projName = pid === '__none__' ? 'No Project Assigned' : (projectMap[pid] || pid.slice(0, 8).toUpperCase());
+      const subTotal = subs.reduce((s, r) => s + (Number(r.amount_cents) || 0) / 100, 0);
+      projGrandTotal += subTotal;
+      projGrandCount += subs.length;
+
+      // ── Project banner ────────────────────────────────────────────────
+      const bannerRow = ws4.addRow([`${projName}   ·   ${subs.length} submission${subs.length !== 1 ? 's' : ''}`]);
+      ws4.mergeCells(bannerRow.number, 1, bannerRow.number, BY_COLS);
+      for (let c = 1; c <= BY_COLS; c++) {
+        const cell = bannerRow.getCell(c);
+        cell.fill = xlFill(NAVY);
+        cell.font = xlFont(true, 10, WHITE_XL);
         cell.border = xlThin();
-        cell.font = xlFont(false, 10);
+      }
+      bannerRow.getCell(1).alignment = xlAlign('left');
+      bannerRow.height = 20;
+
+      // ── Column headers ────────────────────────────────────────────────
+      const hdrs = ['#', 'Ref', 'Submitter', 'Category', 'Date', 'Amount (SDG)', ...(hasUsd ? ['USD Equiv.'] : [])];
+      const hdrRow = ws4.addRow(hdrs);
+      hdrRow.eachCell(cell => {
+        cell.fill = xlFill(NAVY_MID);
+        cell.font = xlFont(true, 9, WHITE_XL);
+        cell.border = xlThin();
         cell.alignment = xlAlign('left');
-        if (bg) cell.fill = bg;
       });
-      r.height = 18;
+      hdrRow.height = 18;
+
+      // ── Individual rows ───────────────────────────────────────────────
+      subs.forEach((s, idx) => {
+        const amtSdg = (Number(s.amount_cents) || 0) / 100;
+        const submitterName = userMap[s.submitted_by]?.name || '—';
+        const rowData = [
+          idx + 1,
+          s.reference_number || s.id.slice(0, 8).toUpperCase(),
+          submitterName,
+          EXPENSE_LABELS[s.expense_category] || s.expense_category || '—',
+          fmtDate(s.expense_date),
+          fmtCurrency(amtSdg),
+          ...(hasUsd ? [`USD ${(amtSdg / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
+        ];
+        const r = ws4.addRow(rowData);
+        const bg = idx % 2 === 1 ? xlFill(LIGHT_BG) : undefined;
+        r.eachCell((cell, ci) => {
+          cell.border = xlThin();
+          cell.font = xlFont(false, 9);
+          cell.alignment = xlAlign(ci === 6 || ci === 7 ? 'right' : 'left');
+          if (bg) cell.fill = bg;
+        });
+        r.height = 17;
+      });
+
+      // ── Subtotal row ──────────────────────────────────────────────────
+      const stCols: (string | number)[] = ['', '', '', '', 'Subtotal', fmtCurrency(subTotal), ...(hasUsd ? [`USD ${(subTotal / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : [])];
+      const stRow = ws4.addRow(stCols);
+      ws4.mergeCells(stRow.number, 1, stRow.number, 4);
+      stRow.eachCell((cell, ci) => {
+        cell.fill = xlFill(GREEN_BG);
+        cell.font = xlFont(true, 9, GREEN_XL);
+        cell.border = xlThin();
+        cell.alignment = xlAlign(ci >= 5 ? 'right' : 'left');
+      });
+      stRow.getCell(5).alignment = xlAlign('right');
+      stRow.height = 18;
+
+      // ── Spacer ────────────────────────────────────────────────────────
+      ws4.addRow([]).height = 5;
     });
 
-    [28, 32, 14, 18, ...(hasUsd ? [16] : [])].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
+    // ── Grand Total row ───────────────────────────────────────────────────
+    const gtCols: (string | number)[] = ['', '', '', '', `GRAND TOTAL  (${projGrandCount} submissions)`, fmtCurrency(projGrandTotal), ...(hasUsd ? [`USD ${(projGrandTotal / usdRate!).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : [])];
+    const gtRow = ws4.addRow(gtCols);
+    ws4.mergeCells(gtRow.number, 1, gtRow.number, 4);
+    gtRow.eachCell((cell, ci) => {
+      cell.fill = xlFill(NAVY);
+      cell.font = xlFont(true, 10, WHITE_XL);
+      cell.border = xlThin();
+      cell.alignment = xlAlign(ci >= 5 ? 'right' : 'left');
+    });
+    gtRow.height = 22;
+
+    // Column widths
+    [6, 18, 28, 26, 14, 20, ...(hasUsd ? [18] : [])].forEach((w, i) => { ws4.getColumn(i + 1).width = w; });
   }
 
   // Write to buffer and return base64 (chunked to avoid O(n²) string concat)

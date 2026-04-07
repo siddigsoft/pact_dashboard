@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter } from 'lucide-react';
+import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter, Copy, X } from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
@@ -24,7 +24,7 @@ const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: strin
   { id: 'payroll',       label: 'My Payroll',      icon: Banknote,   accent: '#D97706', bg: 'rgba(217,119,6,0.12)',   adminOnly: false },
   { id: 'payroll-admin', label: 'Payroll Admin',    icon: Settings2,  accent: '#67e8f9', bg: 'rgba(103,232,249,0.12)', adminOnly: true  },
   { id: 'retainer',      label: 'Retainer',         icon: FileText,   accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: true  },
-  { id: 'hr-tools',      label: 'HR Tools',         icon: Wrench,     accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
+  { id: 'hr-tools',      label: 'HR Analytics',     icon: BarChart2,  accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
 ];
 
 const ADMIN_ROLES = [
@@ -180,19 +180,96 @@ interface ProjectionRow { id: string; role: string; headcount: number; baseSalar
 
 const CHART_COLORS = ['#0F2041','#1D3461','#4f86c6','#34d399','#f59e0b','#a78bfa','#f87171','#38bdf8','#fb923c'];
 
+const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'EGP', 'SAR', 'AED', 'TRY'] as const;
+
+interface Scenario {
+  id: string;
+  name: string;
+  currency: string;
+  rows: ProjectionRow[];
+}
+
+function makeScenario(name: string, currency = 'SDG', rows?: ProjectionRow[]): Scenario {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    currency,
+    rows: rows ?? [
+      { id: crypto.randomUUID(), role: 'Field Coordinator', headcount: 5,  baseSalary: 50000, allowancePct: 20, deductionPct: 10, currency },
+      { id: crypto.randomUUID(), role: 'Data Collector',    headcount: 10, baseSalary: 30000, allowancePct: 10, deductionPct: 8,  currency },
+    ],
+  };
+}
+
+function computeScenario(rows: ProjectionRow[]) {
+  const comp = rows.map(r => {
+    const gross = r.baseSalary * (1 + r.allowancePct / 100);
+    const net   = gross * (1 - r.deductionPct / 100);
+    return { ...r, grossPerHead: gross, netPerHead: net, monthlyGross: gross * r.headcount, monthlyNet: net * r.headcount };
+  });
+  return {
+    rows: comp,
+    headcount:    comp.reduce((s, r) => s + r.headcount, 0),
+    monthlyGross: comp.reduce((s, r) => s + r.monthlyGross, 0),
+    monthlyNet:   comp.reduce((s, r) => s + r.monthlyNet, 0),
+    annualNet:    comp.reduce((s, r) => s + r.monthlyNet * 12, 0),
+  };
+}
+
 function StaffCostProjection() {
-  const [scenarioName, setScenarioName] = useState('Scenario 1');
-  const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
-  const [rows, setRows] = useState<ProjectionRow[]>([
-    { id: crypto.randomUUID(), role: 'Field Coordinator', headcount: 5,  baseSalary: 50000, allowancePct: 20, deductionPct: 10, currency: 'SDG' },
-    { id: crypto.randomUUID(), role: 'Data Collector',    headcount: 10, baseSalary: 30000, allowancePct: 10, deductionPct: 8,  currency: 'SDG' },
-  ]);
+  const [scenarios, setScenarios] = useState<Scenario[]>(() => [makeScenario('Scenario 1')]);
+  const [activeId, setActiveId]   = useState<string>(() => scenarios[0].id);
+  const [viewMode, setViewMode]   = useState<'table' | 'chart'>('table');
   const [loadingReal, setLoadingReal] = useState(false);
 
-  const updateRow = (id: string, field: keyof ProjectionRow, val: any) =>
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: typeof r[field] === 'number' ? (parseFloat(val) || 0) : val } : r));
-  const addRow    = () => setRows(prev => [...prev, { id: crypto.randomUUID(), role: 'New Role', headcount: 1, baseSalary: 30000, allowancePct: 10, deductionPct: 8, currency: 'SDG' }]);
-  const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
+  const scenario        = scenarios.find(s => s.id === activeId) ?? scenarios[0];
+  const displayCurrency = scenario.currency;
+
+  const updateScenario = (id: string, patch: Partial<Omit<Scenario, 'id'>>) =>
+    setScenarios(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+
+  const addScenario = () => {
+    const n = makeScenario(`Scenario ${scenarios.length + 1}`, displayCurrency);
+    setScenarios(prev => [...prev, n]);
+    setActiveId(n.id);
+  };
+
+  const duplicateScenario = (id: string) => {
+    const src = scenarios.find(s => s.id === id);
+    if (!src) return;
+    const copy: Scenario = {
+      ...src,
+      id: crypto.randomUUID(),
+      name: `${src.name} (Copy)`,
+      rows: src.rows.map(r => ({ ...r, id: crypto.randomUUID() })),
+    };
+    setScenarios(prev => [...prev, copy]);
+    setActiveId(copy.id);
+  };
+
+  const deleteScenario = (id: string) => {
+    if (scenarios.length <= 1) return;
+    const idx = scenarios.findIndex(s => s.id === id);
+    const next = scenarios.filter(s => s.id !== id);
+    setScenarios(next);
+    if (activeId === id) setActiveId(next[Math.max(0, idx - 1)].id);
+  };
+
+  const changeCurrency = (cur: string) =>
+    updateScenario(activeId, { currency: cur, rows: scenario.rows.map(r => ({ ...r, currency: cur })) });
+
+  const updateRow = (rowId: string, field: keyof ProjectionRow, val: any) =>
+    updateScenario(activeId, {
+      rows: scenario.rows.map(r => r.id === rowId ? { ...r, [field]: typeof r[field] === 'number' ? (parseFloat(val) || 0) : val } : r),
+    });
+
+  const addRow = () =>
+    updateScenario(activeId, {
+      rows: [...scenario.rows, { id: crypto.randomUUID(), role: 'New Role', headcount: 1, baseSalary: 30000, allowancePct: 10, deductionPct: 8, currency: displayCurrency }],
+    });
+
+  const removeRow = (rowId: string) =>
+    updateScenario(activeId, { rows: scenario.rows.filter(r => r.id !== rowId) });
 
   const loadFromReal = useCallback(async () => {
     setLoadingReal(true);
@@ -201,24 +278,21 @@ function StaffCostProjection() {
         supabase.from('employee_salary_config').select('user_id, base_salary, allowances, deductions, currency'),
         supabase.from('departments').select('id, name'),
       ]);
-      const { data: profs } = await supabase
-        .from('profiles').select('id, full_name, role, department_id, employment_type');
+      const { data: profs } = await supabase.from('profiles').select('id, full_name, role, department_id, employment_type');
       if (!configs || configs.length === 0) { setLoadingReal(false); return; }
-      const deptMap: Record<string,string> = {};
-      (depts ?? []).forEach((d: any) => { deptMap[d.id] = d.name; });
       const profMap: Record<string, any> = {};
       (profs ?? []).forEach((p: any) => { profMap[p.id] = p; });
       const roleGrouped: Record<string, { headcount: number; totalBase: number; allowPct: number; deductPct: number; currency: string }> = {};
       configs.forEach((c: any) => {
         const prof = profMap[c.user_id];
-        const key = prof?.role ?? 'Unknown';
-        const allow = Array.isArray(c.allowances) ? c.allowances.reduce((s: number, a: any) => s + (a.type === 'percent' ? a.value : 0), 0) : 0;
-        const deduct = Array.isArray(c.deductions) ? c.deductions.reduce((s: number, d: any) => s + (d.type === 'percent' ? d.value : 0), 0) : 0;
+        const key  = prof?.role ?? 'Unknown';
+        const allow  = Array.isArray(c.allowances) ? c.allowances.reduce((s: number, a: any) => s + (a.type === 'percent' ? a.value : 0), 0) : 0;
+        const deduct = Array.isArray(c.deductions)  ? c.deductions.reduce( (s: number, d: any) => s + (d.type === 'percent' ? d.value : 0), 0) : 0;
         if (!roleGrouped[key]) roleGrouped[key] = { headcount: 0, totalBase: 0, allowPct: 0, deductPct: 0, currency: c.currency ?? 'SDG' };
         roleGrouped[key].headcount++;
         roleGrouped[key].totalBase += c.base_salary ?? 0;
-        roleGrouped[key].allowPct  = allow;
-        roleGrouped[key].deductPct = deduct;
+        roleGrouped[key].allowPct   = allow;
+        roleGrouped[key].deductPct  = deduct;
       });
       const newRows: ProjectionRow[] = Object.entries(roleGrouped).map(([role, v]) => ({
         id: crypto.randomUUID(),
@@ -229,37 +303,23 @@ function StaffCostProjection() {
         deductionPct: v.deductPct,
         currency: v.currency,
       }));
-      if (newRows.length > 0) { setRows(newRows); setScenarioName('From Payroll Data'); }
+      if (newRows.length > 0) updateScenario(activeId, { name: 'From Payroll Data', rows: newRows });
     } finally { setLoadingReal(false); }
-  }, []);
+  }, [activeId, scenario]);
 
-  const exportXLSX = useCallback(() => {
-    const wb = XLSX.utils.book_new();
-    const data = [
-      ['Role / Grade', 'Headcount', 'Base Salary', 'Allow %', 'Deduct %', 'Net / Head', 'Monthly Gross', 'Monthly Net', 'Annual Net', 'Currency'],
-      ...computed.map(r => [r.role, r.headcount, r.baseSalary, r.allowancePct, r.deductionPct,
-        Math.round(r.netPerHead), Math.round(r.monthlyGross), Math.round(r.monthlyNet), Math.round(r.monthlyNet * 12), r.currency]),
-      [],
-      ['TOTALS', totals.headcount, '', '', '', '',
-        Math.round(totals.monthlyGross), Math.round(totals.monthlyNet), Math.round(totals.annualNet), ''],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, scenarioName.slice(0, 31));
-    XLSX.writeFile(wb, `${scenarioName.replace(/\s+/g,'-')}-cost-projection.xlsx`);
-  }, [computed, totals, scenarioName]);
+  const { rows: computed, headcount: hc, monthlyGross: mg, monthlyNet: mn, annualNet: an } = useMemo(
+    () => computeScenario(scenario.rows),
+    [scenario.rows],
+  );
+  const totals = { headcount: hc, monthlyGross: mg, monthlyNet: mn, annualNet: an };
 
-  const computed = useMemo(() => rows.map(r => {
-    const gross = r.baseSalary * (1 + r.allowancePct / 100);
-    const net   = gross * (1 - r.deductionPct / 100);
-    return { ...r, grossPerHead: gross, netPerHead: net, monthlyGross: gross * r.headcount, monthlyNet: net * r.headcount };
-  }), [rows]);
-
-  const totals = useMemo(() => ({
-    headcount:    computed.reduce((s, r) => s + r.headcount, 0),
-    monthlyGross: computed.reduce((s, r) => s + r.monthlyGross, 0),
-    monthlyNet:   computed.reduce((s, r) => s + r.monthlyNet, 0),
-    annualNet:    computed.reduce((s, r) => s + r.monthlyNet * 12, 0),
-  }), [computed]);
+  const scenarioTotals = useMemo(() =>
+    scenarios.map(s => {
+      const c = computeScenario(s.rows);
+      return { id: s.id, name: s.name, currency: s.currency, headcount: c.headcount, monthlyGross: c.monthlyGross, monthlyNet: c.monthlyNet, annualNet: c.annualNet };
+    }),
+    [scenarios],
+  );
 
   const chartData = useMemo(() => computed.map((r, i) => ({
     name: r.role.length > 14 ? r.role.slice(0, 13) + '…' : r.role,
@@ -269,20 +329,81 @@ function StaffCostProjection() {
     color: CHART_COLORS[i % CHART_COLORS.length],
   })), [computed]);
 
-  const fmtN = (n: number, cur = 'SDG') => `${cur} ${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  const exportXLSX = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    for (const sc of scenarios) {
+      const c = computeScenario(sc.rows);
+      const data = [
+        ['Role / Grade','Headcount','Base Salary','Allow %','Deduct %','Net / Head','Monthly Gross','Monthly Net','Annual Net','Currency'],
+        ...c.rows.map(r => [r.role, r.headcount, r.baseSalary, r.allowancePct, r.deductionPct, Math.round(r.netPerHead), Math.round(r.monthlyGross), Math.round(r.monthlyNet), Math.round(r.monthlyNet * 12), r.currency]),
+        [],
+        ['TOTALS', c.headcount,'','','','', Math.round(c.monthlyGross), Math.round(c.monthlyNet), Math.round(c.annualNet),''],
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), sc.name.slice(0, 31));
+    }
+    XLSX.writeFile(wb, 'cost-projection.xlsx');
+  }, [scenarios]);
+
+  const fmtN = (n: number, cur = displayCurrency) => `${cur} ${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
   return (
     <div className="space-y-4">
-      {/* Header row */}
+
+      {/* ── Scenario tabs ───────────────────────────────────────────────────── */}
+      <div className="flex items-end gap-0 border-b overflow-x-auto">
+        {scenarios.map((sc, idx) => (
+          <div
+            key={sc.id}
+            className={cn(
+              'group relative flex items-center gap-1.5 px-3 py-2 border-b-2 cursor-pointer transition-all whitespace-nowrap text-sm select-none',
+              sc.id === activeId
+                ? 'border-[#0F2041] text-[#0F2041] dark:border-blue-400 dark:text-blue-300 bg-slate-50 dark:bg-slate-800/40 font-semibold'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-slate-300',
+            )}
+            onClick={() => setActiveId(sc.id)}
+          >
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ background: CHART_COLORS[idx % CHART_COLORS.length] }}
+            />
+            <Input
+              value={sc.name}
+              onChange={e => updateScenario(sc.id, { name: e.target.value })}
+              onClick={e => e.stopPropagation()}
+              className="h-6 text-xs border-0 bg-transparent p-0 focus-visible:ring-0 focus-visible:border-b focus-visible:border-slate-300 w-28 font-medium"
+            />
+            <button
+              title="Duplicate scenario"
+              onClick={e => { e.stopPropagation(); duplicateScenario(sc.id); }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-muted-foreground transition-all"
+            >
+              <Copy className="h-3 w-3" />
+            </button>
+            {scenarios.length > 1 && (
+              <button
+                title="Delete scenario"
+                onClick={e => { e.stopPropagation(); deleteScenario(sc.id); }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/40 text-red-400 hover:text-red-600 transition-all"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        ))}
+        <button
+          onClick={addScenario}
+          title="Add new scenario"
+          className="flex items-center gap-1 px-3 py-2 text-xs text-muted-foreground hover:text-[#0F2041] dark:hover:text-blue-300 hover:bg-slate-50 dark:hover:bg-slate-800/40 border-b-2 border-transparent rounded-tl rounded-tr transition-all whitespace-nowrap"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Scenario
+        </button>
+      </div>
+
+      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
         <Calculator className="h-4 w-4 text-emerald-500 shrink-0" />
-        <Input
-          value={scenarioName}
-          onChange={e => setScenarioName(e.target.value)}
-          className="h-8 text-sm font-semibold border-0 bg-transparent p-0 w-40 focus-visible:ring-0 focus-visible:border-b focus-visible:border-slate-300"
-          placeholder="Scenario name…"
-        />
-        <span className="text-xs text-muted-foreground flex-1 hidden sm:block">Estimate payroll costs by headcount and salary grade. Values are projections only.</span>
+        <span className="text-xs text-muted-foreground hidden sm:block">Estimate payroll costs by headcount and salary grade. Values are projections only.</span>
         <div className="flex items-center gap-1.5 ml-auto flex-wrap">
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={loadFromReal} disabled={loadingReal}>
             {loadingReal ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -291,6 +412,14 @@ function StaffCostProjection() {
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={exportXLSX}>
             <Download className="h-3.5 w-3.5" />Export Excel
           </Button>
+          <Select value={displayCurrency} onValueChange={changeCurrency}>
+            <SelectTrigger className="h-8 w-[76px] text-xs font-semibold" data-testid="select-display-currency">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <div className="flex border rounded-lg overflow-hidden">
             <button onClick={() => setViewMode('table')} className={cn('h-8 px-2.5 text-xs flex items-center gap-1 transition-colors', viewMode === 'table' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50')}>
               <TableIcon className="h-3.5 w-3.5" />
@@ -305,14 +434,14 @@ function StaffCostProjection() {
         </div>
       </div>
 
-      {/* KPI cards */}
+      {/* ── KPI cards ───────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
-          { label: 'Headcount',     value: String(totals.headcount),  sub: 'staff',            color: 'text-[#0F2041] dark:text-blue-300' },
-          { label: 'Monthly Gross', value: fmtN(totals.monthlyGross), sub: 'estimated gross',   color: 'text-emerald-600' },
-          { label: 'Monthly Net',   value: fmtN(totals.monthlyNet),   sub: 'after deductions', color: 'text-blue-600' },
-          { label: 'Annual Net',    value: fmtN(totals.annualNet),    sub: '× 12 months',      color: 'text-violet-600' },
-          { label: 'Avg Net / Head',value: totals.headcount > 0 ? fmtN(totals.monthlyNet / totals.headcount) : '—', sub: 'per employee / mo.', color: 'text-amber-600' },
+          { label: 'Headcount',      value: String(totals.headcount),  sub: 'staff',              color: 'text-[#0F2041] dark:text-blue-300' },
+          { label: 'Monthly Gross',  value: fmtN(totals.monthlyGross), sub: 'estimated gross',     color: 'text-emerald-600' },
+          { label: 'Monthly Net',    value: fmtN(totals.monthlyNet),   sub: 'after deductions',   color: 'text-blue-600' },
+          { label: 'Annual Net',     value: fmtN(totals.annualNet),    sub: '× 12 months',        color: 'text-violet-600' },
+          { label: 'Avg Net / Head', value: totals.headcount > 0 ? fmtN(totals.monthlyNet / totals.headcount) : '—', sub: 'per employee / mo.', color: 'text-amber-600' },
         ].map(k => (
           <div key={k.label} className="bg-white dark:bg-slate-900 border rounded-xl px-3 py-3 text-center shadow-sm">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{k.label}</p>
@@ -322,10 +451,10 @@ function StaffCostProjection() {
         ))}
       </div>
 
+      {/* ── Chart or table ──────────────────────────────────────────────────── */}
       {viewMode === 'chart' ? (
-        /* ── Bar chart view ── */
         <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden p-4">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Monthly Cost by Role (SDG)</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Monthly Cost by Role ({displayCurrency})</p>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 24 }}>
               <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" />
@@ -343,10 +472,9 @@ function StaffCostProjection() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          <p className="text-[11px] text-muted-foreground text-center mt-1">Dark bar = net; light = gross. Click role rows in table view to edit values.</p>
+          <p className="text-[11px] text-muted-foreground text-center mt-1">Dark bar = net; light = gross.</p>
         </Card>
       ) : (
-        /* ── Table view ── */
         <Card className="shadow-sm border-0 bg-white dark:bg-slate-900 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -379,10 +507,7 @@ function StaffCostProjection() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1 justify-end">
-                        <Select value={r.currency} onValueChange={v => updateRow(r.id, 'currency', v)}>
-                          <SelectTrigger className="h-7 w-[58px] text-[11px] px-1.5"><SelectValue /></SelectTrigger>
-                          <SelectContent>{['SDG','USD','EUR','GBP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                        </Select>
+                        <span className="text-[11px] text-muted-foreground font-medium w-10 text-right shrink-0">{displayCurrency}</span>
                         <Input type="number" value={r.baseSalary} onChange={e => updateRow(r.id, 'baseSalary', e.target.value)} className="h-7 text-xs w-24 text-right" />
                       </div>
                     </td>
@@ -426,6 +551,54 @@ function StaffCostProjection() {
         </Card>
       )}
 
+      {/* ── Scenario comparison (only when ≥ 2 scenarios exist) ─────────────── */}
+      {scenarios.length >= 2 && (
+        <Card className="shadow-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden">
+          <div className="px-4 py-3 border-b bg-slate-50 dark:bg-slate-800/40 flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-[#0F2041] dark:text-blue-300" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Scenario Comparison</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50/60 dark:bg-slate-800/20">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">Scenario</th>
+                  <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase text-muted-foreground">Currency</th>
+                  <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase text-muted-foreground">Headcount</th>
+                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-emerald-600">Mo. Gross</th>
+                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-blue-600">Mo. Net</th>
+                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-violet-600">Annual Net</th>
+                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase text-amber-600">Avg / Head</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {scenarioTotals.map((sc, idx) => (
+                  <tr
+                    key={sc.id}
+                    className={cn('cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/20', sc.id === activeId && 'bg-blue-50/60 dark:bg-blue-900/10')}
+                    onClick={() => setActiveId(sc.id)}
+                  >
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[idx % CHART_COLORS.length] }} />
+                        <span className={cn('text-xs font-semibold', sc.id === activeId && 'text-[#0F2041] dark:text-blue-300')}>{sc.name}</span>
+                        {sc.id === activeId && <Badge variant="outline" className="text-[10px] h-4 px-1 border-blue-300 text-blue-600">Active</Badge>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-xs text-muted-foreground font-medium">{sc.currency}</td>
+                    <td className="px-3 py-2.5 text-center text-xs font-bold text-[#0F2041] dark:text-blue-300">{sc.headcount}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-emerald-600">{sc.currency} {Math.round(sc.monthlyGross).toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-bold text-blue-600">{sc.currency} {Math.round(sc.monthlyNet).toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-bold text-violet-600">{sc.currency} {Math.round(sc.annualNet).toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right text-xs text-amber-600">{sc.headcount > 0 ? `${sc.currency} ${Math.round(sc.monthlyNet / sc.headcount).toLocaleString()}` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       <p className="text-[11px] text-muted-foreground text-center">
         Projections only. Gross = base × (1 + allow%). Net = gross × (1 − deduct%). Annual = monthly net × 12.
       </p>
@@ -445,6 +618,95 @@ const ROLE_CHIP: Record<string, string> = {
 };
 const roleChip = (role: string | null) => ROLE_CHIP[role ?? ''] ?? 'bg-slate-100 text-slate-600';
 const fmtRole = (r: string | null) => (r ?? '—').replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase());
+
+const ORG_COLORS = ['bg-blue-500','bg-violet-500','bg-emerald-500','bg-amber-500','bg-pink-500','bg-cyan-500','bg-indigo-500','bg-rose-500'];
+const colorForId = (id: string) => ORG_COLORS[id.charCodeAt(0) % ORG_COLORS.length];
+const orgInitials = (name: string | null) => (name ?? '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+interface OrgNodeProps {
+  person: OrgPersonExtended;
+  depth?: number;
+  expandAll: boolean | null;
+  childrenOf: Record<string, OrgPersonExtended[]>;
+  navigate: (path: string) => void;
+}
+
+function OrgNode({ person, depth = 0, expandAll, childrenOf, navigate }: OrgNodeProps) {
+  const [expanded, setExpanded] = useState(expandAll !== null ? expandAll : depth < 2);
+  const prevExpAll = useRef(expandAll);
+
+  useEffect(() => {
+    if (expandAll !== null && expandAll !== prevExpAll.current) {
+      setExpanded(expandAll);
+      prevExpAll.current = expandAll;
+    }
+  }, [expandAll]);
+
+  const children = childrenOf[person.id] ?? [];
+  const hasChildren = children.length > 0;
+
+  return (
+    <div className={cn('relative', depth > 0 && 'ml-7 pl-4 border-l-2 border-slate-200 dark:border-slate-700')}>
+      <div
+        className={cn(
+          'flex items-center gap-2.5 py-2 px-3 rounded-xl my-0.5 transition-all',
+          'hover:bg-slate-50 dark:hover:bg-slate-800/30',
+          depth === 0 && 'bg-white dark:bg-slate-900 shadow-sm border',
+          hasChildren && 'cursor-pointer',
+        )}
+        onClick={() => hasChildren && setExpanded(v => !v)}
+      >
+        {person.avatar_url ? (
+          <img src={person.avatar_url} className="w-8 h-8 rounded-full object-cover shrink-0" alt={person.full_name ?? ''} />
+        ) : (
+          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', colorForId(person.id))}>
+            {orgInitials(person.full_name)}
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-sm font-semibold leading-tight truncate">{person.full_name ?? '—'}</p>
+            {person.employment_type && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-300 text-emerald-700 dark:text-emerald-400 font-medium capitalize">
+                {person.employment_type.replace(/-/g, ' ')}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className={cn('text-[10px] px-1.5 py-0 rounded-full font-medium', roleChip(person.role))}>
+              {fmtRole(person.role)}
+            </span>
+            {person.department_name && (
+              <span className="text-[10px] text-muted-foreground">· {person.department_name}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {hasChildren && (
+            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
+              {children.length} {children.length === 1 ? 'report' : 'reports'}
+            </span>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); navigate(`/users/${person.id}`); }}
+            className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors opacity-0 group-hover:opacity-100"
+            title="View profile"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </button>
+          {hasChildren && (
+            <span className="text-slate-400">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
+          )}
+        </div>
+      </div>
+      {expanded && children.map(c => (
+        <OrgNode key={c.id} person={c} depth={depth + 1} expandAll={expandAll} childrenOf={childrenOf} navigate={navigate} />
+      ))}
+    </div>
+  );
+}
 
 function OrgChartView() {
   const navigate = useNavigate();
@@ -512,88 +774,6 @@ function OrgChartView() {
       (p.role ?? '').toLowerCase().includes(q));
   }, [visiblePeople, searchQ]);
 
-  const COLORS = ['bg-blue-500','bg-violet-500','bg-emerald-500','bg-amber-500','bg-pink-500','bg-cyan-500','bg-indigo-500','bg-rose-500'];
-  const colorForId = (id: string) => COLORS[id.charCodeAt(0) % COLORS.length];
-  const initials   = (name: string | null) => (name ?? '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-
-  function OrgNode({ person, depth = 0 }: { person: OrgPersonExtended; depth?: number }) {
-    const [expanded, setExpanded] = useState(expandAll !== null ? expandAll : depth < 2);
-    const prevExpAll = useRef(expandAll);
-
-    useEffect(() => {
-      if (expandAll !== null && expandAll !== prevExpAll.current) {
-        setExpanded(expandAll);
-        prevExpAll.current = expandAll;
-      }
-    }, [expandAll]);
-
-    const children = childrenOf[person.id] ?? [];
-    const hasChildren = children.length > 0;
-
-    return (
-      <div className={cn('relative', depth > 0 && 'ml-7 pl-4 border-l-2 border-slate-200 dark:border-slate-700')}>
-        <div
-          className={cn(
-            'flex items-center gap-2.5 py-2 px-3 rounded-xl my-0.5 transition-all',
-            'hover:bg-slate-50 dark:hover:bg-slate-800/30',
-            depth === 0 && 'bg-white dark:bg-slate-900 shadow-sm border',
-            hasChildren && 'cursor-pointer',
-          )}
-          onClick={() => hasChildren && setExpanded(v => !v)}
-        >
-          {/* Avatar */}
-          {person.avatar_url ? (
-            <img src={person.avatar_url} className="w-8 h-8 rounded-full object-cover shrink-0" alt={person.full_name ?? ''} />
-          ) : (
-            <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0', colorForId(person.id))}>
-              {initials(person.full_name)}
-            </div>
-          )}
-
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="text-sm font-semibold leading-tight truncate">{person.full_name ?? '—'}</p>
-              {person.employment_type && (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-300 text-emerald-700 dark:text-emerald-400 font-medium capitalize">
-                  {person.employment_type.replace(/-/g, ' ')}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className={cn('text-[10px] px-1.5 py-0 rounded-full font-medium', roleChip(person.role))}>
-                {fmtRole(person.role)}
-              </span>
-              {person.department_name && (
-                <span className="text-[10px] text-muted-foreground">· {person.department_name}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Right side */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {hasChildren && (
-              <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
-                {children.length} {children.length === 1 ? 'report' : 'reports'}
-              </span>
-            )}
-            <button
-              onClick={e => { e.stopPropagation(); navigate(`/users/${person.id}`); }}
-              className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-600 transition-colors opacity-0 group-hover:opacity-100"
-              title="View profile"
-            >
-              <ExternalLink className="h-3 w-3" />
-            </button>
-            {hasChildren && (
-              <span className="text-slate-400">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
-            )}
-          </div>
-        </div>
-        {expanded && children.map(c => <OrgNode key={c.id} person={c} depth={depth + 1} />)}
-      </div>
-    );
-  }
-
   if (isLoading) return <div className="py-20 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin opacity-30" /></div>;
 
   const withManagerCount = visiblePeople.filter(p => p.reports_to && personMap[p.reports_to]).length;
@@ -654,7 +834,7 @@ function OrgChartView() {
                     <img src={p.avatar_url} className="w-9 h-9 rounded-full object-cover shrink-0" alt={p.full_name ?? ''} />
                   ) : (
                     <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0', colorForId(p.id))}>
-                      {initials(p.full_name)}
+                      {orgInitials(p.full_name)}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -691,7 +871,7 @@ function OrgChartView() {
         </div>
       ) : (
         <div className="space-y-0.5">
-          {roots.map(r => <OrgNode key={r.id} person={r} depth={0} />)}
+          {roots.map(r => <OrgNode key={r.id} person={r} depth={0} expandAll={expandAll} childrenOf={childrenOf} navigate={navigate} />)}
         </div>
       )}
     </div>

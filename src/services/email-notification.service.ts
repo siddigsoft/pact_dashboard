@@ -248,6 +248,9 @@ const generatePlainText = (
 };
 
 // ── Enhanced payment/advance email template ──────────────────────────────────
+type BreakdownRow = { name: string; count: number; requested: number; approved: number };
+type BreakdownGroup = { label: string; rows: BreakdownRow[] };
+
 function buildEnhancedPaymentEmailHTML(d: {
   recipientName: string;
   approverName: string;
@@ -264,6 +267,7 @@ function buildEnhancedPaymentEmailHTML(d: {
   isBulk: boolean;
   currency: string;
   usdRate?: number;
+  breakdowns?: BreakdownGroup[];
 }): string {
   const fmt = (n: number) => `${d.currency} ${n > 0 ? n.toLocaleString() : n.toLocaleString()}`;
   const totalUsd = d.usdRate && d.usdRate > 0 && d.totalAmount > 0 ? d.totalAmount / d.usdRate : null;
@@ -435,6 +439,39 @@ function buildEnhancedPaymentEmailHTML(d: {
           </td>
         </tr>
       </table>
+
+      ${d.isBulk && d.breakdowns && d.breakdowns.length > 0 ? `<!-- ── BREAKDOWN SUMMARY ── -->
+      <p style="margin:0 0 9px 0;font-size:9.5px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:1.5px;font-family:Arial,Helvetica,sans-serif;">Breakdown Summary / ملخص التوزيع</p>
+      ${d.breakdowns.map(b => {
+        const totReq = b.rows.reduce((s, r) => s + r.requested, 0);
+        const totApp = b.rows.reduce((s, r) => s + r.approved, 0);
+        return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 10px 0;border-collapse:collapse;border:1px solid #E5E7EB;border-radius:6px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;">
+        <tr style="background:#1D3461;">
+          <td colspan="4" style="padding:5px 12px;">
+            <span style="font-size:9.5px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1px;">${b.label}</span>
+            <span style="font-size:9px;color:#7FA5CC;margin-left:6px;">(${b.rows.length})</span>
+          </td>
+        </tr>
+        <tr style="background:#F8FAFC;">
+          <td style="padding:4px 10px;font-size:9.5px;font-weight:700;color:#6B7280;border-bottom:1px solid #E5E7EB;">${b.label.replace('By ', '')}</td>
+          <td style="padding:4px 8px;font-size:9.5px;font-weight:700;color:#6B7280;text-align:center;border-bottom:1px solid #E5E7EB;width:28px;">#</td>
+          <td style="padding:4px 10px;font-size:9.5px;font-weight:700;color:#6B7280;text-align:right;border-bottom:1px solid #E5E7EB;">Requested</td>
+          <td style="padding:4px 10px;font-size:9.5px;font-weight:700;color:#6B7280;text-align:right;border-bottom:1px solid #E5E7EB;">Approved</td>
+        </tr>
+        ${b.rows.map((r, i) => `<tr style="background:${i % 2 === 0 ? '#ffffff' : '#F8FAFC'};">
+          <td style="padding:4px 10px;color:#111827;border-bottom:1px solid #F3F4F6;">${r.name}</td>
+          <td style="padding:4px 8px;color:#6B7280;text-align:center;border-bottom:1px solid #F3F4F6;">${r.count}</td>
+          <td style="padding:4px 10px;color:#374151;text-align:right;border-bottom:1px solid #F3F4F6;">${d.currency} ${r.requested.toLocaleString()}</td>
+          <td style="padding:4px 10px;font-weight:700;color:#0F2041;text-align:right;border-bottom:1px solid #F3F4F6;">${d.currency} ${r.approved.toLocaleString()}</td>
+        </tr>`).join('')}
+        <tr style="background:#EFF6FF;">
+          <td colspan="2" style="padding:5px 10px;font-size:10.5px;font-weight:700;color:#1D4ED8;border-top:1px solid #BFDBFE;">Total</td>
+          <td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:#1D4ED8;text-align:right;border-top:1px solid #BFDBFE;">${d.currency} ${totReq.toLocaleString()}</td>
+          <td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:#0F2041;text-align:right;border-top:1px solid #BFDBFE;">${d.currency} ${totApp.toLocaleString()}</td>
+        </tr>
+      </table>`;
+      }).join('')}
+      ` : ''}
 
       ${isAdvance ? `<!-- ── RECONCILIATION NOTICE ── -->
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFFBEB;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:6px;margin-bottom:24px;">
@@ -1940,7 +1977,8 @@ PACT Command Center | مركز قيادة باكت`;
     additionalAttachments?: Array<{ base64: string; filename: string; mimeType?: string }>,
     extraCcEmails?: string[],
     mmpNames?: string,
-    usdRate?: number
+    usdRate?: number,
+    breakdowns?: BreakdownGroup[]
   ): Promise<EmailNotificationResult> {
     try {
       if (!recipients || recipients.length === 0) {
@@ -1996,6 +2034,7 @@ PACT Command Center | مركز قيادة باكت`;
         isBulk,
         currency,
         usdRate,
+        breakdowns,
       });
 
       const emailBody: Record<string, unknown> = {
