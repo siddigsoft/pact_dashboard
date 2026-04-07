@@ -41,6 +41,7 @@ const Finance = lazy(() => import('./pages/Finance'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Projects = lazy(() => import('./pages/Projects'));
 const ProjectAnalytics = lazy(() => import('./pages/ProjectAnalytics'));
+const PortfolioDashboard = lazy(() => import('./pages/PortfolioDashboard'));
 const CreateProject = lazy(() => import('./pages/CreateProject'));
 const CreateProjectActivity = lazy(() => import('./pages/CreateProjectActivity'));
 const ProjectActivityDetail = lazy(() => import('./pages/ProjectActivityDetail'));
@@ -314,6 +315,7 @@ const AppRoutes = () => {
         <Route path="/my-tasks" element={<PageWrapper><MyTasksPage /></PageWrapper>} />
         <Route path="/projects" element={<PageWrapper><Projects /></PageWrapper>} />
         <Route path="/projects/analytics" element={<PageWrapper><ProjectAnalytics /></PageWrapper>} />
+        <Route path="/portfolio" element={<PageWrapper><PortfolioDashboard /></PageWrapper>} />
         <Route path="/projects/create" element={<PageWrapper><CreateProject /></PageWrapper>} />
         <Route path="/projects/:id" element={<PageWrapper><ProjectDetail /></PageWrapper>} />
         <Route path="/projects/:id/edit" element={<PageWrapper><EditProject /></PageWrapper>} />

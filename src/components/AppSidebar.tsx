@@ -311,9 +311,12 @@
     if (!isHidden('/projects/analytics') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
       planningItems.push({ id: 'project-analytics', title: "Project Analytics", url: "/projects/analytics", icon: BarChart3, priority: 2, isPinned: isPinned('/projects/analytics') });
     }
+    if (!isHidden('/portfolio') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
+      planningItems.push({ id: 'portfolio', title: "Portfolio Dashboard", url: "/portfolio", icon: LayoutDashboard, priority: 3, isPinned: isPinned('/portfolio') });
+    }
     if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM)) {
       const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
-      planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 3, isPinned: isPinned('/mmp') });
+      planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 4, isPinned: isPinned('/mmp') });
     }
     if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
       planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 4, isPinned: isPinned('/hub-operations') });
