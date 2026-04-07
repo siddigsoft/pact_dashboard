@@ -75,7 +75,8 @@
     SidebarMenuButton, 
     SidebarTrigger,
     SidebarRail,
-    SidebarResizeHandle
+    SidebarResizeHandle,
+    useSidebar
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
   import { useAuthorization } from "@/hooks/use-authorization";
@@ -607,6 +608,8 @@
     const navigate = useNavigate();
     const { currentUser, logout, roles } = useAppContext();
     const { showDueReminders } = useSiteVisitReminders();
+    const { state } = useSidebar();
+    const isSidebarCollapsed = state === 'collapsed';
     const { isSuperAdmin } = useSuperAdmin();
     const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
 
@@ -819,12 +822,13 @@
     }, [menuPrefs.favoritePages]);
 
     return (
-      <Sidebar collapsible="icon" className="border-r border-slate-200/80 bg-slate-50 dark:border-gray-800 dark:bg-gray-900">
+      <>
+        <Sidebar collapsible="offcanvas" className="border-r border-slate-200/80 bg-slate-50 dark:border-gray-800 dark:bg-gray-900">
 
         <SidebarHeader className="border-b border-slate-200/70 py-1">
-          <div className="flex h-14 items-center gap-1 px-2">
+          <div className="flex h-14 items-center gap-1 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
-            <SidebarTrigger className="ml-auto h-4 w-4" data-testid="button-sidebar-trigger" />
+            <SidebarTrigger className="ml-auto h-4 w-4 group-data-[collapsible=icon]:hidden" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
 
@@ -1147,7 +1151,7 @@
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-2 px-2 py-1.5 h-9 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-lg"
+                  className="w-full justify-start gap-2 px-2 py-1.5 h-9 hover:bg-blue-50 dark:hover:bg-gray-800 rounded-lg group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
                   data-testid="button-user-menu"
                 >
                   <div className="relative shrink-0">
@@ -1199,6 +1203,13 @@
         <SidebarRail />
         <SidebarResizeHandle />
       </Sidebar>
+
+      {isSidebarCollapsed && (
+        <div className="fixed left-4 top-4 z-50 hidden sm:block">
+          <SidebarTrigger className="h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-gray-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-gray-500 dark:hover:bg-slate-800" />
+        </div>
+      )}
+      </>
     );
   };
 
