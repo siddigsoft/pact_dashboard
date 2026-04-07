@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { FolderKanban, CheckSquare, Building2, Banknote, BarChart3 } from "lucide-react";
+import { FolderKanban, CheckSquare, Building2, Banknote, BarChart3, Briefcase } from "lucide-react";
 import { useAuthorization } from "@/hooks/use-authorization";
 
 const PAGES = [
@@ -19,6 +19,15 @@ const PAGES = [
     icon: BarChart3,
     color: "#7C3AED",
     light: "#EDE9FE",
+    roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin"],
+  },
+  {
+    id: "portfolio",
+    label: "Portfolio Dashboard",
+    url: "/portfolio",
+    icon: Briefcase,
+    color: "#0F2041",
+    light: "#E8ECF3",
     roles: ["super_admin", "superAdmin", "SuperAdmin", "admin", "Admin"],
   },
   {
