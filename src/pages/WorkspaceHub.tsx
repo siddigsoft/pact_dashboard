@@ -1638,7 +1638,7 @@ export default function WorkspaceHub() {
 
         {/* ── QR Code Modal ──────────────────────────────────────────────────── */}
         <Dialog open={!!qrFile} onOpenChange={open => { if (!open) { setQrFile(null); setShowQrCustomize(false); } }}>
-          <DialogContent className="max-w-[440px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
+          <DialogContent className="max-w-[440px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl max-h-[92vh] flex flex-col">
             {qrFile && (() => {
               const viewerUrl = `${window.location.origin}/view/${qrFile.short_code ?? qrFile.id}`;
               const Icon = getFileIcon(qrFile.mime_type);
@@ -1791,9 +1791,9 @@ export default function WorkspaceHub() {
               }
 
               return (
-                <>
-                  {/* ── Header ──────────────────────────────────────────────── */}
-                  <div className="px-6 pt-6 pb-5 flex flex-col gap-4" style={{ background: 'linear-gradient(150deg,#0F2041 0%,#1D3461 100%)' }}>
+                <div className="flex flex-col min-h-0 overflow-hidden">
+                  {/* ── Header (fixed, never scrolls) ───────────────────────── */}
+                  <div className="px-6 pt-6 pb-5 flex flex-col gap-4 shrink-0" style={{ background: 'linear-gradient(150deg,#0F2041 0%,#1D3461 100%)' }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
@@ -1824,8 +1824,8 @@ export default function WorkspaceHub() {
                     </div>
                   </div>
 
-                  {/* ── White body ──────────────────────────────────────────── */}
-                  <div className="bg-white px-5 pb-5 pt-4 flex flex-col items-center gap-3">
+                  {/* ── White body (scrollable) ─────────────────────────────── */}
+                  <div className="bg-white px-5 pb-5 pt-4 flex flex-col items-center gap-3 overflow-y-auto flex-1 min-h-0">
 
                     {/* QR Code + inline theme row */}
                     <div className="w-full flex gap-4 items-start">
@@ -1860,8 +1860,8 @@ export default function WorkspaceHub() {
                           <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Theme</span>
                         </div>
 
-                        {/* Preset swatches — 5 in a tight grid */}
-                        <div className="grid grid-cols-5 gap-1.5">
+                        {/* Preset swatches — flex-wrap so all 5 always visible */}
+                        <div className="flex flex-wrap gap-1.5">
                           {PRESETS.map(p => {
                             const active = qrFgColor === p.fg && qrBgColor === p.bg;
                             return (
@@ -1869,10 +1869,10 @@ export default function WorkspaceHub() {
                                 key={p.label}
                                 title={p.label}
                                 onClick={() => { setQrFgColor(p.fg); setQrBgColor(p.bg); }}
-                                className="flex flex-col items-center gap-0.5 group"
+                                className="flex flex-col items-center gap-0.5"
                               >
                                 <div
-                                  className="w-full aspect-square rounded-lg transition-all"
+                                  className="w-8 h-8 rounded-lg transition-all"
                                   style={{
                                     background: `linear-gradient(135deg, ${p.fg} 50%, ${p.bg} 50%)`,
                                     outline: active ? `2px solid ${p.fg}` : '2px solid transparent',
@@ -1948,7 +1948,7 @@ export default function WorkspaceHub() {
                       </button>
                     </div>
                   </div>
-                </>
+                </div>
               );
             })()}
           </DialogContent>
