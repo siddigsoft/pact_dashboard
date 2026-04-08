@@ -39,6 +39,13 @@ export interface PersonalTask {
   // Extra fields
   dependencies: string[];
   tools: string | null;
+  // Proof & recurrence fields
+  proofRequired: boolean;
+  proofNote: string | null;
+  proofFileUrl: string | null;
+  proofSubmittedAt: string | null;
+  recurrenceDays: number[];
+  recurrenceMonthlyDay: number | null;
 }
 
 export interface CreatePersonalTask {
@@ -65,6 +72,13 @@ export interface CreatePersonalTask {
   // Extra fields
   dependencies?: string[];
   tools?: string | null;
+  // Proof & recurrence fields
+  proofRequired?: boolean;
+  proofNote?: string | null;
+  proofFileUrl?: string | null;
+  proofSubmittedAt?: string | null;
+  recurrenceDays?: number[];
+  recurrenceMonthlyDay?: number | null;
 }
 
 export interface DailyTaskDefinition {
@@ -75,9 +89,12 @@ export interface DailyTaskDefinition {
   roleTargets: string[];
   departmentId: string | null;
   recurrence: string;
+  recurrenceDays: number[];
+  recurrenceMonthlyDay: number | null;
   rewardAmount: number | null;
   rewardCurrency: string;
   active: boolean;
+  proofRequired: boolean;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -110,6 +127,12 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     dailyTaskDate: (r.daily_task_date as string) ?? null,
     dependencies: Array.isArray(r.dependencies) ? (r.dependencies as string[]) : [],
     tools: (r.tools as string) ?? null,
+    proofRequired: (r.proof_required as boolean) ?? false,
+    proofNote: (r.proof_note as string) ?? null,
+    proofFileUrl: (r.proof_file_url as string) ?? null,
+    proofSubmittedAt: (r.proof_submitted_at as string) ?? null,
+    recurrenceDays: Array.isArray(r.recurrence_days) ? (r.recurrence_days as number[]) : [],
+    recurrenceMonthlyDay: (r.recurrence_monthly_day as number) ?? null,
   };
 }
 
@@ -122,9 +145,12 @@ function mapDefRow(r: Record<string, unknown>): DailyTaskDefinition {
     roleTargets: (r.role_targets as string[]) ?? [],
     departmentId: (r.department_id as string) ?? null,
     recurrence: (r.recurrence as string) ?? 'daily',
+    recurrenceDays: Array.isArray(r.recurrence_days) ? (r.recurrence_days as number[]) : [],
+    recurrenceMonthlyDay: (r.recurrence_monthly_day as number) ?? null,
     rewardAmount: (r.reward_amount as number) ?? null,
     rewardCurrency: (r.reward_currency as string) ?? 'USD',
     active: Boolean(r.active),
+    proofRequired: Boolean(r.proof_required),
     createdBy: (r.created_by as string) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
@@ -445,9 +471,15 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.notes !== undefined)       patch.notes = updates.notes;
       if (updates.completionRewardAmount !== undefined) patch.completion_reward_amount = updates.completionRewardAmount;
       if (updates.completionRewardCurrency !== undefined) patch.completion_reward_currency = updates.completionRewardCurrency;
-      if (updates.coAssignees !== undefined)   patch.co_assignees = updates.coAssignees;
-      if (updates.dependencies !== undefined)  patch.dependencies = updates.dependencies;
-      if (updates.tools !== undefined)         patch.tools = updates.tools;
+      if (updates.coAssignees !== undefined)     patch.co_assignees = updates.coAssignees;
+      if (updates.dependencies !== undefined)    patch.dependencies = updates.dependencies;
+      if (updates.tools !== undefined)           patch.tools = updates.tools;
+      if (updates.proofRequired !== undefined)   patch.proof_required = updates.proofRequired;
+      if (updates.proofNote !== undefined)       patch.proof_note = updates.proofNote;
+      if (updates.proofFileUrl !== undefined)    patch.proof_file_url = updates.proofFileUrl;
+      if (updates.proofSubmittedAt !== undefined) patch.proof_submitted_at = updates.proofSubmittedAt;
+      if (updates.recurrenceDays !== undefined)  patch.recurrence_days = updates.recurrenceDays;
+      if (updates.recurrenceMonthlyDay !== undefined) patch.recurrence_monthly_day = updates.recurrenceMonthlyDay;
 
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;

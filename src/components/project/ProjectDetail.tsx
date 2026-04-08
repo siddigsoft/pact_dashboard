@@ -38,6 +38,8 @@ import {
   Table2,
   Handshake,
   Flag,
+  ShieldAlert,
+  History,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -55,6 +57,8 @@ import ProjectDocumentsPanel from './ProjectDocumentsPanel';
 import { ProjectFieldTasksPanel } from './ProjectFieldTasksPanel';
 import { ProjectMilestonesPanel } from './ProjectMilestonesPanel';
 import { OutlookCalendarPanel } from './OutlookCalendarPanel';
+import ProjectChangeLogPanel from './ProjectChangeLogPanel';
+import ProjectRisksPanel from './ProjectRisksPanel';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -836,6 +840,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <TabsTrigger value="milestones" data-testid="tab-milestones">
             <Flag className="h-3.5 w-3.5 mr-1" />Milestones
           </TabsTrigger>
+          <TabsTrigger value="risks" data-testid="tab-risks">
+            <ShieldAlert className="h-3.5 w-3.5 mr-1" />Risks
+          </TabsTrigger>
+          <TabsTrigger value="changelog" data-testid="tab-changelog">
+            <History className="h-3.5 w-3.5 mr-1" />Change Log
+          </TabsTrigger>
         </TabsList>
         </div>
 
@@ -1398,6 +1408,17 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
         <TabsContent value="milestones" className="mt-4">
           <ProjectMilestonesPanel projectId={project.id} />
+        </TabsContent>
+
+        <TabsContent value="risks" className="mt-4">
+          <ProjectRisksPanel
+            projectId={project.id}
+            canEdit={!project.archived && canArchive}
+          />
+        </TabsContent>
+
+        <TabsContent value="changelog" className="mt-4">
+          <ProjectChangeLogPanel projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>

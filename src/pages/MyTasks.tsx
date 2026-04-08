@@ -14,7 +14,7 @@ import {
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
   GanttChartSquare, HelpCircle, Info, Building2, ListChecks, DollarSign,
   Tag, FileText, StickyNote, ArrowUpDown, Layers, Hash, ExternalLink,
-  Link2, Wrench,
+  Link2, Wrench, Paperclip,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -3221,6 +3221,96 @@ function TaskCalendarView({ tasks, onOpenTask }: CalendarViewProps) {
   );
 }
 
+// ── Proof Submission Dialog ──────────────────────────────────────────────────
+interface ProofTaskDialogProps {
+  taskId: string;
+  taskTitle: string;
+  prevStatus: PersonalTaskStatus;
+  onClose: () => void;
+  onConfirm: (id: string, proofNote: string | null, proofFileUrl: string | null, prevStatus: PersonalTaskStatus) => void;
+}
+
+function ProofTaskDialog({ taskId, taskTitle, prevStatus, onClose, onConfirm }: ProofTaskDialogProps) {
+  const [note, setNote] = useState('');
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { currentUser } = useUser();
+  const { toast } = useToast();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop() ?? 'bin';
+      const path = `task-proofs/${currentUser?.id ?? 'anon'}/${taskId}_${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('chat-files').upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('chat-files').getPublicUrl(path);
+      setFileUrl(publicUrl);
+      toast({ title: 'File uploaded' });
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            Submit Completion Proof
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-2 space-y-4">
+          <div className="text-sm text-muted-foreground bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 rounded-lg p-3">
+            <p className="font-medium text-amber-800 dark:text-amber-400 mb-1">Proof required</p>
+            <p>This task requires proof of completion before it can be marked done.</p>
+            <p className="font-semibold mt-1 text-foreground">"{taskTitle}"</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Completion note</Label>
+            <Textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Describe how you completed this task…"
+              rows={3}
+              data-testid="input-proof-note"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Supporting file (optional)</Label>
+            <div className="flex items-center gap-2">
+              <input ref={fileRef} type="file" className="hidden" onChange={handleFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="button-proof-upload">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Paperclip className="h-4 w-4 mr-2" />}
+                {fileUrl ? 'Change file' : 'Attach file'}
+              </Button>
+              {fileUrl && <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />File attached</span>}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => onConfirm(taskId, note || null, fileUrl, prevStatus)}
+            disabled={uploading}
+            data-testid="button-proof-submit"
+          >
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            Submit & Mark Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function MyTasks() {
@@ -3277,6 +3367,8 @@ export default function MyTasks() {
   };
   const [showTeam, setShowTeam] = useState(true);
   const [showDeptOverview, setShowDeptOverview] = useState(false);
+  // Proof submission dialog
+  const [proofTask, setProofTask] = useState<{ id: string; title: string; prevStatus: PersonalTaskStatus } | null>(null);
 
   // Dept overview query (admin only)
   const { data: deptOverviewStats = [], isLoading: deptOverviewLoading, refetch: refetchDeptOverview } = useQuery({
@@ -3427,6 +3519,14 @@ export default function MyTasks() {
   };
 
   const handleStatusChange = async (id: string, status: PersonalTaskStatus, prevStatus: PersonalTaskStatus) => {
+    // Intercept: if marking done and proof is required but not yet submitted, show proof dialog
+    if (status === 'done') {
+      const task = personalTasks.find(t => t.id === id) ?? allPersonalTasks.find(t => t.id === id);
+      if (task?.proofRequired && !task.proofSubmittedAt) {
+        setProofTask({ id, title: task.title, prevStatus });
+        return;
+      }
+    }
     try {
       const task = personalTasks.find(t => t.id === id) ?? allPersonalTasks.find(t => t.id === id);
       const result = await updateTask(
@@ -3466,6 +3566,30 @@ export default function MyTasks() {
       }
     } catch {
       toast({ title: 'Failed to update', variant: 'destructive' });
+    }
+  };
+
+  const handleProofConfirm = async (id: string, proofNote: string | null, proofFileUrl: string | null, prevStatus: PersonalTaskStatus) => {
+    setProofTask(null);
+    try {
+      const task = personalTasks.find(t => t.id === id) ?? allPersonalTasks.find(t => t.id === id);
+      // Save proof info and mark done
+      const result = await updateTask(
+        id,
+        { status: 'done', title: task?.title, priority: task?.priority, proofNote, proofFileUrl, proofSubmittedAt: new Date().toISOString() },
+        prevStatus,
+        { userId: currentUser?.id, userEmail: currentUser?.email, taskPriority: task?.priority },
+      );
+      const hasReward = !!(task?.completionRewardAmount && task.completionRewardAmount > 0);
+      if (hasReward && result?.creditOk) {
+        const { data: wallet } = await supabase.from('wallets').select('total_earned, currency').eq('user_id', currentUser?.id).maybeSingle();
+        const currency = (wallet?.currency as string) ?? task?.completionRewardCurrency ?? 'USD';
+        toast({ title: '✓ Task completed! Reward credited.', description: wallet ? `Wallet balance: ${currency} ${Number(wallet.total_earned).toFixed(2)}` : undefined });
+      } else {
+        toast({ title: '✓ Task completed with proof!' });
+      }
+    } catch {
+      toast({ title: 'Failed to complete task', variant: 'destructive' });
     }
   };
 
@@ -4162,6 +4286,17 @@ export default function MyTasks() {
         currentUserId={userId ?? ''}
         currentUserName={currentUser?.fullName ?? 'Me'}
       />
+
+      {/* ── Proof Submission Dialog ── */}
+      {proofTask && (
+        <ProofTaskDialog
+          taskId={proofTask.id}
+          taskTitle={proofTask.title}
+          prevStatus={proofTask.prevStatus}
+          onClose={() => setProofTask(null)}
+          onConfirm={handleProofConfirm}
+        />
+      )}
     </div>
   );
 }

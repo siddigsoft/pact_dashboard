@@ -3,13 +3,15 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   format, parseISO, isValid, differenceInCalendarDays,
   startOfMonth, endOfMonth, eachDayOfInterval, getDay,
-  addMonths, subMonths, isToday,
+  addMonths, subMonths, isToday, getYear,
 } from 'date-fns';
 import {
   CalendarOff, Plus, CheckCircle2, XCircle, Clock, Loader2,
   RefreshCw, User, CalendarDays, MessageSquare, Filter,
   AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, List,
+  PieChart, Settings,
 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +60,16 @@ const STATUS_CFG: Record<string, { label: string; badge: string; icon: React.Rea
 
 const BLANK = { leave_type: 'annual', start_date: '', end_date: '', reason: '' };
 
+interface LeaveEntitlement {
+  annual_days: number;
+  sick_days: number;
+  emergency_days: number;
+  maternity_days: number;
+  paternity_days: number;
+  unpaid_days: number;
+}
+const DEFAULT_ENTITLEMENT: LeaveEntitlement = { annual_days: 21, sick_days: 14, emergency_days: 5, maternity_days: 90, paternity_days: 5, unpaid_days: 30 };
+
 function calcDays(start: string, end: string): number {
   if (!start || !end) return 0;
   try {
@@ -77,6 +89,9 @@ export default function LeaveRequests() {
 
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [entitlement, setEntitlement] = useState<LeaveEntitlement>(DEFAULT_ENTITLEMENT);
+  const [entitlementLoading, setEntitlementLoading] = useState(false);
+  const [showBalance, setShowBalance] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [view, setView] = useState<'list' | 'calendar'>('list');
@@ -112,6 +127,32 @@ export default function LeaveRequests() {
   };
 
   useEffect(() => { load(); }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    setEntitlementLoading(true);
+    const year = getYear(new Date());
+    supabase.from('leave_entitlements').select('*').eq('user_id', currentUser.id).eq('year', year).maybeSingle()
+      .then(({ data }) => {
+        if (data) setEntitlement(data as LeaveEntitlement);
+        else setEntitlement(DEFAULT_ENTITLEMENT);
+        setEntitlementLoading(false);
+      });
+  }, [currentUser?.id]);
+
+  const leaveBalance = useMemo(() => {
+    const myApproved = requests.filter(r => r.user_id === currentUser?.id && r.status === 'approved');
+    const used: Record<string, number> = {};
+    myApproved.forEach(r => { used[r.leave_type] = (used[r.leave_type] || 0) + (r.days_count || 0); });
+    return {
+      annual:    { used: used.annual || 0,    total: entitlement.annual_days,    remaining: Math.max(0, entitlement.annual_days - (used.annual || 0)) },
+      sick:      { used: used.sick || 0,      total: entitlement.sick_days,      remaining: Math.max(0, entitlement.sick_days - (used.sick || 0)) },
+      emergency: { used: used.emergency || 0, total: entitlement.emergency_days, remaining: Math.max(0, entitlement.emergency_days - (used.emergency || 0)) },
+      maternity: { used: used.maternity || 0, total: entitlement.maternity_days, remaining: Math.max(0, entitlement.maternity_days - (used.maternity || 0)) },
+      paternity: { used: used.paternity || 0, total: entitlement.paternity_days, remaining: Math.max(0, entitlement.paternity_days - (used.paternity || 0)) },
+      unpaid:    { used: used.unpaid || 0,    total: entitlement.unpaid_days,    remaining: Math.max(0, entitlement.unpaid_days - (used.unpaid || 0)) },
+    };
+  }, [requests, entitlement, currentUser?.id]);
 
   const filtered = useMemo(() => {
     let res = requests;
@@ -229,6 +270,10 @@ export default function LeaveRequests() {
             <Button size="sm" onClick={() => setDialogOpen(true)} className="bg-white text-[#0F2041] hover:bg-blue-50">
               <Plus className="h-4 w-4 mr-1" />Request Leave
             </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowBalance(v => !v)}
+              className={cn('border-white/30 text-white hover:bg-white/10', showBalance && 'bg-white/20')}>
+              <PieChart className="h-4 w-4 mr-1" />My Balance
+            </Button>
           </div>
         </div>
 
@@ -247,6 +292,44 @@ export default function LeaveRequests() {
           ))}
         </div>
       </div>
+
+      {/* Leave Balance Panel */}
+      {showBalance && (
+        <div className="border-t border-white/10 bg-white/5 px-6 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <PieChart className="h-4 w-4" />Leave Balance — {getYear(new Date())}
+            </h3>
+            {entitlementLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-200" />}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { key: 'annual', label: 'Annual', color: 'bg-blue-400' },
+              { key: 'sick', label: 'Sick', color: 'bg-orange-400' },
+              { key: 'emergency', label: 'Emergency', color: 'bg-red-400' },
+              { key: 'unpaid', label: 'Unpaid', color: 'bg-gray-400' },
+              { key: 'maternity', label: 'Maternity', color: 'bg-pink-400' },
+              { key: 'paternity', label: 'Paternity', color: 'bg-teal-400' },
+            ].map(({ key, label, color }) => {
+              const b = leaveBalance[key as keyof typeof leaveBalance];
+              const pct = b.total > 0 ? Math.round(((b.total - b.remaining) / b.total) * 100) : 0;
+              return (
+                <div key={key} className="bg-white/10 rounded-xl p-3 border border-white/10">
+                  <div className="text-xs text-blue-200 font-medium mb-1.5">{label}</div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-white">{b.remaining}</span>
+                    <span className="text-xs text-blue-200">/{b.total}d</span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="text-[10px] text-blue-200/70 mt-1">{b.used}d used</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="p-6">
         {/* Pending alert for admin */}
@@ -510,6 +593,19 @@ export default function LeaveRequests() {
                 {days} working day{days !== 1 ? 's' : ''} of {leaveTypeCfg(form.leave_type).label}
               </div>
             )}
+            {/* Balance hint */}
+            {(['annual','sick','emergency','maternity','paternity','unpaid'] as const).includes(form.leave_type as any) && (() => {
+              const b = leaveBalance[form.leave_type as keyof typeof leaveBalance];
+              if (!b) return null;
+              const isOverLimit = days > b.remaining;
+              return (
+                <div className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium border', isOverLimit ? 'bg-red-50 dark:bg-red-900/10 border-red-200 text-red-700 dark:text-red-300' : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 text-emerald-700 dark:text-emerald-300')}>
+                  {isOverLimit ? <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
+                  Balance: {b.remaining}/{b.total} days remaining for {leaveTypeCfg(form.leave_type).label}
+                  {isOverLimit && <span className="ml-1 font-semibold">— Exceeds balance!</span>}
+                </div>
+              );
+            })()}
             <div>
               <Label>Reason / Notes</Label>
               <Textarea

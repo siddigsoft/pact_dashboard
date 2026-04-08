@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Edit2, Loader2, ChevronDown, ChevronUp,
   Building2, DollarSign, FileDown, ListTodo, Users,
   RepeatIcon, CheckCircle2, Circle, AlertTriangle, RefreshCw,
+  XCircle, Award, Clock,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -174,26 +175,40 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
   const [description, setDescription] = useState(initial?.description ?? '');
   const [priority, setPriority] = useState<PersonalTaskPriority>(initial?.priority ?? 'medium');
   const [recurrence, setRecurrence] = useState(initial?.recurrence ?? 'daily');
+  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
+  const [monthlyDay, setMonthlyDay] = useState(1);
   const [deptId, setDeptId] = useState(initial?.departmentId ?? '');
   const [rolesRaw, setRolesRaw] = useState((initial?.roleTargets ?? []).join(', '));
   const [rewardAmount, setRewardAmount] = useState(initial?.rewardAmount?.toString() ?? '');
   const [rewardCurrency, setRewardCurrency] = useState(initial?.rewardCurrency ?? 'USD');
   const [active, setActive] = useState(initial?.active ?? true);
 
+  const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const toggleWeekday = (day: number) => {
+    setSelectedWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort());
+  };
+
   const handleSave = async () => {
     if (!title.trim()) return;
+    if (recurrence === 'specific_days' && selectedWeekdays.length === 0) return;
     await onSave({
       title: title.trim(),
       description: description.trim() || null,
       priority,
       recurrence,
+      recurrenceDays: recurrence === 'specific_days' ? selectedWeekdays : [],
+      recurrenceMonthlyDay: recurrence === 'monthly' ? monthlyDay : null,
       departmentId: deptId || null,
       roleTargets: rolesRaw.split(',').map(r => r.trim()).filter(Boolean),
       rewardAmount: rewardAmount ? parseFloat(rewardAmount) : null,
       rewardCurrency: rewardCurrency || 'USD',
       active,
+      proofRequired: false,
     });
   };
+
+  const isSpecificDays = recurrence === 'specific_days';
+  const isMonthly = recurrence === 'monthly';
 
   return (
     <div className="space-y-3 py-2">
@@ -222,12 +237,51 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
           <Select value={recurrence} onValueChange={setRecurrence}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="daily">Daily</SelectItem>
+              <SelectItem value="daily">Every day</SelectItem>
               <SelectItem value="weekly">Weekly (Mon)</SelectItem>
+              <SelectItem value="biweekly">Bi-weekly (Every 2 weeks)</SelectItem>
+              <SelectItem value="specific_days">Specific weekdays</SelectItem>
+              <SelectItem value="monthly">Monthly (specific day)</SelectItem>
+              <SelectItem value="weekdays">Weekdays only (Mon–Fri)</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
+
+      {/* Weekday selector */}
+      {isSpecificDays && (
+        <div className="space-y-1">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Select days</Label>
+          <div className="flex gap-1.5 flex-wrap">
+            {WEEKDAY_LABELS.map((label, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => toggleWeekday(idx)}
+                className={cn('w-10 h-9 rounded-lg text-xs font-semibold border transition-colors', selectedWeekdays.includes(idx) ? 'bg-[#1D3461] text-white border-[#1D3461]' : 'bg-muted text-muted-foreground border-border hover:border-[#1D3461]/50')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {selectedWeekdays.length === 0 && <p className="text-[11px] text-amber-600">Select at least one day</p>}
+        </div>
+      )}
+
+      {/* Monthly day picker */}
+      {isMonthly && (
+        <div className="space-y-1">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Day of month</Label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min={1} max={31} value={monthlyDay}
+              onChange={e => setMonthlyDay(Math.min(31, Math.max(1, parseInt(e.target.value) || 1)))}
+              className="w-20 h-9 rounded-lg border text-sm px-3 bg-background"
+            />
+            <span className="text-xs text-muted-foreground">of each month</span>
+          </div>
+        </div>
+      )}
       <div className="space-y-1">
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Department (optional)</Label>
         <Select value={deptId || 'any'} onValueChange={v => setDeptId(v === 'any' ? '' : v)}>
@@ -284,11 +338,14 @@ function DailyTemplatesPanel() {
         description: rest.description,
         priority: rest.priority,
         recurrence: rest.recurrence,
+        recurrence_days: rest.recurrenceDays ?? [],
+        recurrence_monthly_day: rest.recurrenceMonthlyDay ?? null,
         department_id: rest.departmentId,
         role_targets: rest.roleTargets,
         reward_amount: rest.rewardAmount,
         reward_currency: rest.rewardCurrency,
         active: rest.active,
+        proof_required: rest.proofRequired ?? false,
         updated_at: new Date().toISOString(),
       };
 
@@ -363,7 +420,15 @@ function DailyTemplatesPanel() {
                       <Badge variant={def.active ? 'default' : 'secondary'} className="text-[9px] px-1.5 py-0">
                         {def.active ? 'Active' : 'Inactive'}
                       </Badge>
-                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 capitalize">{def.recurrence}</Badge>
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                        {def.recurrence === 'daily' ? 'Daily'
+                         : def.recurrence === 'weekly' ? 'Weekly'
+                         : def.recurrence === 'biweekly' ? 'Bi-weekly'
+                         : def.recurrence === 'weekdays' ? 'Mon–Fri'
+                         : def.recurrence === 'specific_days' ? (def.recurrenceDays?.length ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].filter((_, i) => def.recurrenceDays.includes(i)).join('+') : 'Specific days')
+                         : def.recurrence === 'monthly' ? `Monthly (day ${def.recurrenceMonthlyDay ?? 1})`
+                         : def.recurrence}
+                      </Badge>
                       <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', PRIORITY_CFG[def.priority]?.color)}>
                         {PRIORITY_CFG[def.priority]?.label}
                       </span>
@@ -757,6 +822,7 @@ export default function TaskAdmin() {
         <TabsList className="h-9 text-xs">
           <TabsTrigger value="overview" className="text-xs gap-1.5"><ListTodo className="h-3.5 w-3.5" />Task Overview</TabsTrigger>
           <TabsTrigger value="templates" className="text-xs gap-1.5"><RepeatIcon className="h-3.5 w-3.5" />Daily Templates</TabsTrigger>
+          <TabsTrigger value="rewards" className="text-xs gap-1.5"><Award className="h-3.5 w-3.5" />Reward Approvals</TabsTrigger>
           <TabsTrigger value="payroll" className="text-xs gap-1.5"><DollarSign className="h-3.5 w-3.5" />Payroll</TabsTrigger>
         </TabsList>
 
@@ -768,10 +834,162 @@ export default function TaskAdmin() {
           <DailyTemplatesPanel />
         </TabsContent>
 
+        <TabsContent value="rewards" className="mt-4">
+          <RewardApprovalsPanel />
+        </TabsContent>
+
         <TabsContent value="payroll" className="mt-4">
           <PayrollPanel />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ── Reward Approvals Panel ─────────────────────────────────────────────────
+interface RewardApproval {
+  id: string;
+  task_id: string;
+  task_title: string | null;
+  user_id: string;
+  user_name: string | null;
+  reward_amount: number;
+  reward_currency: string;
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  reviewer_notes: string | null;
+  created_at: string;
+}
+
+function RewardApprovalsPanel() {
+  const { toast } = useToast();
+  const { currentUser } = useUser();
+  const [approvals, setApprovals] = useState<RewardApproval[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [saving, setSaving] = useState<string | null>(null);
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+
+  const load = async () => {
+    setLoading(true);
+    const query = statusFilter === 'all'
+      ? supabase.from('task_reward_approvals').select('*').order('created_at', { ascending: false })
+      : supabase.from('task_reward_approvals').select('*').eq('status', statusFilter).order('created_at', { ascending: false });
+    const { data } = await query;
+    setApprovals(data || []);
+    setLoading(false);
+  };
+
+  // Load on mount
+  useMemo(() => { load(); }, []);
+
+  const review = async (id: string, status: 'approved' | 'rejected', taskId: string, userId: string, amount: number, currency: string) => {
+    setSaving(id);
+    try {
+      const notes = reviewNotes[id] || null;
+      await supabase.from('task_reward_approvals').update({ status, reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString(), reviewer_notes: notes }).eq('id', id);
+      if (status === 'approved') {
+        try {
+          await supabase.functions.invoke('credit-task-reward', { body: { task_id: taskId, user_id: userId, override_amount: amount, override_currency: currency, approval_id: id } });
+        } catch { /* Edge function call, silent fail - wallet credit attempted */ }
+        toast({ title: 'Reward approved', description: `${currency} ${amount} approved for credit` });
+      } else {
+        toast({ title: 'Reward rejected', description: 'The reward has been rejected' });
+      }
+      load();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+            <Award className="h-4 w-4 text-emerald-600" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold">Reward Approval Queue</h2>
+            <p className="text-xs text-muted-foreground">Review and approve task completion rewards before wallet credit</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setTimeout(load, 50); }}>
+            <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+      ) : approvals.length === 0 ? (
+        <div className="flex flex-col items-center py-16 text-muted-foreground">
+          <Award className="h-12 w-12 mb-3 opacity-30" />
+          <p className="font-medium">No {statusFilter === 'all' ? '' : statusFilter} reward approvals</p>
+          <p className="text-sm mt-1">Reward approvals appear here when tasks with rewards are completed</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {approvals.map(a => (
+            <Card key={a.id} className={cn('border', a.status === 'pending' && 'border-amber-200 dark:border-amber-800/40', a.status === 'approved' && 'border-emerald-200 dark:border-emerald-800/40', a.status === 'rejected' && 'border-red-200 dark:border-red-800/40')}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-semibold text-sm">{a.task_title || 'Task Completion'}</span>
+                      <Badge className={cn('text-[10px]', a.status === 'pending' ? 'bg-amber-100 text-amber-700' : a.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}>
+                        {a.status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                        {a.status === 'approved' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                        {a.status === 'rejected' && <XCircle className="h-3 w-3 mr-1" />}
+                        {a.status.charAt(0).toUpperCase() + a.status.slice(1)}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Staff: {a.user_name || a.user_id}</p>
+                    <p className="text-sm font-bold text-emerald-600 mt-1">{a.reward_currency} {a.reward_amount.toFixed(2)}</p>
+                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">{format(new Date(a.created_at), 'dd MMM yyyy HH:mm')}</p>
+                  </div>
+                  {a.status === 'pending' && (
+                    <div className="flex flex-col gap-2 min-w-[220px]">
+                      <Input
+                        placeholder="Reviewer notes (optional)"
+                        className="h-7 text-xs"
+                        value={reviewNotes[a.id] || ''}
+                        onChange={e => setReviewNotes(r => ({ ...r, [a.id]: e.target.value }))}
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" className="flex-1 h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" disabled={saving === a.id}
+                          onClick={() => review(a.id, 'approved', a.task_id, a.user_id, a.reward_amount, a.reward_currency)}>
+                          {saving === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}Approve
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1 h-7 text-xs text-red-600 border-red-200 hover:bg-red-50" disabled={saving === a.id}
+                          onClick={() => review(a.id, 'rejected', a.task_id, a.user_id, a.reward_amount, a.reward_currency)}>
+                          <XCircle className="h-3 w-3 mr-1" />Reject
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {a.status !== 'pending' && a.reviewer_notes && (
+                    <p className="text-xs text-muted-foreground italic">{a.reviewer_notes}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
