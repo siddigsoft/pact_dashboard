@@ -1189,13 +1189,25 @@ export default function WorkspaceHub() {
                 {officeLabel}
               </DropdownMenuItem>
             )}
-            {canDownload && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={e => { e.stopPropagation(); openFileAs(file, 'download'); }}>
-                  <Download className="h-3.5 w-3.5 mr-2 text-green-600" />Download
-                </DropdownMenuItem>
-              </>
+            <DropdownMenuSeparator />
+            {canDownload ? (
+              <DropdownMenuItem onClick={e => { e.stopPropagation(); openFileAs(file, 'download'); }}>
+                <Download className="h-3.5 w-3.5 mr-2 text-green-600" />Download
+              </DropdownMenuItem>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground cursor-not-allowed select-none opacity-60 rounded">
+                    <Ban className="h-3.5 w-3.5 text-orange-400" />
+                    <span>Download blocked</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[220px] text-xs leading-relaxed">
+                  <p className="font-semibold mb-1">Downloads are disabled</p>
+                  <p>Users can view and share this file, but cannot save it to their device.</p>
+                  <p className="mt-1 text-muted-foreground">An admin can re-enable downloads from the file menu (⋮ → Allow Downloads).</p>
+                </TooltipContent>
+              </Tooltip>
             )}
           </DropdownMenuSubContent>
         </DropdownMenuPortal>
@@ -1231,9 +1243,18 @@ export default function WorkspaceHub() {
             <SecBadge level={file.security_level} size="xs" />
             <span className="text-[10px] text-muted-foreground">{fmtSize(file.file_size)}</span>
             {!file.allow_download && (
-              <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium">
-                <Ban className="h-2.5 w-2.5" />No DL
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium cursor-help">
+                    <Ban className="h-2.5 w-2.5" />No DL
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[230px] text-xs leading-relaxed">
+                  <p className="font-semibold mb-1">Downloads are disabled</p>
+                  <p>Users can view and share this file, but cannot save it to their device.</p>
+                  <p className="mt-1 text-muted-foreground">Admins can re-enable via ⋮ → Allow Downloads.</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {file.tags.slice(0, 2).map(t => <span key={t} className="text-[9px] bg-muted px-1.5 py-0 rounded-full">{t}</span>)}
           </div>
@@ -1341,9 +1362,18 @@ export default function WorkspaceHub() {
           <SecBadge level={file.security_level} size="xs" />
           <span className="text-[10px] text-muted-foreground">{fmtSize(file.file_size)}</span>
           {!file.allow_download && (
-            <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium">
-              <Ban className="h-2.5 w-2.5" />No DL
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium cursor-help">
+                  <Ban className="h-2.5 w-2.5" />No DL
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[230px] text-xs leading-relaxed">
+                <p className="font-semibold mb-1">Downloads are disabled</p>
+                <p>Users can view and share this file, but cannot save it to their device.</p>
+                <p className="mt-1 text-muted-foreground">Admins can re-enable via ⋮ → Allow Downloads.</p>
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         <p className="text-[10px] text-muted-foreground mt-1.5">{fmtRelative(file.updated_at)}</p>
