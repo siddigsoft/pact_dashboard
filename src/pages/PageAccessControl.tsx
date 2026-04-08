@@ -343,6 +343,9 @@ export default function PageAccessControl() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const isSuperAdmin = normalizeRole(currentUser?.role ?? '') === 'superAdmin';
+
+  // All hooks must come before any conditional return
   const [selectedPage, setSelectedPage] = useState<PageDef>(PAGE_DEFS[0]);
   const [userSearch, setUserSearch] = useState('');
   const [pageSearch, setPageSearch] = useState('');
@@ -356,6 +359,7 @@ export default function PageAccessControl() {
       return (data ?? []) as Profile[];
     },
     staleTime: 60_000,
+    enabled: isSuperAdmin,
   });
 
   const { data: overrides = [], refetch } = useQuery<PageOverride[]>({
@@ -365,6 +369,7 @@ export default function PageAccessControl() {
       return (data ?? []) as PageOverride[];
     },
     staleTime: 15_000,
+    enabled: isSuperAdmin,
   });
 
   const overrideMap = useMemo(() => {
@@ -375,6 +380,21 @@ export default function PageAccessControl() {
     });
     return m;
   }, [overrides]);
+
+  // Guard — after all hooks
+  if (!isSuperAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[60vh] gap-3 text-center px-6">
+        <div className="h-14 w-14 rounded-2xl bg-red-100 flex items-center justify-center">
+          <Lock className="h-6 w-6 text-red-500" />
+        </div>
+        <h2 className="text-lg font-bold">Super Admin Only</h2>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          This page is restricted to Super Admins. You do not have permission to view or modify page access settings.
+        </p>
+      </div>
+    );
+  }
 
   async function applyOverride(userId: string, isBlocked: boolean, existingId?: string) {
     setSavingId(userId);
