@@ -7,6 +7,9 @@ import './styles/mobile.css' // Import mobile-specific styles
 import { initCapacitor } from './lib/capacitor-init'
 import './lib/i18n' // Initialize i18n for multilingual support
 import { initializeCrashlytics, setupGlobalErrorHandler } from './lib/crashlytics'
+import { validateEnv } from './utils/env-validation'
+
+validateEnv();
 
 initCapacitor().then(async () => {
   console.log('[PACT] Capacitor initialized');

@@ -9,8 +9,21 @@ const CLIENT_REPLACE_COOLDOWN_MS = 15_000;
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
-if (!isSupabaseConfigured) {
-  console.error('[Supabase] Configuration missing');
+const _missingVars: string[] = [];
+if (!url) _missingVars.push('VITE_SUPABASE_URL');
+if (!anonKey) _missingVars.push('VITE_SUPABASE_ANON_KEY');
+
+if (_missingVars.length > 0) {
+  console.error(
+    `[Supabase] Missing required environment variable(s): ${_missingVars.join(', ')}. ` +
+    'The app will not be able to connect to the database. ' +
+    'Ensure these are set in the Replit Secrets panel before deploying.'
+  );
+}
+
+/** Returns the list of missing Supabase env vars (empty when fully configured). */
+export function getMissingSupabaseVars(): string[] {
+  return [..._missingVars];
 }
 
 /**
