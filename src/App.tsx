@@ -140,6 +140,7 @@ const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasks'));
 const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
 const WorkspaceHub = lazy(() => import('./pages/WorkspaceHub'));
+const PageAccessControl = lazy(() => import('./pages/PageAccessControl'));
 const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
@@ -377,6 +378,7 @@ const AppRoutes = () => {
         <Route path="/archive" element={<Archive />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
+        <Route path="/page-access" element={<PageAccessControl />} />
         <Route path="/super-admin-management" element={<SuperAdminManagement />} />
         <Route path="/super-admin-data" element={<SuperAdminDataManagement />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />

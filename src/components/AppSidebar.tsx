@@ -56,7 +56,8 @@
     CheckSquare,
     Handshake,
     FolderOpen,
-    Compass
+    Compass,
+    Lock
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -535,6 +536,9 @@
     }
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 4, isPinned: isPinned('/role-management') });
+    }
+    if (!isHidden('/page-access') && isSuperAdmin) {
+      adminItems.push({ id: 'page-access', title: "Page Access Control", url: "/page-access", icon: Lock, priority: 5, isPinned: isPinned('/page-access') });
     }
     if (!isHidden('/classifications') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 5, isPinned: isPinned('/classifications') });
