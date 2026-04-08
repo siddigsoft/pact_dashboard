@@ -9,9 +9,10 @@ import {
   Globe, Building2, User, UserCheck, UserX, Calendar, ArrowUpDown,
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check,
-  EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer,
+  EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import PactLogo from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -784,6 +785,9 @@ export default function WorkspaceHub() {
   const [moveFolderId, setMoveFolderId] = useState<string | null | '__root__'>('__root__');
   const [moving, setMoving] = useState(false);
   const [qrFile, setQrFile] = useState<WFile | null>(null);
+  const [qrFgColor, setQrFgColor] = useState('#0F2041');
+  const [qrBgColor, setQrBgColor] = useState('#FFFFFF');
+  const [showQrCustomize, setShowQrCustomize] = useState(false);
 
   // ── Password protection state ─────────────────────────────────────────────
   const [unlockedIds, setUnlockedIds] = useState<Set<string>>(new Set());
@@ -1633,49 +1637,104 @@ export default function WorkspaceHub() {
         )}
 
         {/* ── QR Code Modal ──────────────────────────────────────────────────── */}
-        <Dialog open={!!qrFile} onOpenChange={open => { if (!open) setQrFile(null); }}>
-          <DialogContent className="max-w-[420px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
+        <Dialog open={!!qrFile} onOpenChange={open => { if (!open) { setQrFile(null); setShowQrCustomize(false); } }}>
+          <DialogContent className="max-w-[440px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
             {qrFile && (() => {
               const viewerUrl = `${window.location.origin}/view/${qrFile.short_code ?? qrFile.id}`;
               const Icon = getFileIcon(qrFile.mime_type);
               const ext   = (qrFile.extension ?? '').toUpperCase();
               const sizeMB = (qrFile.file_size / 1024 / 1024).toFixed(1);
 
+              const PRESETS = [
+                { label: 'Navy',    fg: '#0F2041', bg: '#FFFFFF' },
+                { label: 'Inverse', fg: '#FFFFFF', bg: '#0F2041' },
+                { label: 'Forest',  fg: '#064E3B', bg: '#ECFDF5' },
+                { label: 'Amber',   fg: '#78350F', bg: '#FFFBEB' },
+                { label: 'Slate',   fg: '#1E293B', bg: '#F1F5F9' },
+              ];
+
+              function svgToCanvas(svg: SVGElement, size: number): Promise<HTMLCanvasElement> {
+                return new Promise(resolve => {
+                  const svgData = new XMLSerializer().serializeToString(svg);
+                  const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const img = new Image();
+                  img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = size + 40;
+                    canvas.height = size + 40;
+                    const ctx = canvas.getContext('2d')!;
+                    ctx.fillStyle = qrBgColor;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 20, 20, size, size);
+                    URL.revokeObjectURL(url);
+                    resolve(canvas);
+                  };
+                  img.src = url;
+                });
+              }
+
+              async function copyQRImage() {
+                const svgEl = document.getElementById('workspace-qr-svg') as SVGElement | null;
+                if (!svgEl) return;
+                const canvas = await svgToCanvas(svgEl, 300);
+                canvas.toBlob(async blob => {
+                  if (!blob) return;
+                  try {
+                    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                    toast({ title: 'QR image copied!', description: 'Paste it anywhere — WhatsApp, email, Slides.' });
+                  } catch {
+                    toast({ title: 'Copy blocked by browser', description: 'Use "Download PNG" instead.' });
+                  }
+                }, 'image/png');
+              }
+
+              async function downloadQR() {
+                const svgEl = document.getElementById('workspace-qr-svg') as SVGElement | null;
+                if (!svgEl) return;
+                const canvas = await svgToCanvas(svgEl, 600);
+                canvas.toBlob(blob => {
+                  if (!blob) return;
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `QR_${(qrFile.short_code ?? qrFile.id)}_${qrFile.name.replace(/[^a-z0-9]/gi,'_')}.png`;
+                  a.click();
+                }, 'image/png');
+              }
+
               function copyLink() {
                 navigator.clipboard.writeText(viewerUrl);
-                toast({ title: 'Link copied!', description: 'Share this link or scan the QR code.' });
+                toast({ title: 'Link copied!', description: viewerUrl });
               }
 
               function printQR() {
-                const win = window.open('', '_blank', 'width=420,height=560');
-                if (!win) return;
-                const svg = document.getElementById('workspace-qr-svg');
+                const svgEl = document.getElementById('workspace-qr-svg');
+                const win = window.open('', '_blank', 'width=480,height=640');
+                if (!win || !svgEl) return;
+                const svgStr = new XMLSerializer().serializeToString(svgEl);
+                const svgB64 = btoa(unescape(encodeURIComponent(svgStr)));
                 win.document.write(`<!DOCTYPE html><html><head><title>${qrFile.name}</title>
-                  <style>*{box-sizing:border-box}body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;background:#fff;padding:32px;gap:12px}
-                  svg{border-radius:12px}
-                  .title{font-size:13px;font-weight:600;text-align:center;color:#0F2041;max-width:320px;word-break:break-word;margin:0}
-                  .meta{font-size:11px;color:#6b7280;margin:0}
-                  .url{font-size:8.5px;color:#9ca3af;word-break:break-all;max-width:320px;text-align:center;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;background:#f9fafb}
-                  .brand{font-size:10px;color:#1D3461;font-weight:700;letter-spacing:.05em;opacity:.6;margin-top:4px}
+                  <style>*{box-sizing:border-box;margin:0;padding:0}body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;background:#fff;gap:14px;padding:36px}
+                  img.qr{width:280px;height:280px;border-radius:12px}
+                  .name{font-size:14px;font-weight:700;color:#0F2041;text-align:center;max-width:340px;word-break:break-word}
+                  .meta{font-size:11px;color:#6b7280}
+                  .url{font-size:8px;color:#9ca3af;word-break:break-all;max-width:340px;text-align:center;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;background:#f9fafb}
+                  .brand{font-size:9px;font-weight:700;letter-spacing:.08em;color:#1D3461;opacity:.5;text-transform:uppercase}
                   </style></head><body>
-                  ${svg?.outerHTML ?? ''}
-                  <p class="title">${qrFile.name}</p>
-                  <p class="meta">${ext}&nbsp;&bull;&nbsp;${sizeMB} MB</p>
+                  <img class="qr" src="data:image/svg+xml;base64,${svgB64}" />
+                  <p class="name">${qrFile.name}</p>
+                  <p class="meta">${ext} &bull; ${sizeMB} MB</p>
                   <div class="url">${viewerUrl}</div>
                   <p class="brand">PACT Command Center</p>
-                  <script>window.onload=()=>{window.print();window.close();}<\/script>
+                  <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),500);}<\/script>
                   </body></html>`);
                 win.document.close();
               }
 
               return (
                 <>
-                  {/* ── Top: dark branded header ────────────────────────────── */}
-                  <div
-                    className="px-6 pt-6 pb-5 flex flex-col gap-4"
-                    style={{ background: 'linear-gradient(150deg,#0F2041 0%,#1D3461 100%)' }}
-                  >
-                    {/* Title row */}
+                  {/* ── Header ──────────────────────────────────────────────── */}
+                  <div className="px-6 pt-6 pb-5 flex flex-col gap-4" style={{ background: 'linear-gradient(150deg,#0F2041 0%,#1D3461 100%)' }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
@@ -1683,89 +1742,162 @@ export default function WorkspaceHub() {
                         </div>
                         <div>
                           <p className="text-white text-sm font-semibold leading-none">Share via QR Code</p>
-                          <p className="text-blue-300/60 text-[10px] mt-0.5">Scannable — no login required</p>
+                          <p className="text-blue-300/60 text-[10px] mt-0.5">Scannable · No login required</p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setQrFile(null)}
-                        className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all"
-                      >
+                      <button onClick={() => { setQrFile(null); setShowQrCustomize(false); }}
+                        className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
-
-                    {/* File info chip */}
-                    <div className="flex items-center gap-3 bg-white/8 border border-white/10 rounded-xl px-3.5 py-3 backdrop-blur-sm">
+                    <div className="flex items-center gap-3 bg-white/[0.07] border border-white/10 rounded-xl px-3.5 py-3">
                       <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
                         <Icon className="h-5 w-5 text-blue-200" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-white text-[13px] font-semibold leading-snug truncate">{qrFile.name}</p>
-                        <p className="text-blue-300/60 text-[11px] mt-0.5">{ext} &bull; {sizeMB} MB</p>
+                        <p className="text-white text-[13px] font-semibold truncate">{qrFile.name}</p>
+                        <p className="text-blue-300/55 text-[11px]">{ext} · {sizeMB} MB</p>
                       </div>
-                      <a
-                        href={viewerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-blue-300 hover:text-white transition-all"
-                        title="Open in browser"
-                      >
+                      <a href={viewerUrl} target="_blank" rel="noopener noreferrer"
+                        className="shrink-0 w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-blue-300 hover:text-white transition-all" title="Open in browser">
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     </div>
                   </div>
 
-                  {/* ── Bottom: white content area ─────────────────────────── */}
+                  {/* ── White body ──────────────────────────────────────────── */}
                   <div className="bg-white px-6 pb-6 pt-5 flex flex-col items-center gap-4">
 
-                    {/* QR code */}
+                    {/* QR Code */}
                     <div className="relative">
-                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#0F2041]/8 to-[#1D3461]/8 blur-xl scale-110 pointer-events-none" />
-                      <div className="relative bg-white border border-slate-100 rounded-2xl p-5 shadow-lg">
+                      <div className="absolute inset-0 rounded-2xl blur-2xl scale-110 opacity-20 pointer-events-none"
+                        style={{ background: `radial-gradient(circle, ${qrFgColor}, transparent)` }} />
+                      <div className="relative rounded-2xl p-5 shadow-lg border border-slate-100" style={{ background: qrBgColor }}>
                         <QRCodeSVG
                           id="workspace-qr-svg"
                           value={viewerUrl}
-                          size={200}
+                          size={210}
                           level="H"
                           includeMargin={false}
-                          fgColor="#0F2041"
+                          fgColor={qrFgColor}
+                          bgColor={qrBgColor}
                           imageSettings={{
-                            src: '/favicon.ico',
-                            height: 30,
-                            width: 30,
+                            src: PactLogo,
+                            height: 36,
+                            width: 36,
                             excavate: true,
                           }}
                         />
                       </div>
                     </div>
 
-                    {/* Scan hint */}
-                    <p className="text-slate-400 text-[11px] text-center leading-snug">
-                      Point your phone camera at the code to open instantly
-                    </p>
-
-                    {/* URL bar */}
-                    <div className="w-full flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5">
-                      <Link className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span className="text-[11px] text-slate-500 truncate flex-1 font-mono">{viewerUrl}</span>
+                    {/* Short URL bar */}
+                    <div className="w-full flex items-center gap-0 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="flex items-center gap-2 flex-1 px-3.5 py-2.5 min-w-0">
+                        <Link className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span className="text-[11.5px] text-slate-600 truncate font-mono font-medium">{viewerUrl}</span>
+                      </div>
+                      <button onClick={copyLink}
+                        className="px-3.5 py-2.5 text-[11px] font-semibold text-[#1D3461] hover:bg-slate-100 border-l border-slate-200 shrink-0 flex items-center gap-1.5 transition-all">
+                        <Copy className="h-3 w-3" />Copy
+                      </button>
                     </div>
 
-                    {/* Action buttons */}
-                    <div className="flex gap-2.5 w-full">
-                      <button
-                        onClick={copyLink}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold border border-slate-200 transition-all active:scale-[.98]"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        Copy Link
+                    {/* ── Customize panel toggle ─── */}
+                    <button
+                      onClick={() => setShowQrCustomize(v => !v)}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Palette className="h-3.5 w-3.5 text-[#1D3461]" />
+                        <span className="text-[12px] font-semibold text-slate-700">Customize Design</span>
+                        <span className="text-[10px] text-slate-400">colors, style</span>
+                      </div>
+                      {showQrCustomize
+                        ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                        : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                      }
+                    </button>
+
+                    {/* ── Customization panel ──────────────────────────────── */}
+                    {showQrCustomize && (
+                      <div className="w-full flex flex-col gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+
+                        {/* Preset swatches */}
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Quick themes</p>
+                        <div className="flex gap-2">
+                          {PRESETS.map(p => (
+                            <button
+                              key={p.label}
+                              title={p.label}
+                              onClick={() => { setQrFgColor(p.fg); setQrBgColor(p.bg); }}
+                              className="flex-1 flex flex-col items-center gap-1 group"
+                            >
+                              <div
+                                className="w-full h-9 rounded-lg border-2 transition-all"
+                                style={{
+                                  background: p.bg,
+                                  borderColor: qrFgColor === p.fg && qrBgColor === p.bg ? p.fg : 'transparent',
+                                  boxShadow: qrFgColor === p.fg && qrBgColor === p.bg ? `0 0 0 1px ${p.fg}` : 'none',
+                                }}
+                              >
+                                <div className="w-full h-full rounded-md flex items-center justify-center">
+                                  <div className="w-4 h-4 rounded-sm" style={{ background: p.fg }} />
+                                </div>
+                              </div>
+                              <span className="text-[9px] text-slate-500 font-medium">{p.label}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Custom color pickers */}
+                        <div className="flex gap-3 pt-1">
+                          <label className="flex-1">
+                            <span className="text-[10px] font-semibold text-slate-500 block mb-1.5">QR Color</span>
+                            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-2">
+                              <input
+                                type="color"
+                                value={qrFgColor}
+                                onChange={e => setQrFgColor(e.target.value)}
+                                className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
+                              />
+                              <span className="text-[11px] font-mono text-slate-600 uppercase">{qrFgColor}</span>
+                            </div>
+                          </label>
+                          <label className="flex-1">
+                            <span className="text-[10px] font-semibold text-slate-500 block mb-1.5">Background</span>
+                            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-2">
+                              <input
+                                type="color"
+                                value={qrBgColor}
+                                onChange={e => setQrBgColor(e.target.value)}
+                                className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
+                              />
+                              <span className="text-[11px] font-mono text-slate-600 uppercase">{qrBgColor}</span>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons — 2×2 grid */}
+                    <div className="grid grid-cols-2 gap-2.5 w-full">
+                      <button onClick={copyQRImage}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
+                        <Copy className="h-3.5 w-3.5" />Copy QR Image
                       </button>
-                      <button
-                        onClick={printQR}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-[.98] text-white shadow-md hover:shadow-lg"
-                        style={{ background: 'linear-gradient(135deg,#0F2041,#1D3461)' }}
-                      >
-                        <Printer className="h-3.5 w-3.5" />
-                        Print QR
+                      <button onClick={downloadQR}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
+                        <ImageDown className="h-3.5 w-3.5" />Download PNG
+                      </button>
+                      <button onClick={copyLink}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
+                        <Link className="h-3.5 w-3.5" />Copy Link
+                      </button>
+                      <button onClick={printQR}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-semibold transition-all active:scale-[.98] text-white shadow-sm hover:shadow-md"
+                        style={{ background: 'linear-gradient(135deg,#0F2041,#1D3461)' }}>
+                        <Printer className="h-3.5 w-3.5" />Print QR
                       </button>
                     </div>
                   </div>
