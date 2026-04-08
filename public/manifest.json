@@ -4,8 +4,8 @@
   "description": "Field Operations Management for MMP Coordination",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#0F2041",
+  "theme_color": "#0F2041",
   "orientation": "portrait-primary",
   "icons": [
     {
