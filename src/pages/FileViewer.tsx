@@ -85,10 +85,12 @@ export default function FileViewer() {
   useEffect(() => {
     if (!fileId) { setError('No file specified.'); setLoading(false); return; }
 
-    supabase
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileId);
+    const query = supabase
       .from('workspace_files')
-      .select('id, name, mime_type, extension, public_url, file_size, description, security_level')
-      .eq('id', fileId)
+      .select('id, name, mime_type, extension, public_url, file_size, description, security_level');
+
+    (isUUID ? query.eq('id', fileId) : query.eq('short_code', fileId.toUpperCase()))
       .eq('archived', false)
       .single()
       .then(({ data, error: err }) => {

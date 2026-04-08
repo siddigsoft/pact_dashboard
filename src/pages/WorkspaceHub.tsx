@@ -64,6 +64,7 @@ interface WFile {
   download_count: number; view_count: number; archived: boolean;
   created_at: string; updated_at: string;
   password_hash: string | null;
+  short_code: string | null;
   _uploaderName?: string;
 }
 interface WPermission {
@@ -1635,7 +1636,7 @@ export default function WorkspaceHub() {
         <Dialog open={!!qrFile} onOpenChange={open => { if (!open) setQrFile(null); }}>
           <DialogContent className="max-w-[420px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
             {qrFile && (() => {
-              const viewerUrl = `${window.location.origin}/view/${qrFile.id}`;
+              const viewerUrl = `${window.location.origin}/view/${qrFile.short_code ?? qrFile.id}`;
               const Icon = getFileIcon(qrFile.mime_type);
               const ext   = (qrFile.extension ?? '').toUpperCase();
               const sizeMB = (qrFile.file_size / 1024 / 1024).toFixed(1);
