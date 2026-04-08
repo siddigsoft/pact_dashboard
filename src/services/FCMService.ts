@@ -62,7 +62,17 @@ class _FCMService {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 
     try {
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+      const swPath = '/firebase-messaging-sw.js';
+      const preflight = await fetch(swPath, { method: 'HEAD', cache: 'no-store' }).catch(() => null);
+      if (!preflight || !preflight.ok) {
+        console.error(
+          `[FCM] Service worker file not accessible: ${swPath} returned ${preflight?.status ?? 'network error'}. ` +
+          'Ensure the file exists in public/ and the deployment build copied it to dist/.'
+        );
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register(swPath, {
         scope: '/firebase-cloud-messaging-push-scope',
       });
 
