@@ -9,7 +9,7 @@ import {
   Globe, Building2, User, UserCheck, UserX, Calendar, ArrowUpDown,
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check,
-  EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp,
+  EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -67,6 +67,7 @@ interface WFile {
   created_at: string; updated_at: string;
   password_hash: string | null;
   short_code: string | null;
+  allow_download: boolean;
   _uploaderName?: string;
 }
 interface WPermission {
@@ -898,6 +899,14 @@ export default function WorkspaceHub() {
     toast({ title: 'File removed' });
   }
 
+  async function toggleDownload(file: WFile) {
+    const next = !file.allow_download;
+    await supabase.from('workspace_files').update({ allow_download: next, updated_at: new Date().toISOString() }).eq('id', file.id);
+    refetchFiles();
+    if (selectedFile?.id === file.id) setSelectedFile(prev => prev ? { ...prev, allow_download: next } : null);
+    toast({ title: next ? 'Downloads enabled' : 'Downloads disabled', description: file.name });
+  }
+
   async function renameItem() {
     if (!renameTarget || !renameValue.trim()) return;
     setRenaming(true);
@@ -1101,7 +1110,7 @@ export default function WorkspaceHub() {
     const isPDF = n.endsWith('.pdf') || mime.includes('pdf');
     const isSpreadsheet = /\.(xlsx?|csv)$/.test(n);
     const isPresentation = /\.pptx?$/.test(n);
-    const canDownload = !['top_secret', 'restricted'].includes(file.security_level);
+    const canDownload = file.allow_download !== false && !['top_secret', 'restricted'].includes(file.security_level);
     const googleLabel = isSpreadsheet ? 'Google Sheets' : isPresentation ? 'Google Slides' : 'Google Docs';
     const officeLabel = isSpreadsheet ? 'Excel Online' : isPresentation ? 'PowerPoint Online' : 'Word Online';
     return (
@@ -1163,6 +1172,11 @@ export default function WorkspaceHub() {
           <div className="flex items-center gap-2 mt-0.5">
             <SecBadge level={file.security_level} size="xs" />
             <span className="text-[10px] text-muted-foreground">{fmtSize(file.file_size)}</span>
+            {!file.allow_download && (
+              <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium">
+                <Ban className="h-2.5 w-2.5" />No DL
+              </span>
+            )}
             {file.tags.slice(0, 2).map(t => <span key={t} className="text-[9px] bg-muted px-1.5 py-0 rounded-full">{t}</span>)}
           </div>
         </div>
@@ -1193,7 +1207,15 @@ export default function WorkspaceHub() {
                 <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
               </DropdownMenuItem>
             )}
-            {isAdmin && <><DropdownMenuSeparator /><DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem></>}
+            {isAdmin && <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
+                {file.allow_download
+                  ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
+                  : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
+            </>}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -1239,7 +1261,15 @@ export default function WorkspaceHub() {
                     <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
                   </DropdownMenuItem>
                 )}
-                {isAdmin && <><DropdownMenuSeparator /><DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem></>}
+                {isAdmin && <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
+                    {file.allow_download
+                      ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
+                      : <><Download className="h-3.5 w-3.5 mr-2 text-green-600" />Allow Downloads</>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
+                </>}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1248,6 +1278,11 @@ export default function WorkspaceHub() {
         <div className="flex items-center gap-1 flex-wrap mt-auto">
           <SecBadge level={file.security_level} size="xs" />
           <span className="text-[10px] text-muted-foreground">{fmtSize(file.file_size)}</span>
+          {!file.allow_download && (
+            <span className="flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0 rounded-full font-medium">
+              <Ban className="h-2.5 w-2.5" />No DL
+            </span>
+          )}
         </div>
         <p className="text-[10px] text-muted-foreground mt-1.5">{fmtRelative(file.updated_at)}</p>
       </div>
