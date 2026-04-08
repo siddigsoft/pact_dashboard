@@ -1712,7 +1712,7 @@ export default function WorkspaceHub() {
 
         {/* ── QR Code Modal ──────────────────────────────────────────────────── */}
         <Dialog open={!!qrFile} onOpenChange={open => { if (!open) { setQrFile(null); setShowQrCustomize(false); } }}>
-          <DialogContent className="max-w-[440px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl max-h-[92vh] flex flex-col">
+          <DialogContent className="max-w-[600px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl max-h-[92vh] flex flex-col">
             {qrFile && (() => {
               const viewerUrl = `${window.location.origin}/view/${qrFile.short_code ?? qrFile.id}`;
               const Icon = getFileIcon(qrFile.mime_type);
@@ -1729,20 +1729,55 @@ export default function WorkspaceHub() {
 
               function svgToCanvas(svg: SVGElement, size: number): Promise<HTMLCanvasElement> {
                 return new Promise(resolve => {
-                  const svgData = new XMLSerializer().serializeToString(svg);
+                  // Clone SVG and strip embedded <image> tags (logo) — they can't
+                  // resolve when the SVG is serialized to a blob URL.
+                  const cloned = svg.cloneNode(true) as SVGElement;
+                  cloned.querySelectorAll('image').forEach(el => el.remove());
+                  const svgData = new XMLSerializer().serializeToString(cloned);
                   const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
                   const url = URL.createObjectURL(blob);
                   const img = new Image();
                   img.onload = () => {
+                    const pad = 24;
                     const canvas = document.createElement('canvas');
-                    canvas.width = size + 40;
-                    canvas.height = size + 40;
+                    canvas.width = size + pad * 2;
+                    canvas.height = size + pad * 2;
                     const ctx = canvas.getContext('2d')!;
+                    // Background
                     ctx.fillStyle = qrBgColor;
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 20, 20, size, size);
+                    // QR code
+                    ctx.drawImage(img, pad, pad, size, size);
                     URL.revokeObjectURL(url);
-                    resolve(canvas);
+                    // Draw PACT logo in the center on top of the QR
+                    const logoImg = new Image();
+                    const logoSize = Math.round(size * 0.22);
+                    const cx = pad + (size - logoSize) / 2;
+                    const cy = pad + (size - logoSize) / 2;
+                    logoImg.onload = () => {
+                      // White backing square so logo is readable on any QR color
+                      const backing = logoSize + 6;
+                      ctx.fillStyle = '#FFFFFF';
+                      ctx.beginPath();
+                      const bx = cx - 3;
+                      const by = cy - 3;
+                      const r = 6;
+                      ctx.moveTo(bx + r, by);
+                      ctx.lineTo(bx + backing - r, by);
+                      ctx.quadraticCurveTo(bx + backing, by, bx + backing, by + r);
+                      ctx.lineTo(bx + backing, by + backing - r);
+                      ctx.quadraticCurveTo(bx + backing, by + backing, bx + backing - r, by + backing);
+                      ctx.lineTo(bx + r, by + backing);
+                      ctx.quadraticCurveTo(bx, by + backing, bx, by + backing - r);
+                      ctx.lineTo(bx, by + r);
+                      ctx.quadraticCurveTo(bx, by, bx + r, by);
+                      ctx.closePath();
+                      ctx.fill();
+                      ctx.drawImage(logoImg, cx, cy, logoSize, logoSize);
+                      resolve(canvas);
+                    };
+                    logoImg.onerror = () => resolve(canvas); // still resolve without logo
+                    logoImg.src = PactLogo;
                   };
                   img.src = url;
                 });
@@ -1912,15 +1947,15 @@ export default function WorkspaceHub() {
                           <QRCodeSVG
                             id="workspace-qr-svg"
                             value={viewerUrl}
-                            size={168}
+                            size={220}
                             level="H"
                             includeMargin={false}
                             fgColor={qrFgColor}
                             bgColor={qrBgColor}
                             imageSettings={{
                               src: PactLogo,
-                              height: 30,
-                              width: 30,
+                              height: 38,
+                              width: 38,
                               excavate: true,
                             }}
                           />
