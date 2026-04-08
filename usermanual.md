@@ -1,6 +1,6 @@
 # PACT Command Center - Complete Operations Manual
 
-**Version 4.1 | Last Updated: January 2026**
+**Version 5.0 | Last Updated: April 2026**
 
 ---
 
@@ -251,26 +251,173 @@ USER ACTION                    SYSTEM PROCESS                    DATA STORE
 | **Reviewer** | `reviewer` | Administrative | Quality assurance reviewing data and submissions | Read-only access, data validation, compliance review |
 | **Data Analyst** | `data_analyst` | Technical | Data analysis generating reports and insights | Reports read/create, data export, analytics |
 
-### 3.3 Permission Matrix
+### 3.3 Page Access by Role — Complete Matrix
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              PERMISSION MATRIX                                         │
-├─────────────────┬───────┬───────┬───────┬───────┬─────────┬────────┬─────────┬────────┤
-│ Resource        │Create │ Read  │Update │Delete │ Approve │ Assign │Override │Archive │
-├─────────────────┼───────┼───────┼───────┼───────┼─────────┼────────┼─────────┼────────┤
-│ users           │   C   │   R   │   U   │   D   │    -    │   A    │    -    │   -    │
-│ roles           │   C   │   R   │   U   │   D   │    -    │   A    │    -    │   -    │
-│ projects        │   C   │   R   │   U   │   D   │   AP    │   A    │    -    │  AR    │
-│ mmp             │   C   │   R   │   U   │   D   │   AP    │   A    │    -    │   -    │
-│ site_visits     │   C   │   R   │   U   │   D   │   AP    │   A    │    -    │   -    │
-│ finances        │   C   │   R   │   U   │   -   │   AP    │   -    │   OV    │   -    │
-│ wallets         │   -   │   R   │   -   │   -   │   AP    │   -    │   OV    │   -    │
-│ reports         │   C   │   R   │   -   │   -   │    -    │   -    │    -    │   -    │
-│ audit_logs      │   -   │   R   │   -   │   -   │    -    │   -    │    -    │   -    │
-│ settings        │   -   │   R   │   U   │   -   │    -    │   -    │    -    │   -    │
-└─────────────────┴───────┴───────┴───────┴───────┴─────────┴────────┴─────────┴────────┘
-```
+The table below shows exactly which pages each role can access by default.
+Legend: ✅ Full access · ⚠️ Visible but requires Workspace Access Grant · ❌ No default access (can be granted by Super Admin override)
+
+> **Note:** Super Admin can grant or block ANY user on ANY page individually, regardless of role, using the Page Access Control system (see Section 3.4).
+
+#### 3.3.1 My Workspace & Communication
+
+| Page | Path | SuperAdmin | Admin | ICT | FOM | Coordinator | Supervisor | DataCollector | DataTeam | FinancialAdmin | Auditor | ProjectManager | CountryDirector | Reviewer |
+|------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Dashboard | `/dashboard` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| My Tasks | `/my-tasks` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Calendar | `/calendar` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Notifications | `/notifications` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Workspace Hub | `/workspace` | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| Chat | `/chat` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Signatures | `/signatures` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Broadcast Center | `/admin/broadcast` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+#### 3.3.2 Programme Management
+
+| Page | Path | SuperAdmin | Admin | ICT | FOM | Coordinator | Supervisor | DataCollector | DataTeam | FinancialAdmin | Auditor | ProjectManager | CountryDirector | Reviewer |
+|------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Projects | `/projects` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Portfolio Dashboard | `/portfolio` | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| MMP Management | `/mmp` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Hub Operations | `/hub-operations` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+#### 3.3.3 Field Operations
+
+| Page | Path | SuperAdmin | Admin | ICT | FOM | Coordinator | Supervisor | DataCollector | DataTeam | FinancialAdmin | Auditor | ProjectManager | CountryDirector | Reviewer |
+|------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Site Visits | `/site-visits` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Monitoring Form | `/monitoring-form` | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Safety Hub | `/safety-hub` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Incident Reports | `/incident-reports` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Equipment Tracking | `/equipment` | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Field Team | `/field-team` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Field Map | `/map` | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Field Operation Manager | `/field-operation-manager` | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+#### 3.3.4 Coordination & Oversight
+
+| Page | Path | SuperAdmin | Admin | ICT | FOM | Coordinator | Supervisor | DataCollector | DataTeam | FinancialAdmin | Auditor | ProjectManager | CountryDirector | Reviewer |
+|------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Site Verification | `/coordinator/sites` | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Cycle Management | `/mmp/cycle-close` | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Staff Directory | `/admin/staff-profiles` | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+#### 3.3.5 Payments & Finance
+
+| Page | Path | SuperAdmin | Admin | ICT | FOM | Coordinator | Supervisor | DataCollector | DataTeam | FinancialAdmin | Auditor | ProjectManager | CountryDirector | Reviewer |
+|------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| My Wallet | `/wallet` | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Cost Submission | `/cost-submission` | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Tier 1 Approvals | `/supervisor-approvals` | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Tier 2 Approvals | `/withdrawal-approval` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Finance Processing | `/finance-approval` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Budget | `/budget` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Wallets Admin | `/admin/wallets` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Financial Operations | `/financial-operations` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+#### 3.3.6 HR & People
+
+| Page | Path | SuperAdmin | Admin | ICT | FOM | Coordinator | Supervisor | DataCollector | DataTeam | FinancialAdmin | Auditor | ProjectManager | CountryDirector | Reviewer |
+|------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| HR Hub (Admin) | `/hr` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Timesheet | `/hr?tab=timesheet` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| My Payslip | `/hr?tab=payroll` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Leave Requests | `/leave` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+#### 3.3.7 CRM, Analytics & Administration
+
+| Page | Path | SuperAdmin | Admin | ICT | FOM | Coordinator | Supervisor | DataCollector | DataTeam | FinancialAdmin | Auditor | ProjectManager | CountryDirector | Reviewer |
+|------|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| CRM Hub | `/crm` | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| Data Export Center | `/data-export-center` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Data Visibility | `/data-visibility` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Reports | `/reports` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Documents | `/documents` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Archive | `/archive` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| DCT PDM Dashboard | `/dct-pdm` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| User Management | `/users` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Departments | `/departments` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Role Management | `/role-management` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Classifications | `/classifications` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Classification Fees | `/classification-fees` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Task Admin | `/task-admin` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Settings | `/settings` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Page Access Control** | `/page-access` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+---
+
+### 3.3.8 Page Count by Role
+
+| Role | Default Pages Accessible | Notable Restrictions |
+|------|:---:|---|
+| **Super Admin** | All 47+ pages | No restrictions |
+| **Admin** | ~38 pages | No Wallet, Financial Operations, Site Verification, or Page Access Control |
+| **ICT** | ~14 pages | Dashboard, Chat, Projects, MMP, Safety Hub, Documents, DCT PDM, Users |
+| **FOM** | ~20 pages | No Dashboard, Site Visits list, User Mgmt, HR Admin |
+| **Coordinator** | ~13 pages | MMP, Monitoring Form, Safety Hub, Site Verification, Wallet, Leave |
+| **Supervisor** | ~14 pages | Similar to Coordinator + Cycle Management, Tier 1 Approvals |
+| **DataCollector** | ~9 pages | My Tasks, MMP, Monitoring Form, Safety Hub, Wallet, Payslip, Leave, Timesheet |
+| **DataTeam** | ~12 pages | MMP, Safety Hub, Incident Reports, Cost Submission + basics |
+| **FinancialAdmin** | ~16 pages | Full finance stack, HR Admin, Documents, Classifications |
+| **Auditor** | ~13 pages | Finance read access, Documents, Classifications |
+| **ProjectManager** | ~9 pages | CRM + basics (My Tasks, Calendar, Leave, Payslip, Timesheet) |
+| **CountryDirector** | ~9 pages | Same as Project Manager |
+| **Reviewer** | ~7 pages | My Tasks, Calendar, Chat, Leave, Payslip, Timesheet, Notifications |
+
+---
+
+### 3.4 Page Access Control System (Super Admin Feature)
+
+> **Added in Version 5.0** — Allows Super Admins to override role-based access at the individual user level.
+
+#### How It Works
+
+The Page Access Control system operates as a **second layer** on top of role-based access. It allows Super Admins to:
+
+1. **Grant access** to a user on a specific page, even if their role does not normally allow it
+2. **Block access** from a user on a specific page, even if their role normally allows it
+3. **Reset** any override to return a user to their default role-based access
+
+Role-based access and individual overrides work **together**. An override only takes effect when it conflicts with the default role; otherwise the role-based rule applies.
+
+#### Accessing Page Access Control
+
+Two ways to open the access manager:
+
+| Method | How | Who |
+|--------|-----|-----|
+| **Sidebar** | Administration → Page Access Control | Super Admin only (hidden from all other roles) |
+| **Floating button** | Bottom-right corner of any registered page | Super Admin only (invisible to all other roles) |
+
+> If you navigate directly to `/page-access` without Super Admin access, you will see a **"Super Admin Only"** blocked screen and no data will be loaded.
+
+#### Status Types
+
+| Status | Colour | Meaning |
+|--------|--------|---------|
+| **Role Access** | 🔵 Blue | User's role gives them default access — no override set |
+| **Explicitly Granted** | 🟢 Green | Super Admin personally granted access (overrides role restriction) |
+| **Explicitly Blocked** | 🔴 Red | Super Admin personally blocked access (overrides role permission) |
+| **No Access** | ⚫ Grey | Role doesn't include this page and no override set |
+
+#### Actions (hover any user row)
+
+| Button | When visible | Effect |
+|--------|-------------|--------|
+| **Grant** | User is Denied or Blocked | Gives personal access to the selected page |
+| **Block** | User has Role Access or is Granted | Removes access from the selected page |
+| **Reset** | Any override exists | Removes the override; user reverts to role-based access |
+
+#### Pages Covered
+
+47 pages are registered across 9 groups:
+My Workspace · Communication · Programme Management · Field Operations · Coordination & Oversight · Payments & Finance · HR & People · CRM · Analytics & Reports · Administration
+
+#### Important Notes
+
+- Super Admins are **never shown** in the user list and can never be blocked
+- Overrides are stored in the `page_access_overrides` table in the database
+- The floating "Manage Access" button only appears on pages in the registry (not sub-pages like `/projects/123`)
+- Both the `/page-access` page and the floating button are completely invisible to all non-Super-Admin roles
 
 ---
 
