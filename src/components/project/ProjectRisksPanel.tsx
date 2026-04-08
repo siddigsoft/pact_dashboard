@@ -430,3 +430,5 @@ export function ProjectRisksPanel({ projectId }: Props) {
     </div>
   );
 }
+
+export default ProjectRisksPanel;
