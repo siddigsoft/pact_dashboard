@@ -909,6 +909,45 @@ export default function WorkspaceHub() {
     toast({ title: 'File removed' });
   }
 
+  async function changeFileSecurity(file: WFile, level: SecurityLevel) {
+    await supabase.from('workspace_files').update({ security_level: level, updated_at: new Date().toISOString() }).eq('id', file.id);
+    refetchFiles();
+    if (selectedFile?.id === file.id) setSelectedFile(prev => prev ? { ...prev, security_level: level } : null);
+    toast({ title: 'Security level updated', description: `${file.name} → ${SEC_CFG[level].label}` });
+  }
+
+  async function changeFolderSecurity(folderId: string, folderName: string, level: SecurityLevel) {
+    await supabase.from('workspace_folders').update({ security_level: level }).eq('id', folderId);
+    refetchFolders();
+    toast({ title: 'Folder security updated', description: `${folderName} → ${SEC_CFG[level].label}` });
+  }
+
+  function SecuritySubMenu({ current, onSelect }: { current: SecurityLevel; onSelect: (l: SecurityLevel) => void }) {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger className="text-xs cursor-pointer">
+          <Shield className="h-3.5 w-3.5 mr-2 text-blue-600" />Change Security…
+        </DropdownMenuSubTrigger>
+        <DropdownMenuPortal>
+          <DropdownMenuSubContent className="text-xs min-w-[180px]">
+            {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => {
+              const Icon = cfg.icon;
+              const isActive = level === current;
+              return (
+                <DropdownMenuItem key={level} onClick={() => onSelect(level)}
+                  className={isActive ? `${cfg.bg} ${cfg.text} font-semibold` : ''}>
+                  <Icon className={`h-3.5 w-3.5 mr-2 ${isActive ? cfg.text : ''}`} />
+                  <span className="flex-1">{cfg.label}</span>
+                  {isActive && <span className="text-[9px] ml-2 opacity-70">current</span>}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuPortal>
+      </DropdownMenuSub>
+    );
+  }
+
   async function toggleDownload(file: WFile) {
     const next = !file.allow_download;
     await supabase.from('workspace_files').update({ allow_download: next, updated_at: new Date().toISOString() }).eq('id', file.id);
@@ -1121,6 +1160,14 @@ export default function WorkspaceHub() {
                 <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
                   <Key className="h-3.5 w-3.5 mr-2" />{folder.password_hash ? 'Change Password' : 'Set Password'}
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <SecuritySubMenu current={folder.security_level} onSelect={l => changeFolderSecurity(folder.id, folder.name, l)} />
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-red-600" onClick={async () => {
+                  await supabase.from('workspace_folders').delete().eq('id', folder.id);
+                  refetchFolders(); refetchFiles();
+                  toast({ title: 'Folder deleted' });
+                }}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete Folder</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -1288,6 +1335,7 @@ export default function WorkspaceHub() {
             )}
             {isAdmin && <>
               <DropdownMenuSeparator />
+              <SecuritySubMenu current={file.security_level} onSelect={l => changeFileSecurity(file, l)} />
               <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
                 {file.allow_download
                   ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
@@ -1346,6 +1394,7 @@ export default function WorkspaceHub() {
                 )}
                 {isAdmin && <>
                   <DropdownMenuSeparator />
+                  <SecuritySubMenu current={file.security_level} onSelect={l => changeFileSecurity(file, l)} />
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
                     {file.allow_download
                       ? <><Ban className="h-3.5 w-3.5 mr-2 text-orange-500" />Block Downloads</>
