@@ -54,7 +54,9 @@
     Package,
     HeartPulse,
     CheckSquare,
-    Handshake
+    Handshake,
+    FolderOpen,
+    Compass
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -137,7 +139,9 @@
     ScrollText,
     Mail,
     Banknote,
-    CheckSquare
+    CheckSquare,
+    FolderOpen,
+    Compass
   };
 
   interface FavoriteItem {
@@ -285,6 +289,9 @@
     if (!isHidden('/notifications')) {
       workspaceItems.push({ id: 'notifications', title: "Notifications", url: "/notifications", icon: Bell, priority: 4, isPinned: isPinned('/notifications') });
     }
+    if (!isHidden('/workspace')) {
+      workspaceItems.push({ id: 'workspace-hub', title: "Workspace Hub", url: "/workspace", icon: FolderOpen, priority: 5, isPinned: isPinned('/workspace') });
+    }
     if (workspaceItems.length) groups.push({ id: 'workspace', label: "My Workspace", order: 1, items: workspaceItems });
 
     // ── 2. Communication ──────────────────────────────────────────────────────
@@ -348,6 +355,9 @@
     }
     if (!isHidden('/map') && (isSuperAdmin || isAdmin || isFOM)) {
       fieldOpsItems.push({ id: 'advanced-map', title: "Field Map", url: "/map", icon: Map, priority: 7, isPinned: isPinned('/map') });
+    }
+    if (!isHidden('/field-operation-manager') && (isSuperAdmin || isAdmin || isFOM)) {
+      fieldOpsItems.push({ id: 'field-operation-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: Compass, priority: 8, isPinned: isPinned('/field-operation-manager') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 4, items: fieldOpsItems });
 

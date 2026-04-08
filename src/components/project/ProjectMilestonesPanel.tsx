@@ -149,6 +149,18 @@ export function ProjectMilestonesPanel({ projectId }: Props) {
   const toggleComplete = async (m: Milestone) => {
     const newStatus = m.status === 'completed' ? 'in_progress' : 'completed';
     await supabase.from('project_milestones').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', m.id);
+    // Log milestone completion to workspace activity for team visibility
+    if (newStatus === 'completed') {
+      supabase.from('workspace_activity').insert({
+        user_id: currentUser?.id,
+        action: 'milestone_completed',
+        metadata: {
+          milestone_id: m.id,
+          milestone_title: m.title,
+          project_id: projectId,
+        },
+      }).then(() => {}).catch(() => {});
+    }
     load();
   };
 

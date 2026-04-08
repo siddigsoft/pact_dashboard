@@ -139,6 +139,9 @@ const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasks'));
 const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
+const WorkspaceHub = lazy(() => import('./pages/WorkspaceHub'));
+const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
+const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -415,6 +418,9 @@ const AppRoutes = () => {
         <Route path="/crm/contacts" element={<CRMContacts />} />
         <Route path="/crm/engagements" element={<CRMEngagements />} />
         <Route path="/crm/opportunities" element={<CRMOpportunities />} />
+        <Route path="/workspace" element={<WorkspaceHub />} />
+        <Route path="/field-operation-manager" element={<FieldOperationManager />} />
+        <Route path="/mmp-management" element={<MMPManagementPage />} />
       </Route>
 
       {/* Redirects */}
