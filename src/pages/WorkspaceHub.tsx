@@ -873,6 +873,7 @@ export default function WorkspaceHub() {
     else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
     else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
     else if (selectedFolderId) files = files.filter(f => f.folder_id === selectedFolderId);
+    else files = files.filter(f => !f.folder_id); // null = root only (no folder)
     // Hide files that belong to locked folders
     files = files.filter(f => !f.folder_id || !lockedFolderIdSet.has(f.folder_id));
     if (secFilter !== 'all') files = files.filter(f => f.security_level === secFilter);
@@ -1357,7 +1358,7 @@ export default function WorkspaceHub() {
     const totalSize = visibleFiles.reduce((s, f) => s + f.file_size, 0);
     const byLevel: Record<SecurityLevel, number> = { public: 0, internal: 0, confidential: 0, restricted: 0, top_secret: 0 };
     visibleFiles.forEach(f => { byLevel[f.security_level]++; });
-    return { total: visibleFiles.length, totalSize, byLevel, pinned: visibleFiles.filter(f => f.is_pinned).length, mine: visibleFiles.filter(f => f.created_by === userId).length };
+    return { total: visibleFiles.length, totalSize, byLevel, pinned: visibleFiles.filter(f => f.is_pinned).length, mine: visibleFiles.filter(f => f.created_by === userId).length, root: visibleFiles.filter(f => !f.folder_id).length };
   }, [allFiles, userId, lockedFolderIdSet]);
 
   const currentFolderName = selectedFolderId === '__pinned__' ? 'Pinned Files' : selectedFolderId === '__recent__' ? 'Recent Files' : selectedFolderId === '__mine__' ? 'My Files' : selectedFolder?.name ?? 'All Files';
@@ -1410,7 +1411,7 @@ export default function WorkspaceHub() {
               { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false },
               { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false },
               { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false },
-              { id: null, label: 'All Files', icon: FolderOpen, count: stats.total, droppable: true },
+              { id: null, label: 'All Files', icon: FolderOpen, count: stats.root, droppable: true },
             ].map(item => {
               const isSelected = selectedFolderId === item.id;
               const isRootDragOver = dragOverFolderId === '__root__' && item.droppable;
