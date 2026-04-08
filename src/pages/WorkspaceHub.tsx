@@ -1464,18 +1464,14 @@ export default function WorkspaceHub() {
                 <p className="text-[10px] text-muted-foreground">{stats.total} files · {fmtSize(stats.totalSize)}</p>
               </div>
               {isSuperAdmin && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setAccessManagerOpen(true)}
-                      className="p-1.5 rounded-lg hover:bg-[#0F2041]/10 text-[#0F2041]/60 hover:text-[#0F2041] transition-colors"
-                      data-testid="btn-workspace-access-manager"
-                    >
-                      <Key className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="text-xs">Manage Access</TooltipContent>
-                </Tooltip>
+                <button
+                  onClick={() => setAccessManagerOpen(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[#0F2041]/10 text-[#0F2041] border border-[#0F2041]/20 transition-colors text-[10px] font-medium"
+                  data-testid="btn-workspace-access-manager"
+                >
+                  <Key className="h-3 w-3" />
+                  Access
+                </button>
               )}
             </div>
             <Button size="sm" className="w-full bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1.5 font-medium" onClick={() => setUploadOpen(true)}>
