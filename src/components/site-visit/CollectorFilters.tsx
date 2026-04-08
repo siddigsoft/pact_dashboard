@@ -1,5 +1,5 @@
 
-import React from 'react';
+import { useEffect, useMemo, type FC } from 'react';
 import { Search, Star, MapPin, Clock, Filter, Info, Building } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -31,7 +31,7 @@ interface CollectorFiltersProps {
   onStateFilterChange?: (stateId: string) => void;
 }
 
-const CollectorFilters: React.FC<CollectorFiltersProps> = ({
+const CollectorFilters: FC<CollectorFiltersProps> = ({
   searchTerm,
   onSearchChange,
   maxDistance,
@@ -47,7 +47,7 @@ const CollectorFilters: React.FC<CollectorFiltersProps> = ({
   onStateFilterChange,
 }) => {
   // Find available states based on selected hub
-  const availableStates = React.useMemo(() => {
+  const availableStates = useMemo(() => {
     if (hubFilter && hubFilter !== "all") {
       const selectedHub = hubs.find(h => h.id === hubFilter);
       if (selectedHub) {
@@ -58,7 +58,7 @@ const CollectorFilters: React.FC<CollectorFiltersProps> = ({
   }, [hubFilter]);
 
   // Reset state filter when hub changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (hubFilter !== "all" && stateFilter !== "all") {
       const selectedHub = hubs.find(h => h.id === hubFilter);
       if (selectedHub && !selectedHub.states.includes(stateFilter)) {

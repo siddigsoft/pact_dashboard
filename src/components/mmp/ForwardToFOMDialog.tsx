@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,18 +27,18 @@ interface FOMUser {
   locality_id?: string | null;
 }
 
-export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({
+export const ForwardToFOMDialog: FC<ForwardToFOMDialogProps> = ({
   open, onOpenChange, mmpId, mmpName, onForwarded
 }) => {
-  const [loading, setLoading] = React.useState(false);
-  const [foms, setFoms] = React.useState<FOMUser[]>([]);
-  const [search, setSearch] = React.useState('');
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [foms, setFoms] = useState<FOMUser[]>([]);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { refreshMMPFiles } = useMMP();
   const { currentUser } = useAppContext();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     let cancelled = false;
     const load = async () => {
@@ -75,7 +75,7 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({
     return () => { cancelled = true; };
   }, [open, currentUser]);
 
-  const filtered = React.useMemo(() => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return foms;
     return foms.filter(u =>

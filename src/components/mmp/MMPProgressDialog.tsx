@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, type FC } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,11 +15,11 @@ interface MMPProgressDialogProps {
   mmpFile: MMPFile | null;
 }
 
-const MMPProgressDialog: React.FC<MMPProgressDialogProps> = ({ open, onOpenChange, mmpFile }) => {
-  const [previewOpen, setPreviewOpen] = React.useState(false);
-  const [previewFile, setPreviewFile] = React.useState<{ url?: string; name: string }>({ name: '' });
-  const [showAllSites, setShowAllSites] = React.useState(false);
-  const [selectedSite, setSelectedSite] = React.useState<any>(null);
+const MMPProgressDialog: FC<MMPProgressDialogProps> = ({ open, onOpenChange, mmpFile }) => {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ url?: string; name: string }>({ name: '' });
+  const [showAllSites, setShowAllSites] = useState(false);
+  const [selectedSite, setSelectedSite] = useState<any>(null);
 
   const { currentUser, users } = useAppContext();
 

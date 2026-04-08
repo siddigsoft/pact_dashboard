@@ -1,5 +1,5 @@
 
-import React from 'react';
+import { useState, type ChangeEvent, type FC, type FormEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,12 +39,12 @@ interface EditSiteEntryFormProps {
   onCancel: () => void;
 }
 
-const EditSiteEntryForm: React.FC<EditSiteEntryFormProps> = ({
+const EditSiteEntryForm: FC<EditSiteEntryFormProps> = ({
   siteEntry,
   onSave,
   onCancel
 }) => {
-  const [formData, setFormData] = React.useState<SiteEntry>({
+  const [formData, setFormData] = useState<SiteEntry>({
     ...siteEntry,
     permitDetails: siteEntry.permitDetails || {
       federal: false,
@@ -53,7 +53,7 @@ const EditSiteEntryForm: React.FC<EditSiteEntryFormProps> = ({
     }
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -73,7 +73,7 @@ const EditSiteEntryForm: React.FC<EditSiteEntryFormProps> = ({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     onSave(siteEntry.id, formData);
   };

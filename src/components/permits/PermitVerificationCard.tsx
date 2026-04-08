@@ -1,5 +1,5 @@
 
-import React from 'react';
+import { useState, type FC } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,16 +19,16 @@ interface PermitVerificationCardProps {
   onDelete: (permitId: string) => void;
 }
 
-export const PermitVerificationCard: React.FC<PermitVerificationCardProps> = ({
+export const PermitVerificationCard: FC<PermitVerificationCardProps> = ({
   permit,
   onVerify,
   onDelete,
 }) => {
-  const [verifyDialogOpen, setVerifyDialogOpen] = React.useState(false);
-  const [previewDialogOpen, setPreviewDialogOpen] = React.useState(false);
-  const [verifyAction, setVerifyAction] = React.useState<'verified' | 'rejected'>();
-  const [notes, setNotes] = React.useState('');
-  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [verifyAction, setVerifyAction] = useState<'verified' | 'rejected'>();
+  const [notes, setNotes] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const handleVerifyClick = (action: 'verified' | 'rejected') => {

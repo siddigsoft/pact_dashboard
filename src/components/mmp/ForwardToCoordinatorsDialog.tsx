@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,7 +43,7 @@ interface CoordinatorUser {
   locality_id?: string | null;
 }
 
-export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogProps> = ({
+export const ForwardToCoordinatorsDialog: FC<ForwardToCoordinatorsDialogProps> = ({
   open,
   onOpenChange,
   mmpId,
@@ -53,18 +53,18 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
   siteGroups,
   onForwarded
 }) => {
-  const [loading, setLoading] = React.useState(false);
-  const [coordinators, setCoordinators] = React.useState<CoordinatorUser[]>([]);
-  const [search, setSearch] = React.useState('');
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [coordinators, setCoordinators] = useState<CoordinatorUser[]>([]);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { refreshMMPFiles } = useMMP();
 
   // For grouped sites, track selections per group
-  const [groupSelections, setGroupSelections] = React.useState<Record<string, Set<string>>>({});
+  const [groupSelections, setGroupSelections] = useState<Record<string, Set<string>>>({});
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     let cancelled = false;
     const load = async () => {
@@ -101,7 +101,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
     return () => { cancelled = true; };
   }, [open, currentUser]);
 
-  const filtered = React.useMemo(() => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return coordinators;
     return coordinators.filter(u =>

@@ -1,4 +1,4 @@
-import React from 'react';
+import { useRef, useState, type ChangeEvent, type FC } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { useAppContext } from '@/context/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -13,17 +13,17 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Simple upload component for coordinator locality permits
-const CoordinatorLocalityPermitUpload: React.FC<{
+const CoordinatorLocalityPermitUpload: FC<{
   locality: LocalityPermitStatus;
   onPermitUploaded: () => void;
 }> = ({ locality, onPermitUploaded }) => {
   const { uploadPermit } = useCoordinatorLocalityPermits();
   const { toast } = useToast();
-  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
-  const [uploading, setUploading] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -147,7 +147,7 @@ const CoordinatorLocalityPermitUpload: React.FC<{
   );
 };
 
-const SitesForVerification: React.FC = () => {
+const SitesForVerification: FC = () => {
   const { currentUser, siteVisits } = useAppContext();
   const navigate = useNavigate();
   const { localitiesWithPermitStatus, totalLocalities, localitiesWithPermits, localitiesWithoutPermits } = useLocalityPermitStatus(siteVisits);

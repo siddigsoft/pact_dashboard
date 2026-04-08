@@ -1,5 +1,5 @@
 
-import React from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { useArchive } from '@/context/archive/ArchiveContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -9,12 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { FileText, Map } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const ArchiveCalendarView: React.FC = () => {
+const ArchiveCalendarView: FC = () => {
   const { archives, currentArchive, selectMonth, loading } = useArchive();
-  const [date, setDate] = React.useState<Date>(new Date());
+  const [date, setDate] = useState<Date>(new Date());
   
   // Create a date object for the currently selected archive month
-  React.useEffect(() => {
+  useEffect(() => {
     if (currentArchive) {
       const newDate = new Date();
       newDate.setFullYear(currentArchive.year);
@@ -31,7 +31,7 @@ const ArchiveCalendarView: React.FC = () => {
   };
   
   // Get the list of years with archives
-  const years = React.useMemo(() => {
+  const years = useMemo(() => {
     const uniqueYears = Array.from(new Set(archives.map(a => a.year)));
     return uniqueYears.sort((a, b) => b - a); // Sort newest first
   }, [archives]);

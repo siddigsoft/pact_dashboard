@@ -1,5 +1,5 @@
 
-import React from 'react';
+import { useMemo, useState, type FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
@@ -14,13 +14,13 @@ interface DashboardCalendarProps {
   siteVisits?: SiteVisit[];
 }
 
-export const DashboardCalendar: React.FC<DashboardCalendarProps> = ({ siteVisits: propSiteVisits }) => {
+export const DashboardCalendar: FC<DashboardCalendarProps> = ({ siteVisits: propSiteVisits }) => {
   const { siteVisits: contextSiteVisits } = useSiteVisitContext();
   const siteVisits = propSiteVisits || contextSiteVisits;
-  const [date, setDate] = React.useState<Date>(new Date());
+  const [date, setDate] = useState<Date>(new Date());
   const navigate = useNavigate();
 
-  const scheduledVisits = React.useMemo(() => {
+  const scheduledVisits = useMemo(() => {
     return siteVisits.filter(visit => 
       isSameDay(new Date(visit.dueDate), date)
     );

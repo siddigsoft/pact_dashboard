@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, type FC } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +28,7 @@ interface ZoneMmpAnalyticsTabProps {
   zoneColor?: string;
 }
 
-export const ZoneMmpAnalyticsTab: React.FC<ZoneMmpAnalyticsTabProps> = ({
+export const ZoneMmpAnalyticsTab: FC<ZoneMmpAnalyticsTabProps> = ({
   filters,
   onFilterChange,
   filteredMmpFiles,
@@ -42,7 +42,7 @@ export const ZoneMmpAnalyticsTab: React.FC<ZoneMmpAnalyticsTabProps> = ({
   canAccessVersioning,
   zoneColor = 'primary',
 }) => {
-  const [subTab, setSubTab] = React.useState('overview');
+  const [subTab, setSubTab] = useState('overview');
 
   const handleFilterChange = (newFilters: DashboardFilterState) => {
     onFilterChange(newFilters);

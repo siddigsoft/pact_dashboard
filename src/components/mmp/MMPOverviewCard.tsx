@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,15 +25,15 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
 
   const displayDate = mmpFile.approvedAt || mmpFile.uploadedAt || undefined;
 
-  const [isForwarded, setIsForwarded] = React.useState(false);
-  const [recallDialogOpen, setRecallDialogOpen] = React.useState(false);
+  const [isForwarded, setIsForwarded] = useState(false);
+  const [recallDialogOpen, setRecallDialogOpen] = useState(false);
   const { refreshMMPFiles } = useMMP();
   const { currentUser } = useAuthorization();
 
   const userRole = currentUser?.role || '';
   const canRecall = getRecallTierForRole(userRole) !== null;
 
-  React.useEffect(() => {
+  useEffect(() => {
     const wf = (mmpFile.workflow as any) || {};
     const forwarded = Array.isArray(wf.forwardedToFomIds) && wf.forwardedToFomIds.length > 0;
     const verified = mmpFile.status === 'approved';

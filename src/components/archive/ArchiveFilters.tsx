@@ -1,5 +1,5 @@
 
-import React from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { useArchive } from '@/context/archive/ArchiveContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,12 +16,12 @@ interface ArchiveFiltersProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const ArchiveFilters: React.FC<ArchiveFiltersProps> = ({ open, onOpenChange }) => {
+const ArchiveFilters: FC<ArchiveFiltersProps> = ({ open, onOpenChange }) => {
   const { filters, setFilters } = useArchive();
-  const [localFilters, setLocalFilters] = React.useState<ArchiveFilter>(filters);
+  const [localFilters, setLocalFilters] = useState<ArchiveFilter>(filters);
   
   // Reset local filters when the sheet opens
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) {
       setLocalFilters(filters);
     }

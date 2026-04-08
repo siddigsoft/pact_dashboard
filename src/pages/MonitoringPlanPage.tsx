@@ -1,4 +1,4 @@
-import React from 'react';
+import { useMemo, type FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import MonitoringPlanSummary from '@/components/mmp/MonitoringPlanSummary';
@@ -6,7 +6,7 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Button } from '@/components/ui/button';
 
-const MonitoringPlanPage: React.FC = () => {
+const MonitoringPlanPage: FC = () => {
   const { mmpFiles, loading, error } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
 
@@ -32,7 +32,7 @@ const MonitoringPlanPage: React.FC = () => {
     );
   }
 
-  const allSiteEntries = React.useMemo(() => {
+  const allSiteEntries = useMemo(() => {
     const list = (mmpFiles || []).flatMap((m) => {
       const entries = Array.isArray(m.siteEntries) ? m.siteEntries : [];
       return entries.map((e: any, idx: number) => ({
@@ -60,7 +60,7 @@ const MonitoringPlanPage: React.FC = () => {
     return best || '—';
   };
 
-  const summaryData = React.useMemo(() => {
+  const summaryData = useMemo(() => {
     const total = allSiteEntries.length;
     const localities = allSiteEntries.map((e: any) => e.locality || e.locality_name || '');
     const states = allSiteEntries.map((e: any) => e.state || e.state_name || '');

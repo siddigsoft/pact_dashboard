@@ -1,5 +1,5 @@
 
-import React from 'react';
+import { useState, type FC } from 'react';
 import { User } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -23,10 +23,10 @@ interface UserProfileProps {
   showActions?: boolean;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ user, showActions = true }) => {
+const UserProfile: FC<UserProfileProps> = ({ user, showActions = true }) => {
   const navigate = useNavigate();
   const { approveUser, rejectUser, hasRole } = useAppContext();
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
   const getInitials = (name: string) => {
     return name

@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -42,14 +42,14 @@ const MMPFileManagement = ({
   const canActuallyApprove = canApprove && isVerificationComplete;
 
   // --- Forward/Recall logic for New MMPs ---
-  const [recalling, setRecalling] = React.useState(false);
-  const [isForwarded, setIsForwarded] = React.useState(false);
-  const [recallDialogOpen, setRecallDialogOpen] = React.useState(false);
+  const [recalling, setRecalling] = useState(false);
+  const [isForwarded, setIsForwarded] = useState(false);
+  const [recallDialogOpen, setRecallDialogOpen] = useState(false);
   const { refreshMMPFiles } = useMMP();
   const { toast } = useToast();
   const { currentUser } = useAuthorization();
 
-  React.useEffect(() => {
+  useEffect(() => {
     const wf = (mmpFile.workflow as any) || {};
     setIsForwarded(Array.isArray(wf.forwardedToFomIds) && wf.forwardedToFomIds.length > 0);
   }, [mmpFile.workflow]);
