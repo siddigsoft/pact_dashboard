@@ -9,8 +9,9 @@ import {
   Globe, Building2, User, UserCheck, UserX, Calendar, ArrowUpDown,
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
   Activity, History, RefreshCw, Loader2, Send, Check,
-  EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck,
+  EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -781,6 +782,7 @@ export default function WorkspaceHub() {
   const [moveTarget, setMoveTarget] = useState<WFile | null>(null);
   const [moveFolderId, setMoveFolderId] = useState<string | null | '__root__'>('__root__');
   const [moving, setMoving] = useState(false);
+  const [qrFile, setQrFile] = useState<WFile | null>(null);
 
   // ── Password protection state ─────────────────────────────────────────────
   const [unlockedIds, setUnlockedIds] = useState<Set<string>>(new Set());
@@ -1109,6 +1111,11 @@ export default function WorkspaceHub() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setShareFolderTarget(null)}><Share2 className="h-3.5 w-3.5 mr-2" />Share</DropdownMenuItem>
+            {file.public_url && !['top_secret','restricted'].includes(file.security_level) && (
+              <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
+                <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
+              </DropdownMenuItem>
+            )}
             {isAdmin && <><DropdownMenuSeparator /><DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem></>}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -1148,6 +1155,11 @@ export default function WorkspaceHub() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem><Share2 className="h-3.5 w-3.5 mr-2" />Share</DropdownMenuItem>
+                {file.public_url && !['top_secret','restricted'].includes(file.security_level) && (
+                  <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
+                    <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && <><DropdownMenuSeparator /><DropdownMenuItem className="text-red-600" onClick={() => deleteFile(file)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem></>}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1618,6 +1630,125 @@ export default function WorkspaceHub() {
             onClose={() => setAccessManagerOpen(false)}
           />
         )}
+
+        {/* ── QR Code Modal ──────────────────────────────────────────────────── */}
+        <Dialog open={!!qrFile} onOpenChange={open => { if (!open) setQrFile(null); }}>
+          <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl" style={{ background: 'linear-gradient(160deg,#0F2041 0%,#1D3461 100%)' }}>
+            {qrFile && (() => {
+              const viewerUrl = `${window.location.origin}/view/${qrFile.id}`;
+              const Icon = getFileIcon(qrFile.mime_type);
+              const ext   = (qrFile.extension ?? '').toUpperCase();
+              const sizeMB = (qrFile.file_size / 1024 / 1024).toFixed(1);
+
+              function copyLink() {
+                navigator.clipboard.writeText(viewerUrl);
+                toast({ title: 'Link copied!', description: 'Share this link or scan the QR code.' });
+              }
+
+              function printQR() {
+                const win = window.open('', '_blank', 'width=400,height=500');
+                if (!win) return;
+                const svg = document.getElementById('workspace-qr-svg');
+                win.document.write(`<!DOCTYPE html><html><head><title>${qrFile.name}</title>
+                  <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;background:#fff;padding:20px}
+                  h2{font-size:15px;text-align:center;color:#0F2041;max-width:300px;word-break:break-word}
+                  p{font-size:11px;color:#666;margin:4px 0 0}
+                  .url{font-size:9px;color:#888;word-break:break-all;margin-top:8px;max-width:300px;text-align:center}
+                  </style></head><body>
+                  ${svg?.outerHTML ?? ''}
+                  <h2>${qrFile.name}</h2>
+                  <p>${ext} &bull; ${sizeMB} MB</p>
+                  <div class="url">${viewerUrl}</div>
+                  <script>window.onload=()=>{window.print();window.close();}<\/script>
+                  </body></html>`);
+                win.document.close();
+              }
+
+              return (
+                <div className="flex flex-col items-center p-6 gap-4">
+                  {/* Header */}
+                  <div className="w-full flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                        <QrCode className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="text-white font-semibold text-sm">Share QR Code</span>
+                    </div>
+                    <button onClick={() => setQrFile(null)} className="text-white/50 hover:text-white transition-colors">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* File info */}
+                  <div className="flex items-center gap-2 w-full bg-white/10 rounded-xl px-3 py-2.5">
+                    <Icon className="h-5 w-5 text-blue-300 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-white text-xs font-medium truncate">{qrFile.name}</p>
+                      <p className="text-blue-300/70 text-[10px]">{ext} &bull; {sizeMB} MB</p>
+                    </div>
+                  </div>
+
+                  {/* QR Code */}
+                  <div className="bg-white rounded-2xl p-4 shadow-2xl">
+                    <QRCodeSVG
+                      id="workspace-qr-svg"
+                      value={viewerUrl}
+                      size={220}
+                      level="H"
+                      includeMargin={false}
+                      imageSettings={{
+                        src: '/favicon.ico',
+                        height: 28,
+                        width: 28,
+                        excavate: true,
+                      }}
+                    />
+                  </div>
+
+                  {/* Instruction */}
+                  <p className="text-blue-200/60 text-[11px] text-center leading-snug">
+                    Scan to open the file instantly in any browser.<br />
+                    No login required.
+                  </p>
+
+                  {/* URL chip */}
+                  <div className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 flex items-center gap-2">
+                    <ExternalLink className="h-3.5 w-3.5 text-blue-300 shrink-0" />
+                    <span className="text-[10px] text-blue-200/70 truncate flex-1">{viewerUrl}</span>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2 w-full">
+                    <button
+                      onClick={copyLink}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium border border-white/10 transition-all"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy Link
+                    </button>
+                    <button
+                      onClick={printQR}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white text-[#1D3461] text-xs font-semibold hover:bg-blue-50 transition-all shadow"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      Print QR
+                    </button>
+                  </div>
+
+                  {/* Preview link */}
+                  <a
+                    href={viewerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-blue-300/70 hover:text-blue-200 underline underline-offset-2 transition-colors"
+                  >
+                    Preview in browser →
+                  </a>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
 
       </div>
     </TooltipProvider>

@@ -142,6 +142,7 @@ const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
 const WorkspaceHub = lazy(() => import('./pages/WorkspaceHub'));
 const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
+const FileViewer = lazy(() => import('./pages/FileViewer'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -268,7 +269,8 @@ const AuthGuard = ({ children }) => {
   if (
     !currentUser &&
     !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation', '/email-preview', '/pdm-report'].includes(location.pathname) &&
-    !location.pathname.startsWith('/demo/')
+    !location.pathname.startsWith('/demo/') &&
+    !location.pathname.startsWith('/view/')
   ) {
     return <Navigate to="/auth" replace />;
   }
@@ -291,6 +293,7 @@ const AppRoutes = () => {
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
       <Route path="/email-preview" element={<EmailPreviewPage />} />
       <Route path="/pdm-report" element={<DCTPDMPublicPage />} />
+      <Route path="/view/:fileId" element={<FileViewer />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
