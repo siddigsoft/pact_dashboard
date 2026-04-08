@@ -1131,7 +1131,7 @@ export default function WorkspaceHub() {
 
   // ── File open actions helper ───────────────────────────────────────────────
 
-  function openFileAs(file: WFile, mode: 'browser' | 'google' | 'office' | 'download') {
+  async function openFileAs(file: WFile, mode: 'browser' | 'google' | 'office' | 'download') {
     const url = file.public_url;
     if (!url) return;
     if (mode === 'browser') {
@@ -1141,10 +1141,14 @@ export default function WorkspaceHub() {
     } else if (mode === 'office') {
       window.open(`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`, '_blank');
     } else if (mode === 'download') {
+      // Generate a signed URL with download flag so the browser always saves the file
+      const { data: signed } = await supabase.storage
+        .from('workspace-files')
+        .createSignedUrl(file.storage_path, 3600, { download: file.name });
+      const downloadHref = signed?.signedUrl ?? url;
       const a = document.createElement('a');
-      a.href = url;
+      a.href = downloadHref;
       a.download = file.name;
-      a.target = '_blank';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
