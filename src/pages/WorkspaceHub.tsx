@@ -25,6 +25,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -1070,6 +1071,75 @@ export default function WorkspaceHub() {
     );
   }
 
+  // ── File open actions helper ───────────────────────────────────────────────
+
+  function openFileAs(file: WFile, mode: 'browser' | 'google' | 'office' | 'download') {
+    const url = file.public_url;
+    if (!url) return;
+    if (mode === 'browser') {
+      window.open(`/view/${file.short_code || file.id}`, '_blank');
+    } else if (mode === 'google') {
+      window.open(`https://docs.google.com/viewer?url=${encodeURIComponent(url)}`, '_blank');
+    } else if (mode === 'office') {
+      window.open(`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`, '_blank');
+    } else if (mode === 'download') {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  }
+
+  function OpenAsSubMenu({ file }: { file: WFile }) {
+    if (!file.public_url) return null;
+    const n = file.name.toLowerCase();
+    const mime = file.mime_type || '';
+    const isOffice = /\.(docx?|xlsx?|pptx?)$/.test(n);
+    const isPDF = n.endsWith('.pdf') || mime.includes('pdf');
+    const isSpreadsheet = /\.(xlsx?|csv)$/.test(n);
+    const isPresentation = /\.pptx?$/.test(n);
+    const canDownload = !['top_secret', 'restricted'].includes(file.security_level);
+    const googleLabel = isSpreadsheet ? 'Google Sheets' : isPresentation ? 'Google Slides' : 'Google Docs';
+    const officeLabel = isSpreadsheet ? 'Excel Online' : isPresentation ? 'PowerPoint Online' : 'Word Online';
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger className="text-xs cursor-pointer">
+          <ExternalLink className="h-3.5 w-3.5 mr-2 text-blue-600" />Open As…
+        </DropdownMenuSubTrigger>
+        <DropdownMenuPortal>
+          <DropdownMenuSubContent className="text-xs min-w-[170px]">
+            <DropdownMenuItem onClick={e => { e.stopPropagation(); openFileAs(file, 'browser'); }}>
+              <Globe className="h-3.5 w-3.5 mr-2 text-blue-500" />Open in Browser
+            </DropdownMenuItem>
+            {(isPDF || isOffice) && (
+              <DropdownMenuItem onClick={e => { e.stopPropagation(); openFileAs(file, 'google'); }}>
+                <span className="h-3.5 w-3.5 mr-2 flex items-center justify-center text-[10px] font-bold" style={{ color: '#4285F4' }}>G</span>
+                {googleLabel}
+              </DropdownMenuItem>
+            )}
+            {isOffice && (
+              <DropdownMenuItem onClick={e => { e.stopPropagation(); openFileAs(file, 'office'); }}>
+                <Building2 className="h-3.5 w-3.5 mr-2" style={{ color: '#D83B01' }} />
+                {officeLabel}
+              </DropdownMenuItem>
+            )}
+            {canDownload && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={e => { e.stopPropagation(); openFileAs(file, 'download'); }}>
+                  <Download className="h-3.5 w-3.5 mr-2 text-green-600" />Download
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuSubContent>
+        </DropdownMenuPortal>
+      </DropdownMenuSub>
+    );
+  }
+
   // ── File card / row renderers ──────────────────────────────────────────────
 
   function FileRow({ file }: { file: WFile }) {
@@ -1108,6 +1178,8 @@ export default function WorkspaceHub() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="text-xs">
             <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
+            <OpenAsSubMenu file={file} />
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
             <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -1152,6 +1224,8 @@ export default function WorkspaceHub() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="text-xs">
                 <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
+                <OpenAsSubMenu file={file} />
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
                 <DropdownMenuSeparator />
