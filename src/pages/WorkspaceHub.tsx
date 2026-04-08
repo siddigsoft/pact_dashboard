@@ -1478,7 +1478,7 @@ export default function WorkspaceHub() {
                 </Tooltip>
               )}
             </div>
-            <Button size="sm" className="w-full bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1.5" onClick={() => setUploadOpen(true)}>
+            <Button size="sm" className="w-full bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1.5 font-medium" onClick={() => setUploadOpen(true)}>
               <Upload className="h-3.5 w-3.5" />Upload Files
             </Button>
           </div>
@@ -1589,12 +1589,12 @@ export default function WorkspaceHub() {
             </div>
 
             {isAdmin && selectedFolderId && !['__pinned__', '__recent__', '__mine__'].includes(selectedFolderId ?? '') && (
-              <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-[#1D3461] text-[#1D3461] hover:bg-[#1D3461]/10 font-medium" onClick={() => setShareFolderTarget(selectedFolder ?? null)}>
                 <Share2 className="h-3.5 w-3.5" />Share Folder
               </Button>
             )}
 
-            <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1" onClick={() => setUploadOpen(true)}>
+            <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041] h-8 text-xs gap-1 font-medium" onClick={() => setUploadOpen(true)}>
               <Upload className="h-3.5 w-3.5" />Upload
             </Button>
           </div>
