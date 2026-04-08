@@ -17,14 +17,20 @@ import * as XLSX from 'xlsx';
 const PayrollPanel      = lazy(() => import('./Payroll'));
 const RetainerPanel     = lazy(() => import('./RetainerManagement'));
 const PayrollAdminPanel = lazy(() => import('./PayrollAdmin'));
+const TimesheetPanel    = lazy(() => import('./Timesheet'));
+const PerformancePanel  = lazy(() => import('./PerformanceReviews'));
+const SalaryIncrPanel   = lazy(() => import('./SalaryIncrements'));
 
-type HRTab = 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools';
+type HRTab = 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments';
 
 const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: string; bg: string; adminOnly: boolean }[] = [
-  { id: 'payroll',       label: 'My Payroll',      icon: Banknote,   accent: '#D97706', bg: 'rgba(217,119,6,0.12)',   adminOnly: false },
-  { id: 'payroll-admin', label: 'Payroll Admin',    icon: Settings2,  accent: '#67e8f9', bg: 'rgba(103,232,249,0.12)', adminOnly: true  },
-  { id: 'retainer',      label: 'Retainer',         icon: FileText,   accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: true  },
-  { id: 'hr-tools',      label: 'HR Analytics',     icon: BarChart2,  accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
+  { id: 'payroll',           label: 'My Payroll',          icon: Banknote,   accent: '#D97706', bg: 'rgba(217,119,6,0.12)',   adminOnly: false },
+  { id: 'payroll-admin',     label: 'Payroll Admin',        icon: Settings2,  accent: '#67e8f9', bg: 'rgba(103,232,249,0.12)', adminOnly: true  },
+  { id: 'retainer',          label: 'Retainer',             icon: FileText,   accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: true  },
+  { id: 'timesheet',         label: 'Timesheet',            icon: Wrench,     accent: '#f472b6', bg: 'rgba(244,114,182,0.12)', adminOnly: false },
+  { id: 'performance',       label: 'Performance Reviews',  icon: BarChart2,  accent: '#fb923c', bg: 'rgba(251,146,60,0.12)',  adminOnly: true  },
+  { id: 'salary-increments', label: 'Salary Increments',   icon: Calculator, accent: '#4ade80', bg: 'rgba(74,222,128,0.12)',  adminOnly: true  },
+  { id: 'hr-tools',          label: 'HR Analytics',         icon: GitBranch,  accent: '#34d399', bg: 'rgba(52,211,153,0.12)', adminOnly: true  },
 ];
 
 const ADMIN_ROLES = [
@@ -141,6 +147,21 @@ export default function HRHub() {
         {tab === 'payroll-admin' && isAdmin && (
           <Suspense fallback={<PanelLoader />}>
             <PayrollAdminPanel />
+          </Suspense>
+        )}
+        {tab === 'timesheet' && (
+          <Suspense fallback={<PanelLoader />}>
+            <TimesheetPanel />
+          </Suspense>
+        )}
+        {tab === 'performance' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}>
+            <PerformancePanel />
+          </Suspense>
+        )}
+        {tab === 'salary-increments' && isAdmin && (
+          <Suspense fallback={<PanelLoader />}>
+            <SalaryIncrPanel />
           </Suspense>
         )}
         {tab === 'hr-tools' && isAdmin && <HRToolsPanel />}

@@ -457,9 +457,21 @@
     if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       hrItems.push({ id: 'hr-analytics', title: "HR Analytics", url: "/hr?tab=hr-tools", icon: TrendingUp, priority: 5, isPinned: false });
     }
-    // 6. My Payslip — personal payslip for every staff member
+    // 6. Timesheet — daily work log for all staff
     if (!isHidden('/hr')) {
-      hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 6, isPinned: isPinned('/hr') });
+      hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 6, isPinned: false });
+    }
+    // 7. Performance Reviews — admin-managed annual/quarterly reviews
+    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      hrItems.push({ id: 'performance-reviews', title: "Performance Reviews", url: "/hr?tab=performance", icon: Activity, priority: 7, isPinned: false });
+    }
+    // 8. Salary Increments — merit-based increment management
+    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      hrItems.push({ id: 'salary-increments', title: "Salary Increments", url: "/hr?tab=salary-increments", icon: Award, priority: 8, isPinned: false });
+    }
+    // 9. My Payslip — personal payslip for every staff member
+    if (!isHidden('/hr')) {
+      hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 9, isPinned: isPinned('/hr') });
     }
     if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
 
