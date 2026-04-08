@@ -791,6 +791,15 @@ export default function WorkspaceHub() {
   const [qrBgColor, setQrBgColor] = useState('#FFFFFF');
   const [showQrCustomize, setShowQrCustomize] = useState(false);
 
+  // ── Drag-and-drop state ───────────────────────────────────────────────────
+  const [dragFileId, setDragFileId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+
+  // ── Folder customization state ────────────────────────────────────────────
+  const [folderCustomizeTarget, setFolderCustomizeTarget] = useState<{ id: string; name: string; color: string; icon: string } | null>(null);
+  const [customColor, setCustomColor] = useState('#1D3461');
+  const [customIcon, setCustomIcon] = useState('');
+
   // ── Password protection state ─────────────────────────────────────────────
   const [unlockedIds, setUnlockedIds] = useState<Set<string>>(new Set());
   const [unlockedFolderIds, setUnlockedFolderIds] = useState<Set<string>>(new Set());
@@ -905,6 +914,22 @@ export default function WorkspaceHub() {
     refetchFiles();
     if (selectedFile?.id === file.id) setSelectedFile(prev => prev ? { ...prev, allow_download: next } : null);
     toast({ title: next ? 'Downloads enabled' : 'Downloads disabled', description: file.name });
+  }
+
+  async function moveFileTo(fileId: string, folderId: string | null) {
+    await supabase.from('workspace_files').update({ folder_id: folderId, updated_at: new Date().toISOString() }).eq('id', fileId);
+    refetchFiles();
+    setDragFileId(null);
+    setDragOverFolderId(null);
+    toast({ title: 'File moved' });
+  }
+
+  async function saveFolderCustomize() {
+    if (!folderCustomizeTarget) return;
+    await supabase.from('workspace_folders').update({ color: customColor, icon: customIcon }).eq('id', folderCustomizeTarget.id);
+    refetchFolders();
+    setFolderCustomizeTarget(null);
+    toast({ title: 'Folder updated' });
   }
 
   async function renameItem() {
@@ -1026,6 +1051,12 @@ export default function WorkspaceHub() {
 
   // ── Folder tree renderer ──────────────────────────────────────────────────
 
+  const FOLDER_COLORS = [
+    '#1D3461','#0D9488','#16A34A','#7C3AED',
+    '#DC2626','#EA580C','#D97706','#DB2777','#475569',
+  ];
+  const FOLDER_ICONS = ['📁','🗂️','📂','📊','📋','📝','📌','⭐','💼','🌍','🔒','📅','✅','🔖','🚨','👥','📈','💡','🎯','🏠'];
+
   function FolderNode({ folder, depth }: { folder: WFolder; depth: number }) {
     const children = childMap[folder.id] ?? [];
     const isExpanded = expandedFolders.has(folder.id);
@@ -1034,25 +1065,40 @@ export default function WorkspaceHub() {
     const sCfg = SEC_CFG[folder.security_level];
     const SecIcon = sCfg.icon;
     const isFolderLocked = !!folder.password_hash && !unlockedFolderIds.has(folder.id);
+    const folderColor = folder.color || '#1D3461';
+    const isDragOver = dragOverFolderId === folder.id;
 
     return (
       <div>
         <div
-          className={cn('flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer group transition-colors text-sm',
-            isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/60')}
-          style={{ paddingLeft: `${8 + depth * 14}px` }}
+          className={cn('flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer group transition-all text-sm',
+            isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/60',
+            isDragOver && !isSelected && 'ring-2 ring-offset-1 bg-blue-50')}
+          style={{ paddingLeft: `${8 + depth * 14}px`, ringColor: folderColor }}
           onClick={() => openFolder(folder)}
+          onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverFolderId(folder.id); }}
+          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(null); }}
+          onDrop={e => { e.preventDefault(); e.stopPropagation(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, folder.id); }}
         >
           {children.length > 0 && !isFolderLocked ? (
             <button onClick={e => { e.stopPropagation(); toggleExpand(folder.id); }} className="flex-shrink-0">
               {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             </button>
           ) : <span className="w-3 flex-shrink-0" />}
-          {isFolderLocked
-            ? <Lock className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? 'text-amber-300' : 'text-amber-500')} />
-            : isExpanded ? <FolderOpen className="h-3.5 w-3.5 flex-shrink-0" /> : <Folder className="h-3.5 w-3.5 flex-shrink-0" />
-          }
+
+          {/* Folder icon — custom emoji or colored folder */}
+          {isFolderLocked ? (
+            <Lock className={cn('h-3.5 w-3.5 flex-shrink-0', isSelected ? 'text-amber-300' : 'text-amber-500')} />
+          ) : folder.icon ? (
+            <span className="text-sm flex-shrink-0 leading-none">{folder.icon}</span>
+          ) : (
+            <span className="h-3.5 w-3.5 rounded flex-shrink-0 flex items-center justify-center" style={{ color: isSelected ? '#fff' : folderColor }}>
+              {isExpanded ? <FolderOpen className="h-3.5 w-3.5" /> : <Folder className="h-3.5 w-3.5" />}
+            </span>
+          )}
+
           <span className="flex-1 text-xs font-medium truncate">{folder.name}</span>
+          {isDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">Drop</span>}
           {isFolderLocked && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0 font-medium', isSelected ? 'bg-amber-500/30 text-amber-200' : 'bg-amber-100 text-amber-700')}>locked</span>}
           <SecIcon className={cn('h-3 w-3 flex-shrink-0 opacity-60', isSelected ? 'text-white' : sCfg.text)} />
           {count > 0 && <span className={cn('text-[9px] px-1 rounded-full flex-shrink-0', isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>{count}</span>}
@@ -1066,6 +1112,9 @@ export default function WorkspaceHub() {
               <DropdownMenuContent align="end" className="text-xs">
                 <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'folder', id: folder.id, currentName: folder.name }); setRenameValue(folder.name); }}>
                   <Edit2 className="h-3.5 w-3.5 mr-2" />Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setCustomColor(folder.color || '#1D3461'); setCustomIcon(folder.icon || ''); setFolderCustomizeTarget({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon }); }}>
+                  <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
@@ -1157,8 +1206,12 @@ export default function WorkspaceHub() {
     const isLocked = !!file.password_hash && !unlockedIds.has(file.id);
     return (
       <div onClick={() => openFile(file)}
-        className={cn('flex items-center gap-3 px-4 py-3 border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors group',
-          isSelected && 'bg-[#1D3461]/5')}>
+        draggable
+        onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
+        onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
+        className={cn('flex items-center gap-3 px-4 py-3 border-b last:border-b-0 cursor-grab active:cursor-grabbing hover:bg-muted/30 transition-colors group',
+          isSelected && 'bg-[#1D3461]/5',
+          dragFileId === file.id && 'opacity-50')}>
         <div className="relative h-9 w-9 rounded-xl bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
           <Icon className="h-5 w-5 text-[#1D3461]" />
           {isLocked && <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-2.5 w-2.5 text-white" /></span>}
@@ -1228,8 +1281,12 @@ export default function WorkspaceHub() {
     const isLocked = !!file.password_hash && !unlockedIds.has(file.id);
     return (
       <div onClick={() => openFile(file)}
-        className={cn('flex flex-col rounded-2xl border cursor-pointer hover:shadow-md transition-all p-3 group relative',
-          isSelected ? 'border-[#1D3461] ring-2 ring-[#1D3461]/20' : 'hover:border-[#1D3461]/40')}>
+        draggable
+        onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
+        onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
+        className={cn('flex flex-col rounded-2xl border cursor-grab active:cursor-grabbing hover:shadow-md transition-all p-3 group relative',
+          isSelected ? 'border-[#1D3461] ring-2 ring-[#1D3461]/20' : 'hover:border-[#1D3461]/40',
+          dragFileId === file.id && 'opacity-50')}>
         <div className="flex items-start justify-between mb-3">
           <div className="relative h-12 w-12 rounded-xl bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
             <Icon className="h-6 w-6 text-[#1D3461]" />
@@ -1346,18 +1403,24 @@ export default function WorkspaceHub() {
           <div className="p-2">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2 mb-1">Quick Access</p>
             {[
-              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length) },
-              { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned },
-              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine },
-              { id: null, label: 'All Files', icon: FolderOpen, count: stats.total },
+              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false },
+              { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false },
+              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false },
+              { id: null, label: 'All Files', icon: FolderOpen, count: stats.total, droppable: true },
             ].map(item => {
               const isSelected = selectedFolderId === item.id;
+              const isRootDragOver = dragOverFolderId === '__root__' && item.droppable;
               return (
                 <button key={String(item.id)} onClick={() => setSelectedFolderId(item.id)}
-                  className={cn('w-full flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs font-medium transition-colors',
-                    isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/60')}>
+                  onDragOver={item.droppable ? e => { e.preventDefault(); setDragOverFolderId('__root__'); } : undefined}
+                  onDragLeave={item.droppable ? () => setDragOverFolderId(null) : undefined}
+                  onDrop={item.droppable ? e => { e.preventDefault(); const fid = e.dataTransfer.getData('fileId'); if (fid) moveFileTo(fid, null); } : undefined}
+                  className={cn('w-full flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs font-medium transition-all',
+                    isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/60',
+                    isRootDragOver && 'ring-2 ring-blue-400 bg-blue-50')}>
                   <item.icon className="h-3.5 w-3.5 flex-shrink-0" />
                   <span className="flex-1 text-left">{item.label}</span>
+                  {isRootDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold">Drop here</span>}
                   <span className={cn('text-[10px] px-1.5 rounded-full', isSelected ? 'bg-white/20' : 'bg-muted')}>{item.count}</span>
                 </button>
               );
@@ -1744,6 +1807,65 @@ export default function WorkspaceHub() {
             onClose={() => setAccessManagerOpen(false)}
           />
         )}
+
+        {/* ── Folder Customize Dialog ────────────────────────────────────────── */}
+        <Dialog open={!!folderCustomizeTarget} onOpenChange={open => { if (!open) setFolderCustomizeTarget(null); }}>
+          <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl border-0 shadow-xl">
+            <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-5 py-4 flex items-center gap-3">
+              <span className="text-2xl">{customIcon || '📁'}</span>
+              <div>
+                <p className="text-white font-bold text-sm">{folderCustomizeTarget?.name}</p>
+                <p className="text-blue-200 text-[11px]">Choose a color and icon</p>
+              </div>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* Color swatches */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Color</p>
+                <div className="flex flex-wrap gap-2">
+                  {FOLDER_COLORS.map(c => (
+                    <button key={c} onClick={() => setCustomColor(c)}
+                      className="w-7 h-7 rounded-lg transition-all hover:scale-110"
+                      style={{ background: c, outline: customColor === c ? `3px solid ${c}` : '3px solid transparent', outlineOffset: '2px' }}
+                    />
+                  ))}
+                  <label className="w-7 h-7 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center cursor-pointer hover:border-slate-400 transition-colors" title="Custom color">
+                    <span className="text-slate-400 text-[10px]">+</span>
+                    <input type="color" value={customColor} onChange={e => setCustomColor(e.target.value)} className="sr-only" />
+                  </label>
+                </div>
+              </div>
+              {/* Icon picker */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Icon</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {FOLDER_ICONS.map(ic => (
+                    <button key={ic} onClick={() => setCustomIcon(customIcon === ic ? '' : ic)}
+                      className={cn('w-8 h-8 rounded-lg text-lg flex items-center justify-center transition-all hover:scale-110',
+                        customIcon === ic ? 'bg-[#1D3461]/15 ring-2 ring-[#1D3461]' : 'bg-slate-50 hover:bg-slate-100')}>
+                      {ic}
+                    </button>
+                  ))}
+                  <button onClick={() => setCustomIcon('')}
+                    className={cn('w-8 h-8 rounded-lg text-[10px] font-bold flex items-center justify-center transition-all hover:scale-110 text-slate-400',
+                      !customIcon ? 'bg-slate-200 ring-2 ring-slate-400' : 'bg-slate-50 hover:bg-slate-100')}>
+                    None
+                  </button>
+                </div>
+              </div>
+              {/* Preview */}
+              <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-2">
+                <span className="text-[11px] text-slate-400 font-medium">Preview:</span>
+                <span className="text-sm">{customIcon || ''}</span>
+                <span className="text-xs font-semibold" style={{ color: customColor }}>{folderCustomizeTarget?.name}</span>
+              </div>
+            </div>
+            <div className="flex gap-2 px-5 pb-5">
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => setFolderCustomizeTarget(null)}>Cancel</Button>
+              <Button size="sm" className="flex-1 bg-[#1D3461] hover:bg-[#0F2041]" onClick={saveFolderCustomize}>Save</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* ── QR Code Modal ──────────────────────────────────────────────────── */}
         <Dialog open={!!qrFile} onOpenChange={open => { if (!open) { setQrFile(null); setShowQrCustomize(false); } }}>
