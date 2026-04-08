@@ -1709,24 +1709,83 @@ export default function WorkspaceHub() {
 
               function printQR() {
                 const svgEl = document.getElementById('workspace-qr-svg');
-                const win = window.open('', '_blank', 'width=480,height=640');
+                const win = window.open('', '_blank', 'width=620,height=860');
                 if (!win || !svgEl) return;
                 const svgStr = new XMLSerializer().serializeToString(svgEl);
                 const svgB64 = btoa(unescape(encodeURIComponent(svgStr)));
-                win.document.write(`<!DOCTYPE html><html><head><title>${qrFile.name}</title>
-                  <style>*{box-sizing:border-box;margin:0;padding:0}body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;background:#fff;gap:14px;padding:36px}
-                  img.qr{width:280px;height:280px;border-radius:12px}
-                  .name{font-size:14px;font-weight:700;color:#0F2041;text-align:center;max-width:340px;word-break:break-word}
-                  .meta{font-size:11px;color:#6b7280}
-                  .url{font-size:8px;color:#9ca3af;word-break:break-all;max-width:340px;text-align:center;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;background:#f9fafb}
-                  .brand{font-size:9px;font-weight:700;letter-spacing:.08em;color:#1D3461;opacity:.5;text-transform:uppercase}
+                const logoUrl = `${window.location.origin}${PactLogo}`;
+                const shortCode = qrFile.short_code ?? '';
+                const year = new Date().getFullYear();
+                win.document.write(`<!DOCTYPE html><html><head>
+                  <meta charset="utf-8"/>
+                  <title>QR — ${qrFile.name}</title>
+                  <style>
+                    *{box-sizing:border-box;margin:0;padding:0}
+                    @page{size:A5 portrait;margin:0}
+                    body{font-family:system-ui,-apple-system,sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+                    .card{background:#fff;width:100%;max-width:400px;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(15,32,65,.18)}
+                    /* ── Header ── */
+                    .hdr{background:linear-gradient(135deg,#0F2041 0%,#1D3461 100%);padding:22px 28px 20px;display:flex;align-items:center;gap:14px}
+                    .hdr img{width:44px;height:44px;object-fit:contain;border-radius:10px;background:rgba(255,255,255,.12);padding:6px}
+                    .hdr-text{}
+                    .hdr-title{color:#fff;font-size:16px;font-weight:700;letter-spacing:.01em}
+                    .hdr-sub{color:rgba(147,197,253,.75);font-size:10px;margin-top:2px;letter-spacing:.04em;text-transform:uppercase}
+                    /* ── QR area ── */
+                    .qr-wrap{padding:28px 28px 0;display:flex;flex-direction:column;align-items:center;gap:10px}
+                    .qr-card{background:${qrBgColor};border-radius:16px;padding:20px;box-shadow:0 2px 16px rgba(15,32,65,.10);border:1px solid rgba(15,32,65,.07)}
+                    .qr-card img{width:260px;height:260px;display:block;border-radius:4px}
+                    .scan-hint{font-size:11px;color:#6b7280;text-align:center;letter-spacing:.01em}
+                    /* ── File info ── */
+                    .info{margin:20px 28px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+                    .info-name{font-size:13px;font-weight:700;color:#0F2041;word-break:break-word;line-height:1.3}
+                    .info-meta{font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px}
+                    .badge{background:#e0e7ef;color:#1D3461;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.05em}
+                    /* ── URL chip ── */
+                    .url-wrap{margin:14px 28px 0;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px}
+                    .url-icon{width:16px;height:16px;flex-shrink:0;opacity:.45}
+                    .url-text{font-size:8.5px;color:#475569;word-break:break-all;font-family:monospace;line-height:1.4}
+                    /* ── Short code pill ── */
+                    .code-pill{display:inline-flex;align-items:center;gap:6px;background:#e0e7ef;border-radius:99px;padding:4px 12px;margin:10px auto 0}
+                    .code-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em}
+                    .code-val{font-size:12px;font-weight:800;color:#0F2041;letter-spacing:.12em;font-family:monospace}
+                    /* ── Footer ── */
+                    .footer{margin:20px 0 0;padding:16px 28px;background:linear-gradient(135deg,#0F2041,#1D3461);display:flex;align-items:center;justify-content:space-between}
+                    .footer-brand{color:rgba(255,255,255,.9);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+                    .footer-year{color:rgba(147,197,253,.5);font-size:9px}
+                    @media print{body{background:#fff;padding:0}.card{box-shadow:none;border-radius:0;max-width:100%}}
                   </style></head><body>
-                  <img class="qr" src="data:image/svg+xml;base64,${svgB64}" />
-                  <p class="name">${qrFile.name}</p>
-                  <p class="meta">${ext} &bull; ${sizeMB} MB</p>
-                  <div class="url">${viewerUrl}</div>
-                  <p class="brand">PACT Command Center</p>
-                  <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),500);}<\/script>
+                  <div class="card">
+                    <div class="hdr">
+                      <img src="${logoUrl}" alt="PACT" onerror="this.style.display='none'"/>
+                      <div class="hdr-text">
+                        <div class="hdr-title">PACT Command Center</div>
+                        <div class="hdr-sub">Workspace File · Secure Share</div>
+                      </div>
+                    </div>
+                    <div class="qr-wrap">
+                      <div class="qr-card">
+                        <img src="data:image/svg+xml;base64,${svgB64}" alt="QR Code"/>
+                      </div>
+                      <p class="scan-hint">Point your phone camera to open instantly — no login needed</p>
+                    </div>
+                    <div class="info">
+                      <div class="info-name">${qrFile.name}</div>
+                      <div class="info-meta">
+                        <span class="badge">${ext}</span>
+                        <span>${sizeMB} MB</span>
+                      </div>
+                    </div>
+                    <div class="url-wrap">
+                      <svg class="url-icon" viewBox="0 0 24 24" fill="none" stroke="#0F2041" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      <div class="url-text">${viewerUrl}</div>
+                    </div>
+                    ${shortCode ? `<div style="display:flex;justify-content:center"><div class="code-pill"><span class="code-label">Code</span><span class="code-val">${shortCode}</span></div></div>` : ''}
+                    <div class="footer">
+                      <span class="footer-brand">PACT Command Center</span>
+                      <span class="footer-year">&copy; ${year} PACT Consultancy</span>
+                    </div>
+                  </div>
+                  <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),800);}<\/script>
                   </body></html>`);
                 win.document.close();
               }
@@ -1766,138 +1825,126 @@ export default function WorkspaceHub() {
                   </div>
 
                   {/* ── White body ──────────────────────────────────────────── */}
-                  <div className="bg-white px-6 pb-6 pt-5 flex flex-col items-center gap-4">
+                  <div className="bg-white px-5 pb-5 pt-4 flex flex-col items-center gap-3">
 
-                    {/* QR Code */}
-                    <div className="relative">
-                      <div className="absolute inset-0 rounded-2xl blur-2xl scale-110 opacity-20 pointer-events-none"
-                        style={{ background: `radial-gradient(circle, ${qrFgColor}, transparent)` }} />
-                      <div className="relative rounded-2xl p-5 shadow-lg border border-slate-100" style={{ background: qrBgColor }}>
-                        <QRCodeSVG
-                          id="workspace-qr-svg"
-                          value={viewerUrl}
-                          size={210}
-                          level="H"
-                          includeMargin={false}
-                          fgColor={qrFgColor}
-                          bgColor={qrBgColor}
-                          imageSettings={{
-                            src: PactLogo,
-                            height: 36,
-                            width: 36,
-                            excavate: true,
-                          }}
-                        />
+                    {/* QR Code + inline theme row */}
+                    <div className="w-full flex gap-4 items-start">
+
+                      {/* QR */}
+                      <div className="relative shrink-0">
+                        <div className="absolute inset-0 rounded-xl blur-xl scale-110 opacity-15 pointer-events-none"
+                          style={{ background: qrFgColor }} />
+                        <div className="relative rounded-xl p-3.5 shadow-md border border-slate-100" style={{ background: qrBgColor }}>
+                          <QRCodeSVG
+                            id="workspace-qr-svg"
+                            value={viewerUrl}
+                            size={168}
+                            level="H"
+                            includeMargin={false}
+                            fgColor={qrFgColor}
+                            bgColor={qrBgColor}
+                            imageSettings={{
+                              src: PactLogo,
+                              height: 30,
+                              width: 30,
+                              excavate: true,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Right panel: themes + custom pickers */}
+                      <div className="flex-1 flex flex-col gap-2.5 min-w-0 pt-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <Palette className="h-3 w-3 text-[#1D3461]" />
+                          <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Theme</span>
+                        </div>
+
+                        {/* Preset swatches — 5 in a tight grid */}
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {PRESETS.map(p => {
+                            const active = qrFgColor === p.fg && qrBgColor === p.bg;
+                            return (
+                              <button
+                                key={p.label}
+                                title={p.label}
+                                onClick={() => { setQrFgColor(p.fg); setQrBgColor(p.bg); }}
+                                className="flex flex-col items-center gap-0.5 group"
+                              >
+                                <div
+                                  className="w-full aspect-square rounded-lg transition-all"
+                                  style={{
+                                    background: `linear-gradient(135deg, ${p.fg} 50%, ${p.bg} 50%)`,
+                                    outline: active ? `2px solid ${p.fg}` : '2px solid transparent',
+                                    outlineOffset: '2px',
+                                  }}
+                                />
+                                <span className="text-[8px] text-slate-400 font-medium leading-none">{p.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Custom color pickers — always visible */}
+                        <div className="flex flex-col gap-1.5">
+                          <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-slate-100 transition-all">
+                            <input
+                              type="color"
+                              value={qrFgColor}
+                              onChange={e => setQrFgColor(e.target.value)}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-semibold text-slate-400 leading-none">QR Color</p>
+                              <p className="text-[11px] font-mono text-slate-700 uppercase mt-0.5">{qrFgColor}</p>
+                            </div>
+                          </label>
+                          <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-slate-100 transition-all">
+                            <input
+                              type="color"
+                              value={qrBgColor}
+                              onChange={e => setQrBgColor(e.target.value)}
+                              className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-semibold text-slate-400 leading-none">Background</p>
+                              <p className="text-[11px] font-mono text-slate-700 uppercase mt-0.5">{qrBgColor}</p>
+                            </div>
+                          </label>
+                        </div>
                       </div>
                     </div>
 
                     {/* Short URL bar */}
                     <div className="w-full flex items-center gap-0 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="flex items-center gap-2 flex-1 px-3.5 py-2.5 min-w-0">
-                        <Link className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span className="text-[11.5px] text-slate-600 truncate font-mono font-medium">{viewerUrl}</span>
+                      <div className="flex items-center gap-2 flex-1 px-3 py-2 min-w-0">
+                        <Link className="h-3 w-3 text-slate-400 shrink-0" />
+                        <span className="text-[11px] text-slate-600 truncate font-mono font-medium">{viewerUrl}</span>
                       </div>
                       <button onClick={copyLink}
-                        className="px-3.5 py-2.5 text-[11px] font-semibold text-[#1D3461] hover:bg-slate-100 border-l border-slate-200 shrink-0 flex items-center gap-1.5 transition-all">
+                        className="px-3 py-2 text-[11px] font-semibold text-[#1D3461] hover:bg-slate-100 border-l border-slate-200 shrink-0 flex items-center gap-1 transition-all">
                         <Copy className="h-3 w-3" />Copy
                       </button>
                     </div>
 
-                    {/* ── Customize panel toggle ─── */}
-                    <button
-                      onClick={() => setShowQrCustomize(v => !v)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Palette className="h-3.5 w-3.5 text-[#1D3461]" />
-                        <span className="text-[12px] font-semibold text-slate-700">Customize Design</span>
-                        <span className="text-[10px] text-slate-400">colors, style</span>
-                      </div>
-                      {showQrCustomize
-                        ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
-                        : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                      }
-                    </button>
-
-                    {/* ── Customization panel ──────────────────────────────── */}
-                    {showQrCustomize && (
-                      <div className="w-full flex flex-col gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
-
-                        {/* Preset swatches */}
-                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Quick themes</p>
-                        <div className="flex gap-2">
-                          {PRESETS.map(p => (
-                            <button
-                              key={p.label}
-                              title={p.label}
-                              onClick={() => { setQrFgColor(p.fg); setQrBgColor(p.bg); }}
-                              className="flex-1 flex flex-col items-center gap-1 group"
-                            >
-                              <div
-                                className="w-full h-9 rounded-lg border-2 transition-all"
-                                style={{
-                                  background: p.bg,
-                                  borderColor: qrFgColor === p.fg && qrBgColor === p.bg ? p.fg : 'transparent',
-                                  boxShadow: qrFgColor === p.fg && qrBgColor === p.bg ? `0 0 0 1px ${p.fg}` : 'none',
-                                }}
-                              >
-                                <div className="w-full h-full rounded-md flex items-center justify-center">
-                                  <div className="w-4 h-4 rounded-sm" style={{ background: p.fg }} />
-                                </div>
-                              </div>
-                              <span className="text-[9px] text-slate-500 font-medium">{p.label}</span>
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Custom color pickers */}
-                        <div className="flex gap-3 pt-1">
-                          <label className="flex-1">
-                            <span className="text-[10px] font-semibold text-slate-500 block mb-1.5">QR Color</span>
-                            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-2">
-                              <input
-                                type="color"
-                                value={qrFgColor}
-                                onChange={e => setQrFgColor(e.target.value)}
-                                className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
-                              />
-                              <span className="text-[11px] font-mono text-slate-600 uppercase">{qrFgColor}</span>
-                            </div>
-                          </label>
-                          <label className="flex-1">
-                            <span className="text-[10px] font-semibold text-slate-500 block mb-1.5">Background</span>
-                            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-2">
-                              <input
-                                type="color"
-                                value={qrBgColor}
-                                onChange={e => setQrBgColor(e.target.value)}
-                                className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
-                              />
-                              <span className="text-[11px] font-mono text-slate-600 uppercase">{qrBgColor}</span>
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Action buttons — 2×2 grid */}
-                    <div className="grid grid-cols-2 gap-2.5 w-full">
+                    <div className="grid grid-cols-2 gap-2 w-full">
                       <button onClick={copyQRImage}
-                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
-                        <Copy className="h-3.5 w-3.5" />Copy QR Image
+                        className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
+                        <Copy className="h-3.5 w-3.5" />Copy Image
                       </button>
                       <button onClick={downloadQR}
-                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
-                        <ImageDown className="h-3.5 w-3.5" />Download PNG
+                        className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
+                        <ImageDown className="h-3.5 w-3.5" />Download
                       </button>
                       <button onClick={copyLink}
-                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
+                        className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12px] font-semibold border border-slate-200 transition-all active:scale-[.98]">
                         <Link className="h-3.5 w-3.5" />Copy Link
                       </button>
                       <button onClick={printQR}
-                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-[12px] font-semibold transition-all active:scale-[.98] text-white shadow-sm hover:shadow-md"
+                        className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[12px] font-semibold transition-all active:scale-[.98] text-white shadow-sm hover:shadow-md"
                         style={{ background: 'linear-gradient(135deg,#0F2041,#1D3461)' }}>
-                        <Printer className="h-3.5 w-3.5" />Print QR
+                        <Printer className="h-3.5 w-3.5" />Print / PDF
                       </button>
                     </div>
                   </div>
