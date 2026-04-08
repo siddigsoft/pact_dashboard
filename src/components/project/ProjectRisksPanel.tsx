@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isValid } from 'date-fns';
 import {
@@ -61,7 +61,7 @@ const CATEGORIES = [
   'operational', 'financial', 'technical', 'schedule', 'resource', 'external', 'compliance', 'security',
 ];
 
-const STATUS_CFG: Record<string, { label: string; badge: string; icon: React.ReactNode }> = {
+const STATUS_CFG: Record<string, { label: string; badge: string; icon: ReactNode }> = {
   open:      { label: 'Open',      badge: 'bg-red-100 text-red-700 dark:bg-red-900/40',         icon: <AlertTriangle className="h-3.5 w-3.5" /> },
   mitigated: { label: 'Mitigated', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40',   icon: <ShieldCheck className="h-3.5 w-3.5" /> },
   closed:    { label: 'Closed',    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40', icon: <CheckCircle2 className="h-3.5 w-3.5" /> },

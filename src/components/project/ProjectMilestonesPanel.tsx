@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isValid, isPast, isToday, differenceInDays } from 'date-fns';
 import {
@@ -37,7 +37,7 @@ interface Props {
   projectId: string;
 }
 
-const STATUS_CFG: Record<string, { label: string; icon: React.ReactNode; badge: string; dot: string }> = {
+const STATUS_CFG: Record<string, { label: string; icon: ReactNode; badge: string; dot: string }> = {
   pending:     { label: 'Pending',     icon: <Circle className="h-4 w-4" />,        badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300', dot: 'bg-gray-400' },
   in_progress: { label: 'In Progress', icon: <Clock className="h-4 w-4 text-blue-500" />,   badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', dot: 'bg-blue-500' },
   completed:   { label: 'Completed',   icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />, badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', dot: 'bg-emerald-500' },

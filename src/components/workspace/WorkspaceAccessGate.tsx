@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -22,7 +22,7 @@ interface AccessRequest {
   created_at: string;
 }
 
-export function WorkspaceAccessGate({ children }: { children: React.ReactNode }) {
+export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
   const { currentUser } = useAppContext();
   const { hasAnyRole } = useAuthorization();
   const { toast } = useToast();

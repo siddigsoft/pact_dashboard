@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isValid } from 'date-fns';
 import {
@@ -57,7 +57,7 @@ const COMPETENCIES_TEMPLATE: Omit<Competency, 'rating'>[] = [
   { id: 'adaptability', name: 'Adaptability & Learning' },
 ];
 
-const STATUS_CFG: Record<string, { label: string; badge: string; icon: React.ReactNode }> = {
+const STATUS_CFG: Record<string, { label: string; badge: string; icon: ReactNode }> = {
   draft:     { label: 'Draft',           badge: 'bg-gray-100 text-gray-700 dark:bg-gray-800', icon: <FileText className="h-3.5 w-3.5" /> },
   submitted: { label: 'Self-Submitted',  badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40', icon: <Send className="h-3.5 w-3.5" /> },
   in_review: { label: 'Manager Review',  badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40', icon: <Clock className="h-3.5 w-3.5" /> },

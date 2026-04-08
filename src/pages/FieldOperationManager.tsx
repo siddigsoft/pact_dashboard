@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { Card } from '@/components/ui/card';
@@ -826,7 +826,7 @@ const FieldOperationManagerPage = () => {
     );
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     setLoading(true);
     supabase
       .from('mmp_files')
@@ -899,7 +899,7 @@ const FieldOperationManagerPage = () => {
   ]);
 
   // Load MMPs explicitly forwarded to the current FOM
-  React.useEffect(() => {
+  useEffect(() => {
     const loadForwarded = async () => {
       if (!currentUser?.id) {
         setForwardedMmpFiles([]);
