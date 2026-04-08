@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MMPFile } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,8 +58,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const { currentUser } = useAppContext();
   const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
   const { mmpBudgets } = useBudget();
-  const [deletingId, setDeletingId] = React.useState<string | null>(null);
-  const [confirmId, setConfirmId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [selectedMMPForForward, setSelectedMMPForForward] = useState<MMPFile | null>(null);
   const [forwardedMMPs, setForwardedMMPs] = useState<Set<string>>(new Set());
@@ -95,7 +95,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const canForwardMMP = !isSupervisor && (checkPermission('mmp', 'update') || isAdmin || isICT);
 
   // Initialize forwarded status from MMP workflow
-  React.useEffect(() => {
+  useEffect(() => {
     const forwarded = new Set<string>();
     mmpFiles.forEach(mmp => {
       const workflow = mmp.workflow as any;

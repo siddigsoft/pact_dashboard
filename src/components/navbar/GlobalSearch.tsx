@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Command,
   CommandDialog,
@@ -24,10 +24,10 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
 export function GlobalSearch() {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
-  React.useEffect(() => {
+  useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();

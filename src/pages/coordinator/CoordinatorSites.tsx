@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -129,21 +129,21 @@ function formatDateLocal(date: Date | undefined | null): string | null {
   return `${year}-${month}-${day}`;
 }
 
-const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hubs, states, localities, hubStates = [] }) => {
+const SiteEditForm: FC<SiteEditFormProps> = ({ site, onSave, onCancel, hubs, states, localities, hubStates = [] }) => {
   const { toast } = useToast();
-  const [formData, setFormData] = React.useState<SiteVisit>({
+  const [formData, setFormData] = useState<SiteVisit>({
     ...site,
     activity_at_site: Array.isArray(site.activity_at_site) ? site.activity_at_site : 
                      (site.activity_at_site ? [site.activity_at_site] : [])
   });
-  const [visitDate, setVisitDate] = React.useState<Date | undefined>(undefined);
-  const [expectedStartDate, setExpectedStartDate] = React.useState<Date | undefined>(undefined);
-  const [expectedEndDate, setExpectedEndDate] = React.useState<Date | undefined>(undefined);
-  const [customValues, setCustomValues] = React.useState({
+  const [visitDate, setVisitDate] = useState<Date | undefined>(undefined);
+  const [expectedStartDate, setExpectedStartDate] = useState<Date | undefined>(undefined);
+  const [expectedEndDate, setExpectedEndDate] = useState<Date | undefined>(undefined);
+  const [customValues, setCustomValues] = useState({
     survey_tool: ''
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       if (site?.visit_date) {
         const vd = new Date(site.visit_date);
@@ -163,7 +163,7 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
     } catch {}
   }, [site]);
 
-  const isDMActivity = React.useMemo(() => {
+  const isDMActivity = useMemo(() => {
     const a = `${formData?.main_activity || ''} ${formData?.activity || ''}`.toUpperCase();
     return a.includes('GFA') || a.includes('CBT') || a.includes('EBSFP');
   }, [formData?.main_activity, formData?.activity]);
@@ -467,7 +467,7 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
 
 // SiteVisit type is imported from useCoordinatorSites hook
 
-const CoordinatorSites: React.FC = () => {
+const CoordinatorSites: FC = () => {
   const navigate = useNavigate();
   const routerLocation = useRouterLocation();
   const isSupervisorRoute = routerLocation.pathname === '/supervisor/sites';

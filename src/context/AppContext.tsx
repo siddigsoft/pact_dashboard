@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import { useCallback, useMemo, type FC, type ReactNode } from 'react';
 import { createContext, useContext, useContextSelector } from 'use-context-selector';
 import { calculateDistanceFee as _calculateDistanceFee } from '@/utils/distanceFee';
 import { UserProvider, useUser } from './user/UserContext';
@@ -84,7 +84,7 @@ interface CompositeContextType {
 
 const AppContext = createContext<CompositeContextType | undefined>(undefined);
 
-const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const CompositeContextProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const userContext = useUser();
   const mmpContext = useMMP();
   const siteVisitContext = useSiteVisitContext();
@@ -137,7 +137,7 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 };
 
 
-export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AppProviders: FC<{ children: ReactNode }> = ({ children }) => {
   return (
     <ViewModeProvider>
       <SyncStatusProvider>
@@ -210,7 +210,7 @@ export const useAppContext = () => {
  *
  * Uses use-context-selector's useContext which correctly reads the actual context
  * value (v.current from its internal wrapper) and returns undefined when no
- * provider is present — unlike React.useContext which would return the raw
+ * provider is present — unlike useContext which would return the raw
  * subscription wrapper object instead of the real CompositeContextType value.
  */
 export const useSafeAppContext = (): CompositeContextType | undefined =>

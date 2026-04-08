@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
@@ -39,7 +39,7 @@ export function MMPFileUpload({ existingMmp }: MMPFileUploadProps) {
   const { projects } = useProjectContext();
   const navigate = useNavigate();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
@@ -56,7 +56,7 @@ export function MMPFileUpload({ existingMmp }: MMPFileUploadProps) {
   };
 
   // Parse file and run duplicate check when a file is selected
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedFile) return;
     let cancelled = false;
     (async () => {

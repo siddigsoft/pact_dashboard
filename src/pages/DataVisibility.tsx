@@ -105,7 +105,7 @@ import { cn } from "@/lib/utils";
 
 const ITEMS_PER_PAGE = 10;
 
-const DataVisibility: React.FC = () => {
+const DataVisibility: FC = () => {
   const { currentUser, users, refreshUsers } = useUser();
   const { siteVisits } = useSiteVisitContext();
   const [activeTab, setActiveTab] = useState("integrated-view");
@@ -199,7 +199,7 @@ const DataVisibility: React.FC = () => {
     return (users || []).filter(u => isCollector(u) && hasValidCoords(u.location));
   }, [users]);
 
-  const resolveUserName = React.useCallback((id?: string) => {
+  const resolveUserName = useCallback((id?: string) => {
     if (!id) return '—';
     const u = (users || []).find(u => u.id === id);
     return u?.name || (u as any)?.fullName || (u as any)?.username || id;

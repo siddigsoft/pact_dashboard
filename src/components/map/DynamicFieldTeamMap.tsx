@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { MapPin, Loader2 } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -19,14 +19,14 @@ interface DynamicFieldTeamMapProps {
   onUserSelect?: (userId: string) => void;
 }
 
-const DynamicFieldTeamMap: React.FC<DynamicFieldTeamMapProps> = (props) => {
+const DynamicFieldTeamMap: FC<DynamicFieldTeamMapProps> = (props) => {
   const { hasRole } = useAppContext();
   const { siteVisits = [], height = '500px', eligibleCollectors = [] } = props;
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'online' | 'busy' | 'offline'>('all');
   const [loading, setLoading] = useState(true);
 
   // Transform siteVisits and collectors into locations for the map
-  const mapLocations = React.useMemo(() => {
+  const mapLocations = useMemo(() => {
     const locations = [];
     
     // Add site visit locations (with fallback to locality-based coordinates)

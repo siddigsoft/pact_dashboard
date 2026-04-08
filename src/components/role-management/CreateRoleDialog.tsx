@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState, type ComponentType, type FC, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,7 +36,7 @@ interface CreateRoleDialogProps {
   cloneSourceRole?: RoleWithPermissions | null;
 }
 
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+const iconMap: Record<string, ComponentType<{ className?: string }>> = {
   Briefcase,
   MapPin,
   Wallet,
@@ -47,7 +47,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Wrench,
 };
 
-export const CreateRoleDialog: React.FC<CreateRoleDialogProps> = ({
+export const CreateRoleDialog: FC<CreateRoleDialogProps> = ({
   open,
   onOpenChange,
   onCreateRole,
@@ -67,7 +67,7 @@ export const CreateRoleDialog: React.FC<CreateRoleDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Handle clone source role
-  React.useEffect(() => {
+  useEffect(() => {
     if (cloneSourceRole && open) {
       // Pre-fill with cloned role data
       setFormData({
@@ -158,7 +158,7 @@ export const CreateRoleDialog: React.FC<CreateRoleDialogProps> = ({
     return Object.values(selectedPermissions).filter(Boolean).length;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 

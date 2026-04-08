@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useRef, useState, type ChangeEvent, type FC } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { safeUploadFile } from '@/lib/safeUpload';
@@ -27,7 +27,7 @@ const permitTypes = [
   // Extend later for state/local permits
 ];
 
-export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUploadSuccess, bucket = 'federal-permits', pathPrefix }) => {
+export const MMPPermitFileUpload: FC<MMPPermitFileUploadProps> = ({ onUploadSuccess, bucket = 'federal-permits', pathPrefix }) => {
   const [uploading, setUploading] = useState(false);
   const [issueDate, setIssueDate] = useState<Date>();
   const [expiryDate, setExpiryDate] = useState<Date>();
@@ -38,13 +38,13 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>('');
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { hasAnyRole } = useAuthorization();
 
   const isFOM = hasAnyRole(['fom', 'fieldOpManager']);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useEffect, useMemo, type FC } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L, { Icon, LatLngBounds } from 'leaflet';
 import { MapPin, Calendar, User as UserIcon, Navigation, Briefcase } from 'lucide-react';
@@ -29,10 +29,10 @@ interface PlanningSiteVisitsMapProps {
   teamMembers?: User[];
 }
 
-const FitBounds: React.FC<{ visits: SiteVisit[], teamMembers: User[] }> = ({ visits, teamMembers }) => {
+const FitBounds: FC<{ visits: SiteVisit[], teamMembers: User[] }> = ({ visits, teamMembers }) => {
   const map = useMap();
 
-  React.useEffect(() => {
+  useEffect(() => {
     const allPoints: [number, number][] = [];
     
     // Add site visit locations
@@ -221,7 +221,7 @@ const createTeamMemberIcon = (
   });
 };
 
-const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisits, teamMembers = [] }) => {
+const PlanningSiteVisitsMap: FC<PlanningSiteVisitsMapProps> = ({ siteVisits, teamMembers = [] }) => {
   const visitsWithCoords = useMemo(() => {
     return siteVisits.filter(visit => 
       visit.coordinates?.latitude && visit.coordinates?.longitude

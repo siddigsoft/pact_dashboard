@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ interface FOMSiteVisitsDashboardProps {
 
 type StatusFilter = 'all' | 'pending' | 'inProgress' | 'completed' | 'assigned' | 'scheduled' | 'overdue';
 
-const FOMSiteVisitsDashboard: React.FC<FOMSiteVisitsDashboardProps> = ({ visits }) => {
+const FOMSiteVisitsDashboard: FC<FOMSiteVisitsDashboardProps> = ({ visits }) => {
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
@@ -91,7 +91,7 @@ const FOMSiteVisitsDashboard: React.FC<FOMSiteVisitsDashboardProps> = ({ visits 
   const totalVisits = visits.length;
 
   // Auto-select first state if none selected
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedState && stateGroups.length > 0) {
       setSelectedState(stateGroups[0].stateName);
     }

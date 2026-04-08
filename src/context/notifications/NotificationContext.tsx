@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type FC, type ReactNode } from 'react';
 import { Notification, NotificationCategory } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -22,7 +22,7 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [appNotifications, setAppNotifications] = useState<Notification[]>(initialNotifications);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -55,7 +55,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   });
   
   // Listen for user changes via localStorage events
-  React.useEffect(() => {
+  useEffect(() => {
     const handleStorageChange = () => {
       try {
         const storedUser = localStorage.getItem('PACTCurrentUser');

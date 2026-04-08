@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -2137,7 +2137,7 @@ const MMP = () => {
   const [unsyncedCompletedVisits, setUnsyncedCompletedVisits] = useState<any[]>([]);
   const [viewerEnumeratorFee, setViewerEnumeratorFee] = useState<number>(0);
   const [enumeratorRefreshTrigger, setEnumeratorRefreshTrigger] = useState(0);
-  const enumeratorDbLoadedRef = React.useRef(false);
+  const enumeratorDbLoadedRef = useRef(false);
 
   // Helper function to normalize role checking (handles both lowercase, proper case, and spaces)
   const hasRole = (rolesToCheck: string[]) => {
@@ -2512,7 +2512,7 @@ const MMP = () => {
 
   // Real-time subscription for site claims (Uber-like first-claim system)
   // When another enumerator claims a site, it will be removed from available sites in real-time
-  const handleSiteClaimedRealtime = React.useCallback((siteId: string, claimedBy: string) => {
+  const handleSiteClaimedRealtime = useCallback((siteId: string, claimedBy: string) => {
     // Remove the claimed site from available sites immediately
     setEnumeratorSiteEntries(prev => prev.filter(s => s.id !== siteId));
     setEnumeratorGroupedByStates(prev => {

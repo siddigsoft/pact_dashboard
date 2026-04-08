@@ -1,5 +1,5 @@
 
-import React, { Suspense } from 'react';
+import { Suspense, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,14 +16,14 @@ import LiveTeamMapWidget from './LiveTeamMapWidget';
 import { useAppContext } from '@/context/AppContext';
 import ForwardedMMPsCard from './ForwardedMMPsCard';
 
-const LazyLoadingCard = ({ children }: { children: React.ReactNode }) => (
+const LazyLoadingCard = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={<Skeleton className="h-[300px] w-full" />}>
     {children}
   </Suspense>
 );
 
 export const DashboardDesktopView = () => {
-  const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const { currentUser, roles } = useAppContext();
   
   const toggleSection = (section: string) => {
@@ -41,10 +41,10 @@ export const DashboardDesktopView = () => {
     children 
   }: { 
     id: string;
-    icon: React.ReactNode;
+    icon: ReactNode;
     title: string;
     description?: string;
-    children: React.ReactNode;
+    children: ReactNode;
   }) => {
     const isCollapsed = collapsedSections[id] || false;
     
