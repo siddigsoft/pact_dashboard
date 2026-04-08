@@ -1633,7 +1633,7 @@ export default function WorkspaceHub() {
 
         {/* ── QR Code Modal ──────────────────────────────────────────────────── */}
         <Dialog open={!!qrFile} onOpenChange={open => { if (!open) setQrFile(null); }}>
-          <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl" style={{ background: 'linear-gradient(160deg,#0F2041 0%,#1D3461 100%)' }}>
+          <DialogContent className="max-w-[420px] w-full p-0 overflow-hidden border-0 shadow-2xl rounded-2xl">
             {qrFile && (() => {
               const viewerUrl = `${window.location.origin}/view/${qrFile.id}`;
               const Icon = getFileIcon(qrFile.mime_type);
@@ -1646,105 +1646,129 @@ export default function WorkspaceHub() {
               }
 
               function printQR() {
-                const win = window.open('', '_blank', 'width=400,height=500');
+                const win = window.open('', '_blank', 'width=420,height=560');
                 if (!win) return;
                 const svg = document.getElementById('workspace-qr-svg');
                 win.document.write(`<!DOCTYPE html><html><head><title>${qrFile.name}</title>
-                  <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;background:#fff;padding:20px}
-                  h2{font-size:15px;text-align:center;color:#0F2041;max-width:300px;word-break:break-word}
-                  p{font-size:11px;color:#666;margin:4px 0 0}
-                  .url{font-size:9px;color:#888;word-break:break-all;margin-top:8px;max-width:300px;text-align:center}
+                  <style>*{box-sizing:border-box}body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;background:#fff;padding:32px;gap:12px}
+                  svg{border-radius:12px}
+                  .title{font-size:13px;font-weight:600;text-align:center;color:#0F2041;max-width:320px;word-break:break-word;margin:0}
+                  .meta{font-size:11px;color:#6b7280;margin:0}
+                  .url{font-size:8.5px;color:#9ca3af;word-break:break-all;max-width:320px;text-align:center;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;background:#f9fafb}
+                  .brand{font-size:10px;color:#1D3461;font-weight:700;letter-spacing:.05em;opacity:.6;margin-top:4px}
                   </style></head><body>
                   ${svg?.outerHTML ?? ''}
-                  <h2>${qrFile.name}</h2>
-                  <p>${ext} &bull; ${sizeMB} MB</p>
+                  <p class="title">${qrFile.name}</p>
+                  <p class="meta">${ext}&nbsp;&bull;&nbsp;${sizeMB} MB</p>
                   <div class="url">${viewerUrl}</div>
+                  <p class="brand">PACT Command Center</p>
                   <script>window.onload=()=>{window.print();window.close();}<\/script>
                   </body></html>`);
                 win.document.close();
               }
 
               return (
-                <div className="flex flex-col items-center p-6 gap-4">
-                  {/* Header */}
-                  <div className="w-full flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                        <QrCode className="h-4 w-4 text-white" />
-                      </div>
-                      <span className="text-white font-semibold text-sm">Share QR Code</span>
-                    </div>
-                    <button onClick={() => setQrFile(null)} className="text-white/50 hover:text-white transition-colors">
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {/* File info */}
-                  <div className="flex items-center gap-2 w-full bg-white/10 rounded-xl px-3 py-2.5">
-                    <Icon className="h-5 w-5 text-blue-300 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-white text-xs font-medium truncate">{qrFile.name}</p>
-                      <p className="text-blue-300/70 text-[10px]">{ext} &bull; {sizeMB} MB</p>
-                    </div>
-                  </div>
-
-                  {/* QR Code */}
-                  <div className="bg-white rounded-2xl p-4 shadow-2xl">
-                    <QRCodeSVG
-                      id="workspace-qr-svg"
-                      value={viewerUrl}
-                      size={220}
-                      level="H"
-                      includeMargin={false}
-                      imageSettings={{
-                        src: '/favicon.ico',
-                        height: 28,
-                        width: 28,
-                        excavate: true,
-                      }}
-                    />
-                  </div>
-
-                  {/* Instruction */}
-                  <p className="text-blue-200/60 text-[11px] text-center leading-snug">
-                    Scan to open the file instantly in any browser.<br />
-                    No login required.
-                  </p>
-
-                  {/* URL chip */}
-                  <div className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 flex items-center gap-2">
-                    <ExternalLink className="h-3.5 w-3.5 text-blue-300 shrink-0" />
-                    <span className="text-[10px] text-blue-200/70 truncate flex-1">{viewerUrl}</span>
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex gap-2 w-full">
-                    <button
-                      onClick={copyLink}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium border border-white/10 transition-all"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy Link
-                    </button>
-                    <button
-                      onClick={printQR}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white text-[#1D3461] text-xs font-semibold hover:bg-blue-50 transition-all shadow"
-                    >
-                      <Printer className="h-3.5 w-3.5" />
-                      Print QR
-                    </button>
-                  </div>
-
-                  {/* Preview link */}
-                  <a
-                    href={viewerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-blue-300/70 hover:text-blue-200 underline underline-offset-2 transition-colors"
+                <>
+                  {/* ── Top: dark branded header ────────────────────────────── */}
+                  <div
+                    className="px-6 pt-6 pb-5 flex flex-col gap-4"
+                    style={{ background: 'linear-gradient(150deg,#0F2041 0%,#1D3461 100%)' }}
                   >
-                    Preview in browser →
-                  </a>
-                </div>
+                    {/* Title row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
+                          <QrCode className="h-4 w-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-white text-sm font-semibold leading-none">Share via QR Code</p>
+                          <p className="text-blue-300/60 text-[10px] mt-0.5">Scannable — no login required</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setQrFile(null)}
+                        className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* File info chip */}
+                    <div className="flex items-center gap-3 bg-white/8 border border-white/10 rounded-xl px-3.5 py-3 backdrop-blur-sm">
+                      <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                        <Icon className="h-5 w-5 text-blue-200" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white text-[13px] font-semibold leading-snug truncate">{qrFile.name}</p>
+                        <p className="text-blue-300/60 text-[11px] mt-0.5">{ext} &bull; {sizeMB} MB</p>
+                      </div>
+                      <a
+                        href={viewerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-blue-300 hover:text-white transition-all"
+                        title="Open in browser"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* ── Bottom: white content area ─────────────────────────── */}
+                  <div className="bg-white px-6 pb-6 pt-5 flex flex-col items-center gap-4">
+
+                    {/* QR code */}
+                    <div className="relative">
+                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#0F2041]/8 to-[#1D3461]/8 blur-xl scale-110 pointer-events-none" />
+                      <div className="relative bg-white border border-slate-100 rounded-2xl p-5 shadow-lg">
+                        <QRCodeSVG
+                          id="workspace-qr-svg"
+                          value={viewerUrl}
+                          size={200}
+                          level="H"
+                          includeMargin={false}
+                          fgColor="#0F2041"
+                          imageSettings={{
+                            src: '/favicon.ico',
+                            height: 30,
+                            width: 30,
+                            excavate: true,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Scan hint */}
+                    <p className="text-slate-400 text-[11px] text-center leading-snug">
+                      Point your phone camera at the code to open instantly
+                    </p>
+
+                    {/* URL bar */}
+                    <div className="w-full flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5">
+                      <Link className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span className="text-[11px] text-slate-500 truncate flex-1 font-mono">{viewerUrl}</span>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2.5 w-full">
+                      <button
+                        onClick={copyLink}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold border border-slate-200 transition-all active:scale-[.98]"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy Link
+                      </button>
+                      <button
+                        onClick={printQR}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-[.98] text-white shadow-md hover:shadow-lg"
+                        style={{ background: 'linear-gradient(135deg,#0F2041,#1D3461)' }}
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        Print QR
+                      </button>
+                    </div>
+                  </div>
+                </>
               );
             })()}
           </DialogContent>
