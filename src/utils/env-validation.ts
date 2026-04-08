@@ -27,7 +27,7 @@ export interface EnvValidationResult {
  * Note: Server-side secrets (GOOGLE_AI_API_KEY for Gemini OCR, GROQ_API_KEY for the
  * Groq OCR fallback, FIREBASE_SERVICE_ACCOUNT_JSON for FCM admin) are consumed by the
  * Vite dev middleware / Supabase Edge Functions and cannot be validated in the client
- * bundle. Ensure they are present in the Replit Secrets panel before deploying.
+ * bundle. Verify they exist in the Replit Secrets panel before deploying.
  */
 export function validateEnv(): EnvValidationResult {
   const missing: string[] = [];
@@ -63,35 +63,27 @@ export function validateEnv(): EnvValidationResult {
 }
 
 /**
- * Verifies that both service worker files are reachable (HTTP 200) before they
- * are registered. Call once after the DOM is ready to detect 404 errors caused
- * by missing files in the production build output, rather than surfacing them
- * as opaque ServiceWorker registration failures.
+ * Verifies that both service worker files are reachable in the current environment.
+ * Runs asynchronously after the app starts and only logs warnings — it never throws
+ * or blocks rendering. Surfaces 404 errors caused by missing files in the production
+ * build output before they manifest as opaque ServiceWorker registration failures.
  */
-export async function verifyServiceWorkerFiles(): Promise<{ ok: boolean; errors: string[] }> {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-    return { ok: true, errors: [] };
-  }
+export function verifyServiceWorkerFiles(): void {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
   const swFiles = ['/service-worker.js', '/firebase-messaging-sw.js'];
-  const errors: string[] = [];
-
-  await Promise.all(
-    swFiles.map(async (path) => {
-      try {
-        const res = await fetch(path, { method: 'HEAD', cache: 'no-store' });
+  for (const path of swFiles) {
+    fetch(path, { method: 'HEAD', cache: 'no-store' })
+      .then((res) => {
         if (!res.ok) {
-          errors.push(`${path} returned HTTP ${res.status}`);
-          console.error(`[SW] Service worker not accessible: ${path} → HTTP ${res.status}`);
-        } else {
-          console.info(`[SW] Service worker reachable: ${path} → HTTP ${res.status}`);
+          console.warn(
+            `[SW] Service worker file returned HTTP ${res.status}: ${path}. ` +
+            'Ensure the file exists in public/ so it is copied to dist/ during the production build.'
+          );
         }
-      } catch (err) {
-        errors.push(`${path} network error`);
-        console.error(`[SW] Service worker unreachable: ${path}`, err);
-      }
-    })
-  );
-
-  return { ok: errors.length === 0, errors };
+      })
+      .catch(() => {
+        // Network errors or HEAD-blocked hosts are non-fatal; SW registration will handle its own errors.
+      });
+  }
 }
