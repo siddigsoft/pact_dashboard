@@ -90,6 +90,10 @@ interface ProfileOption { id: string; full_name: string | null; role: string | n
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+const CLEARANCE_ORDER: Record<SecurityLevel, number> = {
+  public: 0, internal: 1, confidential: 2, restricted: 3, top_secret: 4,
+};
+
 const SEC_CFG: Record<SecurityLevel, {
   label: string; icon: React.ElementType; bg: string; text: string; border: string; desc: string;
 }> = {
@@ -766,6 +770,24 @@ export default function WorkspaceHub() {
 
   const userId = currentUser?.id ?? '';
 
+  // Fetch current user's security clearance
+  const { data: myClearance } = useQuery<SecurityLevel>({
+    queryKey: ['my-workspace-clearance', userId],
+    queryFn: async () => {
+      if (!userId) return 'internal' as SecurityLevel;
+      const { data } = await supabase
+        .from('workspace_security_clearances')
+        .select('clearance_level')
+        .eq('user_id', userId)
+        .maybeSingle();
+      return (data?.clearance_level ?? 'internal') as SecurityLevel;
+    },
+    enabled: !!userId && !isSuperAdmin,
+    staleTime: 60_000,
+  });
+
+  const effectiveClearance: SecurityLevel = isSuperAdmin ? 'top_secret' : (myClearance ?? 'internal');
+
   const [accessManagerOpen, setAccessManagerOpen] = useState(false);
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -869,6 +891,8 @@ export default function WorkspaceHub() {
 
   const displayedFiles = useMemo(() => {
     let files = allFiles;
+    // Enforce security clearance — hide files above user's clearance level
+    files = files.filter(f => CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]);
     if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
     else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
     else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
@@ -883,7 +907,7 @@ export default function WorkspaceHub() {
       if (sortBy === 'size') return b.file_size - a.file_size;
       return b.updated_at.localeCompare(a.updated_at);
     });
-  }, [allFiles, selectedFolderId, secFilter, searchQuery, sortBy, userId, lockedFolderIdSet]);
+  }, [allFiles, selectedFolderId, secFilter, searchQuery, sortBy, userId, lockedFolderIdSet, effectiveClearance]);
 
   // ── Folder actions ────────────────────────────────────────────────────────
 
@@ -1530,14 +1554,32 @@ export default function WorkspaceHub() {
             {(Object.entries(SEC_CFG) as [SecurityLevel, any][]).map(([level, cfg]) => {
               const Icon = cfg.icon;
               const count = stats.byLevel[level];
+              const isAboveClearance = CLEARANCE_ORDER[level] > CLEARANCE_ORDER[effectiveClearance];
               return (
-                <div key={level} className="flex items-center gap-1.5 text-[10px]">
+                <div key={level} className={cn('flex items-center gap-1.5 text-[10px]', isAboveClearance && 'opacity-40')}>
                   <Icon className={cn('h-3 w-3 flex-shrink-0', cfg.text)} />
                   <span className="flex-1 text-muted-foreground">{cfg.label}</span>
-                  <span className="font-medium">{count}</span>
+                  {isAboveClearance ? (
+                    <Lock className="h-2.5 w-2.5 text-muted-foreground" />
+                  ) : (
+                    <span className="font-medium">{count}</span>
+                  )}
                 </div>
               );
             })}
+            {/* User's clearance badge */}
+            <div className={cn(
+              'mt-2 pt-2 border-t flex items-center gap-1.5 rounded-lg px-2 py-1',
+              SEC_CFG[effectiveClearance].bg, SEC_CFG[effectiveClearance].border, 'border'
+            )}>
+              <Shield className={cn('h-3 w-3 shrink-0', SEC_CFG[effectiveClearance].text)} />
+              <span className={cn('text-[10px] font-semibold flex-1', SEC_CFG[effectiveClearance].text)}>
+                Your clearance
+              </span>
+              <span className={cn('text-[10px] font-bold', SEC_CFG[effectiveClearance].text)}>
+                {SEC_CFG[effectiveClearance].label}
+              </span>
+            </div>
           </div>
         </div>
 

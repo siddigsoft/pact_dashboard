@@ -14,7 +14,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Shield, UserPlus, UserX, CheckCircle2, XCircle, Clock, Loader2,
-  Users, Key, RotateCcw, Search, ChevronDown,
+  Users, Key, RotateCcw, Search, ChevronDown, Globe, ShieldCheck,
+  Lock, AlertTriangle,
 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -54,6 +55,27 @@ const ACCESS_LEVELS = [
   { value: 'admin',  label: 'Admin',   desc: 'Full control including sharing & settings' },
 ];
 
+type ClearanceLevel = 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
+
+interface SecurityClearance {
+  id: string;
+  user_id: string;
+  clearance_level: ClearanceLevel;
+  granted_by: string | null;
+  granted_at: string;
+  notes: string | null;
+  _userName?: string;
+  _userRole?: string;
+}
+
+const SEC_CLEARANCES: Record<ClearanceLevel, { label: string; icon: any; bg: string; text: string; border: string; desc: string; order: number }> = {
+  public:       { label: 'Public',       icon: Globe,        bg: 'bg-emerald-50',  text: 'text-emerald-700', border: 'border-emerald-200', desc: 'Can view public files only',            order: 0 },
+  internal:     { label: 'Internal',     icon: Users,        bg: 'bg-blue-50',     text: 'text-blue-700',    border: 'border-blue-200',    desc: 'Can view public + internal files',       order: 1 },
+  confidential: { label: 'Confidential', icon: ShieldCheck,  bg: 'bg-amber-50',    text: 'text-amber-700',   border: 'border-amber-200',   desc: 'Can view up to confidential files',      order: 2 },
+  restricted:   { label: 'Restricted',   icon: Lock,         bg: 'bg-orange-50',   text: 'text-orange-700',  border: 'border-orange-200',  desc: 'Can view up to restricted files',        order: 3 },
+  top_secret:   { label: 'Top Secret',   icon: AlertTriangle,bg: 'bg-red-50',      text: 'text-red-700',     border: 'border-red-200',     desc: 'Full clearance — all files visible',     order: 4 },
+};
+
 const statusBadge = (status: string) => {
   if (status === 'approved') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30';
   if (status === 'rejected') return 'bg-red-100 text-red-700 dark:bg-red-900/30';
@@ -82,6 +104,8 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'none' | 'revoked' | 'pending'>('all');
+  const [clearSearch, setClearSearch] = useState('');
+  const [savingClearance, setSavingClearance] = useState<string | null>(null);
 
   // All profiles for grant form
   const { data: profiles = [] } = useQuery<Profile[]>({
@@ -132,6 +156,65 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
     staleTime: 30_000,
     enabled: open,
   });
+
+  // Security clearances for all users
+  const { data: clearances = [], refetch: refetchClearances } = useQuery<SecurityClearance[]>({
+    queryKey: ['workspace-security-clearances'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('workspace_security_clearances')
+        .select('*')
+        .order('granted_at', { ascending: false });
+      if (!data?.length) return [];
+      const userIds = [...new Set(data.map((c: any) => c.user_id))];
+      const { data: profs } = await supabase.from('profiles').select('id, full_name, role').in('id', userIds);
+      const pm: Record<string, { name: string; role: string }> = {};
+      (profs ?? []).forEach((p: any) => { pm[p.id] = { name: p.full_name ?? 'Unknown', role: p.role ?? '' }; });
+      return data.map((c: any) => ({ ...c, _userName: pm[c.user_id]?.name ?? c.user_id.slice(0, 8), _userRole: pm[c.user_id]?.role ?? '' })) as SecurityClearance[];
+    },
+    staleTime: 30_000,
+    enabled: open,
+  });
+
+  const clearanceMap: Record<string, SecurityClearance> = {};
+  clearances.forEach(c => { clearanceMap[c.user_id] = c; });
+
+  // Grant users with workspace access but no explicit clearance default to 'internal'
+  const clearanceUsers = profiles
+    .filter(p => p.role !== 'super_admin')
+    .map(p => ({
+      ...p,
+      clearance: clearanceMap[p.id]?.clearance_level ?? 'internal' as ClearanceLevel,
+      hasExplicit: !!clearanceMap[p.id],
+    }))
+    .filter(u => clearSearch.trim() === '' ||
+      (u.full_name ?? '').toLowerCase().includes(clearSearch.toLowerCase()) ||
+      (u.role ?? '').toLowerCase().includes(clearSearch.toLowerCase()));
+
+  const clearanceCountByLevel = (Object.keys(SEC_CLEARANCES) as ClearanceLevel[]).reduce((acc, level) => {
+    acc[level] = clearanceUsers.filter(u => u.clearance === level).length;
+    return acc;
+  }, {} as Record<ClearanceLevel, number>);
+
+  async function handleSetClearance(userId: string, level: ClearanceLevel) {
+    if (!currentUser?.id) return;
+    setSavingClearance(userId);
+    try {
+      await supabase.from('workspace_security_clearances').upsert({
+        user_id: userId,
+        clearance_level: level,
+        granted_by: currentUser.id,
+        granted_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+      toast({ title: 'Clearance updated', description: `Security clearance set to ${SEC_CLEARANCES[level].label}` });
+      refetchClearances();
+      qc.invalidateQueries({ queryKey: ['workspace-security-clearances'] });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setSavingClearance(null);
+    }
+  }
 
   const pendingRequests = requests.filter(r => r.status === 'pending');
   const activeGrants = grants.filter(g => g.is_active);
@@ -395,10 +478,10 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         </DialogHeader>
 
         <Tabs defaultValue="all-users" className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <TabsList className="shrink-0 grid grid-cols-3 h-9 text-xs">
+          <TabsList className="shrink-0 grid grid-cols-4 h-9 text-xs">
             <TabsTrigger value="all-users" className="text-xs">
               <Users className="h-3 w-3 mr-1" />
-              All Users ({allUsers.length})
+              Users ({allUsers.length})
             </TabsTrigger>
             <TabsTrigger value="requests" className="text-xs relative">
               <Clock className="h-3 w-3 mr-1" />
@@ -412,6 +495,10 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
             <TabsTrigger value="grant-access" className="text-xs">
               <UserPlus className="h-3 w-3 mr-1" />
               Grant Access
+            </TabsTrigger>
+            <TabsTrigger value="clearances" className="text-xs">
+              <Shield className="h-3 w-3 mr-1" />
+              Clearances
             </TabsTrigger>
           </TabsList>
 
@@ -681,6 +768,115 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
                   </>
                 )}
               </Button>
+            </div>
+          </TabsContent>
+
+          {/* ── Security Clearances ────────────────────────────────────── */}
+          <TabsContent value="clearances" className="flex-1 overflow-hidden flex flex-col m-0 mt-3">
+            {/* Level summary cards */}
+            <div className="grid grid-cols-5 gap-1.5 mb-3 shrink-0">
+              {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([level, cfg]) => {
+                const Icon = cfg.icon;
+                return (
+                  <div key={level} className={cn('rounded-lg border p-2 text-center', cfg.bg, cfg.border)}>
+                    <Icon className={cn('h-3.5 w-3.5 mx-auto mb-1', cfg.text)} />
+                    <p className={cn('text-[10px] font-bold', cfg.text)}>{cfg.label}</p>
+                    <p className="text-xs font-semibold text-foreground">{clearanceCountByLevel[level]}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Search */}
+            <div className="relative mb-3 shrink-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input value={clearSearch} onChange={e => setClearSearch(e.target.value)} placeholder="Search by name or role…" className="pl-8 h-8 text-xs" />
+            </div>
+
+            {/* Explanation */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/30 rounded-lg px-3 py-2 mb-3 shrink-0">
+              <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
+                <strong>How clearances work:</strong> Each user has a max clearance level. They can only see files at or below that level.
+                Users without an explicit record default to <strong>Internal</strong> clearance.
+                Super Admins always see all files.
+              </p>
+            </div>
+
+            {/* User list */}
+            <div className="flex-1 overflow-y-auto space-y-1">
+              {clearanceUsers.length === 0 ? (
+                <div className="py-10 text-center">
+                  <Shield className="h-8 w-8 text-muted-foreground mx-auto opacity-30 mb-2" />
+                  <p className="text-sm text-muted-foreground">No users found</p>
+                </div>
+              ) : clearanceUsers.map(u => {
+                const cfg = SEC_CLEARANCES[u.clearance];
+                const Icon = cfg.icon;
+                const isSaving = savingClearance === u.id;
+                return (
+                  <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-muted/20 transition-colors group">
+                    {/* Avatar */}
+                    <div className="w-9 h-9 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[11px] font-bold shrink-0 text-[#0F2041]">
+                      {initials(u.full_name)}
+                    </div>
+
+                    {/* Name + role */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{u.full_name ?? 'Unknown'}</p>
+                      <p className="text-[11px] text-muted-foreground capitalize">{(u.role ?? '').replace(/_/g, ' ')}</p>
+                    </div>
+
+                    {/* Current clearance badge */}
+                    <span className={cn('flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0', cfg.bg, cfg.text, cfg.border)}>
+                      <Icon className="h-2.5 w-2.5" />
+                      {cfg.label}
+                      {!u.hasExplicit && <span className="opacity-60 ml-0.5">(default)</span>}
+                    </span>
+
+                    {/* Change clearance dropdown */}
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+                    ) : (
+                      <Select value={u.clearance} onValueChange={v => handleSetClearance(u.id, v as ClearanceLevel)}>
+                        <SelectTrigger className="h-7 w-[120px] text-[10px] shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([level, lcfg]) => {
+                            const LIcon = lcfg.icon;
+                            return (
+                              <SelectItem key={level} value={level} className="text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <LIcon className={cn('h-3 w-3', lcfg.text)} />
+                                  {lcfg.label}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend footer */}
+            <div className="mt-3 pt-3 border-t shrink-0 space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Clearance Hierarchy (lowest → highest)</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([level, cfg], idx, arr) => {
+                  const Icon = cfg.icon;
+                  return (
+                    <div key={level} className="flex items-center gap-1">
+                      <span className={cn('flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium', cfg.bg, cfg.text, cfg.border)}>
+                        <Icon className="h-2.5 w-2.5" />{cfg.label}
+                      </span>
+                      {idx < arr.length - 1 && <span className="text-muted-foreground text-[10px]">→</span>}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </TabsContent>
         </Tabs>
