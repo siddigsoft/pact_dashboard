@@ -5,6 +5,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -13,7 +14,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Shield, UserPlus, UserX, CheckCircle2, XCircle, Clock, Loader2,
-  Users, Key, RotateCcw,
+  Users, Key, RotateCcw, Search, ChevronDown,
 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -79,6 +80,8 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
   const [notes, setNotes] = useState('');
   const [granting, setGranting] = useState(false);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'none' | 'revoked' | 'pending'>('all');
 
   // All profiles for grant form
   const { data: profiles = [] } = useQuery<Profile[]>({
@@ -132,17 +135,55 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
 
   const pendingRequests = requests.filter(r => r.status === 'pending');
   const activeGrants = grants.filter(g => g.is_active);
-  const revokedGrants = grants.filter(g => !g.is_active);
 
-  async function handleGrant() {
-    if (!selectedUser || !currentUser?.id) return;
-    setGranting(true);
+  // Build a unified user list (all non-super-admin profiles)
+  const grantMap: Record<string, Grant> = {};
+  grants.forEach(g => { grantMap[g.user_id] = g; });
+
+  const pendingRequestMap: Record<string, AccessRequest> = {};
+  requests.filter(r => r.status === 'pending').forEach(r => { pendingRequestMap[r.user_id] = r; });
+
+  const allUsers = profiles
+    .filter(p => p.role !== 'super_admin')
+    .map(p => {
+      const grant = grantMap[p.id];
+      const pendingReq = pendingRequestMap[p.id];
+      let status: 'active' | 'revoked' | 'none' | 'pending' = 'none';
+      if (grant?.is_active) status = 'active';
+      else if (grant && !grant.is_active) status = 'revoked';
+      else if (pendingReq) status = 'pending';
+      return { ...p, grant, pendingReq, status };
+    });
+
+  const filteredUsers = allUsers.filter(u => {
+    if (statusFilter !== 'all' && u.status !== statusFilter) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return (u.full_name ?? '').toLowerCase().includes(q) ||
+             (u.role ?? '').replace(/_/g, ' ').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const statusCounts = {
+    active: allUsers.filter(u => u.status === 'active').length,
+    none: allUsers.filter(u => u.status === 'none').length,
+    revoked: allUsers.filter(u => u.status === 'revoked').length,
+    pending: allUsers.filter(u => u.status === 'pending').length,
+  };
+
+  async function handleGrant(userId?: string, level?: string) {
+    const uid = userId ?? selectedUser;
+    const lvl = level ?? accessLevel;
+    if (!uid || !currentUser?.id) return;
+    if (!userId) setGranting(true);
+    else setActioningId(uid);
     try {
       const { error } = await supabase.from('workspace_access_grants').upsert({
-        user_id: selectedUser,
+        user_id: uid,
         granted_by: currentUser.id,
         granted_at: new Date().toISOString(),
-        access_level: accessLevel,
+        access_level: lvl,
         notes: notes.trim() || null,
         is_active: true,
         revoked_at: null,
@@ -151,14 +192,13 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
 
       if (error) throw error;
 
-      // Notify the granted user
-      const userName = profiles.find(p => p.id === selectedUser)?.full_name ?? 'User';
+      const userName = profiles.find(p => p.id === uid)?.full_name ?? 'User';
       await supabase.from('notifications').insert({
-        recipient_id: selectedUser,
+        recipient_id: uid,
         event_type: 'workspace_access_granted',
         entity_type: 'workspace',
         title_en: 'Workspace Hub Access Granted',
-        message_en: `You have been granted ${accessLevel} access to the Workspace Hub by ${currentUser.name ?? 'Admin'}.${notes.trim() ? ' Note: ' + notes.trim() : ''}`,
+        message_en: `You have been granted ${lvl} access to the Workspace Hub by ${currentUser.name ?? 'Admin'}.${notes.trim() ? ' Note: ' + notes.trim() : ''}`,
         priority: 'high',
         status: 'pending',
         triggered_by: currentUser.id,
@@ -167,14 +207,33 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         email_sent: false,
       });
 
-      toast({ title: `Access granted`, description: `${userName} now has ${accessLevel} access to the Workspace Hub` });
-      setSelectedUser(''); setNotes(''); setAccessLevel('viewer');
+      toast({ title: 'Access granted', description: `${userName} now has ${lvl} access` });
+      if (!userId) { setSelectedUser(''); setNotes(''); setAccessLevel('viewer'); }
       refetchGrants();
       qc.invalidateQueries({ queryKey: ['workspace_access_grant'] });
     } catch (e: any) {
       toast({ title: 'Error granting access', description: e.message, variant: 'destructive' });
     } finally {
       setGranting(false);
+      setActioningId(null);
+    }
+  }
+
+  async function handleChangeLevel(grant: Grant, newLevel: string) {
+    setActioningId(grant.id);
+    try {
+      await supabase.from('workspace_access_grants').update({
+        access_level: newLevel,
+        granted_at: new Date().toISOString(),
+        granted_by: currentUser?.id,
+      }).eq('id', grant.id);
+      toast({ title: 'Access level updated', description: `${grant._userName} → ${newLevel}` });
+      refetchGrants();
+      qc.invalidateQueries({ queryKey: ['workspace_access_grant'] });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setActioningId(null);
     }
   }
 
@@ -182,15 +241,12 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
     if (!currentUser?.id) return;
     setActioningId(grant.id);
     try {
-      const { error } = await supabase.from('workspace_access_grants').update({
+      await supabase.from('workspace_access_grants').update({
         is_active: false,
         revoked_at: new Date().toISOString(),
         revoked_by: currentUser.id,
       }).eq('id', grant.id);
 
-      if (error) throw error;
-
-      // Notify the user
       await supabase.from('notifications').insert({
         recipient_id: grant.user_id,
         event_type: 'workspace_access_revoked',
@@ -215,7 +271,7 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
     }
   }
 
-  async function handleRestoreGrant(grant: Grant) {
+  async function handleRestore(grant: Grant) {
     if (!currentUser?.id) return;
     setActioningId(grant.id);
     try {
@@ -240,15 +296,13 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
     if (!currentUser?.id) return;
     setActioningId(req.id);
     try {
-      // Update request status
       await supabase.from('workspace_access_requests').update({
         status: 'approved',
         reviewed_by: currentUser.id,
         reviewed_at: new Date().toISOString(),
       }).eq('id', req.id);
 
-      // Create grant
-      const { error } = await supabase.from('workspace_access_grants').upsert({
+      await supabase.from('workspace_access_grants').upsert({
         user_id: req.user_id,
         granted_by: currentUser.id,
         granted_at: new Date().toISOString(),
@@ -259,9 +313,6 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         revoked_by: null,
       }, { onConflict: 'user_id' });
 
-      if (error) throw error;
-
-      // Notify the user
       await supabase.from('notifications').insert({
         recipient_id: req.user_id,
         event_type: 'workspace_access_granted',
@@ -319,9 +370,14 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
     }
   }
 
-  // Users who already have grants
-  const grantedUserIds = new Set(activeGrants.map(g => g.user_id));
-  const eligibleProfiles = profiles.filter(p => !grantedUserIds.has(p.id) && p.role !== 'super_admin');
+  function statusLabel(status: string) {
+    if (status === 'active') return { label: 'Active', cls: 'bg-emerald-100 text-emerald-700' };
+    if (status === 'revoked') return { label: 'Revoked', cls: 'bg-red-100 text-red-700' };
+    if (status === 'pending') return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' };
+    return { label: 'No Access', cls: 'bg-slate-100 text-slate-500' };
+  }
+
+  const initials = (name: string | null) => (name ?? '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -338,11 +394,11 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="grants" className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <Tabs defaultValue="all-users" className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <TabsList className="shrink-0 grid grid-cols-3 h-9 text-xs">
-            <TabsTrigger value="grants" className="text-xs">
+            <TabsTrigger value="all-users" className="text-xs">
               <Users className="h-3 w-3 mr-1" />
-              Active ({activeGrants.length})
+              All Users ({allUsers.length})
             </TabsTrigger>
             <TabsTrigger value="requests" className="text-xs relative">
               <Clock className="h-3 w-3 mr-1" />
@@ -359,75 +415,122 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
             </TabsTrigger>
           </TabsList>
 
-          {/* Active Grants */}
-          <TabsContent value="grants" className="flex-1 overflow-y-auto m-0 mt-3">
-            {activeGrants.length === 0 ? (
-              <div className="py-12 text-center space-y-2">
-                <Shield className="h-8 w-8 text-muted-foreground mx-auto opacity-40" />
-                <p className="text-sm text-muted-foreground">No active grants yet. Grant access to staff using the "Grant Access" tab.</p>
+          {/* ── All Users ─────────────────────────────────────────────── */}
+          <TabsContent value="all-users" className="flex-1 overflow-hidden flex flex-col m-0 mt-3">
+            {/* Search + filter bar */}
+            <div className="flex items-center gap-2 mb-3 shrink-0">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or role…" className="pl-8 h-8 text-xs" />
               </div>
-            ) : (
-              <div className="space-y-1">
-                {activeGrants.map(g => (
-                  <div key={g.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-muted/30 transition-colors group">
-                    <div className="w-9 h-9 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[11px] font-bold text-[#0F2041] shrink-0">
-                      {(g._userName ?? '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{g._userName}</p>
-                      <p className="text-[11px] text-muted-foreground capitalize">{g._userRole?.replace(/_/g, ' ')}</p>
-                    </div>
-                    <Badge className={cn('text-[10px] capitalize', levelBadge(g.access_level))}>
-                      {g.access_level}
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:block">
-                      {formatDistanceToNow(parseISO(g.granted_at), { addSuffix: true })}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 px-2 text-xs"
-                      onClick={() => handleRevoke(g)}
-                      disabled={actioningId === g.id}
-                      data-testid={`btn-revoke-${g.id}`}
-                    >
-                      {actioningId === g.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><UserX className="h-3 w-3 mr-1" />Revoke</>}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+              <Select value={statusFilter} onValueChange={v => setStatusFilter(v as any)}>
+                <SelectTrigger className="h-8 w-36 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">All ({allUsers.length})</SelectItem>
+                  <SelectItem value="active" className="text-xs">Active ({statusCounts.active})</SelectItem>
+                  <SelectItem value="none" className="text-xs">No Access ({statusCounts.none})</SelectItem>
+                  <SelectItem value="revoked" className="text-xs">Revoked ({statusCounts.revoked})</SelectItem>
+                  <SelectItem value="pending" className="text-xs">Pending ({statusCounts.pending})</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-            {revokedGrants.length > 0 && (
-              <div className="mt-5">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Revoked Access ({revokedGrants.length})</p>
-                <div className="space-y-1">
-                  {revokedGrants.map(g => (
-                    <div key={g.id} className="flex items-center gap-3 p-3 rounded-xl border border-dashed bg-muted/20 opacity-60 group">
-                      <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[11px] font-bold text-slate-500 shrink-0">
-                        {(g._userName ?? '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate text-muted-foreground">{g._userName}</p>
-                        <p className="text-[11px] text-muted-foreground">Access revoked</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity h-7 px-2 text-xs"
-                        onClick={() => handleRestoreGrant(g)}
-                        disabled={actioningId === g.id}
-                      >
-                        {actioningId === g.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><RotateCcw className="h-3 w-3 mr-1" />Restore</>}
-                      </Button>
-                    </div>
-                  ))}
+            {/* User rows */}
+            <div className="flex-1 overflow-y-auto space-y-1">
+              {filteredUsers.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-sm text-muted-foreground">No users match your filter</p>
                 </div>
-              </div>
-            )}
+              ) : filteredUsers.map(u => {
+                const sl = statusLabel(u.status);
+                const isActioning = actioningId === (u.grant?.id ?? u.id);
+                return (
+                  <div key={u.id} className={cn(
+                    'flex items-center gap-3 p-3 rounded-xl border transition-colors group',
+                    u.status === 'active' ? 'bg-card hover:bg-muted/30' : 'bg-muted/10 hover:bg-muted/20'
+                  )}>
+                    {/* Avatar */}
+                    <div className={cn(
+                      'w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0',
+                      u.status === 'active' ? 'bg-[#0F2041]/10 text-[#0F2041]' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                    )}>
+                      {initials(u.full_name)}
+                    </div>
+
+                    {/* Name + role */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{u.full_name ?? 'Unknown'}</p>
+                      <p className="text-[11px] text-muted-foreground capitalize">{(u.role ?? '').replace(/_/g, ' ')}</p>
+                    </div>
+
+                    {/* Status badge */}
+                    <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0', sl.cls)}>
+                      {sl.label}
+                    </span>
+
+                    {/* Access level (active users) — inline editable */}
+                    {u.status === 'active' && u.grant && (
+                      <Select
+                        value={u.grant.access_level}
+                        onValueChange={v => handleChangeLevel(u.grant!, v)}
+                        disabled={!!actioningId}
+                      >
+                        <SelectTrigger className="h-7 w-[90px] text-[10px] border-[#1D3461]/30 text-[#1D3461]">
+                          <SelectValue />
+                          <ChevronDown className="h-3 w-3 opacity-50" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ACCESS_LEVELS.map(l => (
+                            <SelectItem key={l.value} value={l.value} className="text-xs">
+                              <span className={cn('font-medium capitalize', levelBadge(l.value), 'px-1.5 py-0.5 rounded text-[10px]')}>{l.label}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {/* Grant time */}
+                    {u.status === 'active' && u.grant?.granted_at && (
+                      <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:block">
+                        {formatDistanceToNow(parseISO(u.grant.granted_at), { addSuffix: true })}
+                      </span>
+                    )}
+
+                    {/* Actions */}
+                    <div className="shrink-0 flex items-center gap-1">
+                      {isActioning ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      ) : u.status === 'active' && u.grant ? (
+                        <Button size="sm" variant="ghost"
+                          className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition-opacity"
+                          onClick={() => handleRevoke(u.grant!)}>
+                          <UserX className="h-3 w-3 mr-1" />Revoke
+                        </Button>
+                      ) : u.status === 'revoked' && u.grant ? (
+                        <Button size="sm" variant="ghost"
+                          className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-opacity"
+                          onClick={() => handleRestore(u.grant!)}>
+                          <RotateCcw className="h-3 w-3 mr-1" />Restore
+                        </Button>
+                      ) : u.status === 'none' ? (
+                        <Button size="sm"
+                          className="opacity-0 group-hover:opacity-100 h-7 px-2 text-xs bg-[#1D3461] hover:bg-[#0F2041] transition-opacity"
+                          onClick={() => handleGrant(u.id, 'viewer')}>
+                          <UserPlus className="h-3 w-3 mr-1" />Grant
+                        </Button>
+                      ) : u.status === 'pending' ? (
+                        <span className="text-[10px] text-amber-600 italic">Awaiting review</span>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </TabsContent>
 
-          {/* Access Requests */}
+          {/* ── Access Requests ────────────────────────────────────────── */}
           <TabsContent value="requests" className="flex-1 overflow-y-auto m-0 mt-3">
             {requests.length === 0 ? (
               <div className="py-12 text-center space-y-2">
@@ -444,7 +547,7 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[10px] font-bold text-[#0F2041] shrink-0">
-                          {(req.user_name ?? '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                          {initials(req.user_name)}
                         </div>
                         <div>
                           <p className="text-sm font-semibold">{req.user_name ?? 'Unknown user'}</p>
@@ -469,23 +572,18 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
                       </span>
                       {req.status === 'pending' && (
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
+                          <Button size="sm" variant="outline"
                             className="h-7 px-3 text-xs text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
                             onClick={() => handleRejectRequest(req)}
                             disabled={actioningId === req.id}
-                            data-testid={`btn-reject-request-${req.id}`}
-                          >
+                            data-testid={`btn-reject-request-${req.id}`}>
                             {actioningId === req.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><XCircle className="h-3 w-3 mr-1" />Reject</>}
                           </Button>
-                          <Button
-                            size="sm"
+                          <Button size="sm"
                             className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
                             onClick={() => handleApproveRequest(req)}
                             disabled={actioningId === req.id}
-                            data-testid={`btn-approve-request-${req.id}`}
-                          >
+                            data-testid={`btn-approve-request-${req.id}`}>
                             {actioningId === req.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><CheckCircle2 className="h-3 w-3 mr-1" />Approve</>}
                           </Button>
                         </div>
@@ -497,7 +595,7 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
             )}
           </TabsContent>
 
-          {/* Grant Access */}
+          {/* ── Grant Access ───────────────────────────────────────────── */}
           <TabsContent value="grant-access" className="flex-1 overflow-y-auto m-0 mt-3">
             <div className="space-y-5 max-w-sm mx-auto">
               <div className="space-y-1.5">
@@ -507,16 +605,26 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
                     <SelectValue placeholder="Choose a staff member…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {eligibleProfiles.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">All eligible staff already have access</div>
-                    ) : eligibleProfiles.map(p => (
-                      <SelectItem key={p.id} value={p.id} className="text-sm">
-                        <span className="font-medium">{p.full_name ?? 'Unknown'}</span>
-                        <span className="text-muted-foreground ml-2 capitalize text-xs">({(p.role ?? '').replace(/_/g, ' ')})</span>
-                      </SelectItem>
-                    ))}
+                    {profiles.filter(p => p.role !== 'super_admin').length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">No staff found</div>
+                    ) : profiles.filter(p => p.role !== 'super_admin').map(p => {
+                      const existing = grantMap[p.id];
+                      return (
+                        <SelectItem key={p.id} value={p.id} className="text-sm">
+                          <span className="font-medium">{p.full_name ?? 'Unknown'}</span>
+                          <span className="text-muted-foreground ml-2 capitalize text-xs">({(p.role ?? '').replace(/_/g, ' ')})</span>
+                          {existing?.is_active && <span className="ml-2 text-[10px] text-emerald-600">• {existing.access_level}</span>}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
+                {selectedUser && grantMap[selectedUser]?.is_active && (
+                  <p className="text-[11px] text-amber-600 flex items-center gap-1">
+                    <Shield className="h-3 w-3" />
+                    This user already has <strong>{grantMap[selectedUser].access_level}</strong> access. Submitting will update their level.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -530,24 +638,19 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
                         'w-full text-left px-4 py-3 rounded-xl border transition-all',
                         accessLevel === level.value
                           ? 'border-[#0F2041] bg-[#0F2041]/5 dark:bg-[#1D3461]/10'
-                          : 'border-border hover:border-slate-300'
+                          : 'border-border hover:bg-muted/30'
                       )}
-                      data-testid={`radio-access-level-${level.value}`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <div className={cn(
-                          'w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center',
-                          accessLevel === level.value ? 'border-[#0F2041]' : 'border-slate-300'
-                        )}>
-                          {accessLevel === level.value && (
-                            <div className="w-2 h-2 rounded-full bg-[#0F2041]" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold">{level.label}</p>
-                          <p className="text-xs text-muted-foreground">{level.desc}</p>
-                        </div>
+                          'w-2 h-2 rounded-full shrink-0',
+                          level.value === 'admin' ? 'bg-violet-500' : level.value === 'editor' ? 'bg-blue-500' : 'bg-slate-400'
+                        )} />
+                        <span className={cn('text-sm font-semibold', accessLevel === level.value ? 'text-[#0F2041]' : '')}>
+                          {level.label}
+                        </span>
                       </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 pl-4">{level.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -565,15 +668,17 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
               </div>
 
               <Button
-                className="w-full bg-[#0F2041] hover:bg-[#1D3461] h-11"
-                onClick={handleGrant}
+                className="w-full bg-[#0F2041] hover:bg-[#1D3461] h-11 font-medium"
+                onClick={() => handleGrant()}
                 disabled={!selectedUser || granting}
-                data-testid="btn-confirm-grant"
+                data-testid="btn-grant-access"
               >
                 {granting ? (
                   <><Loader2 className="h-4 w-4 animate-spin mr-2" />Granting…</>
                 ) : (
-                  <><Shield className="h-4 w-4 mr-2" />Grant Access</>
+                  <><UserPlus className="h-4 w-4 mr-2" />
+                    {selectedUser && grantMap[selectedUser]?.is_active ? 'Update Access Level' : 'Grant Access'}
+                  </>
                 )}
               </Button>
             </div>
