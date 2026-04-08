@@ -315,6 +315,24 @@ function geminiOcrPlugin() {
   return {
     name: 'gemini-ocr-api',
     configureServer(server: any) {
+      // ── /api/health — server-side secrets readiness check ────────────────
+      // Returns JSON with presence status for all required server-side secrets.
+      // Values are never exposed; only boolean present/absent is returned.
+      // Client-side VITE_ vars are validated by src/utils/env-validation.ts.
+      server.middlewares.use('/api/health', (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method !== 'GET') return next();
+        const secrets = {
+          GOOGLE_AI_API_KEY: Boolean(process.env.GOOGLE_AI_API_KEY),
+          GROQ_API_KEY: Boolean(process.env.GROQ_API_KEY),
+          FIREBASE_SERVICE_ACCOUNT_JSON: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON),
+          SUPABASE_ACCESS_TOKEN: Boolean(process.env.SUPABASE_ACCESS_TOKEN),
+        };
+        const allPresent = Object.values(secrets).every(Boolean);
+        res.statusCode = allPresent ? 200 : 503;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: allPresent, secrets, ts: Date.now() }));
+      });
+
       server.middlewares.use('/api/extract-transaction', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (req.method !== 'POST') return next();
 
