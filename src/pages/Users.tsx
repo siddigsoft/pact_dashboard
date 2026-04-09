@@ -5,6 +5,7 @@ import { User } from '@/types';
 import { Project, ProjectRole, ProjectTeamMember } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useDebounce } from '@/hooks/useDebounce';
 import { TableSkeleton } from '@/components/ui/skeletons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,8 +21,9 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { toDisplayLabel } from '@/utils/roleMapping';
+import { toDisplayLabel, VISIBLE_ROLE_CODES, normalizeRole } from '@/utils/roleMapping';
 import { useApproval } from '@/context/approval/ApprovalContext';
+import { supabase } from '@/integrations/supabase/client';
 import {
   User as UserIcon,
   Search,
@@ -47,7 +49,11 @@ import {
   Briefcase,
   Copy,
   Info,
-  TriangleAlert
+  TriangleAlert,
+  UserCheck,
+  Edit2,
+  MessageSquare as MessageIcon,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import {
   Dialog,
@@ -67,7 +73,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
@@ -105,6 +110,12 @@ const Users = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedProjectRole, setSelectedProjectRole] = useState<ProjectRole>('dataCollector');
   const [isAddingToProject, setIsAddingToProject] = useState(false);
+
+  const [activateWithRoleDialog, setActivateWithRoleDialog] = useState<{ open: boolean; user?: User; selectedRole?: string }>({ open: false });
+  const [isActivatingWithRole, setIsActivatingWithRole] = useState(false);
+  const [rejectWithReasonDialog, setRejectWithReasonDialog] = useState<{ open: boolean; userId?: string; userName?: string }>({ open: false });
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [isRejectingWithReason, setIsRejectingWithReason] = useState(false);
 
   const primaryRole = currentUser?.role?.toLowerCase() || '';
   const isAdminOrICT = 
@@ -375,6 +386,91 @@ const Users = () => {
       toast({ title: "Rejection failed", description: "Could not reject user", variant: "destructive" });
     } finally {
       setIsLoadingApproval(null);
+    }
+  };
+
+  const handleActivateWithRole = async () => {
+    if (!activateWithRoleDialog.user) return;
+    const { user, selectedRole } = activateWithRoleDialog;
+    setIsActivatingWithRole(true);
+    try {
+      const roleChanged = selectedRole && selectedRole !== user.role;
+      if (roleChanged) {
+        const { error: roleError } = await supabase
+          .from('profiles')
+          .update({ role: selectedRole })
+          .eq('id', user.id);
+        if (roleError) {
+          toast({
+            title: "Role update failed",
+            description: "Could not update user role before activation. Activation was not completed.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      const approved = await approveUser(user.id);
+      if (!approved) {
+        return;
+      }
+      toast({ title: "User activated", description: `${user.name || 'User'} has been activated${roleChanged ? ` as ${toDisplayLabel(selectedRole!)}` : ''}.` });
+      setActivateWithRoleDialog({ open: false });
+      if (projects.length > 0) {
+        setAddToProjectDialog({ open: true, user });
+        setSelectedProjectId('');
+        setSelectedProjectRole('dataCollector');
+      }
+    } catch (error) {
+      toast({ title: "Activation failed", description: "Could not activate user", variant: "destructive" });
+    } finally {
+      setIsActivatingWithRole(false);
+    }
+  };
+
+  const handleRejectWithReason = async () => {
+    if (!rejectWithReasonDialog.userId) return;
+    const { userId, userName } = rejectWithReasonDialog;
+    setIsRejectingWithReason(true);
+    try {
+      // Mark profile as rejected (soft reject) rather than deleting, so the notification persists
+      // The profile gets status='rejected' so they cannot log in but we can retain the notification
+      const { error: statusError } = await supabase
+        .from('profiles')
+        .update({ status: 'rejected', is_active: false })
+        .eq('id', userId);
+
+      if (statusError) {
+        // Fall back to hard delete path via rejectUser if update fails (e.g. column doesn't exist)
+        await rejectUser(userId);
+        toast({ title: "User rejected", description: `${userName || 'User'}'s registration has been rejected.` });
+        setRejectWithReasonDialog({ open: false });
+        setRejectionReason('');
+        return;
+      }
+
+      // Insert rejection notification with mandatory reason
+      await supabase.from('notifications').insert({
+        recipient_id: userId,
+        title: 'Your registration was not approved',
+        message: `Your account registration could not be approved at this time. Reason: ${rejectionReason.trim()}. Please contact your supervisor for more information.`,
+        type: 'warning',
+        category: 'account',
+        priority: 'high',
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+
+      // Refresh users list to remove rejected user from local state
+      await handleRefreshUsers();
+      localStorage.removeItem(`user-${userId}`);
+
+      toast({ title: "User rejected", description: `${userName || 'User'}'s registration has been rejected and they have been notified.` });
+      setRejectWithReasonDialog({ open: false });
+      setRejectionReason('');
+    } catch (error) {
+      toast({ title: "Rejection failed", description: "Could not reject user", variant: "destructive" });
+    } finally {
+      setIsRejectingWithReason(false);
     }
   };
 
@@ -912,8 +1008,120 @@ const Users = () => {
             )}
           </TabsContent>
 
-          {/* Users Table — rendered for all tabs except duplicates */}
-          <TabsContent value={activeTab} className="mt-0" hidden={activeTab === 'duplicates'}>
+          {/* Pending Activations Queue — enhanced view for pending tab */}
+          <TabsContent value="pending" className="mt-0">
+            {filteredUsers.filter(u => !u.isApproved && u.profileStatus !== 'rejected' && u.profileStatus !== 'inactive').length === 0 ? (
+              <Card className="p-10">
+                <div className="flex flex-col items-center justify-center text-center gap-3">
+                  <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-4">
+                    <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                  </div>
+                  <h3 className="font-semibold text-base">No pending activations</h3>
+                  <p className="text-sm text-muted-foreground">All registered users have been reviewed.</p>
+                </div>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 px-1 pb-1">
+                  <CalendarIcon className="h-4 w-4 text-amber-600" />
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">{filteredUsers.filter(u => !u.isApproved && u.profileStatus !== 'rejected' && u.profileStatus !== 'inactive').length} user{filteredUsers.filter(u => !u.isApproved && u.profileStatus !== 'rejected' && u.profileStatus !== 'inactive').length !== 1 ? 's' : ''}</span> awaiting activation. Review each registration and approve, modify role, or reject.
+                  </p>
+                </div>
+                {filteredUsers.filter(u => !u.isApproved && u.profileStatus !== 'rejected' && u.profileStatus !== 'inactive').map((user) => (
+                  <Card key={user.id} className="overflow-hidden border-amber-200 dark:border-amber-800" data-testid={`card-pending-${user.id}`}>
+                    <div className="flex flex-col md:flex-row md:items-center gap-4 p-4">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <Avatar className="h-12 w-12 ring-2 ring-amber-200 dark:ring-amber-800 shrink-0">
+                          <AvatarImage src={user.avatar} />
+                          <AvatarFallback className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-semibold text-base">
+                            {getInitials(user.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-sm">{user.name || 'Unnamed User'}</p>
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800 text-xs">
+                              <Clock className="h-2.5 w-2.5 mr-1" /> Pending
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>
+                          {user.phone && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{user.phone}</p>
+                          )}
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-muted-foreground">Requested role:</span>
+                              <RoleBadge role={getPrimaryRoleLabel(user)} size="sm" />
+                            </div>
+                            {user.createdAt && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <CalendarIcon className="h-3 w-3" />
+                                <span>Submitted {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                              </div>
+                            )}
+                          </div>
+                          {user.hubId && (
+                            <p className="text-xs text-muted-foreground mt-0.5">Hub: <span className="font-medium">{user.hubId}</span></p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-3 text-xs"
+                          asChild
+                          data-testid={`button-view-pending-${user.id}`}
+                        >
+                          <Link to={`/users/${user.id}`}>
+                            <Eye className="h-3.5 w-3.5 mr-1" /> Profile
+                          </Link>
+                        </Button>
+                        {isAdminOrICT && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-3 text-xs border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400"
+                              onClick={() => setActivateWithRoleDialog({ open: true, user, selectedRole: user.role })}
+                              data-testid={`button-activate-role-${user.id}`}
+                            >
+                              <Edit2 className="h-3.5 w-3.5 mr-1" /> Activate & Modify Role
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => handleApproveUser(user.id)}
+                              disabled={isLoadingApproval === user.id}
+                              data-testid={`button-approve-pending-${user.id}`}
+                            >
+                              {isLoadingApproval === user.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                              Activate
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-3 text-xs border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
+                              onClick={() => setRejectWithReasonDialog({ open: true, userId: user.id, userName: user.name || user.email })}
+                              data-testid={`button-reject-pending-${user.id}`}
+                            >
+                              <X className="h-3.5 w-3.5 mr-1" /> Reject
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Users Table — rendered for all tabs except duplicates and pending */}
+          <TabsContent value={activeTab} className="mt-0" hidden={activeTab === 'duplicates' || activeTab === 'pending'}>
             {isInitialLoad && users.length === 0 ? (
               <TableSkeleton rows={8} columns={5} />
             ) : users.length === 0 ? (
@@ -1075,6 +1283,115 @@ const Users = () => {
             >
               {deletingUserId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {confirmDialog.action === 'delete' ? 'Delete' : 'Deactivate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Activate with Role Modification Dialog */}
+      <Dialog open={activateWithRoleDialog.open} onOpenChange={(open) => setActivateWithRoleDialog({ ...activateWithRoleDialog, open })}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-primary" />
+              Activate User & Assign Role
+            </DialogTitle>
+            <DialogDescription>
+              Review and optionally modify the role before activating {activateWithRoleDialog.user?.name || 'this user'}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            {activateWithRoleDialog.user && (
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={activateWithRoleDialog.user.avatar} />
+                  <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                    {getInitials(activateWithRoleDialog.user.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium text-sm">{activateWithRoleDialog.user.name || 'Unnamed User'}</p>
+                  <p className="text-xs text-muted-foreground">{activateWithRoleDialog.user.email}</p>
+                </div>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Assign Role</label>
+              <Select
+                value={activateWithRoleDialog.selectedRole || activateWithRoleDialog.user?.role || ''}
+                onValueChange={(val) => setActivateWithRoleDialog(prev => ({ ...prev, selectedRole: val }))}
+              >
+                <SelectTrigger data-testid="select-activate-role">
+                  <SelectValue placeholder="Select role..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {VISIBLE_ROLE_CODES.map((roleCode) => (
+                    <SelectItem key={roleCode} value={roleCode}>
+                      {toDisplayLabel(roleCode)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {activateWithRoleDialog.selectedRole && activateWithRoleDialog.user?.role &&
+               normalizeRole(activateWithRoleDialog.selectedRole) !== normalizeRole(activateWithRoleDialog.user.role) && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  Role will be changed from <strong>{toDisplayLabel(activateWithRoleDialog.user.role)}</strong> to <strong>{toDisplayLabel(activateWithRoleDialog.selectedRole)}</strong>
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setActivateWithRoleDialog({ open: false })}>Cancel</Button>
+            <Button onClick={handleActivateWithRole} disabled={isActivatingWithRole} data-testid="button-confirm-activate-role">
+              {isActivatingWithRole ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
+              Activate User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject with Reason Dialog */}
+      <Dialog open={rejectWithReasonDialog.open} onOpenChange={(open) => { if (!open) { setRejectWithReasonDialog({ open: false }); setRejectionReason(''); } }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <UserX className="h-5 w-5" />
+              Reject Registration
+            </DialogTitle>
+            <DialogDescription>
+              Rejecting <strong>{rejectWithReasonDialog.userName}</strong>'s registration. Provide a reason — they will be notified via in-app message.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-3">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                placeholder="e.g. Missing required credentials, duplicate account, not a recognized employee..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="resize-none" rows={3}
+                data-testid="textarea-rejection-reason"
+              />
+              {!rejectionReason.trim() && (
+                <p className="text-xs text-muted-foreground mt-1">A reason is required so the user understands why their registration was not approved.</p>
+              )}
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-200">
+              <strong>Note:</strong> The user's account will be marked as rejected and they will not be able to log in. They will receive an in-app notification with your reason.
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setRejectWithReasonDialog({ open: false }); setRejectionReason(''); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectWithReason}
+              disabled={isRejectingWithReason || !rejectionReason.trim()}
+              data-testid="button-confirm-reject"
+            >
+              {isRejectingWithReason ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
+              Reject Registration
             </Button>
           </DialogFooter>
         </DialogContent>

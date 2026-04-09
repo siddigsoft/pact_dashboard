@@ -16,6 +16,8 @@ export interface User {
   createdAt?: string;
   updatedAt?: string;
   isApproved?: boolean;
+  /** Raw status from profiles: 'pending' | 'approved' | 'rejected' | 'inactive' | string */
+  profileStatus?: string;
   employeeId?: string;
   
   /**
@@ -131,6 +133,12 @@ export interface User {
   contractStartDate?: string | null;
   contractEndDate?: string | null;
   reportsTo?: string | null;
+
+  /**
+   * Onboarding / profile fields collected during registration
+   */
+  emergencyContact?: string | null;
+  bio?: string | null;
 }
 
 export interface UserLogin {

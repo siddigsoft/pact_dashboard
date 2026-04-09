@@ -27,6 +27,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
 import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel } from "@/utils/roleMapping";
+import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCompletenessIndicator";
 
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
@@ -863,6 +864,13 @@ const UserDetail: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Profile Completeness — visible to the user themselves or admins */}
+        {(currentUser?.id === user.id || isAdmin) && (
+          <div className="lg:col-span-3">
+            <ProfileCompletenessIndicator user={user} />
+          </div>
+        )}
 
         {/* Details Tabs */}
         <Card className="lg:col-span-2 shadow-lg border overflow-hidden rounded-xl">

@@ -213,8 +213,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             employeeId: profile.employee_id || existingUser.employeeId,
             lastActive: existingUser.lastActive || new Date().toISOString(),
             isApproved: profile.status === 'approved' || false,
+            profileStatus: profile.status || 'pending',
             availability: profile.availability || existingUser.availability || 'offline',
             createdAt: profile.created_at || existingUser.createdAt || new Date().toISOString(),
+            emergencyContact: (profile as Record<string, unknown>)['emergency_contact'] as string | null || existingUser.emergencyContact || null,
+            bio: (profile as Record<string, unknown>)['bio'] as string | null || existingUser.bio || null,
             location: locationData,
             performance: existingUser.performance || {
               rating: 0,
@@ -548,6 +551,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         contractStartDate: profileData?.contract_start_date ?? null,
         contractEndDate: profileData?.contract_end_date ?? null,
         reportsTo: profileData?.reports_to ?? null,
+        profileStatus: (userProfile as Record<string, unknown>)['status'] as string ?? 'approved',
+        emergencyContact: (userProfile as Record<string, unknown>)['emergency_contact'] as string | null ?? null,
+        bio: (userProfile as Record<string, unknown>)['bio'] as string | null ?? null,
       };
 
       setCurrentUser(supabaseUser);
@@ -880,6 +886,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         localStorage.setItem(`user-${supabaseUser.id}`, JSON.stringify(supabaseUser));
 
+        // Track first login for walkthrough — only if not already done
+        const walkthroughKey = `walkthrough_completed_${supabaseUser.id}`;
+        const firstLoginKey = `first_login_${supabaseUser.id}`;
+        if (!localStorage.getItem(walkthroughKey) && !localStorage.getItem(firstLoginKey)) {
+          localStorage.setItem(firstLoginKey, 'true');
+        }
+
         // Invalidate cached queries so dashboard data loads fresh after login
         queryClient.invalidateQueries();
         
@@ -948,6 +961,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             stateId: userData.stateId,
             localityId: userData.localityId,
             avatar: userData.avatar,
+            emergencyContact: userData.emergencyContact,
+            bio: userData.bio,
           }
         }
       });
@@ -982,6 +997,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
+      // Also explicitly update profiles table with onboarding fields the trigger may not map
+      if (signUpData?.user?.id) {
+        const profilePatch: Record<string, string | null | undefined> = {};
+        if (userData.emergencyContact) profilePatch['emergency_contact'] = userData.emergencyContact;
+        if (userData.bio) profilePatch['bio'] = userData.bio;
+        if (Object.keys(profilePatch).length > 0) {
+          await supabase.from('profiles').update(profilePatch).eq('id', signUpData.user.id);
+        }
+      }
+
       toast({
         title: "Registration successful",
         description: "Your account is pending approval by an administrator.",
@@ -1050,7 +1075,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "The user can now log in to the system.",
       });
 
-      // Send welcome email to the newly approved user
+      // Send welcome email and in-app notification to the newly approved user
       try {
         const { data: userProfile } = await supabase
           .from('profiles')
@@ -1065,9 +1090,27 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             userProfile.role || 'Data Collector'
           );
         }
+
+        // Insert in-app notification for the approved user
+        await supabase.from('notifications').insert({
+          recipient_id: userId,
+          title: 'Your account has been activated!',
+          message: 'Welcome to PACT! Your account registration has been approved and you now have full access to the system. Log in to get started.',
+          type: 'success',
+          category: 'account',
+          priority: 'high',
+          link: '/dashboard',
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
       } catch (emailError) {
-        console.error('Failed to send welcome email:', emailError);
+        console.error('Failed to send welcome email or notification:', emailError);
       }
+
+      // Mark as first login so walkthrough shows on next sign-in
+      try {
+        await supabase.from('profiles').update({ metadata: { first_login: true } }).eq('id', userId);
+      } catch {}
 
       return true;
     } catch (error) {

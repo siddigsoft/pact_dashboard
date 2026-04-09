@@ -8,6 +8,8 @@ import { DashboardZoneLayout, DashboardZone } from '@/components/dashboard/Dashb
 import { DashboardZone as DashboardZoneType } from '@/types/user-preferences';
 import { DashboardMmpFilterProvider } from '@/context/dashboard/DashboardMmpFilterContext';
 import { Loader2 } from 'lucide-react';
+import { WelcomeWalkthrough, useWalkthrough } from '@/components/onboarding/WelcomeWalkthrough';
+import { MobileAppDownloadCard } from '@/components/onboarding/MobileAppDownloadCard';
 
 const OperationsZone = lazy(() => import('@/components/dashboard/zones/OperationsZone').then(m => ({ default: m.OperationsZone })));
 const TeamZone = lazy(() => import('@/components/dashboard/zones/TeamZone').then(m => ({ default: m.TeamZone })));
@@ -32,6 +34,7 @@ const Dashboard = () => {
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
   const { roles, currentUser } = useAppContext();
   const { dashboardPreferences, getDefaultZoneForRole, userSettings } = useSettings();
+  const { showWalkthrough, dismissWalkthrough } = useWalkthrough(currentUser?.id, currentUser?.role);
 
   // Dashboard stays as-is — super admin landing redirect is handled at login time in AuthForm
 
@@ -128,6 +131,23 @@ const Dashboard = () => {
 
         {SiteVisitRemindersDialog}
         <LocationPermissionPrompt />
+
+        {currentUser && (
+          <WelcomeWalkthrough
+            userId={currentUser.id}
+            userName={currentUser.name || currentUser.email || ''}
+            userRole={currentUser.role || ''}
+            open={showWalkthrough}
+            onClose={dismissWalkthrough}
+          />
+        )}
+
+        {currentUser && (
+          <MobileAppDownloadCard
+            userId={currentUser.id}
+            userRole={currentUser.role || ''}
+          />
+        )}
         
         <div className="fixed bottom-4 right-4 z-40">
           <DataFreshnessBadge variant="compact" />
