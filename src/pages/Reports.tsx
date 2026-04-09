@@ -711,8 +711,8 @@ const Reports: React.FC = () => {
 
 // ── HR Summary Report Component ───────────────────────────────────────────────
 
-interface LeaveBalance { name: string; email: string; annual: number; sick: number; emergency: number; maternity: number; }
-interface CertRow { name: string; email: string; type: string; issued: string | null; expiry: string | null; status: string; }
+interface LeaveBalance { userId: string; name: string; email: string; annual: number; sick: number; emergency: number; maternity: number; other: number; }
+interface CertRow { userId: string; name: string; email: string; title: string; certType: string; issued: string | null; expiry: string | null; status: string; }
 
 function HRSummaryReport() {
   const { toast } = useToast();
@@ -724,38 +724,57 @@ function HRSummaryReport() {
   const loadData = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: leaves }, { data: certs }] = await Promise.all([
+      const [{ data: leaves }, { data: certs }, { data: profiles }] = await Promise.all([
         supabase.from('leave_requests')
-          .select('staff_name, staff_email, leave_type, status, start_date, end_date')
+          .select('user_id, leave_type, start_date, end_date, days_count')
           .eq('status', 'approved'),
         supabase.from('staff_certifications')
-          .select('staff_name, staff_email, certification_type, issue_date, expiry_date, status'),
+          .select('user_id, title, cert_type, issue_date, expiry_date, status'),
+        supabase.from('profiles').select('id, full_name, email'),
       ]);
+
+      const profileMap: Record<string, { name: string; email: string }> = {};
+      (profiles ?? []).forEach((p: any) => {
+        profileMap[p.id] = { name: p.full_name ?? '—', email: p.email ?? '—' };
+      });
 
       // Aggregate leave days per person per type
       const balanceMap: Record<string, LeaveBalance> = {};
       (leaves ?? []).forEach((l: any) => {
-        const key = l.staff_email || l.staff_name || 'Unknown';
-        if (!balanceMap[key]) balanceMap[key] = { name: l.staff_name || '—', email: l.staff_email || '—', annual: 0, sick: 0, emergency: 0, maternity: 0 };
-        const start = l.start_date ? new Date(l.start_date) : null;
-        const end   = l.end_date   ? new Date(l.end_date)   : null;
-        const days  = start && end ? Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1) : 1;
-        const type  = (l.leave_type || '').toLowerCase();
-        if (type.includes('annual'))    balanceMap[key].annual    += days;
-        else if (type.includes('sick')) balanceMap[key].sick      += days;
-        else if (type.includes('emergency')) balanceMap[key].emergency += days;
-        else if (type.includes('maternity')) balanceMap[key].maternity += days;
+        const uid = l.user_id ?? 'unknown';
+        if (!balanceMap[uid]) {
+          const prof = profileMap[uid] ?? { name: '—', email: '—' };
+          balanceMap[uid] = { userId: uid, name: prof.name, email: prof.email, annual: 0, sick: 0, emergency: 0, maternity: 0, other: 0 };
+        }
+        // Use days_count if available, otherwise calculate from dates
+        let days = Number(l.days_count ?? 0);
+        if (!days) {
+          const start = l.start_date ? new Date(l.start_date) : null;
+          const end   = l.end_date   ? new Date(l.end_date)   : start;
+          days = start && end ? Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1) : 1;
+        }
+        const type = (l.leave_type || '').toLowerCase();
+        if (type.includes('annual'))         balanceMap[uid].annual    += days;
+        else if (type.includes('sick'))      balanceMap[uid].sick      += days;
+        else if (type.includes('emergency')) balanceMap[uid].emergency += days;
+        else if (type.includes('maternity')) balanceMap[uid].maternity += days;
+        else                                  balanceMap[uid].other     += days;
       });
-      setLeaveBalances(Object.values(balanceMap));
+      setLeaveBalances(Object.values(balanceMap).sort((a, b) => a.name.localeCompare(b.name)));
 
-      setCertRows((certs ?? []).map((c: any) => ({
-        name: c.staff_name || '—',
-        email: c.staff_email || '—',
-        type: c.certification_type || '—',
-        issued: c.issue_date ?? null,
-        expiry: c.expiry_date ?? null,
-        status: c.status || '—',
-      })));
+      setCertRows((certs ?? []).map((c: any) => {
+        const prof = profileMap[c.user_id ?? ''] ?? { name: '—', email: '—' };
+        return {
+          userId: c.user_id ?? '—',
+          name: prof.name,
+          email: prof.email,
+          title: c.title || '—',
+          certType: c.cert_type || '—',
+          issued: c.issue_date ?? null,
+          expiry: c.expiry_date ?? null,
+          status: c.status || '—',
+        };
+      }).sort((a, b) => a.name.localeCompare(b.name)));
       setDataLoaded(true);
     } catch (err) {
       toast({ title: 'Failed to load HR data', variant: 'destructive' });
@@ -769,20 +788,24 @@ function HRSummaryReport() {
   const exportToExcel = async () => {
     setLoading(true);
     try {
-      const XLSXLib = (await import('xlsx')).default;
+      const xlsxModule = await import('xlsx');
+      const XLSXLib = xlsxModule.default ?? xlsxModule;
       const wb = XLSXLib.utils.book_new();
 
       // Sheet 1: Leave Balances
       const leaveData = [
-        ['Name', 'Email', 'Annual (days)', 'Sick (days)', 'Emergency (days)', 'Maternity (days)', 'Total (days)'],
-        ...leaveBalances.map(r => [r.name, r.email, r.annual, r.sick, r.emergency, r.maternity, r.annual + r.sick + r.emergency + r.maternity]),
+        ['Name', 'Email', 'Annual (days)', 'Sick (days)', 'Emergency (days)', 'Maternity (days)', 'Other (days)', 'Total (days)'],
+        ...leaveBalances.map(r => {
+          const total = r.annual + r.sick + r.emergency + r.maternity + r.other;
+          return [r.name, r.email, r.annual, r.sick, r.emergency, r.maternity, r.other, total];
+        }),
       ];
       XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(leaveData), 'Leave Balances');
 
       // Sheet 2: Certifications
       const certData = [
-        ['Name', 'Email', 'Certification Type', 'Issue Date', 'Expiry Date', 'Status'],
-        ...certRows.map(r => [r.name, r.email, r.type, r.issued ?? '—', r.expiry ?? '—', r.status]),
+        ['Name', 'Email', 'Certificate Title', 'Cert Type', 'Issue Date', 'Expiry Date', 'Status'],
+        ...certRows.map(r => [r.name, r.email, r.title, r.certType, r.issued ?? '—', r.expiry ?? '—', r.status]),
       ];
       XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(certData), 'Certifications');
 
@@ -833,21 +856,26 @@ function HRSummaryReport() {
                           <TableHead className="text-center">Sick</TableHead>
                           <TableHead className="text-center">Emergency</TableHead>
                           <TableHead className="text-center">Maternity</TableHead>
+                          <TableHead className="text-center">Other</TableHead>
                           <TableHead className="text-center font-bold">Total</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {leaveBalances.map((r, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium text-sm">{r.name}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{r.email}</TableCell>
-                            <TableCell className="text-center">{r.annual || '—'}</TableCell>
-                            <TableCell className="text-center">{r.sick || '—'}</TableCell>
-                            <TableCell className="text-center">{r.emergency || '—'}</TableCell>
-                            <TableCell className="text-center">{r.maternity || '—'}</TableCell>
-                            <TableCell className="text-center font-bold text-blue-700">{r.annual + r.sick + r.emergency + r.maternity}</TableCell>
-                          </TableRow>
-                        ))}
+                        {leaveBalances.map((r, i) => {
+                          const total = r.annual + r.sick + r.emergency + r.maternity + r.other;
+                          return (
+                            <TableRow key={i}>
+                              <TableCell className="font-medium text-sm">{r.name}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{r.email}</TableCell>
+                              <TableCell className="text-center">{r.annual || '—'}</TableCell>
+                              <TableCell className="text-center">{r.sick || '—'}</TableCell>
+                              <TableCell className="text-center">{r.emergency || '—'}</TableCell>
+                              <TableCell className="text-center">{r.maternity || '—'}</TableCell>
+                              <TableCell className="text-center">{r.other || '—'}</TableCell>
+                              <TableCell className="text-center font-bold text-blue-700">{total}</TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -866,7 +894,8 @@ function HRSummaryReport() {
                         <TableRow>
                           <TableHead>Name</TableHead>
                           <TableHead>Email</TableHead>
-                          <TableHead>Certification</TableHead>
+                          <TableHead>Certificate</TableHead>
+                          <TableHead>Type</TableHead>
                           <TableHead>Issue Date</TableHead>
                           <TableHead>Expiry Date</TableHead>
                           <TableHead>Status</TableHead>
@@ -879,7 +908,8 @@ function HRSummaryReport() {
                             <TableRow key={i}>
                               <TableCell className="font-medium text-sm">{r.name}</TableCell>
                               <TableCell className="text-xs text-muted-foreground">{r.email}</TableCell>
-                              <TableCell className="text-sm">{r.type}</TableCell>
+                              <TableCell className="text-sm">{r.title}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{r.certType}</TableCell>
                               <TableCell className="text-sm">{r.issued ? format(new Date(r.issued), 'dd MMM yyyy') : '—'}</TableCell>
                               <TableCell className={`text-sm ${expired ? 'text-red-600 font-semibold' : ''}`}>
                                 {r.expiry ? format(new Date(r.expiry), 'dd MMM yyyy') : '—'}

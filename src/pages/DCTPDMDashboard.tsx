@@ -1075,21 +1075,28 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       .map(([date, count]) => ({ date: date.slice(5), count }));
   }, [filtered]);
 
-  // ── Coverage Over Time (cumulative) ──────────────────────────────────────
+  // ── Coverage Over Time (cumulative, weekly) ───────────────────────────────
   const coverageOverTime = useMemo(() => {
-    const m: Record<string, number> = {};
+    // Group by ISO week (Monday-based)
+    const weekMap: Record<string, number> = {};
     records.forEach(r => {
       if (r.submission) {
-        const d = r.submission.slice(0, 10);
-        m[d] = (m[d] || 0) + 1;
+        const d = new Date(r.submission.slice(0, 10));
+        if (isNaN(d.getTime())) return;
+        // Get Monday of this week
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        const key = monday.toISOString().slice(0, 10);
+        weekMap[key] = (weekMap[key] || 0) + 1;
       }
     });
     let cumulative = 0;
-    return Object.entries(m).sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, count]) => {
+    return Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b))
+      .map(([weekStart, count]) => {
         cumulative += count;
         return {
-          date: date.slice(5),
+          week: weekStart.slice(5),   // MM-DD format
+          count,                       // surveys that week
           cumulative,
           pct: TICKER_TOTAL_PLANNED > 0 ? Math.round((cumulative / TICKER_TOTAL_PLANNED) * 100) : 0,
         };
@@ -2779,27 +2786,24 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       {coverageOverTime.length > 0 && (
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Coverage Over Time" sub={`Cumulative HHs surveyed vs. ${TICKER_TOTAL_PLANNED.toLocaleString()} planned — all filters cleared`} count={records.length} />
+            <SectionTitle title="Coverage Over Time" sub={`Weekly cumulative HHs surveyed vs. target of ${TICKER_TOTAL_PLANNED.toLocaleString()} — based on uploaded PDM survey data`} count={records.length} />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={coverageOverTime} margin={{ left: 0, right: 16, top: 5, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="covGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 9 }} />
+                <XAxis dataKey="week" tick={{ fontSize: 9 }} label={{ value: 'Week starting (MM-DD)', position: 'insideBottom', offset: -2, fontSize: 9, fill: '#94a3b8' }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
                 <Tooltip
                   contentStyle={{ fontSize: 11, borderRadius: 8 }}
-                  formatter={(value: any, name: string) => name === 'pct' ? [`${value}%`, 'Coverage %'] : [value.toLocaleString(), 'HHs Surveyed']}
+                  formatter={(value: any, name: string) =>
+                    name === 'pct' ? [`${value}%`, 'Coverage %'] :
+                    name === 'count' ? [value.toLocaleString(), 'This Week'] :
+                    [value.toLocaleString(), 'Cumulative HHs']}
                 />
                 <ReferenceLine yAxisId="left" y={TICKER_TOTAL_PLANNED} stroke="#1D3461" strokeDasharray="4 4" label={{ value: 'Target', position: 'insideTopRight', fontSize: 10, fill: '#1D3461' }} />
-                <Line yAxisId="left" type="monotone" dataKey="cumulative" name="cumulative" stroke="#22c55e" strokeWidth={2.5} dot={false} />
+                <Line yAxisId="left" type="monotone" dataKey="cumulative" name="cumulative" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 3 }} />
                 <Line yAxisId="right" type="monotone" dataKey="pct" name="pct" stroke="#1D3461" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
               </LineChart>
             </ResponsiveContainer>

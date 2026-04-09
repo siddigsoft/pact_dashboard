@@ -44,7 +44,7 @@ interface ProjectRow {
   archived: boolean | null;
 }
 interface BudgetRow { project_id: string; total_budget_cents: number; allocated_budget_cents: number; spent_budget_cents: number; remaining_budget_cents: number; }
-interface MilestoneRow { id: string; project_id: string; title: string; status: string; due_date: string | null; }
+interface MilestoneRow { id: string; project_id: string; title: string; status: string; due_date: string | null; updated_at: string | null; }
 interface FlowLogRow { project_id: string; advanced_at: string; }
 interface MmpRow { id: string; status: string; entries: number | null; processed_entries: number | null; hub: string | null; month: number | null; }
 interface SiteEntryRow { id: string; status: string; mmp_file_id: string; }
@@ -170,7 +170,7 @@ async function fetchAll() {
   ] = await Promise.all([
     supabase.rpc('get_projects_for_analytics'),
     supabase.from('project_budgets').select('project_id, total_budget_cents, allocated_budget_cents, spent_budget_cents, remaining_budget_cents'),
-    supabase.from('project_milestones').select('id, project_id, title, status, due_date').order('due_date', { ascending: true }),
+    supabase.from('project_milestones').select('id, project_id, title, status, due_date, updated_at').order('due_date', { ascending: true }),
     supabase.from('project_flow_log').select('project_id, advanced_at').order('advanced_at', { ascending: false }),
     supabase.from('mmp_files').select('id, status, entries, processed_entries, hub, month').order('created_at', { ascending: false }),
     supabase.from('mmp_site_entries').select('id, status, mmp_file_id'),
@@ -316,9 +316,11 @@ function MilestoneTimeline({
         .filter(m => m.project_id === p.id && m.due_date)
         .map(m => {
           const due = safeDate(m.due_date)!;
-          const isOverdue  = isBefore(due, today) && m.status !== 'completed';
           const isCompleted = m.status === 'completed';
-          return { ...m, due, isOverdue, isCompleted };
+          const isOverdue  = isBefore(due, today) && !isCompleted;
+          // actualDate: when a completed milestone was actually done (updated_at proxy)
+          const actualDate = isCompleted && m.updated_at ? safeDate(m.updated_at) : null;
+          return { ...m, due, isOverdue, isCompleted, actualDate };
         });
       return { project: p, start, end, milestones: pMilestones };
     }).filter(r => r.start || r.end);
@@ -391,21 +393,39 @@ function MilestoneTimeline({
                     }}
                     title={`${fmtDate(p.start_date)} → ${fmtDate(p.end_date)}`}
                   />
-                  {/* Milestone markers on the bar */}
+                  {/* Milestone markers on the bar: planned (diamond) + actual (dot) */}
                   {ms.map(m => {
-                    const mPct = toPct(m.due);
+                    const plannedPct = toPct(m.due);
                     const mColor = m.isCompleted ? '#94a3b8' : m.isOverdue ? '#ef4444' : differenceInDays(m.due, today) <= 7 ? '#f59e0b' : barColor;
+                    const actualPct = m.actualDate ? toPct(m.actualDate) : null;
+                    const isEarly  = actualPct != null && actualPct < plannedPct;
+                    const isLate   = actualPct != null && actualPct > plannedPct + 1;
                     return (
-                      <div
-                        key={m.id}
-                        className="absolute top-0 bottom-0 flex items-center z-10"
-                        style={{ left: `${mPct}%` }}
-                        title={`${m.title}: ${fmtDate(m.due_date)}`}
-                      >
+                      <div key={m.id}>
+                        {/* Planned due date — hollow diamond */}
                         <div
-                          className="w-2.5 h-2.5 rounded-sm rotate-45 border border-white/60"
-                          style={{ backgroundColor: mColor, marginLeft: '-5px' }}
-                        />
+                          className="absolute top-0 bottom-0 flex items-center z-10"
+                          style={{ left: `${plannedPct}%` }}
+                          title={`Planned: ${fmtDate(m.due_date)} — ${m.title}`}
+                        >
+                          <div
+                            className="w-2.5 h-2.5 rounded-sm rotate-45 border-2 border-white"
+                            style={{ backgroundColor: mColor, marginLeft: '-5px' }}
+                          />
+                        </div>
+                        {/* Actual completion date — solid green circle (only for completed) */}
+                        {actualPct != null && (
+                          <div
+                            className="absolute top-0 bottom-0 flex items-center z-10"
+                            style={{ left: `${actualPct}%` }}
+                            title={`Actual: ${fmtDate(m.updated_at)} — ${isLate ? 'late' : isEarly ? 'early' : 'on time'}`}
+                          >
+                            <div
+                              className="w-2 h-2 rounded-full border border-white"
+                              style={{ backgroundColor: isLate ? '#ef4444' : '#22c55e', marginLeft: '-4px' }}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -428,8 +448,16 @@ function MilestoneTimeline({
               </span>
             ))}
             <span className="flex items-center gap-1 text-[9px] text-muted-foreground">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm rotate-45 border border-[#ef4444] bg-[#ef4444]" />
-              overdue milestone
+              <span className="inline-block w-2.5 h-2.5 rounded-sm rotate-45 border-2 border-white bg-[#ef4444]" />
+              planned milestone
+            </span>
+            <span className="flex items-center gap-1 text-[9px] text-muted-foreground">
+              <span className="inline-block w-2 h-2 rounded-full bg-[#22c55e]" />
+              actual (completed)
+            </span>
+            <span className="flex items-center gap-1 text-[9px] text-muted-foreground">
+              <span className="inline-block w-2 h-2 rounded-full bg-[#ef4444]" />
+              actual (late)
             </span>
           </div>
         </div>

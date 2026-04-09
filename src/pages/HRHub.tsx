@@ -202,7 +202,7 @@ function LeaveTrendsChart() {
       const { data: rows } = await supabase
         .from('leave_requests')
         .select('leave_type, start_date, end_date, status')
-        .in('status', ['approved', 'pending'])
+        .eq('status', 'approved')
         .gte('start_date', since);
       if (!rows?.length) return { chartData: [], leaveTypes: [] };
 
@@ -287,7 +287,7 @@ function HRToolsPanel() {
           <CardHeader className="pb-2">
             <div>
               <h3 className="text-sm font-semibold">Leave Trends by Month</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Approved & pending leave requests grouped by type per month</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Leave days taken (approved) by type per month — last 6 months</p>
             </div>
           </CardHeader>
           <CardContent className="pb-4">
