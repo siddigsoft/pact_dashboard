@@ -9,6 +9,9 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { logMMPAudit } from '@/services/mmpAudit.service';
 import { checkAndSendCycleReminders } from '@/services/cycleReminderService';
+import { useCycleCloseReadiness } from '@/hooks/useCycleCloseReadiness';
+import { CloseReadinessChecklist } from '@/components/close/CloseReadinessChecklist';
+import { ReconciliationSummary } from '@/components/close/ReconciliationSummary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +26,7 @@ import {
   AlertTriangle, CheckCircle2, Clock, XCircle, MapPin,
   ArrowRight, FileText, BarChart3, Filter, Download,
   ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
-  Bell, TrendingUp, TrendingDown, Minus, Star, Shield,
+  Bell, TrendingUp, TrendingDown, Minus, Star, Shield, ShieldAlert,
   Activity, Target, Layers, SortAsc, SortDesc,
   BookOpen, RotateCcw, HelpCircle
 } from 'lucide-react';
@@ -191,6 +194,21 @@ const MMPCycleClose = () => {
   }, [uncoveredSites]);
   const [comparisonCycle1, setComparisonCycle1] = useState<string>('');
   const [comparisonCycle2, setComparisonCycle2] = useState<string>('');
+  const [checklistMmpId, setChecklistMmpId] = useState<string | null>(null);
+  const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
+  const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
+
+  // Reset reconciliation acknowledgment whenever the operator switches to a different cycle
+  useEffect(() => {
+    setReconciliationAcknowledged(false);
+  }, [checklistMmpId]);
+  const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
+    mmpId: string;
+    issues: string[];
+    action: 'finalize' | 'approve';
+  } | null>(null);
+  const [financeOverrideJustification, setFinanceOverrideJustification] = useState('');
+  const [pendingScopedClose, setPendingScopedClose] = useState<{ scope: CloseScope; scopeValue: string } | null>(null);
   const [qualityData, setQualityData] = useState<{ hub: string; avgScore: number; count: number }[]>([]);
   const [activeHubFilter, setActiveHubFilter] = useState<string>('all');
   const [activeSort, setActiveSort] = useState<'name' | 'coverage' | 'status'>('status');
@@ -200,6 +218,7 @@ const MMPCycleClose = () => {
   const [mmpScopeOptions, setMmpScopeOptions] = useState<Record<string, MmpScopeOptions>>({});
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
+  const isSuperAdmin = hasAnyRole(['super_admin', 'Super Admin']);
   const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
   const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
   const canManageCycle = isAdmin;
@@ -382,18 +401,25 @@ const MMPCycleClose = () => {
 
   const handleScopedClose = async (mmpId: string, scope: CloseScope, scopeValue: string) => {
     if (!canManageCycle) return;
+
+    if (scope === 'full') {
+      handleStartClosingCycle(mmpId);
+      return;
+    }
+
+    setPendingScopedClose({ scope, scopeValue });
+    setChecklistMmpId(mmpId);
+    return;
+  };
+
+  const executeScopedClose = async (mmpId: string, scope: CloseScope, scopeValue: string) => {
+    if (!canManageCycle) return;
     setClosingCycle(true);
     try {
       const mmp = mmpFiles?.find(m => m.id === mmpId);
       const mmpName = mmp?.name || 'MMP';
 
       let siteEntryIds: string[] = [];
-
-      if (scope === 'full') {
-        setClosingCycle(false);
-        handleStartClosingCycle(mmpId);
-        return;
-      }
 
       if (scope === 'hub') {
         const { data: entries } = await supabase
@@ -995,11 +1021,93 @@ const MMPCycleClose = () => {
     }
   };
 
+  const checkFinanceReadinessForClose = async (mmpId: string): Promise<{ ok: boolean; issues: string[] }> => {
+    let advancesRes, withdrawalsRes, costSubsRes;
+    try {
+      const mmpMeta = await supabase
+        .from('mmp_files')
+        .select('month, year')
+        .eq('id', mmpId)
+        .single();
+      const month = mmpMeta.data?.month ?? null;
+      const year = mmpMeta.data?.year ?? null;
+
+      let costSubsQuery = supabase
+        .from('operational_cost_submissions')
+        .select('id, tier1_status, tier2_status, expense_date')
+        .or('tier1_status.eq.pending,tier2_status.eq.pending');
+
+      if (year !== null && month !== null) {
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const lastDay = new Date(year, month, 0).getDate();
+        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        costSubsQuery = costSubsQuery.gte('expense_date', startDate).lte('expense_date', endDate);
+      }
+
+      [advancesRes, withdrawalsRes, costSubsRes] = await Promise.all([
+        supabase.from('down_payment_requests').select('id, status, metadata').eq('mmp_id', mmpId),
+        supabase.from('withdrawal_requests').select('id, status').eq('mmp_id', mmpId),
+        costSubsQuery,
+      ]);
+    } catch {
+      toast({
+        title: 'Finance Gate — Close Blocked',
+        description: 'Unable to verify finance readiness. Please retry or contact support.',
+        variant: 'destructive',
+      });
+      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'] };
+    }
+
+    // Only block on cost submissions error (required table).
+    // advances/withdrawals tables are optional — gracefully treat errors as empty
+    // to match server RPC behavior which also handles missing tables gracefully.
+    if (costSubsRes.error) {
+      toast({
+        title: 'Finance Gate — Close Blocked',
+        description: 'Unable to verify cost submission readiness. Please retry or contact support.',
+        variant: 'destructive',
+      });
+      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'] };
+    }
+
+    // advances: treat query error as empty (optional table, server RPC handles gracefully)
+    const advances = (!advancesRes.error && advancesRes.data || []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
+    const unreconciledAdvances = advances.filter(a => {
+      const isTerminal = a.status === 'approved' || a.status === 'paid';
+      const meta = a.metadata ?? {};
+      return isTerminal && meta['reconciled'] !== true && !meta['reconciled_at'];
+    }).length;
+
+    // withdrawals: treat query error as empty (optional table, server RPC handles gracefully)
+    const pendingWithdrawals = ((!withdrawalsRes.error && withdrawalsRes.data || []) as Array<{ id: string; status: string }>).filter(
+      w => !['approved', 'rejected', 'completed', 'paid'].includes(w.status ?? ''),
+    ).length;
+
+    const pendingCostSubs = (costSubsRes.data || []).length;
+
+    const issues: string[] = [];
+    if (unreconciledAdvances > 0) issues.push(`${unreconciledAdvances} unreconciled transport advance(s)`);
+    if (pendingWithdrawals > 0) issues.push(`${pendingWithdrawals} pending withdrawal request(s)`);
+    if (pendingCostSubs > 0) issues.push(`${pendingCostSubs} pending cost submission(s) (tier 1 or tier 2 pending)`);
+
+    return { ok: issues.length === 0, issues };
+  };
+
   const handleFinalizeCycleClose = async (mmpId: string) => {
     if (!canManageCycle) return;
     const unreasoned = uncoveredSites.filter(s => s.mmp_id === mmpId && !s.not_covered_reason);
     if (unreasoned.length > 0) {
       toast({ title: 'Cannot Close', description: `${unreasoned.length} sites still need a reason. All uncovered sites must have reasons before closing.`, variant: 'destructive' });
+      return;
+    }
+
+    const { ok: financeOk, issues: financeIssues } = await checkFinanceReadinessForClose(mmpId);
+    if (!financeOk) {
+      if (isSuperAdmin) {
+        setFinanceOverrideJustification('');
+        setFinanceOverrideDialog({ mmpId, issues: financeIssues, action: 'finalize' });
+        return;
+      }
       return;
     }
 
@@ -1037,7 +1145,19 @@ const MMPCycleClose = () => {
     }
   };
 
-  const handleApproveCycle = async (mmpId: string) => {
+  const handleApproveCycle = async (mmpId: string, skipFinanceCheck = false, overrideJustification?: string) => {
+    if (!skipFinanceCheck) {
+      const { ok: financeOk, issues: financeIssues } = await checkFinanceReadinessForClose(mmpId);
+      if (!financeOk) {
+        if (isSuperAdmin) {
+          setFinanceOverrideJustification('');
+          setFinanceOverrideDialog({ mmpId, issues: financeIssues, action: 'approve' });
+          return;
+        }
+        return;
+      }
+    }
+
     try {
       const mmpData = mmpFiles?.find(m => m.id === mmpId);
       const existingRecords: CycleCloseRecord[] = (mmpData as any)?.cycle_close_records || [];
@@ -1046,16 +1166,30 @@ const MMPCycleClose = () => {
         status: 'closed' as const,
       }));
 
-      const { error } = await supabase
-        .from('mmp_files')
-        .update({
-          cycle_status: 'closed',
-          cycle_closed_at: new Date().toISOString(),
-          cycle_closed_by: currentUser?.id,
-          cycle_approved_by: currentUser?.id,
-          cycle_close_records: updatedRecords,
-        } as any)
-        .eq('id', mmpId);
+      const now = new Date().toISOString();
+      const mmpSnap = mmpFiles?.find(m => m.id === mmpId);
+      const snapshotRecord = {
+        id: `snapshot-${now}`,
+        scope: 'full',
+        status: 'closed' as const,
+        closedAt: now,
+        closedBy: currentUser?.id,
+        closedByName: currentUser?.fullName,
+        hubOrRegion: mmpSnap?.hub || mmpSnap?.region || null,
+        month: mmpSnap?.month ?? null,
+        name: mmpSnap?.name ?? null,
+      };
+      const finalRecords = [
+        ...updatedRecords,
+        snapshotRecord,
+      ];
+
+      const { error } = await supabase.rpc('cycle_approve_close', {
+        p_mmp_id: mmpId,
+        p_close_records: JSON.parse(JSON.stringify(finalRecords)),
+        p_super_admin_override: skipFinanceCheck && !!overrideJustification,
+        p_override_justification: overrideJustification || null,
+      });
 
       if (error) throw error;
 
@@ -1114,6 +1248,99 @@ const MMPCycleClose = () => {
       await refreshMMPFiles();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to reject cycle', variant: 'destructive' });
+    }
+  };
+
+  const handleFinanceOverrideConfirm = async () => {
+    if (!financeOverrideDialog) return;
+    const { mmpId, action, issues } = financeOverrideDialog;
+    const justification = financeOverrideJustification.trim();
+    if (!justification) {
+      toast({ title: 'Justification Required', description: 'Provide a written justification before overriding.', variant: 'destructive' });
+      return;
+    }
+
+    const mmp = mmpFiles?.find(m => m.id === mmpId);
+    const auditId = await logMMPAudit({
+      mmpId,
+      mmpName: mmp?.name || 'MMP',
+      action: 'bypass',
+      performedBy: currentUser?.id || '',
+      performedByName: currentUser?.fullName,
+      metadata: {
+        overrideAction: action === 'finalize' ? 'finalize_close' : 'approve_close',
+        justification,
+        pendingIssues: issues,
+      },
+    });
+
+    if (!auditId) {
+      toast({ title: 'Override Blocked', description: 'Failed to record override justification. Action blocked.', variant: 'destructive' });
+      return;
+    }
+
+    setFinanceOverrideDialog(null);
+    setFinanceOverrideJustification('');
+
+    if (action === 'finalize') {
+      setFinalizingCycle(true);
+      try {
+        const { error } = await supabase
+          .from('mmp_files')
+          .update({ cycle_status: 'pending_approval' } as any)
+          .eq('id', mmpId);
+        if (error) throw error;
+        await logMMPAudit({
+          mmpId,
+          mmpName: mmp?.name || 'MMP',
+          action: 'status_change',
+          performedBy: currentUser?.id || '',
+          performedByName: currentUser?.fullName,
+          previousStatus: 'closing',
+          newStatus: 'pending_approval',
+          metadata: { cycleAction: 'submit_for_approval', superAdminOverride: true },
+        });
+        toast({ title: 'Submitted for Approval (Override)', description: 'Finance gate bypassed by Super Admin and recorded to audit log.' });
+        await refreshMMPFiles();
+        await fetchUncoveredSites();
+      } catch (err: any) {
+        toast({ title: 'Error', description: err.message || 'Failed to submit for approval', variant: 'destructive' });
+      } finally {
+        setFinalizingCycle(false);
+      }
+    } else {
+      await handleApproveCycle(mmpId, true, justification);
+    }
+  };
+
+  const handleCycleCloseOverride = async (mmpId: string, justification: string) => {
+    const auditId = await logMMPAudit({
+      mmpId,
+      mmpName: mmpFiles?.find(m => m.id === mmpId)?.name || 'MMP',
+      action: 'status_change',
+      performedBy: currentUser?.id || '',
+      performedByName: currentUser?.fullName,
+      metadata: {
+        cycleAction: 'superadmin_finance_gate_override',
+        justification,
+        overriddenAt: new Date().toISOString(),
+      },
+    });
+    if (!auditId) {
+      toast({
+        title: 'Override Blocked',
+        description: 'Could not record justification in the audit trail. Override aborted to preserve compliance.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    toast({ title: 'Override Recorded', description: 'Justification logged. Proceeding to close the cycle.' });
+    const pending = pendingScopedClose;
+    setPendingScopedClose(null);
+    if (pending) {
+      executeScopedClose(mmpId, pending.scope, pending.scopeValue);
+    } else {
+      handleStartClosingCycle(mmpId);
     }
   };
 
@@ -1826,6 +2053,79 @@ const MMPCycleClose = () => {
                 </CardContent>
               </Card>
 
+              {checklistMmpId && (
+                <div className="space-y-3" data-testid="section-cycle-close-checklist">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                      Pre-Close Checklist — {mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}
+                    </h3>
+                    <Button variant="ghost" size="sm" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-dismiss-checklist">
+                      Dismiss
+                    </Button>
+                  </div>
+                  <CloseReadinessChecklist
+                    title="Cycle Close Readiness"
+                    items={cycleReadiness.items}
+                    score={cycleReadiness.score}
+                    allPassed={cycleReadiness.allPassed}
+                    loading={cycleReadiness.loading}
+                    isSuperAdmin={isSuperAdmin}
+                    onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
+                    overrideLabel="Override & Start Closing"
+                  />
+                  <ReconciliationSummary
+                    mmpId={checklistMmpId ?? undefined}
+                    mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
+                  />
+                  {cycleReadiness.allPassed && !cycleReadiness.loading && (
+                    <div className="space-y-3 pt-1">
+                      <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack">
+                        <input
+                          type="checkbox"
+                          checked={reconciliationAcknowledged}
+                          onChange={e => setReconciliationAcknowledged(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
+                          data-testid="checkbox-reconciliation-ack"
+                        />
+                        <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">
+                          I have reviewed the reconciliation summary above and confirm that all financial obligations for this cycle are accounted for.
+                        </span>
+                      </label>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }}
+                          data-testid="button-cancel-close-gate"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          onClick={() => {
+                            const mmpId = checklistMmpId!;
+                            const pending = pendingScopedClose;
+                            setChecklistMmpId(null);
+                            setPendingScopedClose(null);
+                            setReconciliationAcknowledged(false);
+                            if (pending) {
+                              executeScopedClose(mmpId, pending.scope, pending.scopeValue);
+                            } else {
+                              handleStartClosingCycle(mmpId);
+                            }
+                          }}
+                          disabled={closingCycle || !reconciliationAcknowledged}
+                          data-testid="button-proceed-close-cycle"
+                        >
+                          {pendingScopedClose ? `Proceed to Close (${pendingScopedClose.scope})` : 'Proceed to Close Cycle'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid gap-4 md:grid-cols-2">
                 {filteredActiveMmps.map(mmp => {
                   const cycleStatus = (mmp as any).cycle_status || 'active';
@@ -1844,7 +2144,13 @@ const MMPCycleClose = () => {
                       finalizingCycle={finalizingCycle}
                       siteVisitCounts={siteVisitCounts[mmp.id]}
                       scopeOptions={mmpScopeOptions[mmp.id]}
-                      handleStartClosingCycle={handleStartClosingCycle}
+                      handleStartClosingCycle={(mmpId) => {
+                        if (cycleStatus === 'active' && canManageCycle) {
+                          setChecklistMmpId(mmpId);
+                        } else {
+                          handleStartClosingCycle(mmpId);
+                        }
+                      }}
                       handleScopedClose={handleScopedClose}
                       handleFinalizeCycleClose={handleFinalizeCycleClose}
                       handleApproveCycle={handleApproveCycle}
@@ -2215,6 +2521,57 @@ const MMPCycleClose = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {financeOverrideDialog && (
+        <AlertDialog open onOpenChange={open => { if (!open) setFinanceOverrideDialog(null); }}>
+          <AlertDialogContent data-testid="dialog-finance-override">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <ShieldAlert className="h-5 w-5" />
+                Super Admin Finance Gate Override
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p className="text-sm">
+                    The following finance obligations are still pending. As Super Admin you may override, but this action will be permanently logged to the audit trail.
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md p-3 border border-amber-500/20">
+                    {financeOverrideDialog.issues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-foreground" htmlFor="finance-override-justification">
+                      Override Justification <span className="text-red-500">*</span>
+                    </label>
+                    <Textarea
+                      id="finance-override-justification"
+                      value={financeOverrideJustification}
+                      onChange={e => setFinanceOverrideJustification(e.target.value)}
+                      placeholder="Provide a written justification for overriding the finance gate..."
+                      className="text-sm min-h-[80px]"
+                      data-testid="textarea-finance-override-justification"
+                    />
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setFinanceOverrideDialog(null)} data-testid="button-cancel-finance-override">
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleFinanceOverrideConfirm}
+                disabled={!financeOverrideJustification.trim()}
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                data-testid="button-confirm-finance-override"
+              >
+                Override & Proceed
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 };

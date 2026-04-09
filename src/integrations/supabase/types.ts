@@ -1195,6 +1195,30 @@ export type Database = {
           | { user_id: string; role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      close_project: {
+        Args: {
+          p_id: string
+          p_justification?: string | null
+          p_super_admin_override?: boolean
+        }
+        Returns: Json
+      }
+      reopen_project: {
+        Args: {
+          p_id: string
+          p_justification: string
+        }
+        Returns: undefined
+      }
+      cycle_approve_close: {
+        Args: {
+          p_mmp_id: string
+          p_close_records: Json
+          p_super_admin_override?: boolean
+          p_override_justification?: string | null
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       activity_status: "pending" | "inProgress" | "completed" | "cancelled"

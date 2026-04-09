@@ -60,6 +60,11 @@ import { OutlookCalendarPanel } from './OutlookCalendarPanel';
 import ProjectChangeLogPanel from './ProjectChangeLogPanel';
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import ProjectRisksPanel from './ProjectRisksPanel';
+import { useProjectCloseReadiness } from '@/hooks/useProjectCloseReadiness';
+import { CloseReadinessChecklist } from '@/components/close/CloseReadinessChecklist';
+import { ReconciliationSummary } from '@/components/close/ReconciliationSummary';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { logAuditEvent } from '@/utils/audit-logger';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -260,6 +265,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const projectBudget = getProjectBudget(project.id);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
   const [isArchiving, setIsArchiving] = useState(false);
+  const [showCloseChecklist, setShowCloseChecklist] = useState(false);
+  const projectReadiness = useProjectCloseReadiness(showCloseChecklist ? project.id : null);
+  const isSuperAdminUser = isSuperAdmin();
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list' | 'table'>('grid');
   const [partnerName, setPartnerName] = useState<string | null>(null);
   const [milestoneStats, setMilestoneStats] = useState<{ total: number; completed: number; overdue: number } | null>(null);
@@ -297,25 +305,85 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const isStalled = stalledDays !== null && stalledDays >= 14 && project.status === 'active';
 
   // Archive / unarchive handler
-  const handleArchiveToggle = useCallback(async () => {
+  const handleArchiveToggle = useCallback(async (overrideJustification?: string) => {
+    if (project.archived && !isSuperAdminUser) {
+      toast({ title: 'Access Denied', description: 'Only Super Admins can unarchive closed projects.', variant: 'destructive' });
+      return;
+    }
     setIsArchiving(true);
     try {
-      const { error } = await supabase
-        .rpc('set_project_archived', { p_id: project.id, p_archived: !project.archived });
-      if (error) throw error;
+      if (!project.archived) {
+        const isSaOverride = isSuperAdminUser && !!overrideJustification;
+        const { error } = await supabase.rpc('close_project', {
+          p_id: project.id,
+          p_justification: overrideJustification || null,
+          p_super_admin_override: isSaOverride,
+        });
+        if (error) throw error;
+        await logAuditEvent({
+          module: 'projects',
+          action: 'archive',
+          entityType: 'project',
+          entityId: project.id,
+          entityName: project.name,
+          description: `Project "${project.name}" closed. Server-enforced immutable close record written.${isSaOverride ? ' (Super Admin finance gate override)' : ''}`,
+          severity: 'medium',
+        });
+        toast({ title: 'Project Closed', description: `"${project.name}" has been closed and archived.` });
+      } else {
+        const { error } = await supabase.rpc('reopen_project', {
+          p_id: project.id,
+          p_justification: `Super Admin reopen via ProjectDetail at ${new Date().toISOString()}`,
+        });
+        if (error) throw error;
+        await logAuditEvent({
+          module: 'projects',
+          action: 'restore',
+          entityType: 'project',
+          entityId: project.id,
+          entityName: project.name,
+          description: `Super Admin reopened project "${project.name}". Server-side role check enforced.`,
+          severity: 'high',
+        });
+        toast({ title: 'Project Reopened', description: `"${project.name}" has been restored.` });
+      }
+
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      toast({
-        title: project.archived ? 'Project unarchived' : 'Project archived',
-        description: project.archived
-          ? `"${project.name}" has been restored.`
-          : `"${project.name}" has been archived.`,
-      });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to update archive status.', variant: 'destructive' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update archive status.';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
     } finally {
       setIsArchiving(false);
     }
-  }, [project.id, project.archived, project.name, queryClient, toast]);
+  }, [project.id, project.archived, project.name, queryClient, toast, isSuperAdminUser]);
+
+  const handleProjectCloseOverride = useCallback(async (justification: string) => {
+    const auditId = await logAuditEvent({
+      module: 'projects',
+      action: 'bypass',
+      entityType: 'project',
+      entityId: project.id,
+      entityName: project.name,
+      description: `Super Admin override of finance gate for project close: ${justification}`,
+      severity: 'critical',
+      metadata: {
+        justification,
+        overriddenAt: new Date().toISOString(),
+        overriddenByName: currentUser?.fullName,
+      },
+    });
+    if (!auditId) {
+      toast({
+        title: 'Override Blocked',
+        description: 'Could not record justification in the audit trail. Override aborted to preserve compliance.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    toast({ title: 'Override Recorded', description: 'Justification logged to audit trail. Proceeding to close project.' });
+    setShowCloseChecklist(false);
+    handleArchiveToggle(justification);
+  }, [project.id, project.name, currentUser, toast, handleArchiveToggle]);
 
   // PDF export
   const handleExportPdf = useCallback(() => {
@@ -725,8 +793,21 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 Export PDF
               </Button>
 
-              {/* Archive / Unarchive */}
-              {canArchive && (
+              {/* Close Project (with readiness gate) */}
+              {canArchive && !project.archived && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCloseChecklist(true)}
+                  data-testid="button-close-project"
+                >
+                  <Archive className="h-4 w-4 mr-1.5" />
+                  Close Project
+                </Button>
+              )}
+
+              {/* Unarchive — Super Admin only (reopen restriction) */}
+              {isSuperAdminUser && project.archived && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -736,12 +817,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 >
                   {isArchiving ? (
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : project.archived ? (
-                    <ArchiveRestore className="h-4 w-4 mr-1.5" />
                   ) : (
-                    <Archive className="h-4 w-4 mr-1.5" />
+                    <ArchiveRestore className="h-4 w-4 mr-1.5" />
                   )}
-                  {project.archived ? 'Unarchive' : 'Archive'}
+                  Unarchive
                 </Button>
               )}
 
@@ -1423,6 +1502,55 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <ProjectChangeLogPanel projectId={project.id} />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={showCloseChecklist} onOpenChange={setShowCloseChecklist}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto" data-testid="dialog-project-close-checklist">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Archive className="h-4 w-4" />
+              Close Project — {project.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <CloseReadinessChecklist
+              title="Project Close Readiness"
+              items={projectReadiness.items}
+              score={projectReadiness.score}
+              allPassed={projectReadiness.allPassed}
+              loading={projectReadiness.loading}
+              isSuperAdmin={isSuperAdminUser}
+              onOverride={handleProjectCloseOverride}
+              overrideLabel="Override & Close Project"
+            />
+            <ReconciliationSummary projectId={project.id} className="mt-2" />
+            {projectReadiness.allPassed && !projectReadiness.loading && (
+              <div className="flex gap-2 justify-end pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCloseChecklist(false)}
+                  data-testid="button-cancel-project-close"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => {
+                    setShowCloseChecklist(false);
+                    handleArchiveToggle();
+                  }}
+                  disabled={isArchiving}
+                  data-testid="button-confirm-project-close"
+                >
+                  {isArchiving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+                  Confirm Close Project
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
