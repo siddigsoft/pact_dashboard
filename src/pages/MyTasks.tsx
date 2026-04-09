@@ -1429,11 +1429,13 @@ interface NewTaskDialogProps {
   onCreate: (task: CreatePersonalTask) => Promise<void>;
   isCreating: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   currentUserId: string;
   currentUserName: string;
+  currentUserDepartmentId: string | null;
 }
 
-function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUserId, currentUserName }: NewTaskDialogProps) {
+function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAdmin, currentUserId, currentUserName, currentUserDepartmentId }: NewTaskDialogProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<PersonalTaskPriority>('medium');
@@ -1447,22 +1449,32 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
   const [rewardCurrency, setRewardCurrency] = useState('USD');
 
   const { data: users = [], isLoading: loadingUsers } = useQuery({
-    queryKey: ['profiles-for-task-assign'],
+    queryKey: ['profiles-for-task-assign', isSuperAdmin, currentUserDepartmentId],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role, status').order('full_name');
-      return (data ?? []) as { id: string; full_name: string; role: string; status: string }[];
+      let q = supabase.from('profiles').select('id, full_name, role, status, department_id').order('full_name');
+      if (!isSuperAdmin && currentUserDepartmentId) {
+        q = q.eq('department_id', currentUserDepartmentId);
+      } else if (!isSuperAdmin && !currentUserDepartmentId) {
+        return [];
+      }
+      const { data } = await q;
+      return (data ?? []) as { id: string; full_name: string; role: string; status: string; department_id: string | null }[];
     },
-    enabled: isAdmin && open,
+    enabled: open,
     staleTime: 5 * 60_000,
   });
 
   const { data: departments = [] } = useQuery({
-    queryKey: ['departments-list'],
+    queryKey: ['departments-list-task', isSuperAdmin, currentUserDepartmentId],
     queryFn: async () => {
+      if (!isSuperAdmin && currentUserDepartmentId) {
+        const { data } = await supabase.from('departments').select('id, name').eq('id', currentUserDepartmentId);
+        return (data ?? []) as { id: string; name: string }[];
+      }
       const { data } = await supabase.from('departments').select('id, name').order('name');
       return (data ?? []) as { id: string; name: string }[];
     },
-    enabled: isAdmin && open,
+    enabled: open && isSuperAdmin,
     staleTime: 60_000,
   });
 
@@ -1607,7 +1619,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
             </Label>
             <div className="grid grid-cols-3 gap-2">
               <button
-                onClick={() => { setAssignMode('self'); setSelectedUser(null); }}
+                onClick={() => { setAssignMode('self'); setSelectedUsers([]); }}
                 data-testid="button-assign-myself"
                 className={cn(
                   'flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-all',
@@ -1620,30 +1632,29 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
                 <span className="truncate">Myself</span>
               </button>
               <button
-                onClick={() => isAdmin && setAssignMode('other')}
+                onClick={() => setAssignMode('other')}
                 data-testid="button-assign-other"
-                disabled={!isAdmin}
                 className={cn(
                   'flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-all',
                   assignMode === 'other'
                     ? 'bg-[#1D3461] text-white border-[#1D3461]'
-                    : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40',
-                  !isAdmin && 'opacity-40 cursor-not-allowed'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40'
                 )}
               >
                 <Users className="h-3.5 w-3.5 flex-shrink-0" />
                 <span className="truncate">Someone else</span>
               </button>
               <button
-                onClick={() => isAdmin && setAssignMode('dept')}
+                onClick={() => isSuperAdmin && setAssignMode('dept')}
                 data-testid="button-assign-dept"
-                disabled={!isAdmin}
+                disabled={!isSuperAdmin}
+                title={!isSuperAdmin ? 'Only Super Admin can assign to entire departments' : undefined}
                 className={cn(
                   'flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-all',
                   assignMode === 'dept'
                     ? 'bg-[#1D3461] text-white border-[#1D3461]'
                     : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40',
-                  !isAdmin && 'opacity-40 cursor-not-allowed'
+                  !isSuperAdmin && 'opacity-40 cursor-not-allowed'
                 )}
               >
                 <Building2 className="h-3.5 w-3.5 flex-shrink-0" />
@@ -1802,12 +1813,12 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, currentUs
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={!title.trim() || isCreating || (assignMode === 'other' && !selectedUser) || (assignMode === 'dept' && !selectedDeptId)}
+            disabled={!title.trim() || isCreating || (assignMode === 'other' && selectedUsers.length === 0) || (assignMode === 'dept' && !selectedDeptId)}
             className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
             data-testid="button-create-task-submit"
           >
             {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-            {assignMode === 'other' && selectedUser ? `Assign to ${selectedUser.name.split(' ')[0]}`
+            {assignMode === 'other' && selectedUsers[0] ? `Assign to ${selectedUsers[0].name.split(' ')[0]}`
               : assignMode === 'dept' && selectedDeptId ? 'Assign to Dept'
               : 'Create Task'}
           </Button>
@@ -3320,6 +3331,7 @@ export default function MyTasks() {
   const navigate = useNavigate();
   const userId = currentUser?.id;
   const isAdmin = hasAnyRole(['super_admin', 'admin']);
+  const isSuperAdmin = hasAnyRole(['super_admin']);
 
   const { tasks: allPersonalTasks, isLoading: loadingPersonal, createTask, updateTask, deleteTask, isCreating, isUpdating } = usePersonalTasks(userId);
   // Exclude subtasks (parent_task_id set) from the main task list — they are shown inside the parent
@@ -4283,8 +4295,10 @@ export default function MyTasks() {
         onCreate={handleNewTaskCreate}
         isCreating={isCreating}
         isAdmin={isAdmin}
+        isSuperAdmin={isSuperAdmin}
         currentUserId={userId ?? ''}
         currentUserName={currentUser?.fullName ?? 'Me'}
+        currentUserDepartmentId={currentUser?.departmentId ?? null}
       />
 
       {/* ── Proof Submission Dialog ── */}
