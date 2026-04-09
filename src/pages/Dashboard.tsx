@@ -17,6 +17,7 @@ const PlanningZone = lazy(() => import('@/components/dashboard/zones/PlanningZon
 const FOMZone = lazy(() => import('@/components/dashboard/zones/FOMZone').then(m => ({ default: m.FOMZone })));
 const DataCollectorZone = lazy(() => import('@/components/dashboard/zones/DataCollectorZone').then(m => ({ default: m.DataCollectorZone })));
 const ProjectManagerZone = lazy(() => import('@/components/dashboard/zones/ProjectManagerZone').then(m => ({ default: m.ProjectManagerZone })));
+const EmployeeZone = lazy(() => import('@/components/dashboard/zones/EmployeeZone').then(m => ({ default: m.EmployeeZone })));
 
 const ZoneLoadingFallback = () => (
   <div className="flex items-center justify-center min-h-[400px]">
@@ -85,6 +86,10 @@ const Dashboard = () => {
       || roles?.some(r => normalizeRole(r).includes('datacollector'));
     if (isDataCollector) return 'data-collector';
 
+    const isEmployee = (!!normalizedCurrentRole && normalizedCurrentRole.includes('employee'))
+      || roles?.some(r => normalizeRole(r).includes('employee'));
+    if (isEmployee) return 'employee';
+
     return 'operations';
   }, [roles, dashboardPreferences?.defaultZone, currentUser?.role]);
 
@@ -112,6 +117,8 @@ const Dashboard = () => {
         return <PlanningZone />;
       case 'project-manager':
         return <ProjectManagerZone />;
+      case 'employee':
+        return <EmployeeZone />;
       default:
         return <OperationsZone />;
     }

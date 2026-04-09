@@ -19,7 +19,8 @@ export type RoleCode =
   | 'coordinator'
   | 'dataTeam'
   | 'dataCollector'
-  | 'reviewer';
+  | 'reviewer'
+  | 'employee';
 
 // UI display labels
 export type RoleLabel =
@@ -35,7 +36,8 @@ export type RoleLabel =
   | 'Coordinator'
   | 'Data Team'
   | 'Data Collector'
-  | 'Reviewer';
+  | 'Reviewer'
+  | 'Employee';
 
 // Role configuration type
 type RoleConfig = {
@@ -112,6 +114,11 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     code: 'reviewer',
     label: 'Reviewer',
     legacy: ['Reviewer', 'reviewer']
+  },
+  employee: {
+    code: 'employee',
+    label: 'Employee',
+    legacy: ['Employee', 'employee']
   }
 };
 

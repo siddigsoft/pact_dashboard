@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { OnlineUsersPanel } from './OnlineUsersPanel';
 import { EmergencySOS } from '@/components/mobile/EmergencySOS';
 
-export type DashboardZone = 'operations' | 'team' | 'planning' | 'fom' | 'data-collector' | 'project-manager';
+export type DashboardZone = 'operations' | 'team' | 'planning' | 'fom' | 'data-collector' | 'project-manager' | 'employee';
 
 interface DashboardZoneLayoutProps {
   activeZone: DashboardZone;

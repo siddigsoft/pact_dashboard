@@ -275,6 +275,7 @@
     const isDataTeam = hasRole('dataTeam');
     const isProjectManager = hasRole('projectManager');
     const isCountryDirector = hasRole('countryDirector');
+    const isEmployee = hasRole('employee');
 
     const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
     const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -283,7 +284,7 @@
 
     // ── 1. My Workspace ───────────────────────────────────────────────────────
     const workspaceItems: MenuGroup['items'] = [];
-    if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || perms.dashboard)) {
+    if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || isEmployee || perms.dashboard)) {
       workspaceItems.push({ id: 'dashboard', title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
     }
     if (!isHidden('/my-tasks')) {
