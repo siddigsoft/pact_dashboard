@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Shield, UserPlus, UserX, CheckCircle2, XCircle, Clock, Loader2,
   Users, Key, RotateCcw, Search, ChevronDown, Globe, ShieldCheck,
-  Lock, AlertTriangle,
+  Lock, AlertTriangle, ChevronRight, X, Plus,
 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -106,6 +106,9 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'none' | 'revoked' | 'pending'>('all');
   const [clearSearch, setClearSearch] = useState('');
   const [savingClearance, setSavingClearance] = useState<string | null>(null);
+  const [addingToLevel, setAddingToLevel] = useState<ClearanceLevel | null>(null);
+  const [addLevelSearch, setAddLevelSearch] = useState('');
+  const [expandedLevels, setExpandedLevels] = useState<Set<ClearanceLevel>>(new Set(['public', 'internal', 'confidential', 'restricted', 'top_secret']));
 
   // All profiles for grant form
   const { data: profiles = [] } = useQuery<Profile[]>({
@@ -773,110 +776,214 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
 
           {/* ── Security Clearances ────────────────────────────────────── */}
           <TabsContent value="clearances" className="flex-1 overflow-hidden flex flex-col m-0 mt-3">
-            {/* Level summary cards */}
-            <div className="grid grid-cols-5 gap-1.5 mb-3 shrink-0">
-              {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([level, cfg]) => {
-                const Icon = cfg.icon;
-                return (
-                  <div key={level} className={cn('rounded-lg border p-2 text-center', cfg.bg, cfg.border)}>
-                    <Icon className={cn('h-3.5 w-3.5 mx-auto mb-1', cfg.text)} />
-                    <p className={cn('text-[10px] font-bold', cfg.text)}>{cfg.label}</p>
-                    <p className="text-xs font-semibold text-foreground">{clearanceCountByLevel[level]}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Search */}
-            <div className="relative mb-3 shrink-0">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input value={clearSearch} onChange={e => setClearSearch(e.target.value)} placeholder="Search by name or role…" className="pl-8 h-8 text-xs" />
-            </div>
-
             {/* Explanation */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/30 rounded-lg px-3 py-2 mb-3 shrink-0">
               <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
-                <strong>How clearances work:</strong> Each user has a max clearance level. They can only see files at or below that level.
-                Users without an explicit record default to <strong>Internal</strong> clearance.
-                Super Admins always see all files.
+                Each user's clearance determines which files they can see. Users not listed default to <strong>Internal</strong>. Click <strong>+ Add</strong> on any level to assign users.
               </p>
             </div>
 
-            {/* User list */}
-            <div className="flex-1 overflow-y-auto space-y-1">
-              {clearanceUsers.length === 0 ? (
-                <div className="py-10 text-center">
-                  <Shield className="h-8 w-8 text-muted-foreground mx-auto opacity-30 mb-2" />
-                  <p className="text-sm text-muted-foreground">No users found</p>
-                </div>
-              ) : clearanceUsers.map(u => {
-                const cfg = SEC_CLEARANCES[u.clearance];
+            {/* Global search */}
+            <div className="relative mb-3 shrink-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input value={clearSearch} onChange={e => setClearSearch(e.target.value)} placeholder="Filter users across all levels…" className="pl-8 h-8 text-xs" />
+            </div>
+
+            {/* Grouped level sections */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
+              {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([level, cfg]) => {
                 const Icon = cfg.icon;
-                const isSaving = savingClearance === u.id;
+                const isExpanded = expandedLevels.has(level);
+                const usersInLevel = clearanceUsers.filter(u => u.clearance === level);
+                const isAddingHere = addingToLevel === level;
+
+                // Users not already at this level (for the add picker)
+                const addableUsers = profiles
+                  .filter(p => p.role !== 'super_admin')
+                  .filter(p => {
+                    const cur = clearanceMap[p.id]?.clearance_level ?? 'internal';
+                    return cur !== level;
+                  })
+                  .filter(p => {
+                    if (!addLevelSearch.trim()) return true;
+                    const q = addLevelSearch.toLowerCase();
+                    return (p.full_name ?? '').toLowerCase().includes(q) || (p.role ?? '').toLowerCase().includes(q);
+                  });
+
                 return (
-                  <div key={u.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:bg-muted/20 transition-colors group">
-                    {/* Avatar */}
-                    <div className="w-9 h-9 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[11px] font-bold shrink-0 text-[#0F2041]">
-                      {initials(u.full_name)}
+                  <div key={level} className={cn('rounded-xl border overflow-hidden transition-all', cfg.border, isExpanded ? '' : '')}>
+                    {/* Level header */}
+                    <div
+                      className={cn('flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none', cfg.bg)}
+                      onClick={() => {
+                        setExpandedLevels(prev => {
+                          const next = new Set(prev);
+                          if (next.has(level)) next.delete(level); else next.add(level);
+                          return next;
+                        });
+                        if (addingToLevel === level) { setAddingToLevel(null); setAddLevelSearch(''); }
+                      }}
+                    >
+                      <Icon className={cn('h-3.5 w-3.5 shrink-0', cfg.text)} />
+                      <div className="flex-1 min-w-0">
+                        <span className={cn('text-sm font-bold', cfg.text)}>{cfg.label}</span>
+                        <span className="text-[11px] text-muted-foreground ml-2">{cfg.desc}</span>
+                      </div>
+                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', cfg.bg, cfg.text, cfg.border)}>
+                        {usersInLevel.length} {usersInLevel.length === 1 ? 'user' : 'users'}
+                      </span>
+                      {/* Add button */}
+                      <button
+                        className={cn(
+                          'flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all',
+                          'bg-white/80 hover:bg-white border-current/30 dark:bg-slate-800/80',
+                          cfg.text
+                        )}
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (addingToLevel === level) { setAddingToLevel(null); setAddLevelSearch(''); }
+                          else { setAddingToLevel(level); setAddLevelSearch(''); setExpandedLevels(prev => new Set([...prev, level])); }
+                        }}
+                        data-testid={`btn-add-to-level-${level}`}
+                      >
+                        <Plus className="h-3 w-3" />Add
+                      </button>
+                      <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 transition-transform', cfg.text, isExpanded && 'rotate-90')} />
                     </div>
 
-                    {/* Name + role */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{u.full_name ?? 'Unknown'}</p>
-                      <p className="text-[11px] text-muted-foreground capitalize">{(u.role ?? '').replace(/_/g, ' ')}</p>
-                    </div>
+                    {/* Expanded body */}
+                    {isExpanded && (
+                      <div className="bg-card">
+                        {/* Add user picker */}
+                        {isAddingHere && (
+                          <div className="border-b px-3 py-2.5 bg-muted/30 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] font-semibold text-muted-foreground">Add user to {cfg.label} clearance</p>
+                              <button onClick={() => { setAddingToLevel(null); setAddLevelSearch(''); }} className="text-muted-foreground hover:text-foreground">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="relative">
+                              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                              <Input
+                                value={addLevelSearch}
+                                onChange={e => setAddLevelSearch(e.target.value)}
+                                placeholder="Search staff…"
+                                className="pl-7 h-7 text-xs"
+                                autoFocus
+                                data-testid={`input-add-to-level-${level}`}
+                              />
+                            </div>
+                            <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border bg-background p-1">
+                              {addableUsers.length === 0 ? (
+                                <p className="text-[11px] text-muted-foreground text-center py-3">
+                                  {addLevelSearch ? 'No matches' : 'All users are already at this level'}
+                                </p>
+                              ) : addableUsers.map(p => {
+                                const curLevel = clearanceMap[p.id]?.clearance_level ?? 'internal';
+                                const curCfg = SEC_CLEARANCES[curLevel as ClearanceLevel];
+                                const isSaving = savingClearance === p.id;
+                                return (
+                                  <button
+                                    key={p.id}
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/60 transition-colors text-left"
+                                    onClick={() => {
+                                      handleSetClearance(p.id, level);
+                                      setAddLevelSearch('');
+                                    }}
+                                    disabled={isSaving}
+                                    data-testid={`btn-assign-user-${p.id}-to-${level}`}
+                                  >
+                                    <div className="w-6 h-6 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[9px] font-bold text-[#0F2041] shrink-0">
+                                      {initials(p.full_name)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-semibold truncate">{p.full_name ?? 'Unknown'}</p>
+                                      <p className="text-[10px] text-muted-foreground capitalize">{(p.role ?? '').replace(/_/g, ' ')}</p>
+                                    </div>
+                                    <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full border font-medium shrink-0', curCfg.bg, curCfg.text, curCfg.border)}>
+                                      {curLevel === curLevel && !clearanceMap[p.id] ? 'default' : curCfg.label}
+                                    </span>
+                                    {isSaving
+                                      ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                                      : <Plus className={cn('h-3 w-3 shrink-0', cfg.text)} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
 
-                    {/* Current clearance badge */}
-                    <span className={cn('flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0', cfg.bg, cfg.text, cfg.border)}>
-                      <Icon className="h-2.5 w-2.5" />
-                      {cfg.label}
-                      {!u.hasExplicit && <span className="opacity-60 ml-0.5">(default)</span>}
-                    </span>
+                        {/* Users in this level */}
+                        {usersInLevel.length === 0 ? (
+                          <div className="py-5 text-center">
+                            <p className="text-xs text-muted-foreground">No users assigned to this level</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y">
+                            {usersInLevel
+                              .filter(u => clearSearch.trim() === '' ||
+                                (u.full_name ?? '').toLowerCase().includes(clearSearch.toLowerCase()) ||
+                                (u.role ?? '').toLowerCase().includes(clearSearch.toLowerCase()))
+                              .map(u => {
+                                const isSaving = savingClearance === u.id;
+                                return (
+                                  <div key={u.id} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/20 transition-colors group">
+                                    {/* Avatar */}
+                                    <div className="w-8 h-8 rounded-full bg-[#0F2041]/10 flex items-center justify-center text-[10px] font-bold shrink-0 text-[#0F2041]">
+                                      {initials(u.full_name)}
+                                    </div>
 
-                    {/* Change clearance dropdown */}
-                    {isSaving ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
-                    ) : (
-                      <Select value={u.clearance} onValueChange={v => handleSetClearance(u.id, v as ClearanceLevel)}>
-                        <SelectTrigger className="h-7 w-[120px] text-[10px] shrink-0">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([level, lcfg]) => {
-                            const LIcon = lcfg.icon;
-                            return (
-                              <SelectItem key={level} value={level} className="text-xs">
-                                <span className="flex items-center gap-1.5">
-                                  <LIcon className={cn('h-3 w-3', lcfg.text)} />
-                                  {lcfg.label}
-                                </span>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
+                                    {/* Name + role */}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-semibold truncate">{u.full_name ?? 'Unknown'}</p>
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-[10px] text-muted-foreground capitalize">{(u.role ?? '').replace(/_/g, ' ')}</p>
+                                        {!u.hasExplicit && (
+                                          <span className="text-[9px] text-muted-foreground bg-muted/50 px-1.5 rounded-full">default</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Move to another level */}
+                                    {isSaving ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                                    ) : (
+                                      <Select
+                                        value={u.clearance}
+                                        onValueChange={v => handleSetClearance(u.id, v as ClearanceLevel)}
+                                      >
+                                        <SelectTrigger
+                                          className="h-6 w-[100px] text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          data-testid={`select-clearance-${u.id}`}
+                                        >
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([lvl, lcfg]) => {
+                                            const LIcon = lcfg.icon;
+                                            return (
+                                              <SelectItem key={lvl} value={lvl} className="text-xs">
+                                                <span className="flex items-center gap-1.5">
+                                                  <LIcon className={cn('h-3 w-3', lcfg.text)} />
+                                                  {lcfg.label}
+                                                </span>
+                                              </SelectItem>
+                                            );
+                                          })}
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
               })}
-            </div>
-
-            {/* Legend footer */}
-            <div className="mt-3 pt-3 border-t shrink-0 space-y-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Clearance Hierarchy (lowest → highest)</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                {(Object.entries(SEC_CLEARANCES) as [ClearanceLevel, any][]).map(([level, cfg], idx, arr) => {
-                  const Icon = cfg.icon;
-                  return (
-                    <div key={level} className="flex items-center gap-1">
-                      <span className={cn('flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium', cfg.bg, cfg.text, cfg.border)}>
-                        <Icon className="h-2.5 w-2.5" />{cfg.label}
-                      </span>
-                      {idx < arr.length - 1 && <span className="text-muted-foreground text-[10px]">→</span>}
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           </TabsContent>
         </Tabs>
