@@ -2,7 +2,7 @@
  * PayrollAdmin — Admin payroll management
  * 3 sub-tabs: Employee Salaries · Run Payroll · Payslips & History
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
@@ -17,10 +17,12 @@ import {
   BarChart3, Building2, FileSpreadsheet, Send, Plus, X, FileText,
   History, Clock, ShieldCheck, Target, Wallet, AlertTriangle,
   CheckCircle, DollarSign, Info, PlusCircle as PlusCircleIcon,
-  GitBranch, ChevronDown,
+  GitBranch, ChevronDown, CalendarClock, Pause, Play, RefreshCw,
+  Timer, Zap, Calendar,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,6 +43,7 @@ interface SalaryConfig {
   allowances: LineItem[]; deductions: LineItem[];
   effective_date: string; notes: string | null;
   salary_history: SalaryHistoryEntry[];
+  hourly_rate: number | null;
 }
 interface EmployeeRow {
   id: string; full_name: string | null; role: string | null;
@@ -226,6 +229,12 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem) {
 // ── Root ─────────────────────────────────────────────────────────────────────
 export default function PayrollAdmin() {
   const { currentUser } = useUser();
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+
+  // Schedule tab is restricted to FinancialAdmin and above (task spec: "Payroll schedule config restricted to FinancialAdmin and above")
+  const canManageSchedule = isSuperAdmin() || hasAnyRole([
+    'super_admin', 'SuperAdmin', 'superAdmin', 'financialAdmin', 'FinancialAdmin', 'finance', 'Finance',
+  ]);
 
   const PA_CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
 
@@ -311,6 +320,11 @@ export default function PayrollAdmin() {
             <TabsTrigger value="advances" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
               <Wallet className="h-3.5 w-3.5" />Advances
             </TabsTrigger>
+            {canManageSchedule && (
+              <TabsTrigger value="schedule" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
+                <CalendarClock className="h-3.5 w-3.5" />Schedule
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="salaries" className="mt-0">
@@ -327,6 +341,12 @@ export default function PayrollAdmin() {
           </TabsContent>
           <TabsContent value="advances" className="mt-0">
             <AdvancesTab employees={employees} currentUserId={currentUser?.id ?? ''} />
+          </TabsContent>
+          <TabsContent value="schedule" className="mt-0">
+            {canManageSchedule
+              ? <PayrollScheduleTab currentUserId={currentUser?.id ?? ''} runs={runs} employees={employees} />
+              : <div className="py-12 text-center text-sm text-muted-foreground">You do not have permission to manage the payroll schedule.</div>
+            }
           </TabsContent>
         </Tabs>
       </div>
@@ -542,6 +562,7 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
   const [deductions, setDeductions]   = useState<LineItem[]>(existing?.deductions ?? []);
   const [effectiveDate, setEffDate]   = useState(existing?.effective_date ?? format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes]             = useState(existing?.notes ?? '');
+  const [hourlyRate, setHourlyRate]   = useState(String(existing?.hourly_rate ?? ''));
   const [saving, setSaving]           = useState(false);
 
   const base = parseFloat(baseSalary) || 0;
@@ -591,10 +612,12 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
     const prevHistory: SalaryHistoryEntry[] = Array.isArray(existing?.salary_history) ? existing!.salary_history : [];
     const newHistory = historyEntry ? [historyEntry, ...prevHistory] : [];
 
+    const hr = parseFloat(hourlyRate) || null;
     const payload = {
       user_id: emp.id, base_salary: base, currency, allowances, deductions,
       notes: notes || null, effective_date: effectiveDate, updated_at: now,
       salary_history: newHistory,
+      hourly_rate: hr,
     };
     const { error } = existing
       ? await supabase.from('employee_salary_config').update(payload).eq('id', existing.id)
@@ -653,6 +676,17 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
             <div className="col-span-2">
               <SectionLabel icon={<CalendarRange className="h-3.5 w-3.5 text-violet-500" />} label="Effective Date" />
               <Input type="date" value={effectiveDate} onChange={e => setEffDate(e.target.value)} className="text-sm h-10 mt-1.5" />
+            </div>
+          </div>
+
+          {/* Hourly Rate (for hourly-rate employees) */}
+          <div className="grid grid-cols-3 gap-3 items-end">
+            <div>
+              <SectionLabel icon={<Timer className="h-3.5 w-3.5 text-amber-500" />} label="Hourly Rate (optional)" />
+              <Input type="number" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} placeholder="e.g. 50" className="text-sm h-10 mt-1.5" />
+            </div>
+            <div className="col-span-2 text-xs text-muted-foreground pb-2.5">
+              Set an hourly rate if this employee is paid per hour. Approved timesheet hours will be multiplied by this rate and included automatically in payroll runs.
             </div>
           </div>
 
@@ -2711,11 +2745,12 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
     if (!configured.length) { toast({ title: 'No employees have salary configured.', variant: 'destructive' }); return; }
     setComputing(true);
 
+    const startStr = format(periodStart, 'yyyy-MM-dd');
+    const endStr   = format(periodEnd,   'yyyy-MM-dd');
+
     // Fetch task rewards if toggle is on
     let rewardsByUser: Record<string, number> = {};
     if (includeTaskRewards) {
-      const startStr = format(periodStart, 'yyyy-MM-dd');
-      const endStr   = format(periodEnd,   'yyyy-MM-dd');
       const { data: tasks } = await supabase
         .from('personal_tasks')
         .select('assigned_to, completion_reward')
@@ -2724,25 +2759,49 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
         .lte('updated_at', endStr + 'T23:59:59')
         .not('completion_reward', 'is', null)
         .gt('completion_reward', 0);
-      (tasks ?? []).forEach((t: any) => {
+      (tasks ?? []).forEach((t: { assigned_to: string; completion_reward: number }) => {
         rewardsByUser[t.assigned_to] = (rewardsByUser[t.assigned_to] ?? 0) + (t.completion_reward ?? 0);
+      });
+    }
+
+    // Fetch approved timesheet hours using the split model:
+    // timesheet_entries (hours/date) joined through approved timesheets (week_start/status)
+    const hourlyEmployeeIds = configured.filter(e => (e.salary_config?.hourly_rate ?? 0) > 0).map(e => e.id);
+    let hoursByUser: Record<string, number> = {};
+    if (hourlyEmployeeIds.length > 0) {
+      const { data: entries } = await supabase
+        .from('timesheet_entries')
+        .select('hours, date, timesheets!inner(user_id, status)')
+        .gte('date', startStr)
+        .lte('date', endStr);
+      (entries ?? []).forEach((e: { hours: number; date: string; timesheets: { user_id: string; status: string } }) => {
+        const uid = e.timesheets.user_id;
+        if (e.timesheets.status === 'approved' && hourlyEmployeeIds.includes(uid)) {
+          hoursByUser[uid] = (hoursByUser[uid] ?? 0) + (Number(e.hours) || 0);
+        }
       });
     }
 
     setPreview(configured.map(emp => {
       const calc = computePayroll(emp.salary_config!);
       const rewards = rewardsByUser[emp.id] ?? 0;
+      const hourlyRate = emp.salary_config?.hourly_rate ?? 0;
+      const approvedHours = hoursByUser[emp.id] ?? 0;
+      const hourlyPay = hourlyRate > 0 ? Math.round(hourlyRate * approvedHours) : 0;
+      const hourlyAdjustment = hourlyPay > 0
+        ? [{ type: 'bonus' as const, label: `Hourly Pay (${approvedHours}h × ${hourlyRate})`, amount: hourlyPay }]
+        : [];
       return {
         id: crypto.randomUUID(), run_id: '',
         user_id: emp.id, user_name: emp.full_name ?? '—',
         department_name: emp.department_name ?? '—',
         base_salary: calc.base, allowances_total: calc.allowTotal,
         gross_salary: calc.gross, deductions_total: calc.dedTotal,
-        net_salary: calc.net + rewards, task_rewards: rewards, retainer_amount: 0,
+        net_salary: calc.net + rewards + hourlyPay, task_rewards: rewards, retainer_amount: 0,
         currency: emp.salary_config!.currency,
         allowances_snapshot: emp.salary_config!.allowances,
         deductions_snapshot: emp.salary_config!.deductions,
-        adjustments: [],
+        adjustments: hourlyAdjustment,
       };
     }));
     setComputing(false);
@@ -3212,6 +3271,446 @@ function PayslipsTab({ runs, loading, employees }: {
           </Card>
         )}
       </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PAYROLL SCHEDULE TAB
+// ══════════════════════════════════════════════════════════════════════════════
+interface PayrollSchedule {
+  day_of_month: number;
+  enabled: boolean;
+  paused: boolean;
+  last_triggered: string | null;
+  notes: string | null;
+  updated_at: string | null;
+}
+
+const SCHEDULE_SETTING_KEY = 'auto_schedule';
+
+function defaultSchedule(): PayrollSchedule {
+  return { day_of_month: 28, enabled: false, paused: false, last_triggered: null, notes: null, updated_at: null };
+}
+
+function nextTriggerDate(dayOfMonth: number): Date {
+  const now = new Date();
+  const yr = now.getFullYear();
+  const mo = now.getMonth(); // 0-indexed
+  // Clamp day to last day of the current month
+  const lastDayThisMonth = new Date(yr, mo + 1, 0).getDate();
+  const clampedDay = Math.min(dayOfMonth, lastDayThisMonth);
+  const candidate = new Date(yr, mo, clampedDay);
+  if (candidate <= now) {
+    // Move to next month and clamp again
+    const nextMo = mo + 1;
+    const nextYr = nextMo > 11 ? yr + 1 : yr;
+    const normalizedMo = nextMo % 12;
+    const lastDayNextMonth = new Date(nextYr, normalizedMo + 1, 0).getDate();
+    return new Date(nextYr, normalizedMo, Math.min(dayOfMonth, lastDayNextMonth));
+  }
+  return candidate;
+}
+
+function PayrollScheduleTab({ currentUserId, runs, employees }: {
+  currentUserId: string; runs: PayrollRun[]; employees: EmployeeRow[];
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [triggering, setTriggering] = useState(false);
+  const [dayInput, setDayInput] = useState('28');
+  const [notesInput, setNotesInput] = useState('');
+
+  // Load schedule from Supabase (payroll_settings table)
+  const { data: schedule = defaultSchedule(), isLoading: loadingSchedule } = useQuery<PayrollSchedule>({
+    queryKey: ['payroll-schedule'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payroll_settings')
+        .select('setting_value')
+        .eq('setting_key', SCHEDULE_SETTING_KEY)
+        .single();
+      if (error || !data) return defaultSchedule();
+      const val = data.setting_value as Record<string, unknown>;
+      return {
+        day_of_month: Number(val.day_of_month ?? 28),
+        enabled: Boolean(val.enabled ?? false),
+        paused: Boolean(val.paused ?? false),
+        last_triggered: (val.last_triggered as string | null) ?? null,
+        notes: (val.notes as string | null) ?? null,
+        updated_at: (val.updated_at as string | null) ?? null,
+      };
+    },
+    staleTime: 30000,
+  });
+
+  // Sync form inputs when schedule loads from DB
+  useEffect(() => {
+    if (!loadingSchedule) {
+      setDayInput(String(schedule.day_of_month));
+      setNotesInput(schedule.notes ?? '');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingSchedule]);
+
+  const persistSchedule = async (updated: PayrollSchedule) => {
+    const now = new Date().toISOString();
+    const withTs: PayrollSchedule = { ...updated, updated_at: now };
+    const { error } = await supabase
+      .from('payroll_settings')
+      .upsert(
+        { setting_key: SCHEDULE_SETTING_KEY, setting_value: withTs as unknown as Record<string, unknown>, updated_by: currentUserId, updated_at: now },
+        { onConflict: 'setting_key' }
+      );
+    if (error) throw error;
+    qc.setQueryData(['payroll-schedule'], withTs);
+  };
+
+  const nextDate = schedule.enabled && !schedule.paused ? nextTriggerDate(schedule.day_of_month) : null;
+
+  const saveSchedule = async () => {
+    const day = parseInt(dayInput);
+    if (isNaN(day) || day < 1 || day > 31) {
+      toast({ title: 'Enter a valid day of month (1–31)', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await persistSchedule({ ...schedule, day_of_month: day, notes: notesInput || null });
+      toast({ title: 'Payroll schedule saved' });
+    } catch (err: any) {
+      toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleEnabled = async () => {
+    const updated = { ...schedule, enabled: !schedule.enabled };
+    try {
+      await persistSchedule(updated);
+      toast({ title: updated.enabled ? 'Auto-schedule enabled' : 'Auto-schedule disabled' });
+    } catch (err: any) {
+      toast({ title: 'Failed to update schedule', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const togglePaused = async () => {
+    const updated = { ...schedule, paused: !schedule.paused };
+    try {
+      await persistSchedule(updated);
+      toast({ title: updated.paused ? 'Schedule paused' : 'Schedule resumed' });
+    } catch (err: any) {
+      toast({ title: 'Failed to update schedule', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const triggerNow = async () => {
+    setTriggering(true);
+    const now = new Date();
+    const startStr = format(startOfMonth(now), 'yyyy-MM-dd');
+    const endStr   = format(endOfMonth(now), 'yyyy-MM-dd');
+    const periodLabel = format(now, 'MMMM yyyy');
+    const configured = employees.filter(e => e.salary_config);
+
+    if (!configured.length) {
+      toast({ title: 'No employees configured for payroll', variant: 'destructive' });
+      setTriggering(false);
+      return;
+    }
+
+    const existing = runs.find(r => r.period_label === periodLabel);
+    if (existing && (existing.status === 'approved' || existing.status === 'locked')) {
+      toast({ title: `${periodLabel} payroll already exists (${existing.status})`, variant: 'destructive' });
+      setTriggering(false);
+      return;
+    }
+
+    try {
+      // Fetch approved timesheet hours using the split model:
+      // timesheet_entries (hours/date) joined through approved timesheets (week_start/status)
+      const hourlyEmpIds = configured.filter(e => (e.salary_config?.hourly_rate ?? 0) > 0).map(e => e.id);
+      const hoursByUser: Record<string, number> = {};
+      if (hourlyEmpIds.length > 0) {
+        const { data: entries } = await supabase
+          .from('timesheet_entries')
+          .select('hours, date, timesheets!inner(user_id, status)')
+          .gte('date', startStr)
+          .lte('date', endStr);
+        (entries ?? []).forEach((e: { hours: number; date: string; timesheets: { user_id: string; status: string } }) => {
+          const uid = e.timesheets.user_id;
+          if (e.timesheets.status === 'approved' && hourlyEmpIds.includes(uid)) {
+            hoursByUser[uid] = (hoursByUser[uid] ?? 0) + (Number(e.hours) || 0);
+          }
+        });
+      }
+
+      // Fetch task completion rewards within period
+      const rewardsByUser: Record<string, number> = {};
+      const { data: taskRewardsData } = await supabase
+        .from('personal_tasks')
+        .select('assigned_to, completion_reward')
+        .eq('status', 'completed')
+        .gte('updated_at', startStr)
+        .lte('updated_at', endStr + 'T23:59:59')
+        .not('completion_reward', 'is', null)
+        .gt('completion_reward', 0);
+      (taskRewardsData ?? []).forEach((t: { assigned_to: string; completion_reward: number }) => {
+        rewardsByUser[t.assigned_to] = (rewardsByUser[t.assigned_to] ?? 0) + (Number(t.completion_reward) || 0);
+      });
+
+      // Create or reuse draft run
+      let runId = existing?.id;
+      if (!runId) {
+        const { data, error } = await supabase.from('payroll_runs').insert({
+          period_label: periodLabel,
+          period_start: startStr,
+          period_end: endStr,
+          created_by: currentUserId,
+          status: 'draft',
+        }).select('id').single();
+        if (error) throw error;
+        runId = data.id;
+      }
+
+      // Build run items: salary + task rewards + hourly pay
+      await supabase.from('payroll_run_items').delete().eq('run_id', runId!);
+      await supabase.from('payroll_run_items').insert(configured.map(emp => {
+        const calc = computePayroll(emp.salary_config!);
+        const hourlyRate = emp.salary_config?.hourly_rate ?? 0;
+        const approvedHours = hoursByUser[emp.id] ?? 0;
+        const hourlyPay = hourlyRate > 0 ? Math.round(hourlyRate * approvedHours) : 0;
+        const rewards = rewardsByUser[emp.id] ?? 0;
+        const adjustments = hourlyPay > 0
+          ? [{ type: 'bonus' as const, label: `Hourly Pay (${approvedHours}h × ${hourlyRate})`, amount: hourlyPay }]
+          : [];
+        return {
+          run_id: runId, user_id: emp.id, user_name: emp.full_name ?? '—',
+          department_name: emp.department_name ?? '—',
+          base_salary: calc.base, allowances_total: calc.allowTotal,
+          gross_salary: calc.gross, deductions_total: calc.dedTotal,
+          net_salary: calc.net + rewards + hourlyPay,
+          task_rewards: rewards,
+          retainer_amount: 0,
+          currency: emp.salary_config!.currency,
+          allowances_snapshot: emp.salary_config!.allowances,
+          deductions_snapshot: emp.salary_config!.deductions,
+          adjustments,
+        };
+      }));
+
+      // Update last_triggered in persistent schedule (non-blocking — run is already created)
+      persistSchedule({ ...schedule, last_triggered: now.toISOString() }).catch((e: Error) => {
+        console.warn('[payroll-trigger] Failed to update last_triggered:', e.message);
+      });
+
+      qc.invalidateQueries({ queryKey: ['payroll-runs'] });
+      toast({ title: `Payroll draft created for ${periodLabel}`, description: `${configured.length} employees included` });
+    } catch (err: any) {
+      toast({ title: 'Error creating payroll run', description: err.message, variant: 'destructive' });
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  const scheduledRuns = runs.slice(0, 6);
+
+  return (
+    <div className="space-y-5">
+      {/* Status banner */}
+      <div className={cn(
+        'flex items-start gap-3 px-4 py-3 rounded-xl border text-sm',
+        schedule.enabled && !schedule.paused
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-800/40 dark:text-emerald-200'
+          : schedule.paused
+            ? 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/20 dark:border-amber-800/40 dark:text-amber-200'
+            : 'bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300'
+      )}>
+        <CalendarClock className="h-4 w-4 mt-0.5 shrink-0" />
+        <div>
+          {schedule.enabled && !schedule.paused
+            ? <><strong>Auto-schedule active</strong>: payroll runs will be triggered automatically on day {schedule.day_of_month} of each month.</>
+            : schedule.paused
+              ? <><strong>Schedule paused</strong>: automatic payroll runs are temporarily suspended.</>
+              : <><strong>Auto-schedule disabled</strong>: payroll runs must be triggered manually from the Run Payroll tab.</>
+          }
+          {nextDate && (
+            <p className="mt-0.5 text-xs opacity-80">Next trigger: {format(nextDate, 'dd MMMM yyyy')}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Config card */}
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+          <CardHeader className="pb-3 border-b">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500" />Auto-Schedule Configuration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 space-y-4">
+            {/* Enable/disable toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Enable Auto-Schedule</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Automatically create payroll drafts on a set day each month</p>
+              </div>
+              <button
+                onClick={toggleEnabled}
+                className={cn(
+                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
+                  schedule.enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                )}
+                data-testid="toggle-schedule-enabled"
+              >
+                <span className={cn('inline-block h-4 w-4 rounded-full bg-white shadow-sm transform transition-transform', schedule.enabled ? 'translate-x-6' : 'translate-x-1')} />
+              </button>
+            </div>
+
+            {schedule.enabled && (
+              <>
+                {/* Pause/resume */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Paused</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Temporarily halt automatic runs without disabling</p>
+                  </div>
+                  <button
+                    onClick={togglePaused}
+                    className={cn(
+                      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none',
+                      schedule.paused ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'
+                    )}
+                    data-testid="toggle-schedule-paused"
+                  >
+                    <span className={cn('inline-block h-4 w-4 rounded-full bg-white shadow-sm transform transition-transform', schedule.paused ? 'translate-x-6' : 'translate-x-1')} />
+                  </button>
+                </div>
+
+                {/* Day of month */}
+                <div>
+                  <p className="text-sm font-medium mb-1.5">Trigger Day of Month</p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={dayInput}
+                      onChange={e => setDayInput(e.target.value)}
+                      className="w-24 text-sm h-9"
+                      data-testid="input-schedule-day"
+                    />
+                    <span className="text-sm text-muted-foreground">of each month</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">If the month is shorter than the chosen day, the run triggers on the last day.</p>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <p className="text-sm font-medium mb-1.5">Notes (optional)</p>
+                  <Textarea value={notesInput} onChange={e => setNotesInput(e.target.value)} rows={2} placeholder="Admin notes…" className="text-sm" />
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <Button size="sm" onClick={saveSchedule} disabled={saving} className="gap-1.5 bg-[#0F2041] hover:bg-[#1D3461] text-white" data-testid="btn-save-schedule">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Save Schedule
+              </Button>
+            </div>
+
+            {schedule.updated_at && (
+              <p className="text-[10px] text-muted-foreground">
+                Last updated: {format(parseISO(schedule.updated_at), 'dd MMM yyyy HH:mm')}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Manual trigger card */}
+        <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+          <CardHeader className="pb-3 border-b">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Play className="h-4 w-4 text-blue-500" />Manual Trigger
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Trigger a payroll run now for the <strong>current month</strong>. This creates a draft run with all configured employees. You can review and adjust it in the <strong>Run Payroll</strong> tab before submitting.
+            </p>
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              If a draft already exists for this month, it will be overwritten. Approved or locked runs will not be affected.
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Current month summary</p>
+              <p className="text-sm"><span className="font-semibold">{employees.filter(e => e.salary_config).length}</span> employees configured</p>
+              {schedule.last_triggered && (
+                <p className="text-xs text-muted-foreground">
+                  Last auto-triggered: {format(parseISO(schedule.last_triggered), 'dd MMM yyyy HH:mm')}
+                </p>
+              )}
+            </div>
+
+            <Button onClick={triggerNow} disabled={triggering} className="w-full gap-2 bg-[#0F2041] hover:bg-[#1D3461] text-white" data-testid="btn-trigger-payroll-now">
+              {triggering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              {triggering ? 'Creating Payroll Draft…' : 'Trigger Payroll Run Now'}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent runs */}
+      <Card className="shadow-sm border-0 bg-white dark:bg-slate-900">
+        <CardHeader className="pb-3 border-b">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />Recent Payroll Runs
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {scheduledRuns.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No payroll runs yet.</p>
+          ) : (
+            <div className="divide-y">
+              {scheduledRuns.map(run => (
+                <div key={run.id} className="px-5 py-3.5 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      'w-8 h-8 rounded-lg flex items-center justify-center',
+                      run.status === 'locked' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+                      run.status === 'approved' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                      run.status === 'submitted' ? 'bg-indigo-100 dark:bg-indigo-900/30' :
+                      'bg-slate-100 dark:bg-slate-800'
+                    )}>
+                      {run.status === 'locked'
+                        ? <Lock className="h-3.5 w-3.5 text-emerald-600" />
+                        : run.status === 'approved'
+                          ? <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />
+                          : <FileText className="h-3.5 w-3.5 text-slate-500" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{run.period_label}</p>
+                      <p className="text-xs text-muted-foreground">{format(parseISO(run.created_at), 'dd MMM yyyy')}</p>
+                    </div>
+                  </div>
+                  <span className={cn(
+                    'text-[10px] font-semibold px-2.5 py-1 rounded-full capitalize',
+                    run.status === 'locked' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
+                    run.status === 'approved' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                    run.status === 'submitted' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' :
+                    'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                  )}>
+                    {run.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
