@@ -58,7 +58,9 @@
     FolderOpen,
     Compass,
     Lock,
-    Inbox
+    Inbox,
+    FileBarChart,
+    CalendarCheck,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -423,6 +425,9 @@
     if (!isHidden('/reconciliation-dashboard') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finMgmtItems.push({ id: 'reconciliation-dashboard', title: "Reconciliation Dashboard", url: "/reconciliation-dashboard", icon: ClipboardCheck, priority: 5, isPinned: isPinned('/reconciliation-dashboard') });
     }
+    if (!isHidden('/subscriptions') && (isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector)) {
+      finMgmtItems.push({ id: 'subscriptions', title: "Subscriptions", url: "/subscriptions", icon: CreditCard, priority: 6, isPinned: isPinned('/subscriptions') });
+    }
     if (finMgmtItems.length) groups.push({ id: 'finance-management', label: "Financial Management", order: 5.3, items: finMgmtItems, parentGroup: 'finance' } as any);
 
     const finReportItems: MenuGroup['items'] = [];
@@ -437,6 +442,12 @@
     }
     if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finReportItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 4, isPinned: isPinned('/exchange-rates') });
+    }
+    if (!isHidden('/salary-retainer-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector)) {
+      finReportItems.push({ id: 'salary-retainer-report', title: "Salary & Retainer Report", url: "/salary-retainer-report", icon: Users, priority: 5, isPinned: isPinned('/salary-retainer-report') });
+    }
+    if (!isHidden('/month-end-summary') && (isSuperAdmin || isAdmin || isFinancialAdmin || isCountryDirector)) {
+      finReportItems.push({ id: 'month-end-summary', title: "Month-End Summary", url: "/month-end-summary", icon: CalendarCheck, priority: 6, isPinned: isPinned('/month-end-summary') });
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
 

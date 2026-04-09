@@ -146,6 +146,9 @@ const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
 const ApprovalsHub = lazy(() => import('./pages/ApprovalsHub'));
 const IntegrationsSettings = lazy(() => import('./pages/IntegrationsSettings'));
+const SubscriptionsPage = lazy(() => import('./pages/Subscriptions'));
+const SalaryRetainerReport = lazy(() => import('./pages/SalaryRetainerReport'));
+const MonthEndFinancialSummary = lazy(() => import('./pages/MonthEndFinancialSummary'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -430,6 +433,9 @@ const AppRoutes = () => {
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
         <Route path="/integrations" element={<IntegrationsSettings />} />
+        <Route path="/subscriptions" element={<PageWrapper><SubscriptionsPage /></PageWrapper>} />
+        <Route path="/salary-retainer-report" element={<PageWrapper><SalaryRetainerReport /></PageWrapper>} />
+        <Route path="/month-end-summary" element={<PageWrapper><MonthEndFinancialSummary /></PageWrapper>} />
       </Route>
 
       {/* Redirects */}
