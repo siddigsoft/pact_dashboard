@@ -303,7 +303,7 @@
     if (!isHidden('/calls')) {
       communicationItems.push({ id: 'calls', title: "Calls", url: "/calls", icon: Phone, priority: 2, isPinned: isPinned('/calls') });
     }
-    if (!isHidden('/signatures') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isFinancialAdmin || isAuditor)) {
+    if (!isHidden('/signatures')) {
       communicationItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 3, isPinned: isPinned('/signatures') });
     }
     if (!isHidden('/admin/broadcast') && (isSuperAdmin || isAdmin)) {
@@ -329,8 +329,8 @@
     if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
       planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 4, isPinned: isPinned('/hub-operations') });
     }
-    if (!isHidden('/hub-management') && (isSuperAdmin || isAdmin)) {
-      planningItems.push({ id: 'hub-management', title: "Hub Management", url: "/hub-management", icon: Building2, priority: 5, isPinned: isPinned('/hub-management') });
+    if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager)) {
+      planningItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: ClipboardList, priority: 5, isPinned: isPinned('/tracker-preparation-plan') });
     }
     if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 3, items: planningItems });
 
@@ -515,11 +515,8 @@
     if (!isHidden('/archive') && (isSuperAdmin || isAdmin || perms.archive)) {
       analyticsItems.push({ id: 'archive', title: "Archive", url: "/archive", icon: Archive, priority: 5, isPinned: isPinned('/archive') });
     }
-    if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT)) {
-      analyticsItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 6, isPinned: isPinned('/tracker-preparation-plan') });
-    }
-    if (!isHidden('/questionnaire-analytics') && isSuperAdmin) {
-      analyticsItems.push({ id: 'questionnaire-analytics', title: "Questionnaire Analytics", url: "/questionnaire-analytics", icon: BarChart3, priority: 7, isPinned: isPinned('/questionnaire-analytics') });
+    if (!isHidden('/questionnaire-analytics') && (isSuperAdmin || isAdmin || isDataTeam || isFOM || isCountryDirector)) {
+      analyticsItems.push({ id: 'questionnaire-analytics', title: "Questionnaire Analytics", url: "/questionnaire-analytics", icon: BarChart3, priority: 6, isPinned: isPinned('/questionnaire-analytics') });
     }
     if (!isHidden('/dct-pdm') && (isSuperAdmin || isAdmin || isICT)) {
       analyticsItems.push({ id: 'dct-pdm', title: "DCT PDM Dashboard", url: "/dct-pdm", icon: BarChart3, priority: 8, isPinned: isPinned('/dct-pdm') });
@@ -531,8 +528,14 @@
     if (!isHidden('/users') && (isSuperAdmin || isAdmin || isICT || perms.users)) {
       adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
     }
+    if (!isHidden('/audit-compliance') && (isSuperAdmin || isAdmin || isICT)) {
+      adminItems.push({ id: 'audit-compliance', title: "Audit & Compliance", url: "/audit-compliance", icon: Shield, priority: 2, isPinned: isPinned('/audit-compliance') });
+    }
+    if (!isHidden('/hub-management') && (isSuperAdmin || isAdmin || isICT)) {
+      adminItems.push({ id: 'hub-management', title: "Hub Management", url: "/hub-management", icon: Building2, priority: 3, isPinned: isPinned('/hub-management') });
+    }
     if (!isHidden('/departments') && (isSuperAdmin || isAdmin)) {
-      adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 3, isPinned: isPinned('/departments') });
+      adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 4, isPinned: isPinned('/departments') });
     }
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 4, isPinned: isPinned('/role-management') });

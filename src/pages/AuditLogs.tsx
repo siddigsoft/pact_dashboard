@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useAudit } from '@/context/audit/AuditContext';
 import { 
   AuditModule, 
@@ -86,6 +87,8 @@ interface UserProfile {
 const AuditLogs = () => {
   const navigate = useNavigate();
   const { isSuperAdmin } = useSuperAdmin();
+  const { hasAnyRole } = useAuthorization();
+  const canAccessAuditCompliance = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'ict', 'ICT']);
   const { logs, loading, getAuditStats, refreshLogs, exportLogs } = useAudit();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -829,6 +832,17 @@ const AuditLogs = () => {
             </Label>
           </div>
           
+          {canAccessAuditCompliance && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/audit-compliance')}
+              data-testid="button-goto-audit-compliance"
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Audit & Compliance
+            </Button>
+          )}
           <Button 
             variant="outline" 
             size="sm" 

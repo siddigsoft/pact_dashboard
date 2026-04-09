@@ -5,7 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2 } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck, Briefcase, Building2, FileSignature } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -636,12 +636,18 @@ const UserDetail: React.FC = () => {
             <p className="text-sm text-muted-foreground">View and manage user details</p>
           </div>
         </div>
-        {isAdmin && !editMode && (
-          <Button onClick={handleEdit} variant="default" className="min-h-[44px] px-6 shadow-sm rounded-xl gap-2">
-            <Edit className="h-4 w-4" />
-            Edit User
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/signatures')} data-testid="button-goto-signatures">
+            <FileSignature className="h-4 w-4 mr-2" />
+            Signatures
           </Button>
-        )}
+          {isAdmin && !editMode && (
+            <Button onClick={handleEdit} variant="default" className="min-h-[44px] px-6 shadow-sm rounded-xl gap-2">
+              <Edit className="h-4 w-4" />
+              Edit User
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">

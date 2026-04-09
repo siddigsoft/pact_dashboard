@@ -16,11 +16,14 @@ import { MMPFile } from "@/types";
 import { useMMP } from "@/context/mmp/MMPContext";
 import MMPOverallInformation from "@/components/MMPOverallInformation";
 import MMPSiteInformation from "@/components/MMPSiteInformation";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 const MMPDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const canAccessQuestionnaires = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'DataTeam', 'dataTeam', 'data_team', 'fom', 'countryDirector', 'country_director']);
   const { mmpFiles, loading: contextLoading, getMmpById, updateMMP } = useMMP();
   const [activeTab, setActiveTab] = useState("core");
   const [mmpItem, setMmpItem] = useState<MMPFile | null>(null);
@@ -146,16 +149,24 @@ const MMPDetail = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={handleBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">MMP Details</h1>
-          <p className="text-muted-foreground">
-            {mmpItem.mmpId || `MMP-${mmpItem.id}`} • Created on {mmpItem.uploadedAt ? new Date(mmpItem.uploadedAt).toLocaleDateString() : 'Unknown'}
-          </p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="icon" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">MMP Details</h1>
+            <p className="text-muted-foreground">
+              {mmpItem.mmpId || `MMP-${mmpItem.id}`} • Created on {mmpItem.uploadedAt ? new Date(mmpItem.uploadedAt).toLocaleDateString() : 'Unknown'}
+            </p>
+          </div>
         </div>
+        {canAccessQuestionnaires && (
+          <Button variant="outline" size="sm" onClick={() => navigate('/questionnaire-analytics')} data-testid="button-goto-questionnaire-analytics">
+            <BarChart2 className="h-4 w-4 mr-2" />
+            Questionnaire Analytics
+          </Button>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

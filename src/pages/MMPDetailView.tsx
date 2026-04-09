@@ -57,7 +57,7 @@ const MMPDetailView = () => {
   const { toast } = useToast();
   const { currentUser, archiveMMP, deleteMMPFile, approveMMP, rejectMMP } = useAppContext();
   const { resetMMP, getMmpById, updateMMP, loading: mmpContextLoading } = useMMP();
-  const { checkPermission, hasAnyRole } = useAuthorization();
+  const { checkPermission, hasAnyRole, isSuperAdmin } = useAuthorization();
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -116,6 +116,8 @@ const MMPDetailView = () => {
   const isCoordinator = hasAnyRole(['coordinator']);
   const isSupervisor = hasAnyRole(['supervisor', 'hubsupervisor']);
   const isDataTeam = hasAnyRole(['DataTeam', 'dataTeam', 'data_team', 'Data Team']);
+  const isCountryDirector = hasAnyRole(['countryDirector', 'country_director', 'CountryDirector']);
+  const canAccessQuestionnaires = isSuperAdmin() || isAdmin || isDataTeam || isFOM || isCountryDirector;
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isSupervisor || isDataTeam;
   const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator || isSupervisor) ? true : false;
   const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
@@ -557,6 +559,12 @@ const MMPDetailView = () => {
             <History className="h-4 w-4 mr-2" />
             Audit
           </Button>
+          {canAccessQuestionnaires && (
+            <Button variant="outline" size="sm" onClick={() => navigate('/questionnaire-analytics')} data-testid="button-goto-questionnaire-analytics">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Questionnaire Analytics
+            </Button>
+          )}
         </div>
       </div>
 

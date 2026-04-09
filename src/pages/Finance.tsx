@@ -40,6 +40,7 @@ import { useBudget } from "@/context/budget/BudgetContext";
 import { useUser } from "@/context/user/UserContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { AdminWithdrawalRequest } from "@/types/wallet";
+import { useAuthorization } from "@/hooks/use-authorization";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format, startOfMonth, endOfMonth } from "date-fns";
@@ -64,6 +65,8 @@ const Finance: React.FC = () => {
   const transactions: any[] = (appContext as any).transactions ?? [];
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const canAccessReconciliation = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin']);
 
   const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
   const { projectBudgets, stats: budgetStats, budgetAlerts, loading: budgetLoading } = useBudget();
@@ -835,6 +838,17 @@ const Finance: React.FC = () => {
             <TrendingUp className="h-4 w-4 mr-2" />
             Financial Operations
           </Button>
+          {canAccessReconciliation && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/reconciliation-dashboard')}
+              data-testid="button-reconciliation-dashboard"
+            >
+              <ClipboardList className="h-4 w-4 mr-2" />
+              Reconciliation
+            </Button>
+          )}
         </div>
       </div>
 

@@ -1,17 +1,19 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStalledAlert } from '@/hooks/useProjectStalledAlert';
-import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3 } from 'lucide-react';
+import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3, ClipboardList } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import ProjectList from '@/components/project/ProjectList';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
   useProjectStalledAlert();
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
   
   const projectContext = useProjectContext();
   const { projects, loading } = projectContext;
@@ -45,10 +47,18 @@ const ProjectsPage = () => {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={() => navigate('/projects/create')} data-testid="button-create-project">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Create Project
-        </Button>
+        <div className="flex gap-2">
+          {(isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'projectManager'])) && (
+            <Button variant="outline" size="sm" onClick={() => navigate('/tracker-preparation-plan')} data-testid="button-tracker-prep">
+              <ClipboardList className="h-4 w-4 mr-1.5" />
+              Tracker Prep
+            </Button>
+          )}
+          <Button size="sm" onClick={() => navigate('/projects/create')} data-testid="button-create-project">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Create Project
+          </Button>
+        </div>
       </div>
 
       {/* Quick Navigation */}
