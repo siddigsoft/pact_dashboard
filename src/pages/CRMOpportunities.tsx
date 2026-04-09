@@ -76,9 +76,12 @@ export default function CRMOpportunities() {
 
   const CRM_OPP_TAG = (oppId: string) => `[crm-opp:${oppId}]`;
 
+  // Track already-converted opportunities: check both the new crmOpportunityId field (Task #14)
+  // and the legacy description tag (Task #13) for backwards compatibility
   const convertedOppIds = useMemo(() => {
     const ids = new Set<string>();
     for (const p of allProjects) {
+      if ((p as any).crmOpportunityId) ids.add((p as any).crmOpportunityId);
       const match = p.description?.match(/\[crm-opp:([^\]]+)\]/);
       if (match) ids.add(match[1]);
     }
@@ -151,10 +154,15 @@ export default function CRMOpportunities() {
     else { toast({ title: 'Opportunity deleted' }); load(); }
   };
 
+  // Task #13: Automatic project creation (direct, no prefill form) — used when advancing to "won"
+  // or when user clicks Convert on an already-won opportunity and wants quick creation
   const createProjectFromOpp = async (o: Opportunity): Promise<void> => {
     if (convertingOppId === o.id) return;
     if (convertedOppIds.has(o.id)) {
-      const existing = allProjects.find(p => p.description?.includes(CRM_OPP_TAG(o.id)));
+      const existing = allProjects.find(p =>
+        (p as any).crmOpportunityId === o.id ||
+        p.description?.includes(CRM_OPP_TAG(o.id))
+      );
       if (existing) navigate(`/projects/${existing.id}`);
       return;
     }
@@ -183,6 +191,7 @@ export default function CRMOpportunities() {
       createdBy: currentUser?.id,
       partnerId: o.partner_id ?? undefined,
       clientName: o.partner_name,
+      crmOpportunityId: o.id,
     });
     setConvertingOppId(null);
     if (newProject) {
@@ -211,8 +220,20 @@ export default function CRMOpportunities() {
     await supabase.from('crm_opportunities').update({ stage: newStage, updated_at: new Date().toISOString() }).eq('id', o.id);
     load();
     if (newStage === 'won') {
-      await createProjectFromOpp(o);
+      await createProjectFromOpp({ ...o, stage: newStage });
     }
+  };
+
+  // Task #14: Manual "Convert to Project" — navigates to Create Project with prefilled form
+  const convertToProject = (o: Opportunity) => {
+    const params = new URLSearchParams();
+    params.set('crm_opportunity_id', o.id);
+    params.set('crm_opportunity_title', o.title);
+    if (o.partner_id) params.set('crm_partner_id', o.partner_id);
+    if (o.partner_name) params.set('crm_partner_name', o.partner_name);
+    if (o.value_usd) params.set('crm_value_usd', String(o.value_usd));
+    if (o.description) params.set('crm_description', o.description);
+    navigate(`/projects/create?${params.toString()}`);
   };
 
   const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
@@ -319,6 +340,7 @@ export default function CRMOpportunities() {
                     {items.map(o => {
                       const stageIdx = STAGES.findIndex(s => s.value === o.stage);
                       const canAdvance = stageIdx < STAGES.length - 1;
+                      const isConverted = convertedOppIds.has(o.id);
                       return (
                         <Card key={o.id} className="hover:shadow-md transition-shadow cursor-default">
                           <CardContent className="p-3">
@@ -352,15 +374,20 @@ export default function CRMOpportunities() {
                                 Move to {STAGES[stageIdx + 1]?.label} <ArrowRight className="h-3 w-3" />
                               </button>
                             )}
-                            {o.stage === 'won' && (
+                            {(o.stage === 'won' || o.stage === 'negotiation') && (
                               <button
-                                onClick={() => createProjectFromOpp(o)}
-                                className="mt-1 w-full text-xs text-green-700 hover:text-green-800 flex items-center justify-center gap-1 py-1 rounded hover:bg-green-50 transition-colors disabled:opacity-50"
-                                data-testid={`button-convert-project-${o.id}`}
-                                disabled={convertedOppIds.has(o.id) || convertingOppId === o.id}
+                                onClick={() => isConverted ? createProjectFromOpp(o) : convertToProject(o)}
+                                className="mt-1 w-full text-xs text-green-700 hover:text-green-800 flex items-center justify-center gap-1 py-1 rounded hover:bg-green-50 transition-colors border border-green-200 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20 disabled:opacity-50"
+                                data-testid={`button-convert-to-project-${o.id}`}
+                                disabled={convertingOppId === o.id}
                               >
-                                {convertingOppId === o.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FolderPlus className="h-3 w-3" />}
-                                {convertedOppIds.has(o.id) ? 'Project Created' : convertingOppId === o.id ? 'Creating…' : 'Convert to Project'}
+                                {convertingOppId === o.id
+                                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                                  : isConverted
+                                    ? <CheckCircle2 className="h-3 w-3" />
+                                    : <FolderPlus className="h-3 w-3" />
+                                }
+                                {convertingOppId === o.id ? 'Creating…' : isConverted ? 'View Project' : 'Convert to Project'}
                               </button>
                             )}
                           </CardContent>
@@ -382,6 +409,7 @@ export default function CRMOpportunities() {
           <div className="space-y-2">
             {filtered.map(o => {
               const stage = STAGES.find(s => s.value === o.stage);
+              const isConverted = convertedOppIds.has(o.id);
               return (
                 <Card key={o.id} className="hover:shadow-sm transition-shadow">
                   <CardContent className="p-4">
@@ -403,18 +431,23 @@ export default function CRMOpportunities() {
                         </div>
                         {o.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{o.description}</p>}
                       </div>
-                      <div className="flex items-center gap-4 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${stage?.badge}`}>{stage?.label}</span>
                         <span className="text-sm font-bold">{o.value_usd ? fmtCurrency(o.value_usd) : '—'}</span>
-                        {o.stage === 'won' && (
+                        {(o.stage === 'won' || o.stage === 'negotiation') && (
                           <button
-                            onClick={() => createProjectFromOpp(o)}
-                            className="flex items-center gap-1 text-xs text-green-700 hover:text-green-800 px-2 py-1 rounded hover:bg-green-50 transition-colors font-medium disabled:opacity-50"
-                            data-testid={`button-convert-project-list-${o.id}`}
-                            disabled={convertedOppIds.has(o.id) || convertingOppId === o.id}
+                            onClick={() => isConverted ? createProjectFromOpp(o) : convertToProject(o)}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-green-700 hover:text-green-800 hover:bg-green-50 border border-green-200 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50"
+                            data-testid={`button-convert-to-project-list-${o.id}`}
+                            disabled={convertingOppId === o.id}
                           >
-                            {convertingOppId === o.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
-                            {convertedOppIds.has(o.id) ? 'Project Created' : convertingOppId === o.id ? 'Creating…' : 'Convert to Project'}
+                            {convertingOppId === o.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : isConverted
+                                ? <CheckCircle2 className="h-3.5 w-3.5" />
+                                : <FolderPlus className="h-3.5 w-3.5" />
+                            }
+                            {convertingOppId === o.id ? 'Creating…' : isConverted ? 'View Project' : 'Convert'}
                           </button>
                         )}
                         <div className="flex gap-1">

@@ -31,6 +31,7 @@ export function mapDbProjectToProject(dbProject: any): Omit<Project, 'activities
     clientType: (dbProject.client_type ?? 'internal') as 'internal' | 'customer',
     clientName: dbProject.client_name ?? undefined,
     partnerId: dbProject.partner_id ?? undefined,
+    crmOpportunityId: dbProject.crm_opportunity_id ?? undefined,
     budget: dbProject.budget,
     location: dbProject.location,
     team: dbProject.team,
@@ -136,5 +137,6 @@ export function mapProjectToDbProject(project: Project): Record<string, unknown>
     client_type: project.clientType,
     client_name: project.clientName,
     partner_id: project.partnerId || null,
+    crm_opportunity_id: project.crmOpportunityId || null,
   };
 }

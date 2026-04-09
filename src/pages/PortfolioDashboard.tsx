@@ -17,7 +17,7 @@ import {
   Handshake, FileText, CreditCard, UserCheck, Building2, ArrowRight,
   Receipt, TrendingDown, Star, MapPin, Globe, Siren, BadgeDollarSign,
   Wallet, FileWarning, Timer, ClipboardList, AlertCircle, CheckSquare,
-  LayoutDashboard,
+  LayoutDashboard, FolderPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,8 @@ interface ProjectRow {
   client_type: string | null; client_name: string | null;
   budget: { total?: number; currency?: string; totalBudgetCents?: number; spentBudgetCents?: number } | null;
   archived: boolean | null;
+  partner_id: string | null;
+  crm_opportunity_id: string | null;
 }
 interface BudgetRow { project_id: string; total_budget_cents: number; allocated_budget_cents: number; spent_budget_cents: number; remaining_budget_cents: number; }
 interface MilestoneRow { id: string; project_id: string; title: string; status: string; due_date: string | null; updated_at: string | null; }
@@ -875,6 +877,7 @@ export default function PortfolioDashboard() {
               { id: 'portfolio',  icon: Briefcase,       label: 'Projects',  badge: kpis.stalled > 0 ? kpis.stalled : undefined },
               { id: 'people',     icon: Users,           label: 'People',    badge: peopleStats.pendingLeave > 0 ? peopleStats.pendingLeave : undefined },
               { id: 'partners',   icon: Handshake,       label: 'Partners & CRM' },
+              { id: 'pipeline',   icon: TrendingUp,      label: 'Business Pipeline', badge: data.crmOpptys.filter((o: any) => ['negotiating','won'].includes(o.stage)).length > 0 ? data.crmOpptys.filter((o: any) => ['negotiating','won'].includes(o.stage)).length : undefined },
               { id: 'risk',       icon: ShieldAlert,     label: 'Risk & Safety', badge: kpis.openIncidents > 0 ? kpis.openIncidents : undefined },
             ].map(t => (
               <TabsTrigger key={t.id} value={t.id} className="gap-1.5 text-xs font-semibold relative">
@@ -1432,6 +1435,129 @@ export default function PortfolioDashboard() {
                 </div>
               </SectionCard>
             )}
+          </TabsContent>
+
+          {/* ═══════════════ BUSINESS PIPELINE ═══════════════ */}
+          <TabsContent value="pipeline" className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {/* Pipeline Value KPI */}
+              <SectionCard icon={TrendingUp} title="Pipeline Overview">
+                <div className="mb-3 p-3 bg-[#1D3461]/5 rounded-xl">
+                  <p className="text-2xl font-bold text-[#1D3461]">{fmtUSD(crmStats.totalPipelineValue)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Total active pipeline ({crmStats.activePipeline} opportunities)</p>
+                </div>
+                <StatRow label="Won This Year" value={fmtUSD(crmStats.wonValue)} color="text-emerald-600" />
+                <StatRow label="Closing in 30 days" value={crmStats.closingSoon} color={crmStats.closingSoon > 0 ? 'text-amber-600' : undefined} />
+              </SectionCard>
+
+              {/* CRM ↔ Projects bridge stats */}
+              <SectionCard icon={Briefcase} title="CRM → Projects Bridge" action={() => navigate('/projects/create')} actionLabel="New Project">
+                <StatRow label="Won Opportunities" value={data.crmOpptys.filter((o: any) => o.stage === 'won').length} color="text-emerald-600" />
+                <StatRow label="In Negotiation" value={data.crmOpptys.filter((o: any) => o.stage === 'negotiating').length} color="text-blue-600" />
+                <StatRow label="Projects with CRM Link" value={enriched.filter(p => !!p.crm_opportunity_id).length} color="text-purple-600" />
+                <StatRow label="Projects from Partners" value={enriched.filter(p => !!p.partner_id).length} color="text-[#1D3461]" />
+              </SectionCard>
+
+              {/* Stage breakdown */}
+              <SectionCard icon={BarChart2} title="Pipeline by Stage">
+                {crmStats.stageChartData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No opportunities recorded</p>
+                ) : (
+                  <div className="h-52 mt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={crmStats.stageChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                          {crmStats.stageChartData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: number, n: string, p: any) => [fmtUSD(p.payload.amount), n]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+
+            {/* Won / Negotiating opportunities — ready to convert */}
+            {data.crmOpptys.filter((o: any) => ['won', 'negotiating'].includes(o.stage)).length > 0 && (
+              <SectionCard icon={FolderPlus} title="Opportunities Ready to Convert" action={() => navigate('/crm/opportunities')} actionLabel="Open CRM Opportunities">
+                <div className="space-y-2 mt-1">
+                  {data.crmOpptys
+                    .filter((o: any) => ['won', 'negotiating'].includes(o.stage))
+                    .map((o: any) => {
+                      const stageCfg = CRM_STAGE_CFG[o.stage] ?? { label: o.stage, color: '#94a3b8' };
+                      const linkedProject = enriched.find(p => p.crm_opportunity_id === o.id);
+                      return (
+                        <div key={o.id} className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:shadow-sm transition-all">
+                          <div className="h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#1D3461]/10">
+                            <TrendingUp className="h-4 w-4 text-[#1D3461]" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{o.title}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: stageCfg.color + '20', color: stageCfg.color }}>{stageCfg.label}</span>
+                              {o.expected_close_date && <span className="text-[11px] text-muted-foreground">{fmtDate(o.expected_close_date)}</span>}
+                              {linkedProject && (
+                                <button
+                                  className="text-[10px] font-semibold text-purple-600 hover:underline flex items-center gap-1"
+                                  onClick={() => navigate(`/projects/${linkedProject.id}`)}
+                                  data-testid={`link-project-from-oppty-${o.id}`}
+                                >
+                                  <Briefcase className="h-2.5 w-2.5" /> {linkedProject.name}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-[#1D3461] flex-shrink-0">{fmtUSD(o.value_usd)}</span>
+                            {!linkedProject && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7"
+                                data-testid={`button-convert-oppty-${o.id}`}
+                                onClick={() => {
+                                  const params = new URLSearchParams();
+                                  params.set('crm_opportunity_id', o.id);
+                                  params.set('crm_opportunity_title', o.title);
+                                  if (o.value_usd) params.set('crm_value_usd', String(o.value_usd));
+                                  navigate(`/projects/create?${params.toString()}`);
+                                }}
+                              >
+                                <FolderPlus className="h-3 w-3 mr-1" /> Convert
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </SectionCard>
+            )}
+
+            {/* All active opportunities list */}
+            <SectionCard icon={Target} title="All Active Opportunities" action={() => navigate('/crm/opportunities')} actionLabel="Manage Opportunities">
+              {data.crmOpptys.filter((o: any) => !['won', 'lost'].includes(o.stage)).length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">No active opportunities in pipeline.</p>
+              ) : (
+                <div className="space-y-1.5 mt-1">
+                  {data.crmOpptys
+                    .filter((o: any) => !['won', 'lost'].includes(o.stage))
+                    .map((o: any) => {
+                      const stageCfg = CRM_STAGE_CFG[o.stage] ?? { label: o.stage, color: '#94a3b8' };
+                      return (
+                        <div key={o.id} className="flex items-center gap-3 py-2 border-b last:border-b-0">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{o.title}</p>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: stageCfg.color + '20', color: stageCfg.color }}>{stageCfg.label}</span>
+                          </div>
+                          {o.expected_close_date && <span className="text-xs text-muted-foreground flex-shrink-0">{fmtDate(o.expected_close_date)}</span>}
+                          <span className="text-sm font-bold text-[#1D3461] flex-shrink-0">{fmtUSD(o.value_usd)}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </SectionCard>
           </TabsContent>
 
           {/* ═══════════════ RISK & SAFETY ═══════════════ */}

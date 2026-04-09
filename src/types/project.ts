@@ -95,6 +95,7 @@ export interface Project {
   clientType?: 'internal' | 'customer';
   clientName?: string;
   partnerId?: string;
+  crmOpportunityId?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

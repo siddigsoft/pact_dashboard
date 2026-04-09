@@ -16,6 +16,8 @@ export function mapProjectToDbProject(project: Project): Record<string, any> {
     status: project.status,
     client_type: project.clientType ?? 'internal',
     client_name: project.clientName ?? null,
+    partner_id: project.partnerId ?? null,
+    crm_opportunity_id: project.crmOpportunityId ?? null,
     ...formattedDates,
     budget: project.budget ? {
       ...project.budget,
@@ -48,6 +50,10 @@ export function mapDbProjectToProject(dbProject: Record<string, any>): Project {
     location: dbProject.location,
     team: dbProject.team,
     activities: dbProject.activities || [],
+    clientType: (dbProject.client_type ?? 'internal') as 'internal' | 'customer',
+    clientName: dbProject.client_name ?? undefined,
+    partnerId: dbProject.partner_id ?? undefined,
+    crmOpportunityId: dbProject.crm_opportunity_id ?? undefined,
     createdAt: dbProject.created_at,
     updatedAt: dbProject.updated_at
   };

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Handshake } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -19,10 +19,31 @@ import { getProjectTypeConfig } from '@/config/projectTypeConfig';
 const CreateProject = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // Task #13: Template-based prefill
   const templateType = searchParams.get('template') as ProjectType | null;
+
   const { addProject } = useProjectContext();
   const { createProjectBudget } = useBudget();
-  
+
+  // Task #14: CRM opportunity prefill
+  const crmOpportunityId = searchParams.get('crm_opportunity_id') || undefined;
+  const crmOpportunityTitle = searchParams.get('crm_opportunity_title') || undefined;
+  const crmPartnerId = searchParams.get('crm_partner_id') || undefined;
+  const crmPartnerName = searchParams.get('crm_partner_name') || undefined;
+  const crmValueUsd = searchParams.get('crm_value_usd') ? Number(searchParams.get('crm_value_usd')) : undefined;
+  const crmDescription = searchParams.get('crm_description') || undefined;
+
+  const crmPrefill = crmOpportunityId ? {
+    name: crmOpportunityTitle || '',
+    partnerId: crmPartnerId,
+    clientName: crmPartnerName,
+    clientType: 'customer' as const,
+    description: crmDescription,
+    budgetTotal: crmValueUsd,
+    crmOpportunityId,
+  } : undefined;
+
   const [showBudgetDialog, setShowBudgetDialog] = useState(false);
   const [createdProject, setCreatedProject] = useState<Project | null>(null);
   const [budgetLoading, setBudgetLoading] = useState(false);
@@ -40,6 +61,7 @@ const CreateProject = () => {
 
   const oppName = searchParams.get('name');
 
+  // Task #13: Template-based initial data (team roles, duration, description)
   const templateInitialData: Partial<Project> | undefined = useMemo(() => {
     if (!templateType || !templateConfig) return undefined;
     const today = new Date();
@@ -63,13 +85,34 @@ const CreateProject = () => {
     };
   }, [templateType, templateConfig, oppName]);
 
+  // Merge: CRM prefill wins over template for shared fields (name, description, partner)
+  const mergedInitialData: Partial<Project> | undefined = useMemo(() => {
+    if (!crmPrefill && !templateInitialData) return undefined;
+    const base: Partial<Project> = templateInitialData ? { ...templateInitialData } : {};
+    if (crmPrefill) {
+      if (crmPrefill.name) base.name = crmPrefill.name;
+      if (crmPrefill.partnerId) base.partnerId = crmPrefill.partnerId;
+      if (crmPrefill.clientName) base.clientName = crmPrefill.clientName;
+      if (crmPrefill.clientType) base.clientType = crmPrefill.clientType;
+      if (crmPrefill.description) base.description = crmPrefill.description;
+      if (crmPrefill.budgetTotal) {
+        base.budget = { total: crmPrefill.budgetTotal, currency: 'USD', allocated: 0, remaining: crmPrefill.budgetTotal };
+      }
+    }
+    return base;
+  }, [crmPrefill, templateInitialData]);
+
   const typeConfig = useMemo(() => {
     if (!createdProject) return null;
     return getProjectTypeConfig(createdProject.projectType);
   }, [createdProject?.projectType]);
 
   const handleProjectSubmit = async (project: Project) => {
-    const newProject = await addProject(project);
+    const projectWithCrm: Project = {
+      ...project,
+      ...(crmOpportunityId ? { crmOpportunityId } : {}),
+    };
+    const newProject = await addProject(projectWithCrm);
     if (newProject) {
       setCreatedProject(newProject);
       setCategoryValues({});
@@ -151,6 +194,7 @@ const CreateProject = () => {
           </div>
         </div>
 
+        {/* Task #13: Template banner */}
         {templateConfig && (
           <div className="px-4 py-3 rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 space-y-1.5">
             <div className="flex items-center gap-2">
@@ -170,7 +214,23 @@ const CreateProject = () => {
             )}
           </div>
         )}
-        <ProjectForm onSubmit={handleProjectSubmit} initialData={templateInitialData} />
+
+        {/* Task #14: CRM banner */}
+        {crmPrefill && (
+          <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 px-4 py-3">
+            <Handshake className="h-5 w-5 text-green-700 dark:text-green-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-green-900 dark:text-green-300">Converting CRM Opportunity</p>
+              <p className="text-xs text-green-700 dark:text-green-400">
+                Pre-filled from: <span className="font-medium">{crmOpportunityTitle}</span>
+                {crmPartnerName && <> · Partner: <span className="font-medium">{crmPartnerName}</span></>}
+                {crmValueUsd && <> · Value: <span className="font-medium">${crmValueUsd.toLocaleString()}</span></>}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <ProjectForm onSubmit={handleProjectSubmit} initialData={mergedInitialData as any} />
       </div>
 
       <Dialog open={showBudgetDialog} onOpenChange={handleDialogChange}>

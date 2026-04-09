@@ -63,7 +63,7 @@ import ProjectRisksPanel from './ProjectRisksPanel';
 import { useProjectCloseReadiness } from '@/hooks/useProjectCloseReadiness';
 import { CloseReadinessChecklist } from '@/components/close/CloseReadinessChecklist';
 import { ReconciliationSummary } from '@/components/close/ReconciliationSummary';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { logAuditEvent } from '@/utils/audit-logger';
 import { ProjectDeliverablesChecklist } from './ProjectDeliverablesChecklist';
 import { getProjectTypeConfig } from '@/config/projectTypeConfig';
@@ -272,6 +272,10 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const isSuperAdminUser = isSuperAdmin();
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'list' | 'table'>('grid');
   const [partnerName, setPartnerName] = useState<string | null>(null);
+  const [crmOpportunity, setCrmOpportunity] = useState<{ id: string; title: string; stage: string } | null>(null);
+  const [showImportCrmContacts, setShowImportCrmContacts] = useState(false);
+  const [crmContacts, setCrmContacts] = useState<Array<{ id: string; name: string; title: string | null; email: string | null }>>([]);
+  const [loadingCrmContacts, setLoadingCrmContacts] = useState(false);
   const [milestoneStats, setMilestoneStats] = useState<{ total: number; completed: number; overdue: number } | null>(null);
 
   useEffect(() => {
@@ -279,6 +283,22 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     supabase.from('crm_partners').select('name').eq('id', project.partnerId).single()
       .then(({ data }) => setPartnerName(data?.name ?? null));
   }, [project.partnerId]);
+
+  useEffect(() => {
+    if (!project.crmOpportunityId) { setCrmOpportunity(null); return; }
+    supabase.from('crm_opportunities').select('id, title, stage').eq('id', project.crmOpportunityId).single()
+      .then(({ data }) => setCrmOpportunity(data ? { id: data.id, title: data.title, stage: data.stage } : null));
+  }, [project.crmOpportunityId]);
+
+  useEffect(() => {
+    if (!showImportCrmContacts || !project.partnerId) return;
+    setLoadingCrmContacts(true);
+    supabase.from('crm_contacts').select('id, name, title, email').eq('partner_id', project.partnerId)
+      .then(({ data }) => {
+        setCrmContacts((data || []).map((c: any) => ({ id: c.id, name: c.name, title: c.title ?? null, email: c.email ?? null })));
+        setLoadingCrmContacts(false);
+      });
+  }, [showImportCrmContacts, project.partnerId]);
 
   useEffect(() => {
     supabase.from('project_milestones').select('status, due_date').eq('project_id', project.id)
@@ -699,10 +719,24 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </span>
                 )}
                 {partnerName && (
-                  <span className="flex items-center gap-1">
+                  <button
+                    className="flex items-center gap-1 hover:underline text-muted-foreground"
+                    onClick={() => navigate('/crm/partners')}
+                    data-testid="link-crm-partner"
+                  >
                     <Handshake className="h-3.5 w-3.5" />
                     {partnerName}
-                  </span>
+                  </button>
+                )}
+                {crmOpportunity && (
+                  <button
+                    className="flex items-center gap-1 hover:underline text-muted-foreground"
+                    onClick={() => navigate('/crm/opportunities')}
+                    data-testid="link-crm-opportunity"
+                  >
+                    <Target className="h-3.5 w-3.5" />
+                    CRM: {crmOpportunity.title}
+                  </button>
                 )}
               </div>
 
@@ -1274,6 +1308,16 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </button>
                 </div>
               )}
+              {project.partnerId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowImportCrmContacts(true)}
+                  data-testid="button-import-crm-contacts"
+                >
+                  <Handshake className="h-4 w-4 mr-1.5" /> Import from CRM
+                </Button>
+              )}
               <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
                 <Plus className="h-4 w-4 mr-1.5" /> Add Members
               </Button>
@@ -1562,6 +1606,51 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </Button>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import CRM Contacts Dialog */}
+      <Dialog open={showImportCrmContacts} onOpenChange={setShowImportCrmContacts}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Handshake className="h-5 w-5 text-primary" />
+              Import Contacts from CRM Partner
+            </DialogTitle>
+            <DialogDescription>
+              Add {partnerName || 'partner'} contacts as external stakeholders on this project.
+            </DialogDescription>
+          </DialogHeader>
+          {loadingCrmContacts ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : crmContacts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No contacts found for this partner.</p>
+          ) : (
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {crmContacts.map((contact) => (
+                <div key={contact.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium" data-testid={`text-crm-contact-name-${contact.id}`}>{contact.name}</p>
+                    {contact.title && <p className="text-xs text-muted-foreground">{contact.title}</p>}
+                    {contact.email && <p className="text-xs text-muted-foreground">{contact.email}</p>}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    data-testid={`button-add-contact-${contact.id}`}
+                    onClick={() => navigate(`/crm/contacts/${contact.id}`)}
+                  >
+                    View
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setShowImportCrmContacts(false)}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>

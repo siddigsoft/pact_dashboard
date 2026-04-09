@@ -144,6 +144,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         currentFlowStage: initialStage,
         activities: [],
       } as Project;
+
+      // If converting from a CRM opportunity, update the opportunity stage to reflect the project
+      if (project.crmOpportunityId) {
+        const newStage = project.projectType === 'proposal' ? 'proposal' : 'negotiating';
+        await supabase
+          .from('crm_opportunities')
+          .update({ stage: newStage, updated_at: new Date().toISOString() })
+          .eq('id', project.crmOpportunityId);
+      }
       
       await invalidateProjects();
       
