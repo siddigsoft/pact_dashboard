@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
+import { ReasonPickerDialog } from '@/components/audit/ReasonPickerDialog';
 import { ensureValidSession } from '@/lib/session-health';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin, TrendingUp, Sparkles, Wand2, Info } from 'lucide-react';
@@ -675,8 +676,9 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     });
   };
 
-  const handleReturnSelectedSites = async () => {
-    if (!returnReason.trim() || selectedSites.size === 0) return;
+  const handleReturnSelectedSites = async (reason: string, comment?: string) => {
+    if (!reason.trim() || selectedSites.size === 0) return;
+    const combinedNotes = [reason, comment].filter(Boolean).join(' | ');
     setReturningLoading(true);
     try {
       const siteIds = Array.from(selectedSites);
@@ -684,7 +686,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         .from('mmp_site_entries')
         .update({
           status: 'returned_to_fom',
-          verification_notes: returnReason,
+          verification_notes: combinedNotes,
           verified_at: new Date().toISOString(),
         })
         .in('id', siteIds);
@@ -2420,49 +2422,17 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       </DialogContent>
 
       {/* Return to FOM Confirmation Dialog */}
-      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Return Sites to FOM</DialogTitle>
-            <DialogDescription>
-              Send {selectedSites.size} selected site(s) back to the Field Operations Manager.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="return-reason-dispatch">Reason for Return</Label>
-            <Textarea
-              id="return-reason-dispatch"
-              placeholder="Please explain why these sites need to be returned..."
-              value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
-              className="mt-2"
-              rows={4}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReturnDialogOpen(false)} disabled={returningLoading}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleReturnSelectedSites}
-              disabled={!returnReason.trim() || returningLoading}
-              className="bg-orange-600 hover:bg-orange-700"
-            >
-              {returningLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Returning...
-                </>
-              ) : (
-                <>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Confirm Return
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ReasonPickerDialog
+        open={returnDialogOpen}
+        onOpenChange={setReturnDialogOpen}
+        mode="reject"
+        workflowType="site_visit"
+        title="Return Sites to FOM"
+        description={`Send ${selectedSites.size} selected site(s) back to the Field Operations Manager. A structured reason is required.`}
+        rejectLabel="Confirm Return"
+        onConfirm={handleReturnSelectedSites}
+        loading={returningLoading}
+      />
     </Dialog>
   );
 };

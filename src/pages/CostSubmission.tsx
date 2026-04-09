@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
+import { REJECTION_REASONS, APPROVAL_REASONS } from "@/config/rejectionReasons";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -209,6 +212,7 @@ const CostSubmission = () => {
     submission: OperationalCostSubmission | null;
   }>({ open: false, action: 'approve', tier: 1, submission: null });
   const [approvalNotes, setApprovalNotes] = useState('');
+  const [approvalReason, setApprovalReason] = useState('');
   const [approvalProcessing, setApprovalProcessing] = useState(false);
   const [approvalAttachments, setApprovalAttachments] = useState<File[]>([]);
   const pendingApprovalDocsRef = useRef<Array<{ url: string; filename: string }>>([]);
@@ -222,6 +226,7 @@ const CostSubmission = () => {
     submissions: OperationalCostSubmission[];
   }>({ open: false, action: 'approve', tier: 1, groupId: '', groupTitle: '', submissions: [] });
   const [groupApprovalNotes, setGroupApprovalNotes] = useState('');
+  const [groupApprovalReason, setGroupApprovalReason] = useState('');
   const [groupApprovalProcessing, setGroupApprovalProcessing] = useState(false);
   const [groupApprovalAttachments, setGroupApprovalAttachments] = useState<File[]>([]);
 
@@ -705,6 +710,7 @@ const CostSubmission = () => {
   const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3) => {
     setApprovalDialog({ open: true, action, tier, submission: oc });
     setApprovalNotes('');
+    setApprovalReason('');
   };
 
   const openGroupApprovalDialog = (
@@ -716,6 +722,7 @@ const CostSubmission = () => {
   ) => {
     setGroupApprovalDialog({ open: true, action, tier, groupId, groupTitle, submissions });
     setGroupApprovalNotes('');
+    setGroupApprovalReason('');
   };
 
   const uploadApprovalFiles = async (files: File[], prefix: string): Promise<Array<{ url: string; filename: string }>> => {
@@ -746,29 +753,30 @@ const CostSubmission = () => {
 
       const updates: Record<string, any> = {};
 
+      const combinedReason = [groupApprovalReason ? `Reason: ${groupApprovalReason}` : '', groupApprovalNotes].filter(Boolean).join(' | ');
       if (tier === 1) {
         updates.tier1_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier1_approved_by = currentUser.id;
         updates.tier1_approved_at = now;
-        updates.tier1_notes = groupApprovalNotes || null;
+        updates.tier1_notes = combinedReason || null;
         updates.status = action === 'approve' ? 'under_review' : 'rejected';
-        if (action === 'reject') updates.rejection_reason = groupApprovalNotes || 'Rejected at Tier 1';
+        if (action === 'reject') updates.rejection_reason = combinedReason || 'Rejected at Tier 1';
       } else if (tier === 2) {
         updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier2_approved_by = currentUser.id;
         updates.tier2_approved_at = now;
-        updates.tier2_notes = groupApprovalNotes || null;
+        updates.tier2_notes = combinedReason || null;
         const isFinal = !submissions.some(s => hasThreeTiers(s));
         updates.status = action === 'approve' ? (isFinal ? 'approved' : 'under_review') : 'rejected';
-        if (action === 'reject') updates.rejection_reason = groupApprovalNotes || 'Rejected at Tier 2';
+        if (action === 'reject') updates.rejection_reason = combinedReason || 'Rejected at Tier 2';
         else if (action === 'approve' && !isFinal) { updates.tier3_status = 'pending'; }
       } else if (tier === 3) {
         updates.tier3_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier3_approved_by = currentUser.id;
         updates.tier3_approved_at = now;
-        updates.tier3_notes = groupApprovalNotes || null;
+        updates.tier3_notes = combinedReason || null;
         updates.status = action === 'approve' ? 'approved' : 'rejected';
-        if (action === 'reject') updates.rejection_reason = groupApprovalNotes || 'Rejected at Tier 3';
+        if (action === 'reject') updates.rejection_reason = combinedReason || 'Rejected at Tier 3';
       }
 
       const tierStatusKey = `tier${tier}_status` as const;
@@ -804,6 +812,7 @@ const CostSubmission = () => {
         });
         setGroupApprovalDialog(prev => ({ ...prev, open: false }));
         setGroupApprovalNotes('');
+        setGroupApprovalReason('');
         setGroupApprovalAttachments([]);
         await fetchOperationalCosts();
       }
@@ -830,6 +839,11 @@ const CostSubmission = () => {
     const { action, tier, submission } = approvalDialog;
     if (!submission || !currentUser?.id) return;
 
+    const combinedNotes = [
+      approvalReason ? `Reason: ${approvalReason}` : '',
+      approvalNotes,
+    ].filter(Boolean).join(' | ') || approvalNotes;
+
     /* upload any approval-stage attachments first */
     setApprovalProcessing(true);
     const uploadedDocs = approvalAttachments.length > 0
@@ -842,16 +856,17 @@ const CostSubmission = () => {
         open: true,
         submission,
         tier,
-        notes: approvalNotes,
+        notes: combinedNotes,
       });
       setApprovalDialog({ open: false, action: 'approve', tier, submission: null });
       setApprovalProcessing(false);
       return;
     }
 
-    await processApproval(action, tier, submission, approvalNotes, undefined, uploadedDocs);
+    await processApproval(action, tier, submission, combinedNotes, undefined, uploadedDocs);
     setApprovalAttachments([]);
     pendingApprovalDocsRef.current = [];
+    setApprovalReason('');
   };
 
   const processApproval = async (
@@ -1037,6 +1052,7 @@ const CostSubmission = () => {
       setApprovalProcessing(false);
       setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null });
       setApprovalNotes('');
+      setApprovalReason('');
       setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
     }
   };
@@ -3716,6 +3732,12 @@ const CostSubmission = () => {
                         className={`p-4 space-y-3 transition-colors ${selectedCostIds.has(oc.id) ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
                         data-testid={`operational-cost-${oc.id}`}
                       >
+                          {derivedStatus === 'rejected' && (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-2 py-1" data-testid={`alert-cost-needs-attention-${oc.id}`}>
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                              <span>Needs Attention — Submission rejected. Review and resubmit if needed.</span>
+                            </div>
+                          )}
                           {canMarkAsPaid(oc) && (
                             <div className="flex items-center gap-2 mb-1">
                               <Checkbox
@@ -4534,6 +4556,21 @@ const CostSubmission = () => {
                 {/* ── Scrollable body ── */}
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
+                  {/* ── Needs Attention Banner ── */}
+                  {(derivedStatus === 'rejected' || oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || (hasThreeTiers(oc) && oc.tier3_status === 'rejected')) && (
+                    <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                      <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-red-600 dark:text-red-400 font-medium">
+                        Needs Attention — This cost submission has been rejected.
+                        {[oc.tier1_notes, oc.tier2_notes, oc.tier3_notes].filter(Boolean).slice(-1)[0] && (
+                          <p className="text-xs text-muted-foreground mt-0.5 italic">
+                            "{[oc.tier1_notes, oc.tier2_notes, oc.tier3_notes].filter(Boolean).slice(-1)[0]}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* ── Group Line Items (multi-item requests) ── */}
                   {oc.request_group_id && (() => {
                     const groupItems = operationalCosts.filter(o => o.request_group_id === oc.request_group_id);
@@ -4801,6 +4838,9 @@ const CostSubmission = () => {
                       </div>
                     </section>
                   )}
+
+                  {/* ── Approval Status History ── */}
+                  <StatusHistoryPanel entityType="cost_submission" entityId={oc.id} />
                 </div>
 
                 {/* ── Footer action bar ── */}
@@ -4957,6 +4997,7 @@ const CostSubmission = () => {
         if (!open) {
           setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null });
           setApprovalNotes('');
+          setApprovalReason('');
           setApprovalAttachments([]);
         }
       }}>
@@ -5180,25 +5221,47 @@ const CostSubmission = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="approval-notes">
-                    {approvalDialog.action === 'approve' ? 'Approval Notes *' : 'Reason for rejection *'}
+                  <Label htmlFor="approval-reason-select">
+                    {approvalDialog.action === 'approve' ? 'Approval Reason *' : 'Rejection Reason *'}
                     <span dir="rtl" className="text-xs font-normal text-muted-foreground mr-2">
-                      {approvalDialog.action === 'approve' ? '/ ملاحظات الموافقة *' : '/ سبب الرفض *'}
+                      {approvalDialog.action === 'approve' ? '/ سبب الموافقة *' : '/ سبب الرفض *'}
+                    </span>
+                  </Label>
+                  <Select value={approvalReason} onValueChange={setApprovalReason}>
+                    <SelectTrigger id="approval-reason-select" data-testid="select-approval-reason">
+                      <SelectValue placeholder="Select a reason... / اختر سبباً..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(approvalDialog.action === 'reject'
+                        ? REJECTION_REASONS.cost_submission || REJECTION_REASONS.general
+                        : APPROVAL_REASONS.cost_submission || APPROVAL_REASONS.general
+                      ).map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!approvalReason && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      {approvalDialog.action === 'approve' ? 'An approval reason is required. / سبب الموافقة مطلوب.' : 'A rejection reason is required. / سبب الرفض مطلوب.'}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="approval-notes">
+                    {approvalDialog.action === 'approve' ? 'Additional Notes' : 'Additional Comments'}
+                    <span dir="rtl" className="text-xs font-normal text-muted-foreground mr-2">
+                      {approvalDialog.action === 'approve' ? '/ ملاحظات إضافية' : '/ تعليقات إضافية'}
                     </span>
                   </Label>
                   <Textarea
                     id="approval-notes"
-                    placeholder={approvalDialog.action === 'approve' ? 'Provide your approval justification... / اكتب مبرر الموافقة...' : 'Explain why this is being rejected... / اشرح سبب الرفض...'}
+                    placeholder={approvalDialog.action === 'approve' ? 'Provide any additional notes... / اكتب ملاحظات إضافية...' : 'Provide more context... / أضف سياقاً إضافياً...'}
                     value={approvalNotes}
                     onChange={(e) => setApprovalNotes(e.target.value)}
                     rows={3}
                     data-testid="input-approval-notes"
                   />
-                  {!approvalNotes.trim() && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      {approvalDialog.action === 'approve' ? 'Approval notes are required to proceed. / ملاحظات الموافقة مطلوبة للمتابعة.' : 'A rejection reason is required. / سبب الرفض مطلوب.'}
-                    </p>
-                  )}
                 </div>
 
                 {/* ── Approval-stage attachment upload ── */}
@@ -5263,7 +5326,7 @@ const CostSubmission = () => {
             <Button
               variant={approvalDialog.action === 'approve' ? 'default' : 'destructive'}
               onClick={handleApprovalAction}
-              disabled={approvalProcessing || !approvalNotes.trim()}
+              disabled={approvalProcessing || !approvalReason.trim()}
               data-testid="button-approval-confirm"
             >
               {approvalProcessing ? 'Processing... / جارٍ المعالجة...' : approvalDialog.action === 'approve' 
@@ -5281,6 +5344,7 @@ const CostSubmission = () => {
           if (!open) {
             setGroupApprovalDialog(prev => ({ ...prev, open: false }));
             setGroupApprovalNotes('');
+            setGroupApprovalReason('');
             setGroupApprovalAttachments([]);
           }
         }}
@@ -5444,31 +5508,54 @@ const CostSubmission = () => {
                     </div>
                   )}
 
-                  {/* Notes / Reason */}
+                  {/* Structured Reason (Required for both approve and reject) */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="group-approval-reason">
+                      {isApprove ? 'Reason for Approval' : 'Reason for Rejection'}
+                      <span className="text-red-500 ml-0.5">*</span>
+                      <span dir="rtl" className="text-xs font-normal text-muted-foreground ml-2">
+                        {isApprove ? '/ سبب الموافقة *' : '/ سبب الرفض *'}
+                      </span>
+                    </Label>
+                    <Select value={groupApprovalReason} onValueChange={setGroupApprovalReason}>
+                      <SelectTrigger id="group-approval-reason" data-testid="select-group-approval-reason">
+                        <SelectValue placeholder="Select a reason..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(isApprove
+                          ? APPROVAL_REASONS.cost_submission || APPROVAL_REASONS.general
+                          : REJECTION_REASONS.cost_submission || REJECTION_REASONS.general
+                        ).map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!groupApprovalReason && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        A reason is required / السبب مطلوب
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Notes / Comment */}
                   <div className="space-y-1.5">
                     <Label htmlFor="group-approval-notes">
-                      {isApprove ? 'Approval Notes' : 'Reason for Rejection'}
-                      {!isApprove && <span className="text-red-500 ml-0.5">*</span>}
+                      {isApprove ? 'Additional Notes' : 'Additional Details'}
                       <span dir="rtl" className="text-xs font-normal text-muted-foreground ml-2">
-                        {isApprove ? '/ ملاحظات الموافقة' : '/ سبب الرفض *'}
+                        {isApprove ? '/ ملاحظات إضافية (اختياري)' : '/ تفاصيل (اختياري)'}
                       </span>
                     </Label>
                     <Textarea
                       id="group-approval-notes"
                       placeholder={isApprove
                         ? 'Optional notes that will apply to all items...'
-                        : 'Required — provide a clear reason. This will be shown to the submitter for all rejected items.'}
+                        : 'Optional — provide additional context for the submitter.'}
                       value={groupApprovalNotes}
                       onChange={e => setGroupApprovalNotes(e.target.value)}
-                      className="min-h-[72px] resize-none"
+                      className="min-h-[60px] resize-none"
                       data-testid="textarea-group-approval-notes"
                     />
-                    {!isApprove && !groupApprovalNotes.trim() && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        A rejection reason is required / سبب الرفض مطلوب
-                      </p>
-                    )}
                   </div>
 
                   {/* ── Approval-stage attachments ── */}
@@ -5526,7 +5613,7 @@ const CostSubmission = () => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setGroupApprovalDialog(prev => ({ ...prev, open: false })); setGroupApprovalNotes(''); setGroupApprovalAttachments([]); }}
+                    onClick={() => { setGroupApprovalDialog(prev => ({ ...prev, open: false })); setGroupApprovalNotes(''); setGroupApprovalReason(''); setGroupApprovalAttachments([]); }}
                     disabled={groupApprovalProcessing}
                     data-testid="button-group-approval-cancel"
                   >
@@ -5535,7 +5622,7 @@ const CostSubmission = () => {
                   <Button
                     variant={isApprove ? 'default' : 'destructive'}
                     onClick={handleGroupApproval}
-                    disabled={groupApprovalProcessing || (!isApprove && !groupApprovalNotes.trim())}
+                    disabled={groupApprovalProcessing || !groupApprovalReason.trim()}
                     className={isApprove ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}
                     data-testid="button-group-approval-confirm"
                   >

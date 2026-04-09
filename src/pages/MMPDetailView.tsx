@@ -23,6 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import AuditLogViewer from "@/components/AuditLogViewer";
+import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
+import { ReasonPickerDialog } from "@/components/audit/ReasonPickerDialog";
 import ComplianceTracker from "@/components/ComplianceTracker";
 import { MMPStageIndicator } from "@/components/MMPStageIndicator";
 import MMPVersionHistory from "@/components/MMPVersionHistory";
@@ -53,7 +55,7 @@ const MMPDetailView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentUser, archiveMMP, deleteMMPFile, approveMMP } = useAppContext();
+  const { currentUser, archiveMMP, deleteMMPFile, approveMMP, rejectMMP } = useAppContext();
   const { resetMMP, getMmpById, updateMMP, loading: mmpContextLoading } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
   const [showAuditTrail, setShowAuditTrail] = useState(false);
@@ -119,6 +121,7 @@ const MMPDetailView = () => {
   const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
+  const canReject = (checkPermission('mmp', 'approve') || isAdmin) && (mmpFile?.status === 'pending' || mmpFile?.status === 'verified');
   const canForward = hasAnyRole(['admin', 'ict', 'superAdmin', 'superadmin', 'super_admin']);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
@@ -382,23 +385,37 @@ const MMPDetailView = () => {
     }
   };
 
-  const handleApprove = async () => {
-    if (id && currentUser) {
-      try {
-        await approveMMP(id, currentUser.username || 'Unknown User');
-        setRefreshKey(prev => prev + 1);
-        toast({
-          title: "MMP Approved",
-          description: "The MMP file has been approved successfully.",
-        });
-      } catch (error) {
-        console.error("Failed to approve MMP:", error);
-        toast({
-          title: "Approval Failed",
-          description: "There was a problem approving the MMP file.",
-          variant: "destructive"
-        });
+  const [mmpApprovalDialog, setMmpApprovalDialog] = useState<{ open: boolean; mode: 'approve' | 'reject' } | null>(null);
+  const [mmpApprovalLoading, setMmpApprovalLoading] = useState(false);
+
+  const handleApprove = () => {
+    setMmpApprovalDialog({ open: true, mode: 'approve' });
+  };
+
+  const handleReject = () => {
+    setMmpApprovalDialog({ open: true, mode: 'reject' });
+  };
+
+  const handleConfirmMmpAction = async (reason: string, comment: string) => {
+    if (!mmpApprovalDialog || !id || !currentUser) return;
+    const { mode } = mmpApprovalDialog;
+    setMmpApprovalLoading(true);
+    try {
+      const notes = [reason ? `Reason: ${reason}` : '', comment].filter(Boolean).join(' | ');
+      if (mode === 'approve') {
+        await approveMMP(id, currentUser.username || 'Unknown User', notes || undefined);
+        toast({ title: "MMP Approved", description: "The MMP file has been approved successfully." });
+      } else if (mode === 'reject') {
+        await rejectMMP(id, notes || reason || 'Rejected by reviewer');
+        toast({ title: "MMP Rejected", description: "The MMP file has been rejected." });
       }
+      setRefreshKey(prev => prev + 1);
+      setMmpApprovalDialog(null);
+    } catch (error) {
+      console.error(`Failed to ${mode} MMP:`, error);
+      toast({ title: `${mode === 'approve' ? 'Approval' : 'Rejection'} Failed`, description: `There was a problem with this action.`, variant: "destructive" });
+    } finally {
+      setMmpApprovalLoading(false);
     }
   };
 
@@ -1178,7 +1195,8 @@ const MMPDetailView = () => {
               </div>
             </TabsContent>
 
-            <TabsContent value="audit" className="mt-6">
+            <TabsContent value="audit" className="mt-6 space-y-6">
+              <StatusHistoryPanel entityType="mmp" entityId={id || ''} />
               <AuditLogViewer mmpId={id} />
             </TabsContent>
 
@@ -1195,18 +1213,20 @@ const MMPDetailView = () => {
       
 
       {/* Move file management to the top of the page */}
-      {(canArchive || canDelete || canApprove || canForward) && (
+      {(canArchive || canDelete || canApprove || canReject || canForward) && (
         <div className="mb-6">
           <MMPFileManagement
             mmpFile={mmpFile}
             canArchive={canArchive}
             canDelete={canDelete}
             canApprove={canApprove}
+            canReject={canReject}
             canForward={canForward}
             onArchive={handleArchive}
             onDelete={handleDelete}
             onResetApproval={handleReset}
             onApprove={handleApprove}
+            onReject={handleReject}
             onForward={() => setForwardOpen(true)}
           />
         </div>
@@ -1306,6 +1326,18 @@ const MMPDetailView = () => {
           onReclaimComplete={() => {
             navigate('/mmp');
           }}
+        />
+      )}
+
+      {mmpApprovalDialog?.open && (
+        <ReasonPickerDialog
+          open={mmpApprovalDialog.open}
+          onOpenChange={(val) => { if (!val) setMmpApprovalDialog(null); }}
+          mode={mmpApprovalDialog.mode}
+          workflowType="mmp"
+          requireReasonOnApprove={true}
+          loading={mmpApprovalLoading}
+          onConfirm={handleConfirmMmpAction}
         />
       )}
     </div>

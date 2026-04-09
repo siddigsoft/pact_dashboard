@@ -687,6 +687,12 @@ const SiteVisits = () => {
             className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] bg-gradient-to-b from-card to-background border-none group hover:border-primary/30 hover:border hover:scale-[1.02] touch-manipulation" // Added touch-manipulation for better mobile interaction
           >
             <CardHeader className="pb-2 sm:pb-3"> {/* Adjusted padding */}
+              {['cancelled', 'rejected', 'declined'].includes(visit.status?.toLowerCase() || '') && (
+                <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-2 py-1 mb-2" data-testid={`alert-needs-attention-${visit.id}`}>
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>Needs Attention — {visit.status?.charAt(0).toUpperCase() + visit.status?.slice(1)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-start gap-2">
                 <CardTitle className="text-base sm:text-md font-semibold group-hover:text-primary transition-colors leading-tight">
                   {visit.siteName}

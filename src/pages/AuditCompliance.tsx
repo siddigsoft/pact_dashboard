@@ -2,22 +2,30 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, FileText, Shield, ChartBar, Download, Bell, Calendar, Loader2 } from "lucide-react";
+import { AlertTriangle, FileText, Shield, ChartBar, Download, Bell, Calendar, Loader2, FileSpreadsheet, ChevronDown, Filter } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import AuditLogViewer from "@/components/AuditLogViewer";
 import ComplianceTracker from "@/components/ComplianceTracker";
 import { useToast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { exportAuditLogsToCSV } from "@/utils/exportUtils";
+import { exportAuditLogsToCSV, exportAuditLogsToExcel } from "@/utils/exportUtils";
 import { useAudit } from "@/context/audit/AuditContext";
+import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
 
 const AuditCompliancePage = () => {
   const [activeSection, setActiveSection] = useState<string>("audit-logs");
   const [timeFrame, setTimeFrame] = useState<string>("all");
   const [actionType, setActionType] = useState<string>("all");
+  const [exportDateFrom, setExportDateFrom] = useState<string>('');
+  const [exportDateTo, setExportDateTo] = useState<string>('');
+  const [exportEntityType, setExportEntityType] = useState<string>('all');
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const { toast } = useToast();
   const { logs, loading, getAuditStats, getAuditLogs } = useAudit();
+  const { isSuperAdmin } = useSuperAdmin();
 
   const stats = useMemo(() => getAuditStats(), [logs]);
 
@@ -126,6 +134,54 @@ const AuditCompliancePage = () => {
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      const allLogs = getAuditLogs();
+      const dateFrom = exportDateFrom ? new Date(exportDateFrom) : null;
+      const dateTo = exportDateTo ? new Date(exportDateTo + 'T23:59:59') : null;
+      const filtered = allLogs.filter(log => {
+        if (exportEntityType !== 'all' && log.entityType !== exportEntityType) return false;
+        const ts = new Date(log.timestamp);
+        if (dateFrom && ts < dateFrom) return false;
+        if (dateTo && ts > dateTo) return false;
+        return true;
+      });
+      const exportData = filtered.map(log => ({
+        timestamp: log.timestamp,
+        action: log.action,
+        category: log.module,
+        description: log.description,
+        user: log.actorName,
+        userRole: log.actorRole,
+        details: log.details || '',
+        status: log.success !== false ? 'success' : 'failed',
+        severity: log.severity,
+        entityType: log.entityType,
+        entityName: log.entityName || '',
+        metadata: log.metadata,
+      }));
+
+      const suffix = [
+        exportEntityType !== 'all' ? exportEntityType : '',
+        exportDateFrom || exportDateTo ? `${exportDateFrom || 'start'}_to_${exportDateTo || 'now'}` : '',
+      ].filter(Boolean).join('_');
+      const filename = `full-audit-trail${suffix ? `-${suffix}` : ''}-${new Date().toISOString().split('T')[0]}.xlsx`;
+      exportAuditLogsToExcel(exportData, filename);
+
+      toast({
+        title: "Excel Export Successful",
+        description: `${exportData.length} audit log entries exported to Excel.`
+      });
+      setShowExportOptions(false);
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "There was an error exporting to Excel.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'critical': return 'text-red-500';
@@ -144,15 +200,71 @@ const AuditCompliancePage = () => {
             Comprehensive audit logs and compliance tracking
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={handleGenerateReport} disabled={loading} data-testid="button-generate-report">
             {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ChartBar className="h-4 w-4 mr-2" />}
             Generate Report
           </Button>
-          <Button onClick={handleExportData} disabled={loading} data-testid="button-export-data">
+          <Button variant="outline" onClick={handleExportData} disabled={loading} data-testid="button-export-data">
             <Download className="h-4 w-4 mr-2" />
-            Export Data
+            Export CSV
           </Button>
+          {isSuperAdmin && (
+            <Popover open={showExportOptions} onOpenChange={setShowExportOptions}>
+              <PopoverTrigger asChild>
+                <Button disabled={loading} data-testid="button-export-excel">
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export Full Audit (Excel)
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4 space-y-4" align="end">
+                <div className="flex items-center gap-2 mb-1">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium text-sm">Export Filters (optional)</span>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Entity Type</Label>
+                  <Select value={exportEntityType} onValueChange={setExportEntityType}>
+                    <SelectTrigger data-testid="select-export-entity-type">
+                      <SelectValue placeholder="All entity types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All entity types</SelectItem>
+                      <SelectItem value="mmp">MMP</SelectItem>
+                      <SelectItem value="site_visit">Site Visit</SelectItem>
+                      <SelectItem value="wallet">Wallet / Payment</SelectItem>
+                      <SelectItem value="withdrawal">Withdrawal</SelectItem>
+                      <SelectItem value="cost_submission">Cost Submission</SelectItem>
+                      <SelectItem value="project">Project</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Date From</Label>
+                  <Input
+                    type="date"
+                    value={exportDateFrom}
+                    onChange={e => setExportDateFrom(e.target.value)}
+                    data-testid="input-export-date-from"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Date To</Label>
+                  <Input
+                    type="date"
+                    value={exportDateTo}
+                    onChange={e => setExportDateTo(e.target.value)}
+                    data-testid="input-export-date-to"
+                  />
+                </div>
+                <Button onClick={handleExportExcel} className="w-full" data-testid="button-confirm-export-excel">
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export to Excel
+                </Button>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
       </div>
 

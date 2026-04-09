@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,7 @@ import {
   Download, Search, FileText, Shield, Bell, CalendarCheck, 
   AlertTriangle, FileX, FileCheck, Clock, User, Users, Settings,
   Edit, Eye, ArrowRight, ArrowUpRight, Lock, Unlock, RefreshCw,
-  Trash2, Archive, Undo, Check, X, Upload, FileUp, Info
+  Trash2, Archive, Undo, Check, X, Upload, FileUp, Info, ExternalLink
 } from "lucide-react";
 import {
   HoverCard,
@@ -30,6 +31,46 @@ import { useToast } from "@/components/ui/use-toast";
 import { exportAuditLogsToCSV, exportAuditLogsToJSON } from "@/utils/exportUtils";
 import { useMMP } from "@/context/mmp/MMPContext";
 import { MMPFile } from "@/types";
+
+function normalizeEntityType(raw: string): string {
+  return raw.toLowerCase().replace(/[-\s]/g, '_');
+}
+
+function getDeepLinkPath(log: { category?: string; action?: string; entityType?: string; entityId?: string; relatedEntityId?: string }): string | null {
+  const rawType = log.entityType || log.category || '';
+  const entityType = normalizeEntityType(rawType);
+  const entityId = log.entityId || log.relatedEntityId;
+  if (!entityId) return null;
+
+  // MMP variants: mmp, mmp_file, mmp_files, mmpfile
+  if (entityType === 'mmp' || entityType.startsWith('mmp_file') || entityType === 'mmpfile') return `/mmp/${entityId}`;
+  // Generic includes-based fallback for mmp
+  if (entityType.includes('mmp')) return `/mmp/${entityId}`;
+
+  // Site visit variants: site_visit, site_visits, sitevisit, site-visit
+  if (entityType === 'site_visit' || entityType === 'site_visits' || entityType === 'sitevisit') return `/site-visits/${entityId}`;
+  if (entityType.includes('site') && entityType.includes('visit')) return `/site-visits/${entityId}`;
+
+  // Project variants
+  if (entityType === 'project' || entityType === 'projects') return `/projects/${entityId}`;
+  if (entityType.includes('project')) return `/projects/${entityId}`;
+
+  // Withdrawal variants: withdrawal, withdrawal_request, withdrawal_requests
+  if (entityType === 'withdrawal' || entityType.startsWith('withdrawal_request')) return `/withdrawal-approval?highlight=${entityId}`;
+  if (entityType.includes('withdrawal')) return `/withdrawal-approval?highlight=${entityId}`;
+
+  // Cost submission variants: cost_submission, operationalcost, operational_cost
+  if (entityType === 'cost_submission' || entityType === 'operationalcost' || entityType === 'operational_cost') return `/cost-submission?highlight=${entityId}`;
+  if (entityType.includes('cost_submission') || entityType.includes('operationalcost') || entityType.includes('operational_cost')) return `/cost-submission?highlight=${entityId}`;
+
+  // Down payment / wallet variants
+  if (entityType === 'down_payment' || entityType.startsWith('down_payment')) return `/wallet?highlight=${entityId}`;
+  if (entityType.includes('down_payment') || entityType.includes('downpayment')) return `/wallet?highlight=${entityId}`;
+  if (entityType === 'wallet' || entityType === 'payment' || entityType === 'payments') return `/wallet?highlight=${entityId}`;
+  if (entityType.includes('wallet') || entityType.includes('payment')) return `/wallet?highlight=${entityId}`;
+
+  return null;
+}
 
 interface AuditLogViewerProps {
   mmpId?: string;
@@ -50,6 +91,7 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
   const [dateRange, setDateRange] = useState<string>(timeFilter);
   const [currentView, setCurrentView] = useState<'timeline' | 'table'>('timeline');
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { mmpFiles, getMmpById } = useMMP();
   const currentMMP: MMPFile | undefined = mmpId ? getMmpById(mmpId) : undefined;
 
@@ -401,37 +443,54 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
                                   {log.userRole}
                                 </Badge>
                               </div>
-                              {log.metadata && (
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm" className="mt-2">
-                                      View Details
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80">
-                                    <div className="space-y-2">
-                                      <h4 className="font-medium">Detailed Information</h4>
-                                      <div className="text-sm space-y-1">
-                                        {Object.entries(log.metadata).map(([key, value]) => (
-                                          <div key={key}>
-                                            <span className="font-medium capitalize">
-                                              {key.replace(/([A-Z])/g, ' $1').trim()}:
-                                            </span>
-                                            <span className="ml-1">
-                                              {Array.isArray(value) 
-                                                ? value.join(', ')
-                                                : typeof value === 'object'
-                                                  ? JSON.stringify(value, null, 2)
-                                                  : String(value)
-                                              }
-                                            </span>
-                                          </div>
-                                        ))}
+                              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                {log.metadata && (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button variant="outline" size="sm">
+                                        View Details
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80">
+                                      <div className="space-y-2">
+                                        <h4 className="font-medium">Detailed Information</h4>
+                                        <div className="text-sm space-y-1">
+                                          {Object.entries(log.metadata).map(([key, value]) => (
+                                            <div key={key}>
+                                              <span className="font-medium capitalize">
+                                                {key.replace(/([A-Z])/g, ' $1').trim()}:
+                                              </span>
+                                              <span className="ml-1">
+                                                {Array.isArray(value) 
+                                                  ? value.join(', ')
+                                                  : typeof value === 'object'
+                                                    ? JSON.stringify(value, null, 2)
+                                                    : String(value)
+                                                }
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
                                       </div>
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
-                              )}
+                                    </PopoverContent>
+                                  </Popover>
+                                )}
+                                {(() => {
+                                  const deepLink = getDeepLinkPath(log);
+                                  return deepLink ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-blue-600 dark:text-blue-400 h-7 px-2"
+                                      onClick={() => navigate(deepLink)}
+                                      data-testid={`link-audit-record-${log.id}`}
+                                    >
+                                      <ExternalLink className="h-3 w-3 mr-1" />
+                                      View Record
+                                    </Button>
+                                  ) : null;
+                                })()}
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
@@ -494,39 +553,56 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
                           </TableCell>
                           <TableCell>{getStatusBadge(log.status)}</TableCell>
                           <TableCell>
-                            <div className="max-w-[300px]">
+                            <div className="max-w-[300px] flex flex-col gap-1">
                               <p className="truncate">{log.details}</p>
-                              {log.metadata && (
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button variant="link" size="sm" className="h-auto p-0">
-                                      View Details
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80">
-                                    <div className="space-y-2">
-                                      <h4 className="font-medium">Detailed Information</h4>
-                                      <div className="text-sm space-y-1">
-                                        {Object.entries(log.metadata).map(([key, value]) => (
-                                          <div key={key}>
-                                            <span className="font-medium capitalize">
-                                              {key.replace(/([A-Z])/g, ' $1').trim()}:
-                                            </span>
-                                            <span className="ml-1">
-                                              {Array.isArray(value) 
-                                                ? value.join(', ')
-                                                : typeof value === 'object'
-                                                  ? JSON.stringify(value, null, 2)
-                                                  : String(value)
-                                              }
-                                            </span>
-                                          </div>
-                                        ))}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {log.metadata && (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button variant="link" size="sm" className="h-auto p-0">
+                                        View Details
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80">
+                                      <div className="space-y-2">
+                                        <h4 className="font-medium">Detailed Information</h4>
+                                        <div className="text-sm space-y-1">
+                                          {Object.entries(log.metadata).map(([key, value]) => (
+                                            <div key={key}>
+                                              <span className="font-medium capitalize">
+                                                {key.replace(/([A-Z])/g, ' $1').trim()}:
+                                              </span>
+                                              <span className="ml-1">
+                                                {Array.isArray(value) 
+                                                  ? value.join(', ')
+                                                  : typeof value === 'object'
+                                                    ? JSON.stringify(value, null, 2)
+                                                    : String(value)
+                                                }
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
                                       </div>
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
-                              )}
+                                    </PopoverContent>
+                                  </Popover>
+                                )}
+                                {(() => {
+                                  const deepLink = getDeepLinkPath(log);
+                                  return deepLink ? (
+                                    <Button
+                                      variant="link"
+                                      size="sm"
+                                      className="h-auto p-0 text-blue-600 dark:text-blue-400"
+                                      onClick={() => navigate(deepLink)}
+                                      data-testid={`link-audit-table-record-${log.id}`}
+                                    >
+                                      <ExternalLink className="h-3 w-3 mr-1" />
+                                      View Record
+                                    </Button>
+                                  ) : null;
+                                })()}
+                              </div>
                             </div>
                           </TableCell>
                         </TableRow>

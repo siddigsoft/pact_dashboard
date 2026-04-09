@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ReasonPickerDialog } from '@/components/audit/ReasonPickerDialog';
+import { StatusHistoryPanel } from '@/components/audit/StatusHistoryPanel';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
@@ -68,7 +70,7 @@ export default function WithdrawalApproval() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const [selectedRequest, setSelectedRequest] = useState<SupervisedRequest | null>(null);
-  const [dialogType, setDialogType] = useState<'approve' | 'reject' | 'batch_approve' | null>(null);
+  const [dialogType, setDialogType] = useState<'batch_approve' | null>(null);
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -119,13 +121,13 @@ export default function WithdrawalApproval() {
     }
   };
   
-  const handleBatchApprove = async () => {
+  const handleBatchApprove = async (reason: string, comment: string) => {
     if (selectedRequestIds.size === 0) return;
     
     setProcessing(true);
     
     try {
-      const batchNotes = notes || 'Batch approved by supervisor';
+      const batchNotes = [reason ? `Reason: ${reason}` : '', comment].filter(Boolean).join(' | ') || 'Batch approved by supervisor';
       
       const results = await Promise.allSettled(
         Array.from(selectedRequestIds).map(requestId => 
@@ -247,25 +249,32 @@ export default function WithdrawalApproval() {
     }
   };
 
+  const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
+  const [reasonDialogMode, setReasonDialogMode] = useState<'approve' | 'reject'>('approve');
+
   const handleApprove = (request: SupervisedRequest) => {
     setSelectedRequest(request);
-    setDialogType('approve');
+    setReasonDialogMode('approve');
+    setReasonDialogOpen(true);
     setNotes('');
   };
 
   const handleReject = (request: SupervisedRequest) => {
     setSelectedRequest(request);
-    setDialogType('reject');
+    setReasonDialogMode('reject');
+    setReasonDialogOpen(true);
     setNotes('');
   };
 
-  const handleConfirmAction = async () => {
+  const handleConfirmAction = async (reason: string, comment: string) => {
     if (!selectedRequest) return;
+
+    const combinedNotes = [reason ? `Reason: ${reason}` : '', comment].filter(Boolean).join(' | ');
 
     setProcessing(true);
     try {
-      if (dialogType === 'approve') {
-        await approveWithdrawalRequest(selectedRequest.id, notes);
+      if (reasonDialogMode === 'approve') {
+        await approveWithdrawalRequest(selectedRequest.id, combinedNotes || notes);
         
         // Notify hub supervisor of forwarding to finance
         if (selectedRequest.requesterHub) {
@@ -282,8 +291,8 @@ export default function WithdrawalApproval() {
             }
           );
         }
-      } else if (dialogType === 'reject') {
-        await rejectWithdrawalRequest(selectedRequest.id, notes);
+      } else if (reasonDialogMode === 'reject') {
+        await rejectWithdrawalRequest(selectedRequest.id, combinedNotes || notes);
         
         // Notify hub supervisor of rejection
         if (selectedRequest.requesterHub) {
@@ -302,13 +311,14 @@ export default function WithdrawalApproval() {
         }
       }
       await refreshSupervisedWithdrawalRequests();
-      setDialogType(null);
+      setReasonDialogOpen(false);
       setSelectedRequest(null);
       setNotes('');
     } finally {
       setProcessing(false);
     }
   };
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -484,7 +494,18 @@ export default function WithdrawalApproval() {
               </Button>
             </div>
           )}
-          {request.status !== 'pending' && request.supervisorNotes && (
+          {request.status === 'rejected' && (
+            <div className="mt-3 pt-3 border-t flex items-start gap-2 bg-red-500/5 border border-red-500/20 rounded p-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-red-600 dark:text-red-400 font-medium">
+                Needs Attention — This request has been rejected.
+                {request.supervisorNotes && (
+                  <span className="block mt-0.5 text-muted-foreground italic">"{request.supervisorNotes}"</span>
+                )}
+              </div>
+            </div>
+          )}
+          {request.status !== 'pending' && request.status !== 'rejected' && request.supervisorNotes && (
             <div className="mt-4 pt-4 border-t">
               <p className="text-xs text-muted-foreground flex items-start gap-1.5">
                 <FileText className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
@@ -492,6 +513,7 @@ export default function WithdrawalApproval() {
               </p>
             </div>
           )}
+          <StatusHistoryPanel entityType="withdrawal" entityId={request.id} className="mt-3" />
           {request.status === 'approved' && (
             <div className="mt-3 pt-3 border-t">
               {(request as any).fundReceiptConfirmed ? (
@@ -851,142 +873,64 @@ export default function WithdrawalApproval() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={dialogType !== null && dialogType !== 'batch_approve'} onOpenChange={() => setDialogType(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {dialogType === 'approve' ? (
-                <>
-                  <div className="p-2 rounded-full bg-emerald-500/10">
-                    <Send className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  Forward to Finance
-                </>
-              ) : (
-                <>
-                  <div className="p-2 rounded-full bg-red-500/10">
-                    <XCircle className="w-5 h-5 text-red-600" />
-                  </div>
-                  Reject Request
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedRequest && (
-                <div className="mt-4 p-4 rounded-lg bg-muted/50 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Enumerator</span>
-                    <span className="font-medium text-foreground">{getUserName(selectedRequest.userId, selectedRequest)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Amount</span>
-                    <span className="font-bold text-foreground tabular-nums">{formatCurrency(selectedRequest.amount, selectedRequest.currency)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Payment Method</span>
-                    <span className="font-medium text-foreground capitalize">{selectedRequest.paymentMethod}</span>
-                  </div>
-                  {selectedRequest.requestReason && (
-                    <div className="pt-2 border-t">
-                      <p className="text-xs text-muted-foreground mb-1">Reason</p>
-                      <p className="text-sm text-foreground italic">"{selectedRequest.requestReason}"</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">
-              Notes {dialogType === 'reject' && <span className="text-destructive">*</span>}
-            </Label>
-            <Textarea
-              id="notes"
-              placeholder={dialogType === 'approve' ? 'Add optional notes for Finance team...' : 'Explain the reason for rejection...'}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              data-testid="input-supervisor-notes"
-            />
+      <ReasonPickerDialog
+        open={reasonDialogOpen}
+        onOpenChange={setReasonDialogOpen}
+        mode={reasonDialogMode}
+        workflowType="withdrawal"
+        title={reasonDialogMode === 'approve' ? 'Forward to Finance' : 'Reject Request'}
+        description={selectedRequest && (
+          <div className="mt-2 p-4 rounded-lg bg-muted/50 space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Enumerator</span>
+              <span className="font-medium text-foreground">{getUserName(selectedRequest.userId, selectedRequest)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Amount</span>
+              <span className="font-bold text-foreground tabular-nums">{formatCurrency(selectedRequest.amount, selectedRequest.currency)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Payment Method</span>
+              <span className="font-medium text-foreground capitalize">{selectedRequest.paymentMethod}</span>
+            </div>
           </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDialogType(null)} disabled={processing}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmAction}
-              disabled={processing || (dialogType === 'reject' && !notes.trim())}
-              className={dialogType === 'approve' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}
-              data-testid="button-confirm-action"
-            >
-              {processing ? 'Processing...' : dialogType === 'approve' ? 'Forward to Finance' : 'Reject Request'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        onConfirm={handleConfirmAction}
+        loading={processing}
+        approveLabel="Forward to Finance"
+        rejectLabel="Reject Request"
+        requireReasonOnApprove={true}
+      />
       
-      <Dialog open={dialogType === 'batch_approve'} onOpenChange={() => setDialogType(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <div className="p-2 rounded-full bg-emerald-500/10">
-                <CheckCheck className="w-5 h-5 text-emerald-600" />
-              </div>
-              Batch Approval
-            </DialogTitle>
-            <DialogDescription>
-              <div className="mt-4 p-4 rounded-lg bg-muted/50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Requests Selected</span>
-                  <span className="font-bold text-foreground tabular-nums">{selectedRequestIds.size}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Total Amount</span>
-                  <span className="font-bold text-foreground tabular-nums">
-                    {formatCurrency(
-                      pendingRequests
-                        .filter(r => selectedRequestIds.has(r.id))
-                        .reduce((sum, r) => sum + r.amount, 0),
-                      'SDG'
-                    )}
-                  </span>
-                </div>
-              </div>
-              <p className="mt-4 text-sm">
-                All selected requests will be forwarded to Finance for payment processing.
-              </p>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="batch-notes">Notes (Optional)</Label>
-            <Textarea
-              id="batch-notes"
-              placeholder="Add optional notes for Finance team..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              data-testid="input-batch-notes"
-            />
+      <ReasonPickerDialog
+        open={dialogType === 'batch_approve'}
+        onOpenChange={(val) => { if (!val) setDialogType(null); }}
+        mode="approve"
+        workflowType="withdrawal"
+        requireReasonOnApprove={true}
+        title={`Batch Approve ${selectedRequestIds.size} Request${selectedRequestIds.size !== 1 ? 's' : ''}`}
+        description={
+          <div className="mt-2 p-3 rounded-lg bg-muted/50 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Requests Selected</span>
+              <span className="font-bold tabular-nums">{selectedRequestIds.size}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Total Amount</span>
+              <span className="font-bold tabular-nums">
+                {formatCurrency(
+                  pendingRequests.filter(r => selectedRequestIds.has(r.id)).reduce((sum, r) => sum + r.amount, 0),
+                  'SDG'
+                )}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">All selected requests will be forwarded to Finance for payment processing.</p>
           </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDialogType(null)} disabled={processing}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleBatchApprove}
-              disabled={processing}
-              className="bg-emerald-600 text-white"
-              data-testid="button-confirm-batch"
-            >
-              {processing ? 'Processing...' : `Approve ${selectedRequestIds.size} Requests`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        }
+        approveLabel={`Forward ${selectedRequestIds.size} to Finance`}
+        loading={processing}
+        onConfirm={handleBatchApprove}
+      />
 
       <Dialog open={selectedRequest !== null && dialogType === null} onOpenChange={() => setSelectedRequest(null)}>
         <DialogContent className="sm:max-w-md">

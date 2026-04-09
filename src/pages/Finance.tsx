@@ -1,6 +1,7 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { ReasonPickerDialog } from "@/components/audit/ReasonPickerDialog";
 import { useAppContext } from "@/context/AppContext";
 import { DataFreshnessBadge } from "@/components/realtime";
 import { CurrencySwitcher } from "@/components/currency/CurrencySwitcher";
@@ -718,37 +719,36 @@ const Finance: React.FC = () => {
     return user?.name || 'Unknown User';
   };
 
-  const handleApprovePayment = async (requestId: string) => {
-    try {
-      await adminProcessWithdrawal(requestId, 'Approved from finance page');
-      toast({
-        title: "Payment approved",
-        description: "The payment has been processed and funds released.",
-      });
-      fetchWithdrawals();
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to process payment.",
-        variant: "destructive",
-      });
-    }
+  const [paymentActionDialog, setPaymentActionDialog] = useState<{ open: boolean; mode: 'approve' | 'reject'; requestId: string } | null>(null);
+  const [paymentActionLoading, setPaymentActionLoading] = useState(false);
+
+  const handleApprovePayment = (requestId: string) => {
+    setPaymentActionDialog({ open: true, mode: 'approve', requestId });
   };
 
-  const handleRejectPayment = async (requestId: string) => {
+  const handleRejectPayment = (requestId: string) => {
+    setPaymentActionDialog({ open: true, mode: 'reject', requestId });
+  };
+
+  const handleConfirmPaymentAction = async (reason: string, comment: string) => {
+    if (!paymentActionDialog) return;
+    const { mode, requestId } = paymentActionDialog;
+    const notes = [reason ? `Reason: ${reason}` : '', comment].filter(Boolean).join(' | ') || (mode === 'approve' ? 'Approved from finance page' : 'Rejected from finance page');
+    setPaymentActionLoading(true);
     try {
-      await adminRejectWithdrawal(requestId, 'Rejected from finance page');
-      toast({
-        title: "Payment rejected",
-        description: "The withdrawal request has been rejected.",
-      });
+      if (mode === 'approve') {
+        await adminProcessWithdrawal(requestId, notes);
+        toast({ title: "Payment approved", description: "The payment has been processed and funds released." });
+      } else {
+        await adminRejectWithdrawal(requestId, notes);
+        toast({ title: "Payment rejected", description: "The withdrawal request has been rejected." });
+      }
       fetchWithdrawals();
+      setPaymentActionDialog(null);
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to reject payment.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: `Failed to ${mode} payment.`, variant: "destructive" });
+    } finally {
+      setPaymentActionLoading(false);
     }
   };
   
@@ -1864,6 +1864,21 @@ const Finance: React.FC = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      {paymentActionDialog && (
+        <ReasonPickerDialog
+          open={paymentActionDialog.open}
+          onOpenChange={(v) => { if (!v) setPaymentActionDialog(null); }}
+          mode={paymentActionDialog.mode}
+          workflowType="finance"
+          title={paymentActionDialog.mode === 'approve' ? 'Approve Payment' : 'Reject Payment'}
+          onConfirm={handleConfirmPaymentAction}
+          loading={paymentActionLoading}
+          approveLabel="Approve Payment"
+          rejectLabel="Reject Payment"
+          requireReasonOnApprove={true}
+        />
+      )}
     </div>
   );
 };

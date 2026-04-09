@@ -58,6 +58,7 @@ import { ProjectFieldTasksPanel } from './ProjectFieldTasksPanel';
 import { ProjectMilestonesPanel } from './ProjectMilestonesPanel';
 import { OutlookCalendarPanel } from './OutlookCalendarPanel';
 import ProjectChangeLogPanel from './ProjectChangeLogPanel';
+import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import ProjectRisksPanel from './ProjectRisksPanel';
 
 import { Project } from '@/types/project';
@@ -1417,7 +1418,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           />
         </TabsContent>
 
-        <TabsContent value="changelog" className="mt-4">
+        <TabsContent value="changelog" className="mt-4 space-y-4">
+          <StatusHistoryPanel entityType="project" entityId={project.id} />
           <ProjectChangeLogPanel projectId={project.id} />
         </TabsContent>
       </Tabs>

@@ -19,6 +19,8 @@ interface MMPFileManagementProps {
   onResetApproval?: () => void;
   canApprove?: boolean;
   onApprove?: () => void;
+  canReject?: boolean;
+  onReject?: () => void;
   canForward?: boolean;
   onForward?: () => void;
 }
@@ -32,6 +34,8 @@ const MMPFileManagement = ({
   onResetApproval, 
   canApprove,
   onApprove,
+  canReject,
+  onReject,
   canForward,
   onForward
 }: MMPFileManagementProps) => {
@@ -205,6 +209,17 @@ const MMPFileManagement = ({
                 className="bg-green-600 text-white hover:bg-green-700 shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform text-sm"
               >
                 Approve MMP
+              </Button>
+            )}
+
+            {canReject && onReject && !isRejected && (
+              <Button 
+                onClick={onReject}
+                variant="destructive"
+                className="shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform text-sm"
+                data-testid="button-reject-mmp"
+              >
+                Reject MMP
               </Button>
             )}
             

@@ -252,11 +252,18 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           const recallHistory = (workflow?.recallHistory as any[]) || [];
           const recallCount = recallHistory.filter((log: any) => log.action === 'recall' || log.action?.startsWith('recall_')).length;
           
+          const isRejectedMmp = mmp.status?.toLowerCase() === 'rejected' || mmp.status?.toLowerCase() === 'declined';
           return (
             <Card
               key={mmp.id}
               className="hover:shadow-md transition-all"
             >
+              {isRejectedMmp && (
+                <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800 px-4 py-2" data-testid={`alert-mmp-needs-attention-${mmp.id}`}>
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>Needs Attention — MMP {mmp.status?.charAt(0).toUpperCase() + mmp.status?.slice(1)}</span>
+                </div>
+              )}
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div 

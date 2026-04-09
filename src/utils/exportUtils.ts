@@ -2,6 +2,7 @@ import { saveAs } from 'file-saver';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 /**
  * Exports audit log data to CSV format and triggers download
@@ -207,4 +208,37 @@ export const exportSiteEntriesToPDF = (sites: any[], filename?: string) => {
   } catch (error) {
     console.error('Error exporting PDF:', error);
   }
+};
+
+export const exportAuditLogsToExcel = (logs: any[], filename?: string) => {
+  const rows = logs.map(log => ({
+    'Timestamp': log.timestamp ? format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss') : '',
+    'Action': log.action || '',
+    'Category': log.category || log.module || '',
+    'Description': log.description || '',
+    'User': log.user || log.actorName || '',
+    'User Role': log.userRole || log.actorRole || '',
+    'Status': log.status || (log.success !== false ? 'success' : 'failed'),
+    'Severity': log.severity || '',
+    'Entity Type': log.entityType || '',
+    'Entity Name': log.entityName || '',
+    'Details': log.details || '',
+    'IP Address': log.ipAddress || '',
+    'Reason': (log.metadata?.reason) || '',
+    'Comment': (log.metadata?.comment) || '',
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Audit Trail');
+
+  const colWidths = [
+    { wch: 20 }, { wch: 25 }, { wch: 18 }, { wch: 40 }, { wch: 20 },
+    { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 25 },
+    { wch: 35 }, { wch: 15 }, { wch: 30 }, { wch: 35 },
+  ];
+  ws['!cols'] = colWidths;
+
+  const today = format(new Date(), 'yyyy-MM-dd');
+  XLSX.writeFile(wb, filename || `audit-trail-${today}.xlsx`);
 };

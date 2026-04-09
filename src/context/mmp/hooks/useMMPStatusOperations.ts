@@ -239,7 +239,7 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
   );
 
   const approveMMP = useCallback(
-    async (id: string, approvedBy: string) => {
+    async (id: string, approvedBy: string, notes?: string) => {
       const session = await ensureValidSession();
       if (!session.success) {
         toast.error(session.error || 'Session expired. Please refresh and try again.');
@@ -249,16 +249,21 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
       try {
         const timestamp = new Date().toISOString();
 
+        const updateData: Record<string, unknown> = {
+          status: 'approved',
+          approvedby: approvedBy,
+          approvedat: timestamp,
+          updated_at: timestamp,
+        };
+        if (notes) {
+          updateData.approval_notes = notes;
+        }
+
         const { error } = await withTimeout(
           (async () => {
             return await supabase
               .from('mmp_files')
-              .update({
-                status: 'approved',
-                approvedby: approvedBy,
-                approvedat: timestamp,
-                updated_at: timestamp,
-              })
+              .update(updateData)
               .eq('id', id);
           })(),
           15000,

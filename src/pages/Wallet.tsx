@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
@@ -56,6 +56,7 @@ import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'd
 import { DEFAULT_CURRENCY } from '@/types/wallet';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { WalletSignatureIntegration } from '@/components/wallet/WalletSignatureIntegration';
+import { StatusHistoryPanel } from '@/components/audit/StatusHistoryPanel';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
@@ -1451,7 +1452,14 @@ const WalletPage = () => {
                   {/* Mobile Card Layout */}
                   <div className="block sm:hidden space-y-3">
                     {displayWithdrawals.map((request) => (
-                      <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                      <div key={request.id} className="bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700/50">
+                        {request.status === 'rejected' && (
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-red-400 bg-red-950/60 border-b border-red-800/50 px-4 py-2" data-testid={`alert-withdrawal-rejected-${request.id}`}>
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                            <span>Needs Attention — Request rejected. Review notes below and consider resubmitting.</span>
+                          </div>
+                        )}
+                        <div className="p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2 flex-wrap">
                             {getWithdrawalStatusBadge(request.status, request)}
@@ -1541,6 +1549,15 @@ const WalletPage = () => {
                             </button>
                           )}
                         </div>
+                        </div>
+                        <div className="px-4 pb-3">
+                          <StatusHistoryPanel
+                            entityType="withdrawal"
+                            entityId={request.id}
+                            workflowType="withdrawal"
+                            className="bg-slate-900/50"
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1561,10 +1578,19 @@ const WalletPage = () => {
                       </TableHeader>
                       <TableBody>
                         {displayWithdrawals.map((request) => (
-                          <TableRow key={request.id} data-testid={`row-withdrawal-${request.id}`}>
+                          <React.Fragment key={request.id}>
+                          <TableRow data-testid={`row-withdrawal-${request.id}`} className={request.status === 'rejected' ? 'border-red-800/30' : ''}>
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                {getWithdrawalStatusBadge(request.status, request)}
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-2">
+                                  {getWithdrawalStatusBadge(request.status, request)}
+                                </div>
+                                {request.status === 'rejected' && (
+                                  <div className="flex items-center gap-1 text-xs text-red-400" data-testid={`alert-withdrawal-rejected-desktop-${request.id}`}>
+                                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                                    <span>Needs Attention</span>
+                                  </div>
+                                )}
                                 {currentUser && (request.status === 'pending' || request.status === 'supervisor_approved') && (
                                   <WalletSignatureIntegration
                                     transaction={{
@@ -1633,6 +1659,19 @@ const WalletPage = () => {
                               </div>
                             </TableCell>
                           </TableRow>
+                          {request.status === 'rejected' && (
+                            <TableRow className="bg-slate-900/30">
+                              <TableCell colSpan={7} className="py-2 px-4">
+                                <StatusHistoryPanel
+                                  entityType="withdrawal"
+                                  entityId={request.id}
+                                  workflowType="withdrawal"
+                                  className="bg-transparent"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          </React.Fragment>
                         ))}
                       </TableBody>
                     </Table>

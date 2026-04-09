@@ -43,6 +43,7 @@ import { SiteVisitCostDialog } from "@/components/wallet/SiteVisitCostDialog";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisitCostsUnified } from "@/components/site-visit/SiteVisitCostsUnified";
 import { SiteVisitAuditTrail } from "@/components/site-visit/SiteVisitAuditTrail";
+import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import { CompletedVisitReportCard } from "@/components/site-visit/CompletedVisitReportCard";
 import { NearestEnumeratorsCard } from "@/components/site-visit/NearestEnumeratorsCard";
 import { ConfirmationAcknowledgment } from "@/components/site-visit/ConfirmationAcknowledgment";
@@ -543,6 +544,8 @@ const SiteVisitDetail = () => {
           siteVisitId={siteVisit.id}
           siteCode={siteVisit.siteCode}
         />
+
+        <StatusHistoryPanel entityType="site_visit" entityId={siteVisit.id} />
       </div>
 
       {/* Mobile Bottom Action Bar */}

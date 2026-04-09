@@ -33,6 +33,7 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
+import { ReasonPickerDialog } from '@/components/audit/ReasonPickerDialog';
 import { 
   Shield, 
   RotateCcw, 
@@ -726,8 +727,9 @@ export function SuperAdminDataManagement() {
     }
   };
 
-  const handleReturnToFOM = async () => {
-    if (!selectedDispatchedSite || !currentUser || !reason.trim()) return;
+  const handleReturnToFOM = async (pickedReason: string, comment?: string) => {
+    if (!selectedDispatchedSite || !currentUser || !pickedReason.trim()) return;
+    const reason = [pickedReason, comment].filter(Boolean).join(' | ');
 
     setProcessing(true);
     try {
@@ -2628,56 +2630,28 @@ export function SuperAdminDataManagement() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showReturnToFOMDialog} onOpenChange={setShowReturnToFOMDialog}>
-        <DialogContent className="max-w-md" data-testid="dialog-return-to-fom">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Undo2 className="h-5 w-5 text-orange-600" />
-              Return Site to FOM
-            </DialogTitle>
-            <DialogDescription>
-              This will return the site to the Field Operations Manager. The site status will be set to "returned_to_fom" and all dispatch/cost fields will be cleared.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-              <p className="font-semibold">{selectedDispatchedSite?.site_name}</p>
-              <p className="text-sm text-muted-foreground">{selectedDispatchedSite?.site_code}</p>
-              <p className="text-sm">
-                <span className="text-muted-foreground">Location:</span> {selectedDispatchedSite?.state}, {selectedDispatchedSite?.locality}
-              </p>
-            </div>
-
+      <ReasonPickerDialog
+        open={showReturnToFOMDialog}
+        onOpenChange={setShowReturnToFOMDialog}
+        mode="reject"
+        workflowType="site_visit"
+        title="Return Site to FOM"
+        description={
+          selectedDispatchedSite ? (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Reason for returning to FOM <span className="text-red-500">*</span></label>
-              <textarea
-                className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="Enter reason..."
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                data-testid="textarea-return-to-fom-reason"
-              />
+              <p>This will return the site to the Field Operations Manager. All dispatch and cost fields will be cleared.</p>
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1 mt-2">
+                <p className="font-semibold text-sm">{selectedDispatchedSite.site_name}</p>
+                <p className="text-xs text-muted-foreground">{selectedDispatchedSite.site_code}</p>
+                <p className="text-xs"><span className="text-muted-foreground">Location:</span> {selectedDispatchedSite.state}, {selectedDispatchedSite.locality}</p>
+              </div>
             </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowReturnToFOMDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="default"
-              className="bg-orange-600 hover:bg-orange-700"
-              onClick={handleReturnToFOM}
-              disabled={processing || !reason.trim()}
-              data-testid="button-confirm-return-to-fom"
-            >
-              {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Undo2 className="h-4 w-4 mr-2" />}
-              {processing ? 'Returning...' : 'Return to FOM'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          ) : undefined
+        }
+        rejectLabel="Return to FOM"
+        onConfirm={handleReturnToFOM}
+        loading={processing}
+      />
 
       <Dialog open={showResetSiteVisitDialog} onOpenChange={setShowResetSiteVisitDialog}>
         <DialogContent className="max-w-md" data-testid="dialog-reset-site-visit">
