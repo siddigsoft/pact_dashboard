@@ -711,23 +711,39 @@ const Reports: React.FC = () => {
 
 // ── HR Summary Report Component ───────────────────────────────────────────────
 
-interface LeaveBalance { userId: string; name: string; email: string; annual: number; sick: number; emergency: number; maternity: number; other: number; }
+interface LeaveTaken { userId: string; name: string; email: string; annual: number; sick: number; emergency: number; maternity: number; other: number; }
+interface LeaveEntitlement { userId: string; annual: number; sick: number; emergency: number; maternity: number; }
+interface LeaveRow {
+  userId: string; name: string; email: string;
+  annualEnt: number; annualTaken: number; annualBalance: number;
+  sickEnt: number; sickTaken: number; sickBalance: number;
+  emergEnt: number; emergTaken: number; emergBalance: number;
+  matEnt: number; matTaken: number; matBalance: number;
+  otherTaken: number;
+  totalEnt: number; totalTaken: number; totalBalance: number;
+}
 interface CertRow { userId: string; name: string; email: string; title: string; certType: string; issued: string | null; expiry: string | null; status: string; }
 
 function HRSummaryReport() {
   const { toast } = useToast();
   const [loading, setLoading] = React.useState(false);
-  const [leaveBalances, setLeaveBalances] = React.useState<LeaveBalance[]>([]);
+  const [leaveRows, setLeaveRows] = React.useState<LeaveRow[]>([]);
   const [certRows, setCertRows] = React.useState<CertRow[]>([]);
   const [dataLoaded, setDataLoaded] = React.useState(false);
+  const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: leaves }, { data: certs }, { data: profiles }] = await Promise.all([
+      const [{ data: leaves }, { data: entitlements }, { data: certs }, { data: profiles }] = await Promise.all([
         supabase.from('leave_requests')
           .select('user_id, leave_type, start_date, end_date, days_count')
-          .eq('status', 'approved'),
+          .eq('status', 'approved')
+          .gte('start_date', `${selectedYear}-01-01`)
+          .lte('start_date', `${selectedYear}-12-31`),
+        supabase.from('leave_entitlements')
+          .select('user_id, annual_days, sick_days, emergency_days, maternity_days')
+          .eq('year', selectedYear),
         supabase.from('staff_certifications')
           .select('user_id, title, cert_type, issue_date, expiry_date, status'),
         supabase.from('profiles').select('id, full_name, email'),
@@ -738,15 +754,26 @@ function HRSummaryReport() {
         profileMap[p.id] = { name: p.full_name ?? '—', email: p.email ?? '—' };
       });
 
-      // Aggregate leave days per person per type
-      const balanceMap: Record<string, LeaveBalance> = {};
+      // Build entitlement map
+      const entMap: Record<string, LeaveEntitlement> = {};
+      (entitlements ?? []).forEach((e: any) => {
+        entMap[e.user_id] = {
+          userId: e.user_id,
+          annual: Number(e.annual_days ?? 0),
+          sick: Number(e.sick_days ?? 0),
+          emergency: Number(e.emergency_days ?? 0),
+          maternity: Number(e.maternity_days ?? 0),
+        };
+      });
+
+      // Aggregate leave taken per person per type
+      const takenMap: Record<string, LeaveTaken> = {};
       (leaves ?? []).forEach((l: any) => {
         const uid = l.user_id ?? 'unknown';
-        if (!balanceMap[uid]) {
+        if (!takenMap[uid]) {
           const prof = profileMap[uid] ?? { name: '—', email: '—' };
-          balanceMap[uid] = { userId: uid, name: prof.name, email: prof.email, annual: 0, sick: 0, emergency: 0, maternity: 0, other: 0 };
+          takenMap[uid] = { userId: uid, name: prof.name, email: prof.email, annual: 0, sick: 0, emergency: 0, maternity: 0, other: 0 };
         }
-        // Use days_count if available, otherwise calculate from dates
         let days = Number(l.days_count ?? 0);
         if (!days) {
           const start = l.start_date ? new Date(l.start_date) : null;
@@ -754,13 +781,37 @@ function HRSummaryReport() {
           days = start && end ? Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1) : 1;
         }
         const type = (l.leave_type || '').toLowerCase();
-        if (type.includes('annual'))         balanceMap[uid].annual    += days;
-        else if (type.includes('sick'))      balanceMap[uid].sick      += days;
-        else if (type.includes('emergency')) balanceMap[uid].emergency += days;
-        else if (type.includes('maternity')) balanceMap[uid].maternity += days;
-        else                                  balanceMap[uid].other     += days;
+        if (type.includes('annual'))         takenMap[uid].annual    += days;
+        else if (type.includes('sick'))      takenMap[uid].sick      += days;
+        else if (type.includes('emergency')) takenMap[uid].emergency += days;
+        else if (type.includes('maternity')) takenMap[uid].maternity += days;
+        else                                  takenMap[uid].other     += days;
       });
-      setLeaveBalances(Object.values(balanceMap).sort((a, b) => a.name.localeCompare(b.name)));
+
+      // Merge entitlements + taken (include users with entitlements even if no leave taken)
+      const allUserIds = new Set([...Object.keys(takenMap), ...Object.keys(entMap)]);
+      const rows: LeaveRow[] = [];
+      allUserIds.forEach(uid => {
+        const taken = takenMap[uid] ?? { userId: uid, name: profileMap[uid]?.name ?? '—', email: profileMap[uid]?.email ?? '—', annual: 0, sick: 0, emergency: 0, maternity: 0, other: 0 };
+        const ent   = entMap[uid]   ?? { userId: uid, annual: 0, sick: 0, emergency: 0, maternity: 0 };
+        const annualEnt = ent.annual, annualTaken = taken.annual;
+        const sickEnt   = ent.sick,   sickTaken   = taken.sick;
+        const emergEnt  = ent.emergency, emergTaken = taken.emergency;
+        const matEnt    = ent.maternity, matTaken  = taken.maternity;
+        const otherTaken = taken.other;
+        const totalEnt   = annualEnt + sickEnt + emergEnt + matEnt;
+        const totalTaken = annualTaken + sickTaken + emergTaken + matTaken + otherTaken;
+        rows.push({
+          userId: uid, name: taken.name, email: taken.email,
+          annualEnt, annualTaken, annualBalance: annualEnt - annualTaken,
+          sickEnt, sickTaken, sickBalance: sickEnt - sickTaken,
+          emergEnt, emergTaken, emergBalance: emergEnt - emergTaken,
+          matEnt, matTaken, matBalance: matEnt - matTaken,
+          otherTaken,
+          totalEnt, totalTaken, totalBalance: totalEnt - totalTaken,
+        });
+      });
+      setLeaveRows(rows.sort((a, b) => a.name.localeCompare(b.name)));
 
       setCertRows((certs ?? []).map((c: any) => {
         const prof = profileMap[c.user_id ?? ''] ?? { name: '—', email: '—' };
@@ -781,7 +832,7 @@ function HRSummaryReport() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, selectedYear]);
 
   React.useEffect(() => { loadData(); }, [loadData]);
 
@@ -792,15 +843,26 @@ function HRSummaryReport() {
       const XLSXLib = xlsxModule.default ?? xlsxModule;
       const wb = XLSXLib.utils.book_new();
 
-      // Sheet 1: Leave Taken (approved leave days per category)
+      // Sheet 1: Leave Balance (entitlement vs taken vs remaining)
       const leaveData = [
-        ['Name', 'Email', 'Annual (days taken)', 'Sick (days taken)', 'Emergency (days taken)', 'Maternity (days taken)', 'Other (days taken)', 'Total Days Taken'],
-        ...leaveBalances.map(r => {
-          const total = r.annual + r.sick + r.emergency + r.maternity + r.other;
-          return [r.name, r.email, r.annual, r.sick, r.emergency, r.maternity, r.other, total];
-        }),
+        ['Name', 'Email',
+          'Annual Entitlement', 'Annual Taken', 'Annual Remaining',
+          'Sick Entitlement', 'Sick Taken', 'Sick Remaining',
+          'Emergency Entitlement', 'Emergency Taken', 'Emergency Remaining',
+          'Maternity Entitlement', 'Maternity Taken', 'Maternity Remaining',
+          'Other Taken',
+          'Total Entitlement', 'Total Taken', 'Total Remaining'],
+        ...leaveRows.map(r => [
+          r.name, r.email,
+          r.annualEnt, r.annualTaken, r.annualBalance,
+          r.sickEnt, r.sickTaken, r.sickBalance,
+          r.emergEnt, r.emergTaken, r.emergBalance,
+          r.matEnt, r.matTaken, r.matBalance,
+          r.otherTaken,
+          r.totalEnt, r.totalTaken, r.totalBalance,
+        ]),
       ];
-      XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(leaveData), 'Leave Taken');
+      XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(leaveData), 'Leave Balance');
 
       // Sheet 2: Certifications
       const certData = [
@@ -809,7 +871,7 @@ function HRSummaryReport() {
       ];
       XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(certData), 'Certifications');
 
-      XLSXLib.writeFile(wb, `HR_Summary_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      XLSXLib.writeFile(wb, `HR_Summary_${selectedYear}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
       toast({ title: 'HR Summary exported successfully' });
     } catch (err) {
       toast({ title: 'Export failed', variant: 'destructive' });
@@ -828,54 +890,78 @@ function HRSummaryReport() {
                 <Users className="h-5 w-5 text-blue-600" />
                 HR Summary Report
               </CardTitle>
-              <CardDescription>Leave balances and staff certifications — approved records only</CardDescription>
+              <CardDescription>Leave balance (entitlement vs taken vs remaining) and staff certifications</CardDescription>
             </div>
-            <Button onClick={exportToExcel} disabled={loading || !dataLoaded} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="btn-hr-summary-export">
-              <Download className="h-4 w-4" />
-              Export to Excel
-            </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedYear}
+                onChange={e => setSelectedYear(Number(e.target.value))}
+                className="border rounded px-2 py-1 text-sm bg-background"
+                data-testid="select-hr-summary-year"
+              >
+                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <Button onClick={exportToExcel} disabled={loading || !dataLoaded} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="btn-hr-summary-export">
+                <Download className="h-4 w-4" />
+                Export to Excel
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {loading && <p className="text-sm text-muted-foreground py-4 text-center">Loading HR data…</p>}
           {!loading && dataLoaded && (
             <div className="space-y-6">
-              {/* Leave Balances */}
+              {/* Leave Balance */}
               <div>
-                <h3 className="text-sm font-semibold mb-2 text-foreground">Leave Taken — Approved Days by Category</h3>
-                {leaveBalances.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-2">No approved leave records found.</p>
+                <h3 className="text-sm font-semibold mb-1 text-foreground">Leave Balance — {selectedYear}</h3>
+                <p className="text-xs text-muted-foreground mb-2">Entitlement vs. approved days taken vs. remaining balance. Set entitlements in HR Analytics.</p>
+                {leaveRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No leave records found for {selectedYear}.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-md border">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead className="text-center">Annual</TableHead>
-                          <TableHead className="text-center">Sick</TableHead>
-                          <TableHead className="text-center">Emergency</TableHead>
-                          <TableHead className="text-center">Maternity</TableHead>
-                          <TableHead className="text-center">Other</TableHead>
-                          <TableHead className="text-center font-bold">Total</TableHead>
+                        <TableRow className="text-xs">
+                          <TableHead rowSpan={2}>Name</TableHead>
+                          <TableHead className="text-center border-l" colSpan={3}>Annual</TableHead>
+                          <TableHead className="text-center border-l" colSpan={3}>Sick</TableHead>
+                          <TableHead className="text-center border-l" colSpan={3}>Emergency</TableHead>
+                          <TableHead className="text-center border-l" colSpan={3}>Maternity</TableHead>
+                          <TableHead className="text-center border-l">Other</TableHead>
+                          <TableHead className="text-center border-l" colSpan={3}>Total</TableHead>
+                        </TableRow>
+                        <TableRow className="text-[10px] text-muted-foreground">
+                          <TableHead className="text-center border-l py-1">Ent.</TableHead><TableHead className="text-center py-1">Taken</TableHead><TableHead className="text-center py-1">Rem.</TableHead>
+                          <TableHead className="text-center border-l py-1">Ent.</TableHead><TableHead className="text-center py-1">Taken</TableHead><TableHead className="text-center py-1">Rem.</TableHead>
+                          <TableHead className="text-center border-l py-1">Ent.</TableHead><TableHead className="text-center py-1">Taken</TableHead><TableHead className="text-center py-1">Rem.</TableHead>
+                          <TableHead className="text-center border-l py-1">Ent.</TableHead><TableHead className="text-center py-1">Taken</TableHead><TableHead className="text-center py-1">Rem.</TableHead>
+                          <TableHead className="text-center border-l py-1">Days</TableHead>
+                          <TableHead className="text-center border-l py-1">Ent.</TableHead><TableHead className="text-center py-1">Taken</TableHead><TableHead className="text-center font-bold py-1">Rem.</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {leaveBalances.map((r, i) => {
-                          const total = r.annual + r.sick + r.emergency + r.maternity + r.other;
-                          return (
-                            <TableRow key={i}>
-                              <TableCell className="font-medium text-sm">{r.name}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground">{r.email}</TableCell>
-                              <TableCell className="text-center">{r.annual || '—'}</TableCell>
-                              <TableCell className="text-center">{r.sick || '—'}</TableCell>
-                              <TableCell className="text-center">{r.emergency || '—'}</TableCell>
-                              <TableCell className="text-center">{r.maternity || '—'}</TableCell>
-                              <TableCell className="text-center">{r.other || '—'}</TableCell>
-                              <TableCell className="text-center font-bold text-blue-700">{total}</TableCell>
-                            </TableRow>
-                          );
-                        })}
+                        {leaveRows.map((r, i) => (
+                          <TableRow key={i} className="text-xs">
+                            <TableCell className="font-medium text-sm whitespace-nowrap">{r.name}</TableCell>
+                            <TableCell className="text-center border-l">{r.annualEnt || '—'}</TableCell>
+                            <TableCell className="text-center">{r.annualTaken || '—'}</TableCell>
+                            <TableCell className={`text-center font-semibold ${r.annualBalance < 0 ? 'text-red-600' : r.annualBalance > 0 ? 'text-emerald-700' : 'text-muted-foreground'}`}>{r.annualBalance}</TableCell>
+                            <TableCell className="text-center border-l">{r.sickEnt || '—'}</TableCell>
+                            <TableCell className="text-center">{r.sickTaken || '—'}</TableCell>
+                            <TableCell className={`text-center font-semibold ${r.sickBalance < 0 ? 'text-red-600' : r.sickBalance > 0 ? 'text-emerald-700' : 'text-muted-foreground'}`}>{r.sickBalance}</TableCell>
+                            <TableCell className="text-center border-l">{r.emergEnt || '—'}</TableCell>
+                            <TableCell className="text-center">{r.emergTaken || '—'}</TableCell>
+                            <TableCell className={`text-center font-semibold ${r.emergBalance < 0 ? 'text-red-600' : r.emergBalance > 0 ? 'text-emerald-700' : 'text-muted-foreground'}`}>{r.emergBalance}</TableCell>
+                            <TableCell className="text-center border-l">{r.matEnt || '—'}</TableCell>
+                            <TableCell className="text-center">{r.matTaken || '—'}</TableCell>
+                            <TableCell className={`text-center font-semibold ${r.matBalance < 0 ? 'text-red-600' : r.matBalance > 0 ? 'text-emerald-700' : 'text-muted-foreground'}`}>{r.matBalance}</TableCell>
+                            <TableCell className="text-center border-l">{r.otherTaken || '—'}</TableCell>
+                            <TableCell className="text-center border-l">{r.totalEnt || '—'}</TableCell>
+                            <TableCell className="text-center">{r.totalTaken || '—'}</TableCell>
+                            <TableCell className={`text-center font-bold ${r.totalBalance < 0 ? 'text-red-600' : r.totalBalance > 0 ? 'text-emerald-700' : 'text-muted-foreground'}`}>{r.totalBalance}</TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>

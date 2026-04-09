@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter, Copy, X } from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -177,6 +178,165 @@ export default function HRHub() {
   );
 }
 
+// ── Leave Entitlements Panel ──────────────────────────────────────────────────
+interface Entitlement { id?: string; user_id: string; year: number; annual_days: number; sick_days: number; emergency_days: number; maternity_days: number; paternity_days: number; unpaid_days: number; }
+interface StaffProfile { id: string; full_name: string | null; email: string | null; }
+
+function LeaveEntitlementsPanel() {
+  const { toast } = useToast();
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<Partial<Entitlement>>({});
+
+  const { data: profiles } = useQuery({
+    queryKey: ['profiles_for_entitlements'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, email').order('full_name');
+      return (data ?? []) as StaffProfile[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: entitlements, refetch } = useQuery({
+    queryKey: ['leave_entitlements', year],
+    queryFn: async () => {
+      const { data } = await supabase.from('leave_entitlements').select('*').eq('year', year);
+      return (data ?? []) as Entitlement[];
+    },
+    staleTime: 30_000,
+  });
+
+  const entMap = Object.fromEntries((entitlements ?? []).map(e => [e.user_id, e]));
+
+  const startEdit = (profile: StaffProfile) => {
+    const existing = entMap[profile.id];
+    setForm({
+      user_id: profile.id, year,
+      annual_days: existing?.annual_days ?? 21,
+      sick_days: existing?.sick_days ?? 10,
+      emergency_days: existing?.emergency_days ?? 5,
+      maternity_days: existing?.maternity_days ?? 90,
+      paternity_days: existing?.paternity_days ?? 3,
+      unpaid_days: existing?.unpaid_days ?? 0,
+    });
+    setEditing(profile.id);
+  };
+
+  const saveEntitlement = async () => {
+    if (!form.user_id) return;
+    setSaving(true);
+    try {
+      const existing = entMap[form.user_id];
+      const payload = { user_id: form.user_id, year, annual_days: form.annual_days ?? 0, sick_days: form.sick_days ?? 0, emergency_days: form.emergency_days ?? 0, maternity_days: form.maternity_days ?? 0, paternity_days: form.paternity_days ?? 0, unpaid_days: form.unpaid_days ?? 0, updated_at: new Date().toISOString() };
+      if (existing?.id) {
+        await supabase.from('leave_entitlements').update(payload).eq('id', existing.id);
+      } else {
+        await supabase.from('leave_entitlements').insert(payload);
+      }
+      toast({ title: 'Entitlement saved' });
+      setEditing(null);
+      refetch();
+    } catch {
+      toast({ title: 'Failed to save', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const EntField = ({ label, field }: { label: string; field: keyof Entitlement }) => (
+    <div className="flex flex-col gap-0.5">
+      <label className="text-[10px] text-muted-foreground font-medium">{label}</label>
+      <Input
+        type="number" min="0" max="365"
+        value={String(form[field] ?? 0)}
+        onChange={e => setForm(f => ({ ...f, [field]: Number(e.target.value) }))}
+        className="h-7 text-xs w-20 text-center"
+        data-testid={`input-ent-${field}`}
+      />
+    </div>
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">Leave Entitlements</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Set annual leave entitlement per staff member — used in Leave Balance report</p>
+          </div>
+          <select value={year} onChange={e => setYear(Number(e.target.value))} className="border rounded px-2 py-1 text-xs bg-background" data-testid="select-entitlement-year">
+            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-800/60">
+              <tr>
+                <th className="text-left px-3 py-2 font-semibold">Staff</th>
+                <th className="text-center px-2 py-2 font-semibold">Annual</th>
+                <th className="text-center px-2 py-2 font-semibold">Sick</th>
+                <th className="text-center px-2 py-2 font-semibold">Emergency</th>
+                <th className="text-center px-2 py-2 font-semibold">Maternity</th>
+                <th className="text-center px-2 py-2 font-semibold">Paternity</th>
+                <th className="text-center px-2 py-2 font-semibold">Unpaid</th>
+                <th className="text-center px-2 py-2 font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(profiles ?? []).map(p => {
+                const ent = entMap[p.id];
+                const isEditing = editing === p.id;
+                return (
+                  <tr key={p.id} className="border-t hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-foreground">{p.full_name ?? '—'}</div>
+                      <div className="text-[10px] text-muted-foreground">{p.email ?? ''}</div>
+                    </td>
+                    {isEditing ? (
+                      <>
+                        <td className="px-2 py-1 text-center"><EntField label="Annual" field="annual_days" /></td>
+                        <td className="px-2 py-1 text-center"><EntField label="Sick" field="sick_days" /></td>
+                        <td className="px-2 py-1 text-center"><EntField label="Emergency" field="emergency_days" /></td>
+                        <td className="px-2 py-1 text-center"><EntField label="Maternity" field="maternity_days" /></td>
+                        <td className="px-2 py-1 text-center"><EntField label="Paternity" field="paternity_days" /></td>
+                        <td className="px-2 py-1 text-center"><EntField label="Unpaid" field="unpaid_days" /></td>
+                        <td className="px-2 py-1 text-center">
+                          <div className="flex gap-1 justify-center">
+                            <Button size="sm" className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={saveEntitlement} disabled={saving} data-testid="btn-save-entitlement">Save</Button>
+                            <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={() => setEditing(null)}>Cancel</Button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-2 py-2 text-center">{ent?.annual_days ?? <span className="text-muted-foreground">—</span>}</td>
+                        <td className="px-2 py-2 text-center">{ent?.sick_days ?? <span className="text-muted-foreground">—</span>}</td>
+                        <td className="px-2 py-2 text-center">{ent?.emergency_days ?? <span className="text-muted-foreground">—</span>}</td>
+                        <td className="px-2 py-2 text-center">{ent?.maternity_days ?? <span className="text-muted-foreground">—</span>}</td>
+                        <td className="px-2 py-2 text-center">{ent?.paternity_days ?? <span className="text-muted-foreground">—</span>}</td>
+                        <td className="px-2 py-2 text-center">{ent?.unpaid_days ?? <span className="text-muted-foreground">—</span>}</td>
+                        <td className="px-2 py-2 text-center">
+                          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => startEdit(p)} data-testid={`btn-edit-entitlement-${p.id}`}>
+                            {ent ? 'Edit' : 'Set'}
+                          </Button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── HR Tools Panel ─────────────────────────────────────────────────────────────
 interface OrgPerson { id: string; full_name: string | null; role: string | null; department_name: string | null; reports_to: string | null; }
 
@@ -263,15 +423,16 @@ function LeaveTrendsChart() {
 }
 
 function HRToolsPanel() {
-  const [toolTab, setToolTab] = useState<'projection' | 'orgchart' | 'leave-trends'>('projection');
+  const [toolTab, setToolTab] = useState<'projection' | 'orgchart' | 'leave-trends' | 'leave-entitlements'>('projection');
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 space-y-5">
       <div className="flex gap-2 flex-wrap">
         {([
-          { id: 'projection',   label: 'Staff Cost Projection', icon: <Calculator className="h-3.5 w-3.5" /> },
-          { id: 'orgchart',     label: 'Org Chart',             icon: <GitBranch className="h-3.5 w-3.5" /> },
-          { id: 'leave-trends', label: 'Leave Trends',          icon: <BarChart2 className="h-3.5 w-3.5" /> },
+          { id: 'projection',         label: 'Staff Cost Projection', icon: <Calculator className="h-3.5 w-3.5" /> },
+          { id: 'orgchart',           label: 'Org Chart',             icon: <GitBranch className="h-3.5 w-3.5" /> },
+          { id: 'leave-trends',       label: 'Leave Trends',          icon: <BarChart2 className="h-3.5 w-3.5" /> },
+          { id: 'leave-entitlements', label: 'Leave Entitlements',    icon: <TableIcon className="h-3.5 w-3.5" /> },
         ] as const).map(t => (
           <button key={t.id} onClick={() => setToolTab(t.id)}
             className={cn('flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-xl font-medium transition-all border',
@@ -280,8 +441,9 @@ function HRToolsPanel() {
           </button>
         ))}
       </div>
-      {toolTab === 'projection'   && <StaffCostProjection />}
-      {toolTab === 'orgchart'     && <OrgChartView />}
+      {toolTab === 'projection'         && <StaffCostProjection />}
+      {toolTab === 'orgchart'           && <OrgChartView />}
+      {toolTab === 'leave-entitlements' && <LeaveEntitlementsPanel />}
       {toolTab === 'leave-trends' && (
         <Card>
           <CardHeader className="pb-2">

@@ -1076,6 +1076,9 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       .map(([date, count]) => ({ date: date.slice(5), count }));
   }, [filtered]);
 
+  // ── Coverage chart scope toggle ──────────────────────────────────────────
+  const [coverageScope, setCoverageScope] = useState<'all' | 'cycle'>('all');
+
   // ── Site-visit PDM coverage (preferred source) ───────────────────────────
   const { data: siteVisitPDMRows } = useQuery({
     queryKey: ['site_visits_pdm_coverage'],
@@ -1095,12 +1098,28 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   // Prefer site_visits PDM data if available; fall back to uploaded Excel records
   const coverageOverTime = useMemo(() => {
     const useSiteVisits = (siteVisitPDMRows?.length ?? 0) > 0;
+
+    // Determine cycle boundaries from the underlying data
+    const allDates = useSiteVisits
+      ? siteVisitPDMRows!.map(sv => (sv.completed_at ?? sv.scheduled_date ?? '').slice(0, 10)).filter(Boolean)
+      : records.map(r => r.submission?.slice(0, 10) ?? '').filter(Boolean);
+    const sortedDates = [...allDates].sort();
+    const cycleStart = sortedDates[0] ?? '';
+    const cycleEnd   = sortedDates[sortedDates.length - 1] ?? '';
+
+    // Filter source records by scope
+    const inScope = (dateStr: string) => {
+      if (coverageScope === 'all') return true;
+      // 'cycle': use the min/max dates of data as cycle boundaries
+      return dateStr >= cycleStart && dateStr <= cycleEnd;
+    };
+
     const weekMap: Record<string, number> = {};
     if (useSiteVisits) {
       // Source: site_visits table filtered to PDM monitoring type
       siteVisitPDMRows!.forEach(sv => {
         const dateStr = (sv.completed_at ?? sv.scheduled_date ?? '').slice(0, 10);
-        if (!dateStr) return;
+        if (!dateStr || !inScope(dateStr)) return;
         const d = new Date(dateStr);
         if (isNaN(d.getTime())) return;
         const monday = new Date(d);
@@ -1111,14 +1130,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     } else {
       // Fallback: uploaded PDM Excel survey records (no PDM visits in site_visits yet)
       records.forEach(r => {
-        if (r.submission) {
-          const d = new Date(r.submission.slice(0, 10));
-          if (isNaN(d.getTime())) return;
-          const monday = new Date(d);
-          monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-          const key = monday.toISOString().slice(0, 10);
-          weekMap[key] = (weekMap[key] || 0) + 1;
-        }
+        if (!r.submission) return;
+        const dateStr = r.submission.slice(0, 10);
+        if (!inScope(dateStr)) return;
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return;
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        const key = monday.toISOString().slice(0, 10);
+        weekMap[key] = (weekMap[key] || 0) + 1;
       });
     }
     const sorted = Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b));
@@ -1142,7 +1162,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       data: rows,
       source: useSiteVisits ? 'site_visits' : 'survey_upload',
     };
-  }, [records, siteVisitPDMRows]);
+  }, [records, siteVisitPDMRows, coverageScope]);
 
   // ── Demographics ──────────────────────────────────────────────────────────
   const sexData = useMemo(() => [
@@ -2827,11 +2847,17 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       {coverageOverTime.data.length > 0 && (
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle
-              title="Coverage Over Time"
-              sub={`Weekly cumulative HHs vs. target ${TICKER_TOTAL_PLANNED.toLocaleString()} — source: ${coverageOverTime.source === 'site_visits' ? 'site visits (PDM type)' : 'uploaded PDM survey data'}`}
-              count={records.length}
-            />
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              <SectionTitle
+                title="Coverage Over Time"
+                sub={`Weekly cumulative HHs vs. target ${TICKER_TOTAL_PLANNED.toLocaleString()} — ${coverageOverTime.source === 'site_visits' ? 'site visits (PDM)' : 'uploaded survey data'}`}
+                count={records.length}
+              />
+              <div className="flex items-center gap-1 text-xs border rounded-lg overflow-hidden shrink-0">
+                <button onClick={() => setCoverageScope('all')} className={`px-3 py-1.5 transition-colors font-medium ${coverageScope === 'all' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:text-foreground'}`}>All Data</button>
+                <button onClick={() => setCoverageScope('cycle')} className={`px-3 py-1.5 transition-colors font-medium ${coverageScope === 'cycle' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:text-foreground'}`}>Current Cycle</button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={200}>
