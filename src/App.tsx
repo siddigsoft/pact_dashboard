@@ -146,6 +146,7 @@ const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
 const ApprovalsHub = lazy(() => import('./pages/ApprovalsHub'));
 const IntegrationsSettings = lazy(() => import('./pages/IntegrationsSettings'));
+const ChangelogPage = lazy(() => import('./pages/Changelog'));
 const SubscriptionsPage = lazy(() => import('./pages/Subscriptions'));
 const SalaryRetainerReport = lazy(() => import('./pages/SalaryRetainerReport'));
 const MonthEndFinancialSummary = lazy(() => import('./pages/MonthEndFinancialSummary'));
@@ -336,6 +337,7 @@ const AppRoutes = () => {
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/documentation" element={<Documentation />} />
+        <Route path="/changelog" element={<PageWrapper><ChangelogPage /></PageWrapper>} />
         <Route path="/mobile-documentation" element={<MobileDocumentation />} />
         <Route path="/public-documentation" element={<PublicDocumentation />} />
         <Route path="/documents" element={<DocumentsPage />} />

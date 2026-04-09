@@ -61,6 +61,7 @@
     Inbox,
     FileBarChart,
     CalendarCheck,
+    Sparkles,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -100,6 +101,7 @@
   import { ChevronDown } from "lucide-react";
   import { useState, useMemo, useCallback, useEffect } from "react";
   import { useNavBadgeCountsContext } from "@/context/NavBadgeCountsContext";
+  import { getChangelogUnreadCount } from "@/lib/changelog-utils";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
   import { normalizeRole } from "@/utils/roleMapping";
   import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
@@ -577,6 +579,9 @@
 
     // ── 11. Help & Support ────────────────────────────────────────────────────
     const helpItems: MenuGroup['items'] = [];
+    if (!isHidden('/changelog')) {
+      helpItems.push({ id: 'changelog', title: "What's New", url: "/changelog", icon: Sparkles, priority: 0, isPinned: isPinned('/changelog') });
+    }
     if (!isHidden('/documentation')) {
       helpItems.push({ id: 'documentation', title: "Documentation", url: "/documentation", icon: BookOpen, priority: 1, isPinned: isPinned('/documentation') });
     }
@@ -722,6 +727,7 @@
     const pendingVerificationCount = counts.pendingVerification;
     const pendingWalletCount = counts.pendingWallet;
     const myTasksOverdueCount = counts.myTasksOverdue;
+    const changelogUnreadCount = getChangelogUnreadCount(currentUser?.id ?? '', currentUser?.role ?? '');
 
     // Aggregate approvals hub badge — mirrors useApprovalsData status-scope exactly.
     // Uses the same role gates and status filters as the useApprovalsData hook sections:
@@ -1046,6 +1052,11 @@
                             {item.id === 'my-tasks' && myTasksOverdueCount > 0 && (
                               <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-my-tasks-overdue-count">
                                 {myTasksOverdueCount > 99 ? '99+' : myTasksOverdueCount}
+                              </span>
+                            )}
+                            {item.id === 'changelog' && changelogUnreadCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-600 text-white text-[9px] font-bold leading-none" data-testid="badge-changelog-unread-count">
+                                {changelogUnreadCount > 99 ? '99+' : changelogUnreadCount}
                               </span>
                             )}
                           </Link>
