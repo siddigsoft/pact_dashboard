@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -64,6 +64,9 @@ interface EquipRow { id: string; name: string; category: string | null; status: 
 interface CrmPartnerRow { id: string; name: string; type: string | null; status: string | null; }
 interface CrmOpptyRow { id: string; title: string; value_usd: number | null; stage: string; expected_close_date: string | null; }
 interface PayrollRunRow { id: string; status: string; period_start: string | null; period_end: string | null; total_gross_cents: number | null; created_at: string; }
+interface TaskRow { id: string; title: string; status: string; due_date: string | null; assigned_to: string | null; department_id: string | null; updated_at: string | null; created_at: string; }
+interface TimesheetRow { id: string; user_id: string; week_start: string; status: string; total_hours: number | null; }
+interface SubscriptionRow { id: string; name: string; status: string; monthly_cost_cents: number | null; renewal_date: string | null; }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & helpers
@@ -232,6 +235,9 @@ async function fetchAll() {
     { data: crmPartnersRaw },
     { data: crmOpptysRaw },
     { data: payrollRunsRaw },
+    { data: tasksRaw },
+    { data: timesheetsRaw },
+    { data: subscriptionsRaw },
   ] = await Promise.all([
     supabase.rpc('get_projects_for_analytics'),
     supabase.from('project_budgets').select('project_id, total_budget_cents, allocated_budget_cents, spent_budget_cents, remaining_budget_cents'),
@@ -250,6 +256,9 @@ async function fetchAll() {
     supabase.from('crm_partners').select('id, name, type, status'),
     supabase.from('crm_opportunities').select('id, title, value_usd, stage, expected_close_date').order('expected_close_date', { ascending: true }),
     supabase.from('payroll_runs').select('id, status, period_start, period_end, total_gross_cents, created_at').order('created_at', { ascending: false }).limit(6),
+    supabase.from('personal_tasks').select('id, title, status, due_date, assigned_to, department_id, updated_at, created_at').limit(500),
+    supabase.from('timesheets').select('id, user_id, week_start, status, total_hours').order('week_start', { ascending: false }).limit(500),
+    supabase.from('organizational_subscriptions').select('id, name, status, monthly_cost_cents, renewal_date').limit(200),
   ]);
 
   const latestAdvanced: Record<string, string> = {};
@@ -275,6 +284,9 @@ async function fetchAll() {
     crmPartners: (crmPartnersRaw ?? []) as CrmPartnerRow[],
     crmOpptys: (crmOpptysRaw ?? []) as CrmOpptyRow[],
     payrollRuns: (payrollRunsRaw ?? []) as PayrollRunRow[],
+    tasks: (tasksRaw ?? []) as TaskRow[],
+    timesheets: (timesheetsRaw ?? []) as TimesheetRow[],
+    subscriptions: (subscriptionsRaw ?? []) as SubscriptionRow[],
   };
 }
 
@@ -546,14 +558,35 @@ export default function PortfolioDashboard() {
     'projectManager', 'project_manager',
   ]);
 
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['portfolio_csuite'],
-    queryFn: fetchAll,
-    staleTime: 3 * 60_000,
+    queryFn: async () => {
+      const result = await fetchAll();
+      setLastUpdated(new Date());
+      setSecondsAgo(0);
+      return result;
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
     refetchOnWindowFocus: false,
   });
 
-  const [activeTab, setActiveTab] = useState('executive');
+  useEffect(() => {
+    if (!lastUpdated) return;
+    const timer = setInterval(() => {
+      setSecondsAgo(Math.floor((Date.now() - lastUpdated.getTime()) / 1000));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [lastUpdated]);
+
+  const defaultTab = (isSuperAdmin() || hasAnyRole([
+    'super_admin', 'superAdmin', 'Admin', 'admin', 'CEO', 'COO', 'CTO',
+    'country_director', 'countryDirector',
+  ])) ? 'executive' : 'overview';
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [projectSearch, setProjectSearch] = useState('');
   const [projectStatusFilter, setProjectStatusFilter] = useState('all');
   const [projectSort, setProjectSort] = useState<{ field: string; dir: 'asc' | 'desc' }>({ field: 'health', dir: 'asc' });
@@ -935,6 +968,233 @@ export default function PortfolioDashboard() {
     };
   }, [d]);
 
+  // ── Task Health (org-wide) ────────────────────────────────────────────────
+
+  const taskStats = useMemo(() => {
+    const tasks = d?.tasks ?? [];
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const open = tasks.filter(t => t.status === 'todo' || t.status === 'open' || t.status === 'not_started');
+    const inProgress = tasks.filter(t => t.status === 'in_progress' || t.status === 'in-progress' || t.status === 'doing');
+    const overdue = tasks.filter(t => {
+      if (!t.due_date) return false;
+      const due = safeDate(t.due_date);
+      const done = t.status === 'done' || t.status === 'completed' || t.status === 'complete';
+      return due && isBefore(due, today) && !done;
+    });
+    const completedThisMonth = tasks.filter(t => {
+      const done = t.status === 'done' || t.status === 'completed' || t.status === 'complete';
+      if (!done) return false;
+      const updated = safeDate(t.updated_at);
+      return updated && isAfter(updated, startOfMonth);
+    });
+
+    const depts = d?.depts ?? [];
+    const profiles = d?.profiles ?? [];
+    const profileMap: Record<string, ProfileRow> = {};
+    profiles.forEach(p => { profileMap[p.id] = p; });
+
+    const overdueByDept: Record<string, { deptName: string; count: number; tasks: TaskRow[] }> = {};
+    overdue.forEach(t => {
+      const profile = t.assigned_to ? profileMap[t.assigned_to] : null;
+      const deptId = t.department_id ?? profile?.department_id ?? '__none__';
+      const dept = depts.find(dd => dd.id === deptId);
+      const deptName = dept?.name ?? (deptId === '__none__' ? 'Unassigned' : 'Other');
+      if (!overdueByDept[deptId]) overdueByDept[deptId] = { deptName, count: 0, tasks: [] };
+      overdueByDept[deptId].count++;
+      overdueByDept[deptId].tasks.push(t);
+    });
+
+    return {
+      total: tasks.length,
+      openCount: open.length,
+      inProgressCount: inProgress.length,
+      overdueCount: overdue.length,
+      completedThisMonthCount: completedThisMonth.length,
+      overdueByDept: Object.values(overdueByDept).sort((a, b) => b.count - a.count).slice(0, 5),
+      topOverdue: overdue.slice(0, 8),
+      hasData: tasks.length > 0,
+    };
+  }, [d]);
+
+  // ── Timesheet / Workload ──────────────────────────────────────────────────
+
+  const workloadStats = useMemo(() => {
+    const timesheets = d?.timesheets ?? [];
+    const profiles = d?.profiles ?? [];
+    const depts = d?.depts ?? [];
+    if (!timesheets.length) return null;
+
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const weekStr = format(startOfWeek, 'yyyy-MM-dd');
+
+    const thisWeekSheets = timesheets.filter(t => t.week_start === weekStr);
+    const approvedThisWeek = thisWeekSheets.filter(t => t.status === 'approved');
+
+    const profileMap: Record<string, ProfileRow> = {};
+    profiles.forEach(p => { profileMap[p.id] = p; });
+
+    const deptHoursWeek: Record<string, { deptName: string; hours: number; headcount: number }> = {};
+    approvedThisWeek.forEach(t => {
+      const profile = profileMap[t.user_id];
+      if (!profile) return;
+      const deptId = profile.department_id ?? '__none__';
+      const dept = depts.find(d => d.id === deptId);
+      const deptName = dept?.name ?? 'Other';
+      if (!deptHoursWeek[deptId]) deptHoursWeek[deptId] = { deptName, hours: 0, headcount: 0 };
+      deptHoursWeek[deptId].hours += t.total_hours ?? 0;
+      deptHoursWeek[deptId].headcount++;
+    });
+
+    const submittedUserIds = new Set(thisWeekSheets.map(t => t.user_id));
+    const activeProfiles = profiles.filter(p => p.status !== 'inactive' && p.status !== 'suspended' && p.employment_type !== 'contractor');
+    const missingThisWeek = activeProfiles.filter(p => !submittedUserIds.has(p.id));
+
+    const totalApprovedHoursWeek = approvedThisWeek.reduce((s, t) => s + (t.total_hours ?? 0), 0);
+    const departmentList = Object.values(deptHoursWeek).sort((a, b) => b.hours - a.hours);
+    const avgHoursPerDept = departmentList.length > 0 ? totalApprovedHoursWeek / departmentList.length : 0;
+
+    return {
+      totalApprovedHoursWeek,
+      departmentList,
+      missingCount: missingThisWeek.length,
+      missingList: missingThisWeek.slice(0, 8),
+      avgHoursPerDept,
+      hasData: timesheets.length > 0,
+    };
+  }, [d]);
+
+  // ── Subscription costs ────────────────────────────────────────────────────
+
+  const subscriptionStats = useMemo(() => {
+    const subs = d?.subscriptions ?? [];
+    const activeSubs = subs.filter(s => s.status === 'active');
+    const totalMonthlyCents = activeSubs.reduce((s, sub) => s + (sub.monthly_cost_cents ?? 0), 0);
+    const today = new Date();
+    const renewingSoon = subs.filter(s => {
+      const rd = safeDate(s.renewal_date);
+      return rd && differenceInDays(rd, today) <= 30 && differenceInDays(rd, today) >= 0;
+    });
+    return {
+      total: subs.length,
+      activeCount: activeSubs.length,
+      totalMonthlyCents,
+      renewingSoon: renewingSoon.length,
+      renewingSoonList: renewingSoon.slice(0, 5),
+      hasData: subs.length > 0,
+    };
+  }, [d]);
+
+  // ── Accountability feed items ─────────────────────────────────────────────
+
+  const accountabilityFeed = useMemo(() => {
+    type FeedItem = {
+      id: string;
+      type: 'overdue_task' | 'timesheet_pending' | 'subscription_renewal' | 'incident' | 'stalled_project' | 'pending_approval';
+      title: string;
+      sub: string;
+      urgency: 'critical' | 'high' | 'medium';
+      action?: () => void;
+    };
+    const items: FeedItem[] = [];
+
+    // Overdue tasks escalations (no update in 48h)
+    const tasks = d?.tasks ?? [];
+    const now = new Date();
+    tasks.filter(t => {
+      if (!t.due_date) return false;
+      const due = safeDate(t.due_date);
+      const done = t.status === 'done' || t.status === 'completed' || t.status === 'complete';
+      if (!due || !isBefore(due, now) || done) return false;
+      const lastUpdate = safeDate(t.updated_at);
+      return !lastUpdate || differenceInDays(now, lastUpdate) >= 2;
+    }).slice(0, 5).forEach(t => {
+      const daysOverdue = t.due_date ? differenceInDays(now, safeDate(t.due_date)!) : 0;
+      items.push({
+        id: `task-${t.id}`,
+        type: 'overdue_task',
+        title: `Overdue task: ${t.title}`,
+        sub: `${daysOverdue}d overdue, no update in 48h`,
+        urgency: daysOverdue > 7 ? 'critical' : 'high',
+      });
+    });
+
+    // Pending timesheet approvals
+    const timesheets = d?.timesheets ?? [];
+    const pendingSheets = timesheets.filter(t => t.status === 'submitted' || t.status === 'pending');
+    if (pendingSheets.length > 0) {
+      items.push({
+        id: 'timesheet-pending',
+        type: 'timesheet_pending',
+        title: `${pendingSheets.length} timesheet${pendingSheets.length > 1 ? 's' : ''} awaiting approval`,
+        sub: 'Submitted and pending manager review',
+        urgency: pendingSheets.length > 5 ? 'high' : 'medium',
+      });
+    }
+
+    // Subscription renewals due in 14 days
+    const subs = d?.subscriptions ?? [];
+    subs.filter(s => {
+      const rd = safeDate(s.renewal_date);
+      return rd && differenceInDays(rd, now) <= 14 && differenceInDays(rd, now) >= 0;
+    }).slice(0, 3).forEach(s => {
+      const daysLeft = differenceInDays(safeDate(s.renewal_date)!, now);
+      items.push({
+        id: `sub-${s.id}`,
+        type: 'subscription_renewal',
+        title: `Subscription renewal: ${s.name}`,
+        sub: `Renews in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`,
+        urgency: daysLeft <= 3 ? 'critical' : 'medium',
+      });
+    });
+
+    // Critical incidents
+    const incidents = d?.incidents ?? [];
+    incidents.filter(i => i.severity === 'critical' && (i.status === 'open' || i.status === 'investigating')).slice(0, 3).forEach(i => {
+      items.push({
+        id: `incident-${i.id}`,
+        type: 'incident',
+        title: `Critical incident: ${i.title}`,
+        sub: `Reported ${fmtDate(i.date_reported)} — still open`,
+        urgency: 'critical',
+      });
+    });
+
+    // Stalled projects
+    enriched.filter(p => p.health === 'stalled').slice(0, 3).forEach(p => {
+      items.push({
+        id: `stalled-${p.id}`,
+        type: 'stalled_project',
+        title: `Stalled project: ${p.name}`,
+        sub: `No flow advance in >${STALL_DAYS} days`,
+        urgency: 'high',
+      });
+    });
+
+    // High pending approvals
+    const totalPending = (d?.costSubs ?? []).filter(c => c.status === 'pending').length +
+      (d?.downPays ?? []).filter(dp => dp.status === 'pending_supervisor' || dp.status === 'pending_admin').length +
+      (d?.opCosts ?? []).filter(o => o.tier1_status === 'pending' || o.tier2_status === 'pending').length;
+    if (totalPending > 10) {
+      items.push({
+        id: 'pending-approvals',
+        type: 'pending_approval',
+        title: `${totalPending} financial approvals pending`,
+        sub: 'Cost reimbursements, advances, and op costs',
+        urgency: 'high',
+      });
+    }
+
+    return items.sort((a, b) => {
+      const rank = (u: string) => u === 'critical' ? 3 : u === 'high' ? 2 : 1;
+      return rank(b.urgency) - rank(a.urgency);
+    }).slice(0, 12);
+  }, [d, enriched]);
+
   // ── Risk & Safety tab ─────────────────────────────────────────────────────
 
   const riskStats = useMemo(() => {
@@ -1193,6 +1453,13 @@ export default function PortfolioDashboard() {
               <p className="text-blue-200 text-sm mt-0.5">
                 Executive overview · {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
+              {lastUpdated && (
+                <p className="text-blue-300/70 text-[11px] mt-0.5 flex items-center gap-1" data-testid="text-last-updated">
+                  <Clock className="h-3 w-3" />
+                  Last updated {secondsAgo < 60 ? `${secondsAgo}s ago` : `${Math.floor(secondsAgo / 60)}m ago`}
+                  {isFetching && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1205,7 +1472,8 @@ export default function PortfolioDashboard() {
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}
-              className="border-white/30 text-white hover:bg-white/10 gap-1.5">
+              className="border-white/30 text-white hover:bg-white/10 gap-1.5"
+              data-testid="button-manual-refresh">
               {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               Refresh
             </Button>
@@ -1504,6 +1772,48 @@ export default function PortfolioDashboard() {
                   </button>
                 ))}
               </div>
+              {/* Subscription + Payroll Total Cost Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-2xl border p-4 bg-violet-50 dark:bg-violet-900/20 border-violet-200" data-testid="fin-kpi-subscription-monthly-cost">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CreditCard className="h-4 w-4 text-violet-600" />
+                    <span className="text-[11px] text-muted-foreground font-medium">Monthly Subscription Cost</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {subscriptionStats.hasData ? fmtMoney(subscriptionStats.totalMonthlyCents) : '—'}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{subscriptionStats.activeCount} active subscriptions</div>
+                  {subscriptionStats.renewingSoon > 0 && (
+                    <div className="mt-1 text-[10px] text-amber-600 font-semibold">{subscriptionStats.renewingSoon} renewal{subscriptionStats.renewingSoon > 1 ? 's' : ''} due in 30 days</div>
+                  )}
+                </div>
+                <div className="rounded-2xl border p-4 bg-slate-50 dark:bg-slate-900/20 border-slate-200" data-testid="fin-kpi-latest-payroll-cost">
+                  <div className="flex items-center gap-2 mb-2">
+                    <BadgeDollarSign className="h-4 w-4 text-slate-600" />
+                    <span className="text-[11px] text-muted-foreground font-medium">Latest Payroll Gross</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {d?.payrollRuns?.[0] ? fmtMoney(d.payrollRuns[0].total_gross_cents ?? 0) : '—'}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    {d?.payrollRuns?.[0] ? `${fmtDate(d.payrollRuns[0].period_start)} – ${fmtDate(d.payrollRuns[0].period_end)}` : 'No payroll run recorded'}
+                  </div>
+                </div>
+                <div className={cn('rounded-2xl border p-4', subscriptionStats.hasData ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200' : 'bg-muted/30 border-border')} data-testid="fin-kpi-total-org-cost">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingDown className="h-4 w-4 text-teal-600" />
+                    <span className="text-[11px] text-muted-foreground font-medium">Total Org Cost (Est.)</span>
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">
+                    {(() => {
+                      const payrollCents = d?.payrollRuns?.[0]?.total_gross_cents ?? 0;
+                      const subsCents = subscriptionStats.totalMonthlyCents;
+                      return fmtMoney(payrollCents + subsCents);
+                    })()}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">Payroll + subscriptions (monthly)</div>
+                </div>
+              </div>
               {/* Budget by type sparkline */}
               {financialOverview.typeSpend.length > 0 && (
                 <div className="rounded-2xl border bg-card shadow-sm p-4">
@@ -1641,11 +1951,212 @@ export default function PortfolioDashboard() {
                 </div>
               )}
             </div>
+
+            {/* Section 5: Time & Workload */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-teal-600/10 flex items-center justify-center flex-shrink-0">
+                  <Timer className="h-3.5 w-3.5 text-teal-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">5. Time & Workload</h2>
+                  <p className="text-[11px] text-muted-foreground">Approved hours by department this week, utilisation signals, and missing timesheets</p>
+                </div>
+                <button onClick={() => navigate('/timesheets')} className="ml-auto text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                  Timesheets <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              {!workloadStats ? (
+                <div className="flex flex-col items-center py-8 text-muted-foreground gap-2 border-2 border-dashed rounded-2xl">
+                  <Timer className="h-7 w-7 opacity-30" />
+                  <p className="text-sm">Timesheet data not yet available</p>
+                  <p className="text-[11px] text-muted-foreground">This panel will populate once staff submit timesheets</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Department hours */}
+                  <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                    <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+                      <BarChart3 className="h-3.5 w-3.5 text-teal-600" />
+                      <span className="text-xs font-bold flex-1">Approved Hours This Week — By Department</span>
+                      <span className="text-[11px] text-muted-foreground font-semibold">{workloadStats.totalApprovedHoursWeek.toFixed(0)}h total</span>
+                    </div>
+                    {workloadStats.departmentList.length === 0 ? (
+                      <div className="py-6 text-center text-sm text-muted-foreground">No approved timesheets for this week yet</div>
+                    ) : (
+                      <div className="p-4 space-y-2.5">
+                        {workloadStats.departmentList.map(dept => {
+                          const pct = workloadStats.avgHoursPerDept > 0 ? (dept.hours / workloadStats.avgHoursPerDept) : 1;
+                          const isOver = pct > 1.3;
+                          const isUnder = pct < 0.7;
+                          const barColor = isOver ? 'bg-red-500' : isUnder ? 'bg-amber-400' : 'bg-teal-500';
+                          return (
+                            <div key={dept.deptName} className="flex items-center gap-3">
+                              <div className="w-28 text-xs font-medium truncate flex-shrink-0">{dept.deptName}</div>
+                              <div className="flex-1 bg-muted/30 rounded-full h-2">
+                                <div className={cn('h-2 rounded-full transition-all', barColor)} style={{ width: `${Math.min(100, (dept.hours / Math.max(...workloadStats.departmentList.map(d => d.hours), 1)) * 100)}%` }} />
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span className={cn('text-xs font-bold w-10 text-right', isOver ? 'text-red-600' : isUnder ? 'text-amber-600' : '')}>{dept.hours.toFixed(0)}h</span>
+                                {isOver && <span className="text-[9px] text-red-600 font-bold">HIGH</span>}
+                                {isUnder && <span className="text-[9px] text-amber-600 font-bold">LOW</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {/* Missing timesheets */}
+                  <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                    <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+                      <AlertTriangle className={cn('h-3.5 w-3.5', workloadStats.missingCount > 0 ? 'text-amber-500' : 'text-muted-foreground')} />
+                      <span className="text-xs font-bold flex-1">Missing Timesheets This Week</span>
+                      <span className={cn('text-[11px] font-bold', workloadStats.missingCount > 0 ? 'text-amber-600' : 'text-emerald-600')}>{workloadStats.missingCount} staff</span>
+                    </div>
+                    {workloadStats.missingCount === 0 ? (
+                      <div className="flex items-center gap-2 py-6 text-emerald-700 dark:text-emerald-400 justify-center">
+                        <CheckCircle2 className="h-5 w-5" /><span className="text-sm">All staff submitted timesheets this week</span>
+                      </div>
+                    ) : (
+                      <div className="divide-y max-h-52 overflow-y-auto">
+                        {workloadStats.missingList.map(p => (
+                          <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                            <div className="h-7 w-7 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0 text-xs font-bold text-amber-700">
+                              {p.full_name ? p.full_name.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold truncate">{p.full_name ?? 'Unknown'}</p>
+                              <p className="text-[10px] text-muted-foreground capitalize">{p.role?.replace(/_/g,' ')}</p>
+                            </div>
+                            <span className="text-[10px] text-amber-600 font-semibold flex-shrink-0">No submission</span>
+                          </div>
+                        ))}
+                        {workloadStats.missingCount > 8 && (
+                          <div className="px-4 py-2 text-[11px] text-muted-foreground text-center">+{workloadStats.missingCount - 8} more</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 6: Accountability Feed */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-red-600/10 flex items-center justify-center flex-shrink-0">
+                  <Activity className="h-3.5 w-3.5 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">6. Accountability Feed</h2>
+                  <p className="text-[11px] text-muted-foreground">Escalations, overdue items, pending reviews, and renewal alerts requiring leadership attention</p>
+                </div>
+              </div>
+              {accountabilityFeed.length === 0 ? (
+                <div className="flex flex-col items-center py-8 text-emerald-700 dark:text-emerald-400 gap-2 border-2 border-dashed border-emerald-200 rounded-2xl">
+                  <CheckCircle2 className="h-7 w-7" />
+                  <p className="text-sm font-semibold">All clear — no accountability items</p>
+                  <p className="text-[11px] text-muted-foreground">No escalations, overdue tasks, or pending approvals requiring your attention</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                  <div className="divide-y">
+                    {accountabilityFeed.map(item => {
+                      const urgencyConfig = {
+                        critical: { bg: 'bg-red-50 dark:bg-red-900/10', dot: 'bg-red-500', text: 'text-red-700 dark:text-red-400', badge: 'bg-red-100 text-red-700' },
+                        high: { bg: 'bg-amber-50 dark:bg-amber-900/10', dot: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-400', badge: 'bg-amber-100 text-amber-700' },
+                        medium: { bg: '', dot: 'bg-blue-400', text: 'text-blue-700 dark:text-blue-400', badge: 'bg-blue-100 text-blue-700' },
+                      }[item.urgency];
+                      const typeIcon = {
+                        overdue_task: CheckSquare,
+                        timesheet_pending: Timer,
+                        subscription_renewal: CreditCard,
+                        incident: Siren,
+                        stalled_project: Clock,
+                        pending_approval: Receipt,
+                      }[item.type];
+                      const IconComp = typeIcon;
+                      return (
+                        <div key={item.id} className={cn('flex items-start gap-3 px-4 py-3 hover:bg-muted/20 transition-colors', urgencyConfig.bg)} data-testid={`feed-item-${item.id}`}>
+                          <div className={cn('h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', urgencyConfig.badge)}>
+                            <IconComp className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold">{item.title}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{item.sub}</p>
+                          </div>
+                          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 capitalize', urgencyConfig.badge)}>
+                            {item.urgency}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
           </TabsContent>
           )}
 
           {/* ═══════════════ OVERVIEW ═══════════════ */}
           <TabsContent value="overview" className="mt-4 space-y-4">
+
+            {/* Org-wide Task Health */}
+            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden" data-testid="section-task-health">
+              <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+                <div className="h-7 w-7 rounded-lg bg-indigo-600/10 flex items-center justify-center flex-shrink-0">
+                  <CheckSquare className="h-3.5 w-3.5 text-indigo-600" />
+                </div>
+                <span className="text-sm font-bold flex-1">Org-wide Task Health</span>
+                <button onClick={() => navigate('/tasks')} className="text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                  View tasks <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="p-4">
+                {/* Status breakdown cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  {[
+                    { label: 'Open', value: taskStats.openCount, bg: 'bg-slate-50 dark:bg-slate-900/20 border-slate-200', text: 'text-slate-700', action: () => navigate('/tasks?status=todo') },
+                    { label: 'In Progress', value: taskStats.inProgressCount, bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200', text: 'text-blue-700', action: () => navigate('/tasks?status=in_progress') },
+                    { label: 'Overdue', value: taskStats.overdueCount, bg: taskStats.overdueCount > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200' : 'bg-slate-50 border-slate-200', text: taskStats.overdueCount > 0 ? 'text-red-700 dark:text-red-400' : 'text-slate-500', action: () => navigate('/tasks?filter=overdue') },
+                    { label: 'Done This Month', value: taskStats.completedThisMonthCount, bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200', text: 'text-emerald-700', action: () => navigate('/tasks?filter=done') },
+                  ].map(k => (
+                    <button key={k.label} onClick={k.action} className={cn('rounded-xl border p-3 text-left hover:shadow-sm transition-all', k.bg)} data-testid={`task-status-${k.label.toLowerCase().replace(/\s+/g,'-')}`}>
+                      <div className={cn('text-2xl font-bold', k.text)}>{k.value}</div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">{k.label}</div>
+                    </button>
+                  ))}
+                </div>
+                {/* Overdue by department */}
+                {taskStats.overdueCount > 0 && taskStats.overdueByDept.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-bold text-muted-foreground mb-2 uppercase tracking-wider">Overdue tasks by department</p>
+                    <div className="space-y-1.5">
+                      {taskStats.overdueByDept.map(dept => (
+                        <div key={dept.deptName} className="flex items-center gap-3 py-1.5 border-b last:border-b-0">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium">{dept.deptName}</span>
+                          </div>
+                          <div className="flex-1 bg-muted/30 rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full bg-red-400" style={{ width: `${Math.min(100, (dept.count / taskStats.overdueCount) * 100)}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-red-600 w-6 text-right">{dept.count}</span>
+                          <button onClick={() => navigate('/tasks?filter=overdue')} className="text-[10px] text-[#1D3461] hover:underline flex-shrink-0">
+                            View <ChevronRight className="h-3 w-3 inline" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!taskStats.hasData && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No task data available yet</p>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
               {/* Project status breakdown */}
