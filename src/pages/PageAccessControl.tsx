@@ -55,7 +55,7 @@ export const PAGE_DEFS: PageDef[] = [
 
   // ── Programme Management ──────────────────────────────────────────────────
   { slug:'projects',            label:'Projects',               path:'/projects',               icon:FolderKanban, group:'Programme Management',
-    roles:['superAdmin','admin','ict'], note:'Also via custom "projects" permission' },
+    roles:['superAdmin'], note:'Super Admin only' },
   { slug:'portfolio',           label:'Portfolio Dashboard',    path:'/portfolio',              icon:LayoutDashboard, group:'Programme Management',
     roles:['superAdmin','admin','fom'], note:'Also via custom "projects" permission' },
   { slug:'mmp',                 label:'MMP Management',         path:'/mmp',                    icon:Database, group:'Programme Management',
@@ -139,7 +139,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'users',               label:'User Management',        path:'/users',                  icon:Users, group:'Administration',
     roles:['superAdmin','admin','ict'], note:'Also via custom "users" permission' },
   { slug:'departments',         label:'Departments',            path:'/departments',            icon:Building2, group:'Administration',
-    roles:['superAdmin','admin'] },
+    roles:['superAdmin'] },
   { slug:'role-management',     label:'Role Management',        path:'/role-management',        icon:Shield, group:'Administration',
     roles:['superAdmin','admin'], note:'Also via custom "roleManagement" permission' },
   { slug:'classifications',     label:'Classifications',        path:'/classifications',        icon:Award, group:'Administration',

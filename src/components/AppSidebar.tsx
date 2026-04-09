@@ -319,7 +319,7 @@
 
     // ── 3. Programme Management ───────────────────────────────────────────────
     const planningItems: MenuGroup['items'] = [];
-    if (!isHidden('/projects') && (isSuperAdmin || isAdmin || isICT || perms.projects)) {
+    if (!isHidden('/projects') && isSuperAdmin) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
     if (!isHidden('/projects/analytics') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
@@ -552,7 +552,7 @@
     if (!isHidden('/hub-management') && (isSuperAdmin || isAdmin || isICT)) {
       adminItems.push({ id: 'hub-management', title: "Hub Management", url: "/hub-management", icon: Building2, priority: 3, isPinned: isPinned('/hub-management') });
     }
-    if (!isHidden('/departments') && (isSuperAdmin || isAdmin)) {
+    if (!isHidden('/departments') && isSuperAdmin) {
       adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 4, isPinned: isPinned('/departments') });
     }
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {

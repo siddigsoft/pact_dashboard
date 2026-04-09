@@ -2525,10 +2525,10 @@ export default function Departments() {
   const roleNorm = (currentUser?.role ?? "").toLowerCase().replace(/[_\s]/g, "");
   const canManage = isSuperAdmin || roleNorm === "superadmin";
   // admin (and super_admin) can move employees between departments
-  const canMoveEmployees = canManage || roleNorm === "admin";
+  const canMoveEmployees = canManage;
 
-  // Only admin+ may access this page; non-admins see an access-denied screen
-  const canAccess = canMoveEmployees;
+  // Only Super Admin may access this page
+  const canAccess = canManage;
 
   const qc = useQueryClient();
   const DEPT_KEY = ["departments-page-data"] as const;
