@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { isProtectedOwner } from '@/lib/protected-accounts';
 import { useUser } from '@/context/user/UserContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { User } from '@/types';
@@ -392,6 +393,11 @@ const Users = () => {
   const handleActivateWithRole = async () => {
     if (!activateWithRoleDialog.user) return;
     const { user, selectedRole } = activateWithRoleDialog;
+    if (isProtectedOwner(user.id)) {
+      toast({ title: 'Protected Account', description: 'This account role cannot be changed.', variant: 'destructive' });
+      setActivateWithRoleDialog({ open: false });
+      return;
+    }
     setIsActivatingWithRole(true);
     try {
       const roleChanged = selectedRole && selectedRole !== user.role;

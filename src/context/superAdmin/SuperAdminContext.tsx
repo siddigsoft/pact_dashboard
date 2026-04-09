@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { isProtectedOwner } from '@/lib/protected-accounts';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
@@ -364,6 +365,17 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const deactivateSuperAdmin = async (data: DeactivateSuperAdmin): Promise<boolean> => {
+    // Block any attempt to deactivate the protected owner's super admin entry
+    const targetAdmin = superAdmins.find(a => a.id === data.superAdminId);
+    if (targetAdmin && isProtectedOwner(targetAdmin.userId)) {
+      toast({
+        title: 'Protected Account',
+        description: 'The owner account cannot be deactivated or modified by anyone.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
     const session = await ensureValidSession();
     if (!session.success) {
       toast({

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { isProtectedOwner } from '@/lib/protected-accounts';
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -1331,6 +1332,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUser = async (user: User): Promise<boolean> => {
     try {
       console.log("Updating user:", user);
+
+      // ── Protected owner guard ────────────────────────────────────────────
+      // The owner account role can never be changed by anyone (including other super admins).
+      // The DB trigger also enforces this, but we block it early in the UI layer too.
+      if (isProtectedOwner(user.id)) {
+        const existingUser = users.find(u => u.id === user.id);
+        if (existingUser && user.role !== existingUser.role) {
+          toast({
+            title: 'Protected Account',
+            description: 'This account is protected. Its role cannot be changed.',
+            variant: 'destructive',
+          });
+          return false;
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────
       
       const updatedUser = {
         ...user,

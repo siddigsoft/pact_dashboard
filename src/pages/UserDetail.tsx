@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
+import { isProtectedOwner } from "@/lib/protected-accounts";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -680,9 +681,11 @@ const UserDetail: React.FC = () => {
               <div className="flex flex-wrap justify-center items-center gap-2 mt-3">
                 {editMode ? (
                   <select
-                    className="border rounded-lg px-3 py-2 text-center min-h-[44px] text-sm w-full max-w-xs bg-background"
+                    className="border rounded-lg px-3 py-2 text-center min-h-[44px] text-sm w-full max-w-xs bg-background disabled:opacity-60 disabled:cursor-not-allowed"
                     value={editForm.role || ""}
                     onChange={e => handleEditChange("role", e.target.value)}
+                    disabled={isProtectedOwner(user?.id)}
+                    title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
                   >
                     <option value="" disabled>Select role</option>
                     {availableRoles.map(role => (
@@ -947,9 +950,11 @@ const UserDetail: React.FC = () => {
                     <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-widest">Role</h3>
                     {editMode ? (
                       <select
-                        className="border rounded-lg px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base bg-background"
+                        className="border rounded-lg px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base bg-background disabled:opacity-60 disabled:cursor-not-allowed"
                         value={editForm.role || ""}
                         onChange={e => handleEditChange("role", e.target.value)}
+                        disabled={isProtectedOwner(user?.id)}
+                        title={isProtectedOwner(user?.id) ? "This account's role is permanently protected" : undefined}
                       >
                         <option value="" disabled>Select role</option>
                         {availableRoles.map(role => (
