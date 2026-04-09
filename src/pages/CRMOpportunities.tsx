@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
+import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
   TrendingUp, Plus, Search, DollarSign, Building2,
   Edit2, Trash2, Loader2, RefreshCw, Calendar, Target,
-  ChevronRight, ArrowRight
+  ChevronRight, ArrowRight, FolderPlus, CheckCircle2
 } from 'lucide-react';
+import { useProjectContext } from '@/context/project/ProjectContext';
+import type { ProjectType } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +60,8 @@ function fmtCurrency(v: number) {
 export default function CRMOpportunities() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { addProject, projects: allProjects } = useProjectContext();
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +72,18 @@ export default function CRMOpportunities() {
   const [editing, setEditing] = useState<Opportunity | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
+  const [convertingOppId, setConvertingOppId] = useState<string | null>(null);
+
+  const CRM_OPP_TAG = (oppId: string) => `[crm-opp:${oppId}]`;
+
+  const convertedOppIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of allProjects) {
+      const match = p.description?.match(/\[crm-opp:([^\]]+)\]/);
+      if (match) ids.add(match[1]);
+    }
+    return ids;
+  }, [allProjects]);
 
   const load = async () => {
     setLoading(true);
@@ -134,12 +151,68 @@ export default function CRMOpportunities() {
     else { toast({ title: 'Opportunity deleted' }); load(); }
   };
 
+  const createProjectFromOpp = async (o: Opportunity): Promise<void> => {
+    if (convertingOppId === o.id) return;
+    if (convertedOppIds.has(o.id)) {
+      const existing = allProjects.find(p => p.description?.includes(CRM_OPP_TAG(o.id)));
+      if (existing) navigate(`/projects/${existing.id}`);
+      return;
+    }
+    setConvertingOppId(o.id);
+    const today = new Date().toISOString();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 90);
+    const projectType: ProjectType = 'tpm';
+    const tag = CRM_OPP_TAG(o.id);
+    const baseDesc = o.description
+      ? `${o.description}\n\n${tag}`
+      : `Active project converted from won CRM opportunity: ${o.title}\n\n${tag}`;
+    const newProject = await addProject({
+      id: '',
+      name: o.title,
+      projectCode: `WIN-${Date.now().toString(36).toUpperCase()}`,
+      projectType,
+      status: 'active',
+      description: baseDesc,
+      startDate: today,
+      endDate: endDate.toISOString(),
+      location: { country: 'Sudan', region: '', state: '' },
+      activities: [],
+      createdAt: today,
+      updatedAt: today,
+      createdBy: currentUser?.id,
+      partnerId: o.partner_id ?? undefined,
+      clientName: o.partner_name,
+    });
+    setConvertingOppId(null);
+    if (newProject) {
+      toast({
+        title: 'Project Created',
+        description: (
+          <div className="flex flex-col gap-2 mt-1">
+            <span><strong>{newProject.name}</strong> is now an active TPM project.</span>
+            <button
+              className="self-start px-3 py-1 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700"
+              onClick={() => navigate(`/projects/${newProject.id}`)}
+            >
+              Open Project
+            </button>
+          </div>
+        ),
+        duration: 10000,
+      });
+    }
+  };
+
   const advanceStage = async (o: Opportunity) => {
     const idx = STAGES.findIndex(s => s.value === o.stage);
     if (idx === -1 || idx >= STAGES.length - 1) return;
     const newStage = STAGES[idx + 1].value;
     await supabase.from('crm_opportunities').update({ stage: newStage, updated_at: new Date().toISOString() }).eq('id', o.id);
     load();
+    if (newStage === 'won') {
+      await createProjectFromOpp(o);
+    }
   };
 
   const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
@@ -279,6 +352,17 @@ export default function CRMOpportunities() {
                                 Move to {STAGES[stageIdx + 1]?.label} <ArrowRight className="h-3 w-3" />
                               </button>
                             )}
+                            {o.stage === 'won' && (
+                              <button
+                                onClick={() => createProjectFromOpp(o)}
+                                className="mt-1 w-full text-xs text-green-700 hover:text-green-800 flex items-center justify-center gap-1 py-1 rounded hover:bg-green-50 transition-colors disabled:opacity-50"
+                                data-testid={`button-convert-project-${o.id}`}
+                                disabled={convertedOppIds.has(o.id) || convertingOppId === o.id}
+                              >
+                                {convertingOppId === o.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FolderPlus className="h-3 w-3" />}
+                                {convertedOppIds.has(o.id) ? 'Project Created' : convertingOppId === o.id ? 'Creating…' : 'Convert to Project'}
+                              </button>
+                            )}
                           </CardContent>
                         </Card>
                       );
@@ -322,6 +406,17 @@ export default function CRMOpportunities() {
                       <div className="flex items-center gap-4 shrink-0">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${stage?.badge}`}>{stage?.label}</span>
                         <span className="text-sm font-bold">{o.value_usd ? fmtCurrency(o.value_usd) : '—'}</span>
+                        {o.stage === 'won' && (
+                          <button
+                            onClick={() => createProjectFromOpp(o)}
+                            className="flex items-center gap-1 text-xs text-green-700 hover:text-green-800 px-2 py-1 rounded hover:bg-green-50 transition-colors font-medium disabled:opacity-50"
+                            data-testid={`button-convert-project-list-${o.id}`}
+                            disabled={convertedOppIds.has(o.id) || convertingOppId === o.id}
+                          >
+                            {convertingOppId === o.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
+                            {convertedOppIds.has(o.id) ? 'Project Created' : convertingOppId === o.id ? 'Creating…' : 'Convert to Project'}
+                          </button>
+                        )}
                         <div className="flex gap-1">
                           <button onClick={() => openEdit(o)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                             <Edit2 className="h-3.5 w-3.5" />
@@ -394,6 +489,7 @@ export default function CRMOpportunities() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

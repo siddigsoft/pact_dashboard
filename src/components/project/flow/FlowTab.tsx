@@ -863,6 +863,11 @@ export function FlowTab({
                             <Link2 className="h-2.5 w-2.5" /> Parallel
                           </span>
                         )}
+                        {stage.typicalDurationDays && status !== 'completed' && status !== 'skipped' && (
+                          <span className="text-[10px] bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-full px-1.5 py-0.5 font-medium flex items-center gap-0.5" title="Typical duration">
+                            <Clock className="h-2.5 w-2.5" />~{stage.typicalDurationDays}d
+                          </span>
+                        )}
                         {overdue && !blocked && (
                           <span className="text-[10px] bg-red-100 text-red-700 rounded-full px-1.5 py-0.5 font-medium">Overdue</span>
                         )}

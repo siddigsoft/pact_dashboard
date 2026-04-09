@@ -17,6 +17,7 @@ export interface FlowStage {
   linkedModule?: string;
   linkedActions?: StageAction[];
   keyOutputs: string[];
+  typicalDurationDays?: number;
 }
 
 export interface ProjectFlow {
@@ -31,6 +32,7 @@ const TPM_FLOW: FlowStage[] = [
     label: 'Inception',
     description: 'Finalise scope, key stakeholders, and inception report. Establish coordination with implementing partners.',
     keyOutputs: ['Inception report', 'Stakeholder mapping', 'Work plan'],
+    typicalDurationDays: 14,
   },
   {
     id: 'site_selection',
@@ -42,6 +44,7 @@ const TPM_FLOW: FlowStage[] = [
       { label: 'Hub Map & Coverage', route: '/hub-management', icon: 'hub-map' },
     ],
     keyOutputs: ['Site registry', 'Coverage plan', 'Geographical mapping'],
+    typicalDurationDays: 7,
   },
   {
     id: 'mmp_design',
@@ -53,6 +56,7 @@ const TPM_FLOW: FlowStage[] = [
       { label: 'Staff Directory', route: '/staff-directory', icon: 'staff' },
     ],
     keyOutputs: ['Approved MMP files', 'DC assignment list', 'Monitoring indicators'],
+    typicalDurationDays: 7,
   },
   {
     id: 'enumerator_training',
@@ -63,6 +67,7 @@ const TPM_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Training agenda', 'Attendance register', 'Pre/post training test results'],
+    typicalDurationDays: 3,
   },
   {
     id: 'field_verification',
@@ -74,6 +79,7 @@ const TPM_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Verified site visit records', 'Photo documentation', 'Field observation notes'],
+    typicalDurationDays: 30,
   },
   {
     id: 'data_processing',
@@ -84,6 +90,7 @@ const TPM_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Cleaned dataset', 'Data quality log', 'Validation summary'],
+    typicalDurationDays: 10,
   },
   {
     id: 'reporting',
@@ -95,6 +102,7 @@ const TPM_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Draft TPM report', 'Final TPM report', 'Executive summary'],
+    typicalDurationDays: 14,
   },
   {
     id: 'recommendations_tracking',
@@ -105,6 +113,7 @@ const TPM_FLOW: FlowStage[] = [
       { label: 'Site Visits', route: '/site-visits', icon: 'visits' },
     ],
     keyOutputs: ['Recommendation tracker', 'Partner response log', 'Lessons learned note'],
+    typicalDurationDays: 14,
   },
 ];
 
@@ -114,12 +123,14 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
     label: 'Inception',
     description: 'Agree on survey objectives, scope, sampling approach, and timeline with the client.',
     keyOutputs: ['Inception report', 'Survey ToR', 'Sampling frame'],
+    typicalDurationDays: 14,
   },
   {
     id: 'methodology_design',
     label: 'Methodology Design',
     description: 'Develop the sampling methodology, define indicators, and finalise the measurement framework.',
     keyOutputs: ['Methodology note', 'Indicator framework', 'Sampling design document'],
+    typicalDurationDays: 10,
   },
   {
     id: 'tool_development',
@@ -129,6 +140,7 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Approved questionnaire', 'Digital form (ODK/KoBoToolbox)', 'Translation sign-off'],
+    typicalDurationDays: 14,
   },
   {
     id: 'enumerator_training',
@@ -139,6 +151,7 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Training attendance register', 'Pre/post test scores', 'Field protocol guide'],
+    typicalDurationDays: 5,
   },
   {
     id: 'pilot',
@@ -150,6 +163,7 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Pilot report', 'Revised questionnaire', 'Lessons from pilot'],
+    typicalDurationDays: 5,
   },
   {
     id: 'data_collection',
@@ -161,6 +175,7 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'MMP Management', route: '/mmp-management', icon: 'mmp' },
     ],
     keyOutputs: ['Completed submissions', 'Daily progress reports', 'Field supervisor logs'],
+    typicalDurationDays: 30,
   },
   {
     id: 'data_cleaning',
@@ -170,6 +185,7 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Clean dataset', 'Data cleaning log', 'Outlier and missing data report'],
+    typicalDurationDays: 14,
   },
   {
     id: 'analysis',
@@ -179,6 +195,7 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Statistical tables', 'Charts and infographics', 'Analytical narrative'],
+    typicalDurationDays: 14,
   },
   {
     id: 'report_dissemination',
@@ -190,6 +207,7 @@ const BASELINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Draft baseline report', 'Final baseline report', 'Dissemination record'],
+    typicalDurationDays: 14,
   },
 ];
 
@@ -202,6 +220,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Endline inception report', 'Comparison framework', 'Revised sampling frame'],
+    typicalDurationDays: 14,
   },
   {
     id: 'methodology_design',
@@ -211,6 +230,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Endline methodology note', 'Indicator tracking matrix'],
+    typicalDurationDays: 10,
   },
   {
     id: 'tool_development',
@@ -220,6 +240,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Updated questionnaire', 'Digital form', 'Translation sign-off'],
+    typicalDurationDays: 10,
   },
   {
     id: 'enumerator_training',
@@ -230,6 +251,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Training attendance register', 'Pre/post test scores'],
+    typicalDurationDays: 5,
   },
   {
     id: 'pilot',
@@ -241,6 +263,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Pilot report', 'Final revised tools'],
+    typicalDurationDays: 5,
   },
   {
     id: 'data_collection',
@@ -252,6 +275,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'MMP Management', route: '/mmp-management', icon: 'mmp' },
     ],
     keyOutputs: ['Completed submissions', 'Daily progress reports'],
+    typicalDurationDays: 30,
   },
   {
     id: 'data_cleaning',
@@ -261,6 +285,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Clean endline dataset', 'Comparison-ready dataset', 'Data cleaning log'],
+    typicalDurationDays: 14,
   },
   {
     id: 'analysis',
@@ -270,6 +295,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Change analysis tables', 'Impact indicators', 'Statistical significance tests'],
+    typicalDurationDays: 14,
   },
   {
     id: 'report_dissemination',
@@ -281,6 +307,7 @@ const ENDLINE_SURVEY_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Draft endline report', 'Final endline report', 'Baseline-endline comparison table'],
+    typicalDurationDays: 14,
   },
 ];
 
@@ -293,6 +320,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Inception report', 'Assessment framework', 'Work plan'],
+    typicalDurationDays: 10,
   },
   {
     id: 'methodology_design',
@@ -302,6 +330,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Methodology note', 'Assessment matrix', 'Sampling strategy'],
+    typicalDurationDays: 7,
   },
   {
     id: 'tool_development',
@@ -311,6 +340,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Data collection tools', 'Interview guides', 'Translation and back-translation'],
+    typicalDurationDays: 7,
   },
   {
     id: 'enumerator_training',
@@ -321,6 +351,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Training attendance register', 'Field protocol', 'Competency assessment results'],
+    typicalDurationDays: 3,
   },
   {
     id: 'data_collection',
@@ -332,6 +363,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Completed data forms', 'Interview transcripts', 'FGD notes'],
+    typicalDurationDays: 14,
   },
   {
     id: 'data_cleaning',
@@ -341,6 +373,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Clean dataset', 'Data validation log', 'Triangulation summary'],
+    typicalDurationDays: 7,
   },
   {
     id: 'analysis',
@@ -350,6 +383,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Quantitative analysis tables', 'Qualitative themes', 'Key findings summary'],
+    typicalDurationDays: 7,
   },
   {
     id: 'report_validation',
@@ -361,6 +395,7 @@ const ASSESSMENT_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Draft assessment report', 'Stakeholder validation notes', 'Final assessment report'],
+    typicalDurationDays: 10,
   },
 ];
 
@@ -373,6 +408,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Inception report', 'Evaluation matrix', 'Theory of Change review', 'Work plan'],
+    typicalDurationDays: 21,
   },
   {
     id: 'methodology_design',
@@ -383,6 +419,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Evaluation methodology note', 'Data source map', 'Sampling design'],
+    typicalDurationDays: 14,
   },
   {
     id: 'tool_development',
@@ -392,6 +429,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Evaluation questionnaire', 'KII and FGD guides', 'Document review checklist'],
+    typicalDurationDays: 10,
   },
   {
     id: 'data_collection',
@@ -403,6 +441,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Survey data', 'Interview transcripts', 'Secondary data analysis'],
+    typicalDurationDays: 21,
   },
   {
     id: 'data_analysis',
@@ -412,6 +451,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Analysis tables', 'OECD-DAC criteria scoring', 'Findings matrix'],
+    typicalDurationDays: 21,
   },
   {
     id: 'draft_report',
@@ -422,6 +462,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Draft evaluation report', 'Executive summary'],
+    typicalDurationDays: 21,
   },
   {
     id: 'stakeholder_validation',
@@ -431,6 +472,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Staff Directory', route: '/staff-directory', icon: 'staff' },
     ],
     keyOutputs: ['Validation workshop report', 'Comment log', 'Management response draft'],
+    typicalDurationDays: 7,
   },
   {
     id: 'final_report',
@@ -442,6 +484,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Final evaluation report', 'Management response', 'Evaluation summary sheet'],
+    typicalDurationDays: 14,
   },
   {
     id: 'learning_session',
@@ -452,6 +495,7 @@ const EVALUATION_FLOW: FlowStage[] = [
       { label: 'Staff Directory', route: '/staff-directory', icon: 'staff' },
     ],
     keyOutputs: ['Learning session report', 'Action plan for recommendations', 'Dissemination record'],
+    typicalDurationDays: 7,
   },
 ];
 
@@ -465,6 +509,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Budget', route: '/budget', icon: 'budget' },
     ],
     keyOutputs: ['Approved concept note', 'Research proposal', 'Budget plan'],
+    typicalDurationDays: 14,
   },
   {
     id: 'ethics_approvals',
@@ -474,6 +519,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Ethics certificate', 'Research permit', 'Government clearance letter'],
+    typicalDurationDays: 30,
   },
   {
     id: 'instrument_development',
@@ -483,6 +529,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Research instruments', 'Pre-test report', 'Coding framework'],
+    typicalDurationDays: 14,
   },
   {
     id: 'data_collection',
@@ -494,6 +541,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Primary dataset', 'Interview recordings/transcripts', 'Field notes'],
+    typicalDurationDays: 30,
   },
   {
     id: 'data_analysis',
@@ -503,6 +551,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Analysis outputs', 'Statistical results', 'Thematic codes and themes'],
+    typicalDurationDays: 21,
   },
   {
     id: 'draft_writeup',
@@ -512,6 +561,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Draft research paper/report', 'Bibliography', 'Data annexes'],
+    typicalDurationDays: 21,
   },
   {
     id: 'peer_review',
@@ -522,6 +572,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Peer review comments', 'Revision log', 'Revised manuscript'],
+    typicalDurationDays: 14,
   },
   {
     id: 'publication',
@@ -533,6 +584,7 @@ const RESEARCH_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Published report/paper', 'Dissemination plan', 'Media or presentation materials'],
+    typicalDurationDays: 14,
   },
 ];
 
@@ -546,6 +598,7 @@ const CAPACITY_BUILDING_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['TNA report', 'Capacity gap analysis', 'Prioritised training areas'],
+    typicalDurationDays: 10,
   },
   {
     id: 'curriculum_design',
@@ -555,6 +608,7 @@ const CAPACITY_BUILDING_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Training plan', 'Session schedule', 'Learning objectives matrix'],
+    typicalDurationDays: 7,
   },
   {
     id: 'material_development',
@@ -564,6 +618,7 @@ const CAPACITY_BUILDING_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ["Facilitator's guide", "Participant's workbook", 'Presentation slides', 'Exercises and handouts'],
+    typicalDurationDays: 10,
   },
   {
     id: 'training_delivery',
@@ -574,6 +629,7 @@ const CAPACITY_BUILDING_FLOW: FlowStage[] = [
       { label: 'Site Visits', route: '/site-visits', icon: 'visits' },
     ],
     keyOutputs: ['Attendance register', 'Pre/post test results', 'Daily session evaluations'],
+    typicalDurationDays: 5,
   },
   {
     id: 'post_training_assessment',
@@ -584,6 +640,7 @@ const CAPACITY_BUILDING_FLOW: FlowStage[] = [
       { label: 'Staff Directory', route: '/staff-directory', icon: 'staff' },
     ],
     keyOutputs: ['Assessment results', 'Competency verification report', 'Certification records'],
+    typicalDurationDays: 7,
   },
   {
     id: 'followup_mentoring',
@@ -595,6 +652,7 @@ const CAPACITY_BUILDING_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Follow-up visit records', 'Mentoring session notes', 'Capacity improvement report'],
+    typicalDurationDays: 30,
   },
 ];
 
@@ -608,6 +666,7 @@ const COMPLIANCE_FLOW: FlowStage[] = [
       { label: 'Staff Directory', route: '/staff-directory', icon: 'staff' },
     ],
     keyOutputs: ['Review plan', 'Compliance checklist', 'Document request list'],
+    typicalDurationDays: 5,
   },
   {
     id: 'document_review',
@@ -618,6 +677,7 @@ const COMPLIANCE_FLOW: FlowStage[] = [
       { label: 'Finance', route: '/finance', icon: 'finance' },
     ],
     keyOutputs: ['Document review matrix', 'Initial findings log', 'Information gap list'],
+    typicalDurationDays: 10,
   },
   {
     id: 'field_verification',
@@ -629,6 +689,7 @@ const COMPLIANCE_FLOW: FlowStage[] = [
       { label: 'Hub Operations', route: '/hub-operations', icon: 'hub' },
     ],
     keyOutputs: ['Field visit reports', 'Interview notes', 'Photo evidence'],
+    typicalDurationDays: 7,
   },
   {
     id: 'findings_report',
@@ -639,6 +700,7 @@ const COMPLIANCE_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Draft findings report', 'Risk rating matrix', 'Non-compliance log'],
+    typicalDurationDays: 10,
   },
   {
     id: 'action_plan',
@@ -649,6 +711,7 @@ const COMPLIANCE_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Agreed action plan', 'Timeline for remediation', 'Responsible person matrix'],
+    typicalDurationDays: 7,
   },
   {
     id: 'followup_verification',
@@ -660,6 +723,7 @@ const COMPLIANCE_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Verification report', 'Closed findings log', 'Final compliance certificate'],
+    typicalDurationDays: 14,
   },
 ];
 
@@ -674,6 +738,7 @@ const INFRASTRUCTURE_FLOW: FlowStage[] = [
       { label: 'Budget', route: '/budget', icon: 'budget' },
     ],
     keyOutputs: ['Feasibility report', 'Site assessment', 'Community consultation notes'],
+    typicalDurationDays: 21,
   },
   {
     id: 'design_planning',
@@ -684,6 +749,7 @@ const INFRASTRUCTURE_FLOW: FlowStage[] = [
       { label: 'Budget', route: '/budget', icon: 'budget' },
     ],
     keyOutputs: ['Technical drawings', 'Bill of Quantities (BoQ)', 'Environmental clearance'],
+    typicalDurationDays: 30,
   },
   {
     id: 'procurement',
@@ -694,6 +760,7 @@ const INFRASTRUCTURE_FLOW: FlowStage[] = [
       { label: 'Finance', route: '/finance', icon: 'finance' },
     ],
     keyOutputs: ['Procurement report', 'Signed contracts', 'Contractor vetting records'],
+    typicalDurationDays: 30,
   },
   {
     id: 'construction',
@@ -706,6 +773,7 @@ const INFRASTRUCTURE_FLOW: FlowStage[] = [
       { label: 'Hub Map', route: '/hub-management', icon: 'hub-map' },
     ],
     keyOutputs: ['Progress monitoring reports', 'Site supervision logs', 'Variation orders (if any)'],
+    typicalDurationDays: 90,
   },
   {
     id: 'quality_assurance',
@@ -716,6 +784,7 @@ const INFRASTRUCTURE_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['QA inspection reports', 'Material testing certificates', 'Snag list'],
+    typicalDurationDays: 14,
   },
   {
     id: 'commissioning_handover',
@@ -726,6 +795,7 @@ const INFRASTRUCTURE_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Handover certificate', 'As-built drawings', 'Operation & maintenance manual'],
+    typicalDurationDays: 7,
   },
   {
     id: 'post_completion_review',
@@ -736,6 +806,7 @@ const INFRASTRUCTURE_FLOW: FlowStage[] = [
       { label: 'Reports', route: '/reports', icon: 'reports' },
     ],
     keyOutputs: ['Post-completion review report', 'Lessons learned', 'Maintenance schedule'],
+    typicalDurationDays: 14,
   },
 ];
 
@@ -749,6 +820,7 @@ const OTHER_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Project plan', 'Work breakdown structure'],
+    typicalDurationDays: 14,
   },
   {
     id: 'implementation',
@@ -759,6 +831,7 @@ const OTHER_FLOW: FlowStage[] = [
       { label: 'Finance', route: '/finance', icon: 'finance' },
     ],
     keyOutputs: ['Activity progress reports', 'Issue log'],
+    typicalDurationDays: 60,
   },
   {
     id: 'closure',
@@ -770,6 +843,66 @@ const OTHER_FLOW: FlowStage[] = [
       { label: 'Documents', route: '/documents', icon: 'docs' },
     ],
     keyOutputs: ['Project completion report', 'Lessons learned document'],
+    typicalDurationDays: 14,
+  },
+];
+
+const PROPOSAL_FLOW: FlowStage[] = [
+  {
+    id: 'opportunity_identified',
+    label: 'Opportunity Identified',
+    description: 'Log and qualify the opportunity. Define the bid/no-bid decision criteria and assign a bid lead.',
+    linkedActions: [
+      { label: 'CRM Opportunities', route: '/crm/opportunities', icon: 'docs' },
+      { label: 'Documents', route: '/documents', icon: 'docs' },
+    ],
+    keyOutputs: ['Opportunity brief', 'Bid/no-bid decision note', 'Competitor landscape summary'],
+    typicalDurationDays: 3,
+  },
+  {
+    id: 'proposal_writing',
+    label: 'Proposal Writing',
+    description: 'Develop the technical and financial proposal including methodology, team CVs, and work plan.',
+    linkedActions: [
+      { label: 'Documents', route: '/documents', icon: 'docs' },
+      { label: 'Staff Directory', route: '/staff-directory', icon: 'staff' },
+      { label: 'Budget', route: '/budget', icon: 'budget' },
+    ],
+    keyOutputs: ['Technical proposal draft', 'Budget/financial proposal', 'Team composition plan', 'CVs and past performance'],
+    typicalDurationDays: 14,
+  },
+  {
+    id: 'submission',
+    label: 'Submission',
+    description: 'Submit the final proposal to the client or contracting authority by the deadline.',
+    linkedActions: [
+      { label: 'Documents', route: '/documents', icon: 'docs' },
+    ],
+    keyOutputs: ['Submitted proposal package', 'Submission confirmation', 'Clarification log'],
+    typicalDurationDays: 1,
+  },
+  {
+    id: 'negotiation',
+    label: 'Negotiation',
+    description: 'Engage in contract negotiations, respond to clarifications, and finalise terms.',
+    linkedActions: [
+      { label: 'CRM Opportunities', route: '/crm/opportunities', icon: 'docs' },
+      { label: 'Documents', route: '/documents', icon: 'docs' },
+      { label: 'Finance', route: '/finance', icon: 'finance' },
+    ],
+    keyOutputs: ['Negotiation meeting notes', 'Revised cost proposal', 'Draft contract'],
+    typicalDurationDays: 14,
+  },
+  {
+    id: 'won_lost',
+    label: 'Won / Lost',
+    description: 'Record the final outcome of the bid. If won, initiate project setup. If lost, capture lessons learned.',
+    linkedActions: [
+      { label: 'CRM Opportunities', route: '/crm/opportunities', icon: 'docs' },
+      { label: 'Documents', route: '/documents', icon: 'docs' },
+    ],
+    keyOutputs: ['Award letter / rejection notice', 'Contract (if won)', 'Lessons learned note'],
+    typicalDurationDays: 1,
   },
 ];
 
@@ -783,6 +916,7 @@ export const PROJECT_FLOWS: Record<string, ProjectFlow> = {
   capacity_building: { type: 'capacity_building', label: 'Capacity Building', stages: CAPACITY_BUILDING_FLOW },
   compliance: { type: 'compliance', label: 'Compliance Review', stages: COMPLIANCE_FLOW },
   infrastructure: { type: 'infrastructure', label: 'Infrastructure', stages: INFRASTRUCTURE_FLOW },
+  proposal: { type: 'proposal', label: 'Proposal / Bid', stages: PROPOSAL_FLOW },
   other: { type: 'other', label: 'Other', stages: OTHER_FLOW },
   // Legacy type aliases — map to nearest equivalent flow
   survey: { type: 'baseline_survey', label: 'Survey (Legacy)', stages: BASELINE_SURVEY_FLOW },
@@ -809,5 +943,6 @@ export const PROJECT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'capacity_building', label: 'Capacity Building' },
   { value: 'compliance', label: 'Compliance Review' },
   { value: 'infrastructure', label: 'Infrastructure' },
+  { value: 'proposal', label: 'Proposal / Bid' },
   { value: 'other', label: 'Other' },
 ];

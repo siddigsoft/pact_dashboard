@@ -65,6 +65,8 @@ import { CloseReadinessChecklist } from '@/components/close/CloseReadinessCheckl
 import { ReconciliationSummary } from '@/components/close/ReconciliationSummary';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { logAuditEvent } from '@/utils/audit-logger';
+import { ProjectDeliverablesChecklist } from './ProjectDeliverablesChecklist';
+import { getProjectTypeConfig } from '@/config/projectTypeConfig';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -619,6 +621,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const daysRemaining = getDaysRemaining();
 
   const budgetSummary = project.budget ? getBudgetSummary(project.budget) : null;
+  const typeConfig = getProjectTypeConfig(project.projectType);
 
   return (
     <div className="space-y-4 p-3 md:p-4">
@@ -898,12 +901,14 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         <div className="w-full overflow-x-auto">
         <TabsList className="flex flex-row flex-nowrap h-auto w-max min-w-full justify-start">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="activities">Activities</TabsTrigger>
+          <TabsTrigger value="activities" data-testid="tab-activities">
+            {typeConfig.tabLabels.planning ?? 'Activities'}
+          </TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="costs" data-testid="tab-costs">Costs</TabsTrigger>
           <TabsTrigger value="budget">Budget</TabsTrigger>
           <TabsTrigger value="flow" data-testid="tab-flow">
-            <GitBranch className="h-3.5 w-3.5 mr-1" />Flow
+            <GitBranch className="h-3.5 w-3.5 mr-1" />{typeConfig.tabLabels.monitoring ?? 'Flow'}
           </TabsTrigger>
           <TabsTrigger value="field_tasks" data-testid="tab-field-tasks">
             <CheckSquare className="h-3.5 w-3.5 mr-1" />Tasks
@@ -912,7 +917,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <MessageCircle className="h-3.5 w-3.5 mr-1" />Comments
           </TabsTrigger>
           <TabsTrigger value="documents" data-testid="tab-documents">
-            <Paperclip className="h-3.5 w-3.5 mr-1" />Documents
+            <Paperclip className="h-3.5 w-3.5 mr-1" />{typeConfig.tabLabels.reporting ?? 'Documents'}
           </TabsTrigger>
           <TabsTrigger value="calendar" data-testid="tab-calendar">
             <Calendar className="h-3.5 w-3.5 mr-1" />Calendar
@@ -960,7 +965,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Type</p>
                       <div className="flex items-center gap-1.5">
                         <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-sm capitalize">{project.projectType}</span>
+                        <span className="text-sm">{typeConfig.label}</span>
                       </div>
                     </div>
                     
@@ -1022,6 +1027,15 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </CardContent>
               </Card>
               
+              {/* Deliverables Checklist */}
+              <ProjectDeliverablesChecklist
+                projectId={project.id}
+                projectType={project.projectType}
+                initialState={project.team?.deliverablesState}
+                currentTeam={project.team as Record<string, unknown>}
+                canEdit={!project.archived && canArchive}
+              />
+
               {/* Activity Timeline */}
               <ActivityTimeline activities={project.activities} />
             </div>

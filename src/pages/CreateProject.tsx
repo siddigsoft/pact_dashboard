@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -8,15 +8,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import ProjectForm from '@/components/project/ProjectForm';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { useBudget } from '@/context/budget/BudgetContext';
-import { Project } from '@/types/project';
+import { Project, ProjectType } from '@/types/project';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { ProjectBudget } from '@/types/budget';
+import { getProjectTypeConfig } from '@/config/projectTypeConfig';
 
 const CreateProject = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const templateType = searchParams.get('template') as ProjectType | null;
   const { addProject } = useProjectContext();
   const { createProjectBudget } = useBudget();
   
@@ -24,29 +27,58 @@ const CreateProject = () => {
   const [createdProject, setCreatedProject] = useState<Project | null>(null);
   const [budgetLoading, setBudgetLoading] = useState(false);
   
-  // Budget form state
   const [totalBudget, setTotalBudget] = useState('');
   const [budgetPeriod, setBudgetPeriod] = useState<ProjectBudget['budgetPeriod']>('annual');
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear().toString());
   const [budgetNotes, setBudgetNotes] = useState('');
-  const [categoryTransport, setCategoryTransport] = useState('');
-  const [categoryPermit, setCategoryPermit] = useState('');
-  const [categoryInternet, setCategoryInternet] = useState('');
+  const [categoryValues, setCategoryValues] = useState<Record<string, string>>({});
+
+  const templateConfig = useMemo(() => {
+    if (!templateType) return null;
+    return getProjectTypeConfig(templateType);
+  }, [templateType]);
+
+  const oppName = searchParams.get('name');
+
+  const templateInitialData: Partial<Project> | undefined = useMemo(() => {
+    if (!templateType || !templateConfig) return undefined;
+    const today = new Date();
+    const end = new Date(today);
+    end.setDate(end.getDate() + templateConfig.templateDefaults.durationDays);
+    const teamComposition = templateConfig.typicalTeamRoles.flatMap(r =>
+      Array.from({ length: r.count }, (_, i) => ({
+        userId: `template-${r.role}-${i}`,
+        name: `[${r.role.replace(/([A-Z])/g, ' $1').trim()}]`,
+        role: r.role as import('@/types/project').ProjectRole,
+        joinedAt: today.toISOString(),
+      }))
+    );
+    return {
+      projectType: templateType,
+      name: oppName ?? undefined,
+      description: templateConfig.templateDefaults.description,
+      startDate: today.toISOString(),
+      endDate: end.toISOString(),
+      team: { teamComposition },
+    };
+  }, [templateType, templateConfig, oppName]);
+
+  const typeConfig = useMemo(() => {
+    if (!createdProject) return null;
+    return getProjectTypeConfig(createdProject.projectType);
+  }, [createdProject?.projectType]);
 
   const handleProjectSubmit = async (project: Project) => {
     const newProject = await addProject(project);
     if (newProject) {
       setCreatedProject(newProject);
+      setCategoryValues({});
       setShowBudgetDialog(true);
     }
   };
 
   const handleDialogChange = (open: boolean) => {
-    // Prevent closing dialog - budget is mandatory
-    // Only allow closing after budget is created (which navigates away)
-    if (!open) {
-      return;
-    }
+    if (!open) return;
     setShowBudgetDialog(open);
   };
 
@@ -57,11 +89,13 @@ const CreateProject = () => {
     try {
       const totalBudgetCents = Math.round(parseFloat(totalBudget) * 100);
       
-      const categoryAllocations = {
-        transportation_and_visit_fees: categoryTransport ? Math.round(parseFloat(categoryTransport) * 100) : 0,
-        permit_fee: categoryPermit ? Math.round(parseFloat(categoryPermit) * 100) : 0,
-        internet_and_communication_fees: categoryInternet ? Math.round(parseFloat(categoryInternet) * 100) : 0,
-      };
+      const categoryAllocations: Record<string, number> = {};
+      Object.entries(categoryValues).forEach(([key, val]) => {
+        const parsed = parseFloat(val);
+        if (!isNaN(parsed) && parsed > 0) {
+          categoryAllocations[key] = Math.round(parsed * 100);
+        }
+      });
 
       const periodStart = budgetPeriod === 'annual' 
         ? `${fiscalYear}-01-01` 
@@ -93,8 +127,9 @@ const CreateProject = () => {
     }
   };
 
-  const categoryTotal = [categoryTransport, categoryPermit, categoryInternet]
-    .reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+  const categoryTotal = Object.values(categoryValues).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+
+  const currency = createdProject?.budget?.currency ?? 'SDG';
 
   return (
     <>
@@ -116,23 +151,43 @@ const CreateProject = () => {
           </div>
         </div>
 
-        <ProjectForm onSubmit={handleProjectSubmit} />
+        {templateConfig && (
+          <div className="px-4 py-3 rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Template:</span>
+              <span className="font-semibold">{templateConfig.label}</span>
+              <span className="text-blue-600 dark:text-blue-400">— Pre-filled with default stages and {templateConfig.templateDefaults.durationDays}-day timeline.</span>
+            </div>
+            {templateConfig.typicalTeamRoles.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-blue-600 dark:text-blue-400 font-medium">Suggested team:</span>
+                {templateConfig.typicalTeamRoles.map(r => (
+                  <span key={r.role} className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">
+                    {r.count}× {r.role.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <ProjectForm onSubmit={handleProjectSubmit} initialData={templateInitialData} />
       </div>
 
-      {/* Budget Creation Dialog - Mandatory */}
       <Dialog open={showBudgetDialog} onOpenChange={handleDialogChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" hideCloseButton>
           <DialogHeader>
             <DialogTitle>Create Budget for {createdProject?.name}</DialogTitle>
             <DialogDescription>
-              A budget is required for all projects. Please set up the budget to continue.
+              {typeConfig
+                ? `Budget template for ${typeConfig.label}. Fill in the typical cost categories for this project type.`
+                : 'A budget is required for all projects. Please set up the budget to continue.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="total-budget">Total Budget (SDG)</Label>
+                <Label htmlFor="total-budget">Total Budget ({currency})</Label>
                 <Input
                   id="total-budget"
                   type="number"
@@ -176,46 +231,32 @@ const CreateProject = () => {
             )}
 
             <div className="border-t pt-4">
-              <h4 className="font-medium mb-3">Category Allocations (Optional)</h4>
+              <h4 className="font-medium mb-1">Category Allocations (Optional)</h4>
+              {typeConfig && (
+                <p className="text-xs text-muted-foreground mb-3">
+                  Suggested categories for <strong>{typeConfig.label}</strong> projects
+                </p>
+              )}
               <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="cat-transport">Transportation and Visit Fees (SDG)</Label>
-                  <Input
-                    id="cat-transport"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={categoryTransport}
-                    onChange={(e) => setCategoryTransport(e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="cat-permit">Permit Fee (SDG)</Label>
-                  <Input
-                    id="cat-permit"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={categoryPermit}
-                    onChange={(e) => setCategoryPermit(e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="cat-internet">Internet & Communication Fees (SDG)</Label>
-                  <Input
-                    id="cat-internet"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={categoryInternet}
-                    onChange={(e) => setCategoryInternet(e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
+                {(typeConfig?.budgetCategories ?? [
+                  { key: 'transportation_and_visit_fees', label: 'Transportation and Visit Fees', placeholder: '0.00' },
+                  { key: 'permit_fee', label: 'Permit Fee', placeholder: '0.00' },
+                  { key: 'internet_and_communication_fees', label: 'Internet & Communication Fees', placeholder: '0.00' },
+                ]).map((cat) => (
+                  <div key={cat.key} className="grid gap-2">
+                    <Label htmlFor={`cat-${cat.key}`}>{cat.label} ({currency})</Label>
+                    <Input
+                      id={`cat-${cat.key}`}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={categoryValues[cat.key] ?? ''}
+                      onChange={(e) => setCategoryValues(prev => ({ ...prev, [cat.key]: e.target.value }))}
+                      placeholder={cat.placeholder ?? '0.00'}
+                      data-testid={`input-budget-cat-${cat.key}`}
+                    />
+                  </div>
+                ))}
               </div>
 
               {categoryTotal > 0 && (
@@ -223,12 +264,12 @@ const CreateProject = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Total Allocated:</span>
                     <span className="text-sm font-bold">
-                      SDG {categoryTotal.toLocaleString('en-SD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {currency} {categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   {totalBudget && categoryTotal > parseFloat(totalBudget) && (
                     <p className="text-sm text-destructive mt-1">
-                      Category total exceeds budget by SDG {(categoryTotal - parseFloat(totalBudget)).toFixed(2)}
+                      Category total exceeds budget by {currency} {(categoryTotal - parseFloat(totalBudget)).toFixed(2)}
                     </p>
                   )}
                 </div>

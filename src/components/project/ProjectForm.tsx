@@ -59,7 +59,7 @@ const createFormSchema = (isEditing: boolean) => z.object({
   description: z.string().optional(),
   projectType: z.enum([
     'tpm', 'baseline_survey', 'endline_survey', 'assessment', 'evaluation',
-    'research', 'capacity_building', 'compliance', 'infrastructure', 'other',
+    'research', 'capacity_building', 'compliance', 'infrastructure', 'proposal', 'other',
     // legacy values kept for editing existing records
     'survey', 'monitoring', 'training',
   ]),
@@ -372,6 +372,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                         <SelectItem value="capacity_building">Capacity Building</SelectItem>
                         <SelectItem value="compliance">Compliance Review</SelectItem>
                         <SelectItem value="infrastructure">Infrastructure</SelectItem>
+                        <SelectItem value="proposal">Proposal / Bid</SelectItem>
                         <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>

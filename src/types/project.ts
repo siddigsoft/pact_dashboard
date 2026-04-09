@@ -10,6 +10,7 @@ export type ProjectType =
   | 'capacity_building'
   | 'compliance'
   | 'infrastructure'
+  | 'proposal'
   | 'other'
   // Legacy values kept for backward-compatibility with existing DB records
   | 'survey'
@@ -85,6 +86,7 @@ export interface Project {
     projectManager?: string;
     members?: string[];
     teamComposition?: ProjectTeamMember[];
+    deliverablesState?: Record<string, boolean>;
   };
   activities: ProjectActivity[];
   relatedMMPs?: string[];

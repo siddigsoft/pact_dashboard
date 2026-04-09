@@ -4,7 +4,7 @@ import { Project, ProjectType, ProjectStatus } from "@/types/project";
 
 const validProjectTypes = [
   'tpm', 'baseline_survey', 'endline_survey', 'assessment', 'evaluation',
-  'research', 'capacity_building', 'compliance', 'infrastructure', 'other',
+  'research', 'capacity_building', 'compliance', 'infrastructure', 'proposal', 'other',
   // Legacy values accepted for backward-compatibility
   'survey', 'monitoring', 'training',
 ] as const;
