@@ -29,6 +29,7 @@ import MMPVersionHistory from "@/components/MMPVersionHistory";
 import { MMPInfoCard } from "@/components/site-visit/MMPInfoCard";
 import MMPSiteInformation from "@/components/MMPSiteInformation";
 import { MMPStatusBadge } from "@/components/mmp/MMPStatusBadge";
+import { CycleProgressBar } from "@/components/mmp/CycleProgressBar";
 
 // New components
 import MMPOverviewCard from "@/components/mmp/MMPOverviewCard";
@@ -161,6 +162,20 @@ const MMPDetailView = () => {
     });
     return returnedSites;
   }, [siteEntries]);
+
+  const coveredSitesCount = useMemo(() => {
+    return siteEntries.filter((s: any) => {
+      const st = (s.status || '').toLowerCase();
+      return st === 'completed' || st === 'visited' || st === 'verified' || st === 'approved';
+    }).length;
+  }, [siteEntries]);
+
+  const daysToDeadline = useMemo(() => {
+    const deadline = (mmpFile as any)?.cycle_close_deadline || (mmpFile as any)?.cycleCloseDeadline;
+    if (!deadline) return null;
+    const diff = Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return diff;
+  }, [mmpFile]);
 
   const recallInfo = useMemo(() => {
     const workflow = (mmpFile as any)?.workflow || {};
@@ -597,6 +612,44 @@ const MMPDetailView = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Cycle Coverage Progress Bar */}
+      {siteEntries.length > 0 && (
+        <Card className="shadow-sm border" data-testid="card-cycle-coverage">
+          <CardContent className="p-4">
+            <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-blue-600" />
+              Cycle Coverage
+            </p>
+            <CycleProgressBar covered={coveredSitesCount} total={siteEntries.length} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Deadline Warning Banner */}
+      {daysToDeadline !== null && daysToDeadline <= 3 && (
+        <Card className="shadow-md bg-gradient-to-r from-red-50/80 to-rose-50/50 dark:from-red-900/20 dark:to-rose-900/10 border-red-200 dark:border-red-800" data-testid="card-deadline-warning">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-red-200/50 dark:bg-red-800/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                  {daysToDeadline <= 0
+                    ? 'Cycle Close Deadline Passed'
+                    : daysToDeadline === 1
+                      ? 'Cycle Close Deadline Tomorrow'
+                      : `Cycle Close Deadline in ${daysToDeadline} Days`}
+                </p>
+                <p className="text-sm text-red-700 dark:text-red-400 mt-0.5">
+                  {siteEntries.length - coveredSitesCount} site{siteEntries.length - coveredSitesCount !== 1 ? 's' : ''} still uncovered — urgent action required.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recall Information Banner */}
       {recallInfo.wasRecalled && (

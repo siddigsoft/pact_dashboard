@@ -408,13 +408,17 @@ const MMPSiteEntriesTable = ({
     let mapped = results.map(({ raw }) => raw);
 
     if (sortUnclaimedFirst) {
+      const isClaimed = (site: any) => {
+        const norm = normalizeSite(site);
+        const status = (norm.status || '').toLowerCase();
+        const acceptedBy = site.accepted_by || site.acceptedBy;
+        return acceptedBy || ['accepted', 'claimed', 'ongoing', 'in_progress', 'inprogress', 'in progress', 'completed', 'verified'].some(s => status.includes(s));
+      };
       mapped = [...mapped].sort((a, b) => {
-        const isClaimed = (site: any) => {
-          const norm = normalizeSite(site);
-          const status = (norm.status || '').toLowerCase();
-          const acceptedBy = site.accepted_by || site.acceptedBy;
-          return acceptedBy || ['accepted', 'claimed', 'ongoing', 'in_progress', 'inprogress', 'in progress', 'completed', 'verified'].some(s => status.includes(s));
-        };
+        const locA = (a.locality || a.locality_name || '').toLowerCase();
+        const locB = (b.locality || b.locality_name || '').toLowerCase();
+        if (locA < locB) return -1;
+        if (locA > locB) return 1;
         const aClaimed = isClaimed(a) ? 1 : 0;
         const bClaimed = isClaimed(b) ? 1 : 0;
         return aClaimed - bClaimed;
