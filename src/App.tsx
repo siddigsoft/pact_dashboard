@@ -145,6 +145,7 @@ const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager')
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
 const ApprovalsHub = lazy(() => import('./pages/ApprovalsHub'));
+const IntegrationsSettings = lazy(() => import('./pages/IntegrationsSettings'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -428,6 +429,7 @@ const AppRoutes = () => {
         <Route path="/workspace" element={<WorkspaceHub />} />
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
+        <Route path="/integrations" element={<IntegrationsSettings />} />
       </Route>
 
       {/* Redirects */}

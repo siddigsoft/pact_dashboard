@@ -233,6 +233,38 @@ serve(async (req) => {
       )
     }
 
+    // Fetch email integration preferences for all recipients in a single query
+    // Maps event_type categories to preference column names in user_integrations
+    const EVENT_TYPE_PREF_MAP: Record<string, string> = {
+      'task_assigned': 'email_notify_task_assigned',
+      'task_updated': 'email_notify_task_assigned',
+      'task_completed': 'email_notify_task_assigned',
+      'approval_required': 'email_notify_approval_needed',
+      'mmp_assigned': 'email_notify_approval_needed',
+      'cost_submitted': 'email_notify_approval_needed',
+      'payment_processed': 'email_notify_payroll',
+      'wallet_updated': 'email_notify_payroll',
+      'cost_approved': 'email_notify_payroll',
+      'cost_rejected': 'email_notify_payroll',
+      'mmp_completed': 'email_notify_project_milestones',
+      'site_visit_completed': 'email_notify_project_milestones',
+      'mmp_created': 'email_notify_system',
+      'user_approved': 'email_notify_system',
+      'user_rejected': 'email_notify_system',
+    }
+    const prefColumn = EVENT_TYPE_PREF_MAP[event_type] ?? null
+
+    const recipientIdSet = recipients.map(r => r.id)
+    const { data: integrationPrefs } = await supabase
+      .from('user_integrations')
+      .select('user_id, email_notifications_enabled, notification_email, email_notify_task_assigned, email_notify_approval_needed, email_notify_payroll, email_notify_project_milestones, email_notify_system')
+      .in('user_id', recipientIdSet)
+
+    const prefsByUserId = new Map<string, Record<string, unknown>>()
+    for (const pref of (integrationPrefs ?? [])) {
+      prefsByUserId.set(pref.user_id as string, pref as Record<string, unknown>)
+    }
+
     // SMTP configuration
     const smtpHost = Deno.env.get('SMTP_HOST')
     const smtpPort = Deno.env.get('SMTP_PORT') || '465'
@@ -300,8 +332,19 @@ serve(async (req) => {
         notifications.push(inserted)
       }
 
-      // Send email if configured
-      if (nodemailerTransporter && recipient.email && send_email) {
+      // Send email if configured, respecting per-user integration preferences
+      const recipientPrefs = prefsByUserId.get(recipient.id)
+      // Default to send if user has no preferences row (opt-in by default)
+      const userEmailEnabled = recipientPrefs
+        ? recipientPrefs.email_notifications_enabled !== false
+        : true
+      const categoryEnabled = recipientPrefs && prefColumn
+        ? recipientPrefs[prefColumn] !== false
+        : true
+      // Use user's custom notification_email if set, otherwise fall back to profile email
+      const effectiveEmail = (recipientPrefs?.notification_email as string | null) || recipient.email
+
+      if (nodemailerTransporter && effectiveEmail && send_email && userEmailEnabled && categoryEnabled) {
         try {
           const allRecipientRoles = recipients.map(r => r.role).filter(Boolean)
           const emailHtml = generateBilingualEmailHtml(
@@ -317,7 +360,7 @@ serve(async (req) => {
 
           const mailOptions = {
             from: `"PACT Command Center" <${smtpUser}>`,
-            to: recipient.email,
+            to: effectiveEmail,
             subject: `[${priority.toUpperCase()}] ${finalTitleEn} | ${finalTitleAr}`,
             text: `${finalTitleEn}\n\n${message_en}\n\n---\n\n${finalTitleAr}\n\n${message_ar || message_en}`,
             html: emailHtml
@@ -348,12 +391,12 @@ serve(async (req) => {
               entity_type: 'email',
               entity_id: info.messageId || `email-${Date.now()}`,
               entity_name: `[${priority.toUpperCase()}] ${finalTitleEn}`,
-              description: `Email sent to ${recipient.email}: ${finalTitleEn}`,
+              description: `Email sent to ${effectiveEmail}: ${finalTitleEn}`,
               success: true,
               actor_id: triggered_by || 'system',
               actor_name: triggered_by_name || 'System',
               metadata: {
-                recipient: recipient.email,
+                recipient: effectiveEmail,
                 subject: `[${priority.toUpperCase()}] ${finalTitleEn}`,
                 emailType: 'notification',
                 messageId: info.messageId,
@@ -368,7 +411,7 @@ serve(async (req) => {
 
         } catch (emailError) {
           const errMsg = (emailError as Error)?.message || 'Unknown email error'
-          console.error(`Failed to send email to ${recipient.email}:`, errMsg)
+          console.error(`Failed to send email to ${effectiveEmail}:`, errMsg)
           
           // Only update DB record if it was successfully inserted
           if (inserted?.id) {
@@ -386,13 +429,13 @@ serve(async (req) => {
               entity_type: 'email',
               entity_id: `email-${Date.now()}`,
               entity_name: `[${priority.toUpperCase()}] ${finalTitleEn}`,
-              description: `Failed to send email to ${recipient.email}: ${finalTitleEn}`,
+              description: `Failed to send email to ${effectiveEmail}: ${finalTitleEn}`,
               success: false,
               error_message: errMsg,
               actor_id: triggered_by || 'system',
               actor_name: triggered_by_name || 'System',
               metadata: {
-                recipient: recipient.email,
+                recipient: effectiveEmail,
                 subject: `[${priority.toUpperCase()}] ${finalTitleEn}`,
                 emailType: 'notification',
                 event_type,

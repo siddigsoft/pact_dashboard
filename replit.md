@@ -30,6 +30,7 @@ The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI,
 *   **Outlook Calendar Integration:** Integrates with Outlook Calendar for event viewing and management within project details, utilizing MSAL OAuth and Microsoft Graph API.
 *   **Project Field Tasks:** A lightweight tracker for tasks within projects, managing priority, status, assignments, due dates, and location details.
 *   **Leave Request System:** Manages leave requests with various types, approval workflows, and historical tracking for employees and administrators.
+*   **Integrations Settings Page (`/integrations`):** A dedicated settings page for connecting Google Calendar (OAuth flow, connection status, connect/disconnect) and configuring email notification preferences (per-category toggles, custom notification email address). Accessible from the user profile dropdown in the sidebar. Data persisted in `user_integrations` Supabase table with RLS.
 
 ### System Design Choices
 The project utilizes a unified Supabase client and integrates the complete Sudan administrative structure. It supports multiple concurrent sessions for the same user across different devices and browsers.

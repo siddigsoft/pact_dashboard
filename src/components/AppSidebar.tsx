@@ -1248,6 +1248,12 @@
                     </Link>
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem asChild>
+                  <Link to="/integrations" data-testid="link-integrations">
+                    <Link2 className="mr-2 h-4 w-4" />
+                    <span>Integrations</span>
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
