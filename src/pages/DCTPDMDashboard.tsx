@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback, Fragment, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import rawData from '@/data/pdm_data.json';
 import {
@@ -1075,33 +1076,66 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       .map(([date, count]) => ({ date: date.slice(5), count }));
   }, [filtered]);
 
+  // ── Site-visit PDM coverage (preferred source) ───────────────────────────
+  const { data: siteVisitPDMRows } = useQuery({
+    queryKey: ['site_visits_pdm_coverage'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('site_visits')
+        .select('completed_at, scheduled_date, mmp_id')
+        .or('monitoring_type.ilike.%pdm%,visit_type.ilike.%pdm%,main_activity.ilike.%pdm%')
+        .eq('status', 'completed')
+        .order('completed_at');
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   // ── Coverage Over Time (cumulative, weekly) ───────────────────────────────
+  // Prefer site_visits PDM data if available; fall back to uploaded Excel records
   const coverageOverTime = useMemo(() => {
-    // Group by ISO week (Monday-based)
+    const useSiteVisits = (siteVisitPDMRows?.length ?? 0) > 0;
     const weekMap: Record<string, number> = {};
-    records.forEach(r => {
-      if (r.submission) {
-        const d = new Date(r.submission.slice(0, 10));
+    if (useSiteVisits) {
+      // Source: site_visits table filtered to PDM monitoring type
+      siteVisitPDMRows!.forEach(sv => {
+        const dateStr = (sv.completed_at ?? sv.scheduled_date ?? '').slice(0, 10);
+        if (!dateStr) return;
+        const d = new Date(dateStr);
         if (isNaN(d.getTime())) return;
-        // Get Monday of this week
         const monday = new Date(d);
         monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
         const key = monday.toISOString().slice(0, 10);
         weekMap[key] = (weekMap[key] || 0) + 1;
-      }
-    });
-    let cumulative = 0;
-    return Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b))
-      .map(([weekStart, count]) => {
-        cumulative += count;
-        return {
-          week: weekStart.slice(5),   // MM-DD format
-          count,                       // surveys that week
-          cumulative,
-          pct: TICKER_TOTAL_PLANNED > 0 ? Math.round((cumulative / TICKER_TOTAL_PLANNED) * 100) : 0,
-        };
       });
-  }, [records]);
+    } else {
+      // Fallback: uploaded PDM Excel survey records (no PDM visits in site_visits yet)
+      records.forEach(r => {
+        if (r.submission) {
+          const d = new Date(r.submission.slice(0, 10));
+          if (isNaN(d.getTime())) return;
+          const monday = new Date(d);
+          monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+          const key = monday.toISOString().slice(0, 10);
+          weekMap[key] = (weekMap[key] || 0) + 1;
+        }
+      });
+    }
+    let cumulative = 0;
+    return {
+      data: Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b))
+        .map(([weekStart, count]) => {
+          cumulative += count;
+          return {
+            week: weekStart.slice(5),
+            count,
+            cumulative,
+            pct: TICKER_TOTAL_PLANNED > 0 ? Math.round((cumulative / TICKER_TOTAL_PLANNED) * 100) : 0,
+          };
+        }),
+      source: useSiteVisits ? 'site_visits' : 'survey_upload',
+    };
+  }, [records, siteVisitPDMRows]);
 
   // ── Demographics ──────────────────────────────────────────────────────────
   const sexData = useMemo(() => [
@@ -2783,14 +2817,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       </Card>
 
       {/* ── Coverage Over Time ── */}
-      {coverageOverTime.length > 0 && (
+      {coverageOverTime.data.length > 0 && (
         <Card className="border shadow-sm">
           <CardHeader className="pb-2 pt-4 px-5">
-            <SectionTitle title="Coverage Over Time" sub={`Weekly cumulative HHs surveyed vs. target of ${TICKER_TOTAL_PLANNED.toLocaleString()} — based on uploaded PDM survey data`} count={records.length} />
+            <SectionTitle
+              title="Coverage Over Time"
+              sub={`Weekly cumulative HHs vs. target ${TICKER_TOTAL_PLANNED.toLocaleString()} — source: ${coverageOverTime.source === 'site_visits' ? 'site visits (PDM type)' : 'uploaded PDM survey data'}`}
+              count={records.length}
+            />
           </CardHeader>
           <CardContent className="px-3 pb-4">
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={coverageOverTime} margin={{ left: 0, right: 16, top: 5, bottom: 0 }}>
+              <LineChart data={coverageOverTime.data} margin={{ left: 0, right: 16, top: 5, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="week" tick={{ fontSize: 9 }} label={{ value: 'Week starting (MM-DD)', position: 'insideBottom', offset: -2, fontSize: 9, fill: '#94a3b8' }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 10 }} />

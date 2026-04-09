@@ -604,8 +604,8 @@ function useEarningsTrend() {
       const [{ data: txns }, { data: profiles }] = await Promise.all([
         supabase
           .from('wallet_transactions')
-          .select('created_at, amount, user_id, type')
-          .eq('type', 'wallet_credit')
+          .select('created_at, amount, user_id, type, description')
+          .in('type', ['earning', 'wallet_credit'])
           .gte('created_at', since + 'T00:00:00'),
         supabase.from('profiles').select('id, full_name'),
       ]);
