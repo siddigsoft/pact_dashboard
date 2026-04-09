@@ -492,10 +492,11 @@ interface TaskDetailSheetProps {
   onDelete: () => void;
   isSaving: boolean;
   isAdmin: boolean;
+  isManager?: boolean;
 }
 
 function TaskDetailSheet({
-  task, subtasks, onClose, onSave, onCreateSubtask, onSubtaskStatusChange, onDelete, isSaving, isAdmin,
+  task, subtasks, onClose, onSave, onCreateSubtask, onSubtaskStatusChange, onDelete, isSaving, isAdmin, isManager = false,
 }: TaskDetailSheetProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -561,8 +562,9 @@ function TaskDetailSheet({
 
   const handleSave = async () => {
     if (!task) return;
-    const reward = isAdmin ? (rewardAmount ? parseFloat(rewardAmount) : null) : task.completionRewardAmount;
-    const currency = isAdmin ? (reward ? rewardCurrency : null) : task.completionRewardCurrency;
+    const canEditReward = isAdmin || isManager;
+    const reward = canEditReward ? (rewardAmount ? parseFloat(rewardAmount) : null) : task.completionRewardAmount;
+    const currency = canEditReward ? (reward ? rewardCurrency : null) : task.completionRewardCurrency;
     await onSave(task.id, {
       title: title.trim(),
       description: description.trim() || null,
@@ -779,7 +781,7 @@ function TaskDetailSheet({
               <TabsTrigger value="people" className="h-11 rounded-none px-4 text-sm font-medium border-b-2 border-transparent data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all">
                 <Users className="h-3.5 w-3.5 mr-1.5" />People &amp; Tools
               </TabsTrigger>
-              {(task.completionRewardAmount || isAdmin) && (
+              {(task.completionRewardAmount || isAdmin || isManager) && (
                 <TabsTrigger value="reward" className="h-11 rounded-none px-4 text-sm font-medium border-b-2 border-transparent data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all">
                   <DollarSign className="h-3.5 w-3.5 mr-1.5" />Reward
                 </TabsTrigger>
@@ -1088,12 +1090,12 @@ function TaskDetailSheet({
           </TabsContent>
 
           {/* ── Tab: Reward ── */}
-          {(task.completionRewardAmount || isAdmin) && (
+          {(task.completionRewardAmount || isAdmin || isManager) && (
             <TabsContent value="reward" className="flex-1 overflow-y-auto m-0 px-6 py-6 bg-background">
               <div className="max-w-sm mx-auto mt-4">
                 <div className="rounded-2xl border bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/60 dark:border-emerald-700/30 p-6 text-center mb-6">
                   <DollarSign className="h-10 w-10 mx-auto text-emerald-500 mb-2" />
-                  {isAdmin ? (
+                  {(isAdmin || isManager) ? (
                     <>
                       <p className="text-sm font-medium text-foreground mb-4">Set the reward amount credited to the assignee's wallet when this task is marked done.</p>
                       <div className="flex gap-2">
@@ -1288,9 +1290,10 @@ interface EditDialogProps {
   onSave: (id: string, updates: Partial<CreatePersonalTask>) => Promise<void>;
   isSaving: boolean;
   isAdmin: boolean;
+  isManager?: boolean;
 }
 
-function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin }: EditDialogProps) {
+function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin, isManager = false }: EditDialogProps) {
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [priority, setPriority] = useState<PersonalTaskPriority>(task?.priority ?? 'medium');
@@ -1304,9 +1307,9 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin }: Ed
   if (!task) return null;
 
   const handleSave = async () => {
-    // Only admins may modify reward fields; non-admin saves preserve the existing reward unchanged
-    const reward = isAdmin ? (rewardAmount ? parseFloat(rewardAmount) : null) : task.completionRewardAmount;
-    const currency = isAdmin ? (reward ? rewardCurrency : null) : task.completionRewardCurrency;
+    const canEditReward = isAdmin || isManager;
+    const reward = canEditReward ? (rewardAmount ? parseFloat(rewardAmount) : null) : task.completionRewardAmount;
+    const currency = canEditReward ? (reward ? rewardCurrency : null) : task.completionRewardCurrency;
     await onSave(task.id, {
       title: title.trim(),
       description: description.trim() || null,
@@ -1377,8 +1380,8 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin }: Ed
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Notes</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} className="min-h-[60px] text-sm resize-none" />
           </div>
-          {/* Completion Reward — admin only */}
-          {isAdmin ? (
+          {/* Completion Reward — admin / manager only */}
+          {(isAdmin || isManager) ? (
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Completion Reward (optional)</Label>
               <div className="flex gap-2">
@@ -3434,6 +3437,19 @@ export default function MyTasks() {
   const isAdmin = hasAnyRole(['super_admin', 'admin']);
   const isSuperAdmin = hasAnyRole(['super_admin']);
 
+  // Check if this user manages any department → gives them reward+assign rights
+  const { data: isCurrentUserManager = false } = useQuery({
+    queryKey: ['is-dept-manager', userId],
+    queryFn: async () => {
+      if (!userId) return false;
+      const { data } = await supabase.from('departments').select('id').eq('manager_user_id', userId).limit(1);
+      return (data?.length ?? 0) > 0;
+    },
+    enabled: !!userId && !isAdmin,
+    staleTime: 5 * 60_000,
+  });
+  const canSetReward = isAdmin || isCurrentUserManager;
+
   const { tasks: allPersonalTasks, isLoading: loadingPersonal, createTask, updateTask, deleteTask, isCreating, isUpdating } = usePersonalTasks(userId);
   // Exclude subtasks (parent_task_id set) from the main task list — they are shown inside the parent
   const personalTasks = useMemo(() => allPersonalTasks.filter(t => !t.parentTaskId), [allPersonalTasks]);
@@ -4378,6 +4394,7 @@ export default function MyTasks() {
         onDelete={() => { if (selectedTaskId) { handleDelete(selectedTaskId); setSelectedTaskId(null); } }}
         isSaving={isUpdating}
         isAdmin={isAdmin}
+        isManager={canSetReward}
       />
 
       {/* ── Edit dialog ── */}
@@ -4387,6 +4404,7 @@ export default function MyTasks() {
         onSave={handleEditSave}
         isSaving={isUpdating}
         isAdmin={isAdmin}
+        isManager={canSetReward}
       />
 
       {/* ── New Task dialog ── */}
