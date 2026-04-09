@@ -1713,6 +1713,230 @@ const documentationSections: Section[] = [
         ]
       }
     ]
+  },
+  {
+    title: "34. Timesheet Module & Payroll Scheduling",
+    content: [
+      "The Timesheet Module provides a complete system for tracking staff working hours, managing leave balances, and scheduling payroll runs with full approval workflows."
+    ],
+    subsections: [
+      {
+        title: "34.1 Timesheet Overview",
+        content: [
+          "Staff can log daily work hours directly from their profile or the HR Hub",
+          "Each entry records the date, hours worked, project/task reference, and notes",
+          "Supervisors and HR admins can review and approve submitted timesheets",
+          "Monthly summaries are automatically aggregated for payroll calculation",
+          "Integration with Leave Requests ensures leave days are excluded from billable hours"
+        ]
+      },
+      {
+        title: "34.2 Submitting a Timesheet",
+        content: [
+          "Navigate to HR Hub → Timesheets tab",
+          "Click 'Add Entry' and select the work date",
+          "Enter hours worked and select the associated project or task",
+          "Add optional notes for context",
+          "Submit for supervisor review — submitted entries are locked from editing"
+        ]
+      },
+      {
+        title: "34.3 Payroll Scheduling",
+        content: [
+          "Finance admins can schedule payroll runs from HR Hub → Payroll → Schedule Run",
+          "Set the payroll period (start date / end date) and payment date",
+          "System auto-calculates gross pay based on approved timesheets, salary contracts, and retainer agreements",
+          "Deductions (advance repayments, unpaid leave) are applied automatically",
+          "A payroll summary report is generated for admin sign-off before processing"
+        ]
+      },
+      {
+        title: "34.4 Payroll Approval Workflow",
+        content: [
+          "Step 1 — Finance Admin prepares payroll run and reviews the summary",
+          "Step 2 — Admin or Super Admin approves the payroll run",
+          "Step 3 — System credits individual wallets and generates payslips",
+          "Step 4 — Staff receive in-app and email notification with payslip link",
+          "All payroll actions are logged in the audit trail"
+        ]
+      },
+      {
+        title: "34.5 Payroll Reports",
+        content: [
+          "Payroll Breakdown: line-by-line breakdown per staff member for each run",
+          "Contract Expiry Report: flags staff whose contracts expire within 30/60/90 days",
+          "Budget vs Actual: compares planned payroll budget against actual payroll spend",
+          "Staff Cost Projection: forecasts future payroll costs based on current contracts"
+        ]
+      }
+    ]
+  },
+  {
+    title: "35. Subscription Tracker & Month-End Finance Reports",
+    content: [
+      "The Subscription Tracker helps the organization monitor all active software and service subscriptions, track renewal dates, and manage costs. The Month-End Finance module provides automated financial close reports."
+    ],
+    subsections: [
+      {
+        title: "35.1 Subscription Tracker Overview",
+        content: [
+          "Accessible from Financial Operations → Subscriptions",
+          "Lists all active subscriptions with vendor name, cost, billing cycle, renewal date, and owner",
+          "Color-coded renewal alerts: red (overdue), amber (due within 30 days), green (active)",
+          "Supports annual, monthly, and one-time payment types",
+          "Admin and Finance roles can add, edit, or cancel subscriptions"
+        ]
+      },
+      {
+        title: "35.2 Adding a Subscription",
+        content: [
+          "Click 'Add Subscription' and fill in: vendor name, service description, cost (USD/SDG), billing cycle",
+          "Set the renewal date — the system will alert the owner 30 days before renewal",
+          "Assign an owner (the staff member responsible for managing the subscription)",
+          "Attach any contract or invoice document",
+          "Save — the subscription appears in the tracker immediately"
+        ]
+      },
+      {
+        title: "35.3 Cost Alerts",
+        content: [
+          "Automatic alerts fire when a subscription renewal is approaching",
+          "Alerts are sent via in-app notification and email to the subscription owner and Finance Admin",
+          "Budget overage alerts trigger when total subscription costs exceed the set budget ceiling",
+          "All alerts are visible in the Notification Center and Approvals Hub"
+        ]
+      },
+      {
+        title: "35.4 Month-End Finance Reports",
+        content: [
+          "Navigate to Financial Operations → Month-End Reports",
+          "Select the reporting period (month/year) and click 'Generate Report'",
+          "Report includes: total income, total expenditure, wallet balances, advances outstanding, cost submissions, subscription costs, and net position",
+          "Export as PDF or Excel for external audits",
+          "Period-close lock prevents retroactive edits after the report is finalized"
+        ]
+      },
+      {
+        title: "35.5 Reconciliation",
+        content: [
+          "The Reconciliation Dashboard cross-checks wallet transactions against approved cost submissions",
+          "Highlights discrepancies for Finance Admin to investigate",
+          "Once reconciled, the period is marked 'Closed' and becomes read-only",
+          "Duplicate payment detection flags identical transactions within the same period"
+        ]
+      }
+    ]
+  },
+  {
+    title: "36. Integrations Settings (Email & Calendar)",
+    content: [
+      "The Integrations Settings page allows each user to connect their Google Calendar account and configure email notification preferences, all from a single unified interface."
+    ],
+    subsections: [
+      {
+        title: "36.1 Accessing Integrations Settings",
+        content: [
+          "Click your profile avatar in the top-right corner of the sidebar",
+          "Select 'Integrations' from the dropdown menu",
+          "Alternatively, navigate directly to /integrations"
+        ]
+      },
+      {
+        title: "36.2 Google Calendar Integration",
+        content: [
+          "Click 'Connect Google Calendar' to begin the OAuth authorization flow",
+          "You will be redirected to Google to grant calendar access — no passwords are stored",
+          "Once connected, your account email is shown and the status badge turns green",
+          "PACT events (site visits, project milestones, MMP deadlines) can sync to your calendar",
+          "Click 'Disconnect' at any time to revoke access — tokens are deleted from the server immediately"
+        ]
+      },
+      {
+        title: "36.3 Email Notification Preferences",
+        content: [
+          "Use the master toggle to enable or disable all email notifications",
+          "Fine-tune which categories trigger emails using individual category toggles:",
+          "  • Task Assignments — notified when a task is assigned to you",
+          "  • Approval Requests — notified when your approval is required",
+          "  • Payroll — notified when payslips are ready or payroll is processed",
+          "  • Milestones — notified when a project milestone is due or reached",
+          "  • System — notified for account security events and system announcements",
+          "Set a custom notification email address if you prefer a different inbox from your login email"
+        ]
+      },
+      {
+        title: "36.4 Privacy & Security",
+        content: [
+          "Google OAuth tokens are stored server-side only — never accessible from the browser",
+          "Token revocation at Google is performed before local deletion on disconnect",
+          "Admins cannot read your tokens or email preferences via client queries",
+          "The OAuth state parameter prevents CSRF attacks during the authorization flow"
+        ]
+      }
+    ]
+  },
+  {
+    title: "37. Portfolio Dashboard Executive Enhancements",
+    content: [
+      "The Portfolio Dashboard (/portfolio) has been upgraded with executive-level insights, enabling directors and senior management to monitor the entire project portfolio from a single view."
+    ],
+    subsections: [
+      {
+        title: "37.1 Executive KPI Cards",
+        content: [
+          "Six live KPI cards at the top of the dashboard refresh in real time:",
+          "  • Active Projects — count of projects currently in progress",
+          "  • Stalled Projects — projects with no activity in the last 14 days",
+          "  • At-Risk Projects — projects flagged by the health score algorithm",
+          "  • Overdue Milestones — milestones past their planned completion date",
+          "  • Portfolio Burn Rate — total budget consumed as a percentage of total budget",
+          "  • Completed This Year — projects closed within the current calendar year"
+        ]
+      },
+      {
+        title: "37.2 Health Matrix Table",
+        content: [
+          "One row per project showing: project name, health signal (RAG), flow progress, next milestone, and burn %",
+          "Sortable by any column — click column headers to sort ascending/descending",
+          "Filterable by project type, status, or health signal using the toolbar dropdowns",
+          "Health signal is calculated from: schedule adherence, budget consumption, team activity, and milestone completion rate"
+        ]
+      },
+      {
+        title: "37.3 Financial Tab",
+        content: [
+          "Budget vs Actual bar chart for all active projects side by side",
+          "Top spenders table — ranked list of projects by absolute spend",
+          "Over-budget alerts highlighted in red with drill-down to the project detail page",
+          "Visible to Admin, Finance Admin, Super Admin, and Country Director roles only"
+        ]
+      },
+      {
+        title: "37.4 Milestones Tab",
+        content: [
+          "Overdue milestones listed with days-overdue counter and responsible team member",
+          "30-day upcoming milestone timeline — visual Gantt-style view of imminent deadlines",
+          "Click any milestone to navigate directly to the project detail page"
+        ]
+      },
+      {
+        title: "37.5 Pipeline & Project Mix Tabs",
+        content: [
+          "Pipeline Tab: Kanban board organized by project flow stage with a stalled swimlane at the bottom",
+          "Project Mix Tab: Donut chart showing distribution by project type, plus a status breakdown bar chart",
+          "Both tabs update live when project stages or statuses change"
+        ]
+      },
+      {
+        title: "37.6 Stalled Project Alerts",
+        content: [
+          "Projects inactive for 14+ days are automatically moved to the 'Stalled' swimlane",
+          "An in-app notification is sent to the project manager when a project becomes stalled",
+          "The project health score drops when stalled, surfacing it in the At-Risk KPI card",
+          "Admins can manually mark a stalled project as active after verifying field activity"
+        ]
+      }
+    ]
   }
 ];
 
@@ -1813,7 +2037,7 @@ export const generateUserManualPDF = () => {
   doc.setFontSize(10);
   doc.text(`Generated: ${format(new Date(), 'PPpp')}`, pageWidth / 2, yPos, { align: 'center' });
   yPos += 6;
-  doc.text('Version 3.0 | February 2026', pageWidth / 2, yPos, { align: 'center' });
+  doc.text('Version 4.0 | April 2026', pageWidth / 2, yPos, { align: 'center' });
   yPos += 15;
 
   doc.setDrawColor(200, 200, 200);
@@ -2004,7 +2228,7 @@ export const generateUserManualDOCX = async () => {
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "Version 3.0 | February 2026", size: 20 })
+        new TextRun({ text: "Version 4.0 | April 2026", size: 20 })
       ],
       alignment: AlignmentType.CENTER,
       spacing: { after: 400 }
@@ -2274,7 +2498,7 @@ export const generateWorkflowsPDF = () => {
   doc.setFontSize(10);
   doc.text(`Generated: ${format(new Date(), 'PPpp')}`, pageWidth / 2, yPos, { align: 'center' });
   yPos += 6;
-  doc.text('Version 3.0 | February 2026', pageWidth / 2, yPos, { align: 'center' });
+  doc.text('Version 4.0 | April 2026', pageWidth / 2, yPos, { align: 'center' });
   yPos += 15;
 
   doc.setDrawColor(200, 200, 200);
@@ -2403,7 +2627,7 @@ export const generateWorkflowsDOCX = async () => {
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "Version 3.0 | February 2026", size: 20 })
+        new TextRun({ text: "Version 4.0 | April 2026", size: 20 })
       ],
       alignment: AlignmentType.CENTER,
       spacing: { after: 400 }
@@ -3409,6 +3633,168 @@ const arabicDocumentationSections: Section[] = [
         ]
       }
     ]
+  },
+  {
+    title: "16. وحدة كشوف الدوام وجدولة الرواتب",
+    content: [
+      "توفر وحدة كشوف الدوام نظاماً متكاملاً لتتبع ساعات عمل الموظفين وإدارة أرصدة الإجازات وجدولة مسيرات الرواتب مع سير عمل موافقة متكامل."
+    ],
+    subsections: [
+      {
+        title: "16.1 نظرة عامة على كشوف الدوام",
+        content: [
+          "يمكن للموظفين تسجيل ساعات العمل اليومية من ملفهم الشخصي أو مركز الموارد البشرية",
+          "كل إدخال يسجل التاريخ وساعات العمل والمشروع/المهمة المرتبطة والملاحظات",
+          "يمكن للمشرفين ومسؤولي الموارد البشرية مراجعة كشوف الدوام المقدمة والموافقة عليها",
+          "يتم تجميع الملخصات الشهرية تلقائياً لحساب الراتب",
+          "التكامل مع طلبات الإجازة يضمن استبعاد أيام الإجازة من الساعات القابلة للفوترة"
+        ]
+      },
+      {
+        title: "16.2 تقديم كشف دوام",
+        content: [
+          "انتقل إلى مركز الموارد البشرية ← تبويب كشوف الدوام",
+          "انقر على 'إضافة إدخال' وحدد تاريخ العمل",
+          "أدخل ساعات العمل وحدد المشروع أو المهمة المرتبطة",
+          "أضف ملاحظات اختيارية للسياق",
+          "قدم للمراجعة من قبل المشرف — الإدخالات المقدمة تكون مقفلة من التعديل"
+        ]
+      },
+      {
+        title: "16.3 جدولة الرواتب",
+        content: [
+          "يمكن لمسؤولي المالية جدولة مسيرات الرواتب من مركز الموارد البشرية ← الرواتب ← جدولة مسيرة",
+          "حدد فترة الرواتب (تاريخ البداية/النهاية) وتاريخ الدفع",
+          "يحسب النظام تلقائياً إجمالي الراتب بناءً على كشوف الدوام المعتمدة وعقود الرواتب واتفاقيات الاحتفاظ",
+          "يتم تطبيق الاستقطاعات (سداد السلف، الإجازات غير المدفوعة) تلقائياً",
+          "يتم إنشاء ملخص مسيرة الرواتب لمراجعة المسؤول قبل المعالجة"
+        ]
+      },
+      {
+        title: "16.4 سير عمل الموافقة على الرواتب",
+        content: [
+          "الخطوة 1 — يُعدّ مسؤول المالية مسيرة الرواتب ويراجع الملخص",
+          "الخطوة 2 — يوافق المسؤول أو المسؤول الأعلى على مسيرة الرواتب",
+          "الخطوة 3 — يعتمد النظام المحافظ الفردية ويُنشئ قسائم الراتب",
+          "الخطوة 4 — يتلقى الموظفون إشعاراً داخل التطبيق وعبر البريد الإلكتروني مع رابط قسيمة الراتب",
+          "جميع إجراءات الرواتب مسجلة في سجل التدقيق"
+        ]
+      }
+    ]
+  },
+  {
+    title: "17. متتبع الاشتراكات وتقارير نهاية الشهر المالية",
+    content: [
+      "يساعد متتبع الاشتراكات المنظمة على مراقبة جميع اشتراكات البرامج والخدمات النشطة وتتبع تواريخ التجديد وإدارة التكاليف. توفر وحدة نهاية الشهر تقارير إغلاق مالية آلية."
+    ],
+    subsections: [
+      {
+        title: "17.1 نظرة عامة على متتبع الاشتراكات",
+        content: [
+          "يمكن الوصول إليه من العمليات المالية ← الاشتراكات",
+          "يسرد جميع الاشتراكات النشطة مع اسم المورد والتكلفة ودورة الفوترة وتاريخ التجديد والمسؤول",
+          "تنبيهات تجديد مرمزة بالألوان: أحمر (متأخر)، كهرماني (مستحق خلال 30 يوماً)، أخضر (نشط)",
+          "يدعم أنواع الدفع السنوية والشهرية ولمرة واحدة",
+          "يمكن للمسؤول ومسؤولي المالية إضافة الاشتراكات وتعديلها وإلغاؤها"
+        ]
+      },
+      {
+        title: "17.2 إضافة اشتراك",
+        content: [
+          "انقر على 'إضافة اشتراك' وأدخل: اسم المورد، وصف الخدمة، التكلفة (دولار/جنيه)، دورة الفوترة",
+          "حدد تاريخ التجديد — سيُنبّه النظام المسؤول قبل 30 يوماً من التجديد",
+          "عيّن مسؤولاً (الموظف المسؤول عن إدارة الاشتراك)",
+          "أرفق أي وثيقة عقد أو فاتورة",
+          "احفظ — يظهر الاشتراك في المتتبع فوراً"
+        ]
+      },
+      {
+        title: "17.3 تقارير نهاية الشهر",
+        content: [
+          "انتقل إلى العمليات المالية ← تقارير نهاية الشهر",
+          "حدد فترة التقرير (الشهر/السنة) وانقر على 'إنشاء تقرير'",
+          "يتضمن التقرير: إجمالي الإيرادات، إجمالي النفقات، أرصدة المحافظ، السلف القائمة، تقديمات التكاليف، تكاليف الاشتراكات، والمركز الصافي",
+          "تصدير كـ PDF أو Excel للمراجعات الخارجية",
+          "قفل إغلاق الفترة يمنع التعديلات بأثر رجعي بعد الاعتماد النهائي"
+        ]
+      }
+    ]
+  },
+  {
+    title: "18. إعدادات التكاملات (البريد الإلكتروني والتقويم)",
+    content: [
+      "تتيح صفحة إعدادات التكاملات لكل مستخدم ربط حسابه في تقويم Google وضبط تفضيلات إشعارات البريد الإلكتروني من واجهة موحدة."
+    ],
+    subsections: [
+      {
+        title: "18.1 الوصول إلى إعدادات التكاملات",
+        content: [
+          "انقر على صورتك الشخصية في الزاوية العلوية اليمنى من الشريط الجانبي",
+          "اختر 'التكاملات' من القائمة المنسدلة",
+          "أو انتقل مباشرةً إلى /integrations"
+        ]
+      },
+      {
+        title: "18.2 تكامل تقويم Google",
+        content: [
+          "انقر على 'ربط تقويم Google' لبدء تدفق تفويض OAuth",
+          "سيتم توجيهك إلى Google لمنح وصول التقويم — لا يتم تخزين كلمات المرور",
+          "بعد الربط، يظهر البريد الإلكتروني لحسابك وتتحول شارة الحالة إلى اللون الأخضر",
+          "يمكن لفعاليات PACT (زيارات المواقع، معالم المشاريع، مواعيد MMP) المزامنة مع تقويمك",
+          "انقر على 'قطع الاتصال' في أي وقت لإلغاء الوصول — يتم حذف الرموز من الخادم فوراً"
+        ]
+      },
+      {
+        title: "18.3 تفضيلات إشعارات البريد الإلكتروني",
+        content: [
+          "استخدم المفتاح الرئيسي لتمكين أو تعطيل جميع إشعارات البريد الإلكتروني",
+          "اضبط الفئات التي تُشغّل رسائل البريد الإلكتروني باستخدام أزرار التشغيل الفردية:",
+          "  • تعيينات المهام — إشعار عند تعيين مهمة لك",
+          "  • طلبات الموافقة — إشعار عند الحاجة إلى موافقتك",
+          "  • الرواتب — إشعار عند جاهزية قسائم الراتب أو معالجة الرواتب",
+          "  • المعالم — إشعار عند استحقاق معلم مشروع أو تحقيقه",
+          "  • النظام — إشعار لأحداث أمان الحساب وإعلانات النظام",
+          "حدد عنوان بريد إلكتروني مخصص للإشعارات إذا كنت تفضل صندوق بريد مختلف عن بريد تسجيل الدخول"
+        ]
+      }
+    ]
+  },
+  {
+    title: "19. تحسينات لوحة محفظة المشاريع التنفيذية",
+    content: [
+      "تم تحديث لوحة محفظة المشاريع (/portfolio) بإضافة رؤى تنفيذية، مما يمكّن المدراء وكبار الإدارة من مراقبة محفظة المشاريع بأكملها من عرض واحد."
+    ],
+    subsections: [
+      {
+        title: "19.1 بطاقات المؤشرات التنفيذية",
+        content: [
+          "ست بطاقات مؤشرات حية في أعلى لوحة القيادة تُحدَّث في الوقت الفعلي:",
+          "  • المشاريع النشطة — عدد المشاريع قيد التنفيذ",
+          "  • المشاريع المتوقفة — المشاريع التي لا يوجد فيها نشاط خلال الـ 14 يوماً الماضية",
+          "  • المشاريع المعرضة للخطر — المشاريع التي يحددها خوارزمية الصحة",
+          "  • المعالم المتأخرة — المعالم التي تجاوزت تاريخ الإكمال المخطط",
+          "  • معدل استهلاك الميزانية — إجمالي الميزانية المستهلكة كنسبة مئوية",
+          "  • المكتملة هذا العام — المشاريع المغلقة خلال السنة التقويمية الحالية"
+        ]
+      },
+      {
+        title: "19.2 جدول مصفوفة الصحة",
+        content: [
+          "صف واحد لكل مشروع يعرض: اسم المشروع، إشارة الصحة (RAG)، تقدم المسار، المعلم التالي، ونسبة الاستهلاك",
+          "قابل للترتيب حسب أي عمود — انقر على رؤوس الأعمدة للترتيب تصاعدياً/تنازلياً",
+          "قابل للتصفية حسب نوع المشروع أو الحالة أو إشارة الصحة",
+          "يتم حساب إشارة الصحة من: الالتزام بالجدول الزمني، استهلاك الميزانية، نشاط الفريق، ومعدل إكمال المعالم"
+        ]
+      },
+      {
+        title: "19.3 تبويب لوحة البيبلاين والتنوع",
+        content: [
+          "تبويب البيبلاين: لوحة Kanban منظمة حسب مرحلة تدفق المشروع مع ممر سباحة للمشاريع المتوقفة في الأسفل",
+          "تبويب تنوع المشاريع: مخطط دائري يعرض التوزيع حسب نوع المشروع، بالإضافة إلى مخطط شريطي لتوزيع الحالات",
+          "كلا التبويبين يتحدثان مباشرةً عند تغيير مراحل أو حالات المشروع"
+        ]
+      }
+    ]
   }
 ];
 
@@ -3439,7 +3825,7 @@ export const generateArabicUserManualDOCX = async () => {
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "الإصدار 3.0", size: 20 })
+        new TextRun({ text: "الإصدار 4.0", size: 20 })
       ],
       alignment: AlignmentType.CENTER,
       bidirectional: true,
