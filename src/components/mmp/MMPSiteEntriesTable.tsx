@@ -633,7 +633,7 @@ const MMPSiteEntriesTable = ({
         )}
         {/* Dispatch Summary Bar */}
         {siteEntries.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border/50">
+          <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-3 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -649,11 +649,6 @@ const MMPSiteEntriesTable = ({
                       {totalUnclaimed} unclaimed
                     </Badge>
                   )}
-                  {dispatchSummaryByLocality.length > 1 && dispatchSummaryByLocality.slice(0, 3).map(loc => loc.unclaimed > 0 && (
-                    <Badge key={loc.locality} variant="secondary" className="text-xs">
-                      {loc.locality}: {loc.unclaimed} open
-                    </Badge>
-                  ))}
                 </div>
               </div>
               {totalUnclaimed > 0 && (
@@ -669,6 +664,31 @@ const MMPSiteEntriesTable = ({
                 </Button>
               )}
             </div>
+            {/* Per-locality claimed/unclaimed breakdown */}
+            {dispatchSummaryByLocality.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse" data-testid="table-locality-dispatch">
+                  <thead>
+                    <tr className="border-b border-border/40">
+                      <th className="text-left py-1 pr-3 font-medium text-muted-foreground">Locality</th>
+                      <th className="text-right py-1 px-2 font-medium text-green-700 dark:text-green-400">Claimed</th>
+                      <th className="text-right py-1 px-2 font-medium text-orange-700 dark:text-orange-400">Unclaimed</th>
+                      <th className="text-right py-1 pl-2 font-medium text-muted-foreground">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dispatchSummaryByLocality.map(loc => (
+                      <tr key={loc.locality} className="border-b border-border/20 last:border-0">
+                        <td className="py-0.5 pr-3 text-muted-foreground truncate max-w-[120px]">{loc.locality}</td>
+                        <td className="text-right py-0.5 px-2 font-medium text-green-700 dark:text-green-400">{loc.claimed}</td>
+                        <td className="text-right py-0.5 px-2 font-medium text-orange-700 dark:text-orange-400">{loc.unclaimed}</td>
+                        <td className="text-right py-0.5 pl-2 text-muted-foreground">{loc.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </CardHeader>

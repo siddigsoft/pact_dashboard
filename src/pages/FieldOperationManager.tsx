@@ -9,6 +9,7 @@ import autoTable from 'jspdf-autotable'; // npm install jspdf-autotable
 import { CycleProgressBar } from '@/components/mmp/CycleProgressBar';
 
 const FIELD_OP_ROLE = 'fieldOpManager'; // Adjust if your AppRole uses a different value
+const COVERED_STATUSES = new Set(['covered', 'completed', 'visited', 'verified', 'approved']);
 
 const CATEGORY_LABELS = [
   { key: 'all', label: 'All' },
@@ -147,9 +148,7 @@ const FieldOperationManagerPage = () => {
       let covered = 0;
       let notCovered = 0;
       sites.forEach(site => {
-        const isCovered =
-          (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') ||
-          site.covered === true;
+        const isCovered = (typeof site.status === 'string' && COVERED_STATUSES.has(site.status.toLowerCase())) || site.covered === true;
         if (isCovered) covered += 1;
         else notCovered += 1;
       });
@@ -194,7 +193,7 @@ const FieldOperationManagerPage = () => {
       let notCovered = 0;
       sites.forEach(site => {
         const isCovered =
-          (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') ||
+          (typeof site.status === 'string' && COVERED_STATUSES.has(site.status.toLowerCase())) ||
           site.covered === true;
         if (isCovered) covered += 1;
         else notCovered += 1;
@@ -423,7 +422,7 @@ const FieldOperationManagerPage = () => {
       let notCovered = 0;
       sites.forEach(site => {
         const isCovered =
-          (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') ||
+          (typeof site.status === 'string' && COVERED_STATUSES.has(site.status.toLowerCase())) ||
           site.covered === true;
         if (isCovered) covered += 1;
         else notCovered += 1;
@@ -572,7 +571,7 @@ const FieldOperationManagerPage = () => {
         let notCovered = 0;
         sites.forEach(site => {
           const isCovered =
-            (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') ||
+            (typeof site.status === 'string' && COVERED_STATUSES.has(site.status.toLowerCase())) ||
             site.covered === true;
           if (isCovered) covered += 1;
           else notCovered += 1;
@@ -731,7 +730,7 @@ const FieldOperationManagerPage = () => {
       let covered = 0, notCovered = 0;
       sites.forEach(site => {
         const isCovered =
-          (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') ||
+          (typeof site.status === 'string' && COVERED_STATUSES.has(site.status.toLowerCase())) ||
           site.covered === true;
         if (isCovered) covered += 1;
         else notCovered += 1;
