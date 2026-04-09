@@ -1347,6 +1347,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return false;
         }
       }
+
+      // ── Admin / SuperAdmin role assignment guard ──────────────────────────
+      // Only the platform owner can promote users to Admin or SuperAdmin.
+      const existingUser = users.find(u => u.id === user.id);
+      const isRoleEscalation =
+        existingUser &&
+        user.role !== existingUser.role &&
+        ['Admin', 'SuperAdmin'].includes(user.role || '');
+      if (isRoleEscalation && !isProtectedOwner(currentUser?.id)) {
+        toast({
+          title: 'Not Authorised',
+          description: 'Only the platform owner can assign Admin or Super Admin roles.',
+          variant: 'destructive',
+        });
+        return false;
+      }
       // ────────────────────────────────────────────────────────────────────
       
       const updatedUser = {

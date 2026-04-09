@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
 import { isProtectedOwner } from "@/lib/protected-accounts";
+import { AdminRoleConfirmDialog } from "@/components/ui/AdminRoleConfirmDialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ const UserDetail: React.FC = () => {
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [isConfirmingEmail, setIsConfirmingEmail] = useState(false);
+  const [adminRoleOtpOpen, setAdminRoleOtpOpen] = useState(false);
 
   // Add loading state for save
   const [isLoadingUser, setIsLoadingUser] = useState(false);
@@ -853,7 +855,17 @@ const UserDetail: React.FC = () => {
             {editMode && (
               <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
                 <Button
-                  onClick={handleEditSave}
+                  onClick={() => {
+                    // Intercept save when role is being escalated to Admin/SuperAdmin
+                    const roleEscalation = user &&
+                      editForm.role !== user.role &&
+                      ['Admin', 'SuperAdmin'].includes(editForm.role || '');
+                    if (roleEscalation && isProtectedOwner(currentUser?.id)) {
+                      setAdminRoleOtpOpen(true);
+                    } else {
+                      handleEditSave();
+                    }
+                  }}
                   disabled={isSaving}
                   variant="default"
                   className="min-h-[44px] px-6 w-full"
@@ -1638,6 +1650,18 @@ const UserDetail: React.FC = () => {
           currentClassification={userClassification}
         />
       )}
+
+      <AdminRoleConfirmDialog
+        open={adminRoleOtpOpen}
+        onClose={() => setAdminRoleOtpOpen(false)}
+        onConfirmed={async () => {
+          setAdminRoleOtpOpen(false);
+          await handleEditSave();
+        }}
+        targetUserName={user?.name || 'this user'}
+        targetRole={editForm.role || ''}
+        currentUserName={currentUser?.name || 'Platform Owner'}
+      />
     </div>
   );
 };

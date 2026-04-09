@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { isProtectedOwner } from '@/lib/protected-accounts';
+import { AdminRoleConfirmDialog } from '@/components/ui/AdminRoleConfirmDialog';
 import { useUser } from '@/context/user/UserContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { User } from '@/types';
@@ -114,6 +115,7 @@ const Users = () => {
 
   const [activateWithRoleDialog, setActivateWithRoleDialog] = useState<{ open: boolean; user?: User; selectedRole?: string }>({ open: false });
   const [isActivatingWithRole, setIsActivatingWithRole] = useState(false);
+  const [usersAdminOtpOpen, setUsersAdminOtpOpen] = useState(false);
   const [rejectWithReasonDialog, setRejectWithReasonDialog] = useState<{ open: boolean; userId?: string; userName?: string }>({ open: false });
   const [rejectionReason, setRejectionReason] = useState('');
   const [isRejectingWithReason, setIsRejectingWithReason] = useState(false);
@@ -1348,7 +1350,19 @@ const Users = () => {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setActivateWithRoleDialog({ open: false })}>Cancel</Button>
-            <Button onClick={handleActivateWithRole} disabled={isActivatingWithRole} data-testid="button-confirm-activate-role">
+            <Button
+              onClick={() => {
+                const selectedRole = activateWithRoleDialog.selectedRole;
+                const isAdminEscalation = selectedRole && ['Admin', 'SuperAdmin'].includes(selectedRole);
+                if (isAdminEscalation && isProtectedOwner(currentUser?.id)) {
+                  setUsersAdminOtpOpen(true);
+                } else {
+                  handleActivateWithRole();
+                }
+              }}
+              disabled={isActivatingWithRole}
+              data-testid="button-confirm-activate-role"
+            >
               {isActivatingWithRole ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
               Activate User
             </Button>
@@ -1504,6 +1518,17 @@ const Users = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <AdminRoleConfirmDialog
+        open={usersAdminOtpOpen}
+        onClose={() => setUsersAdminOtpOpen(false)}
+        onConfirmed={async () => {
+          setUsersAdminOtpOpen(false);
+          await handleActivateWithRole();
+        }}
+        targetUserName={activateWithRoleDialog.user?.name || 'this user'}
+        targetRole={activateWithRoleDialog.selectedRole || ''}
+        currentUserName={currentUser?.name || 'Platform Owner'}
+      />
     </div>
   );
 };
