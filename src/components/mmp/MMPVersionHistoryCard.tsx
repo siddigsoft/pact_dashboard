@@ -9,7 +9,9 @@ import {
   Clock, 
   FileText,
   ArrowRight,
-  User
+  User,
+  PlusCircle,
+  MinusCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -63,6 +65,29 @@ export const MMPVersionHistoryCard: React.FC<MMPVersionHistoryCardProps> = ({
     }
     
     return related;
+  }, [mmp, allMmps]);
+
+  const getSiteIds = (m: MMPFile): Set<string> => {
+    const entries = m.siteEntries || (m as any).sites || (m as any).siteData || [];
+    const ids = new Set<string>();
+    entries.forEach((s: any) => {
+      const id = s.id || s.site_id || s.siteId || s.siteCode || s.site_code;
+      if (id) ids.add(String(id));
+    });
+    return ids;
+  };
+
+  const versionDiff = useMemo(() => {
+    const parentId = mmp.relationship?.parentMmpId;
+    if (!parentId) return null;
+    const parent = allMmps.find(m => m.id === parentId);
+    if (!parent) return null;
+    const currentIds = getSiteIds(mmp);
+    const parentIds = getSiteIds(parent);
+    if (currentIds.size === 0 && parentIds.size === 0) return null;
+    const added = [...currentIds].filter(id => !parentIds.has(id)).length;
+    const removed = [...parentIds].filter(id => !currentIds.has(id)).length;
+    return { added, removed, currentTotal: currentIds.size, parentTotal: parentIds.size };
   }, [mmp, allMmps]);
 
   const modificationHistory = mmp.modificationHistory || [];
@@ -142,6 +167,26 @@ export const MMPVersionHistoryCard: React.FC<MMPVersionHistoryCardProps> = ({
                 : 'Never'}
             </div>
           </div>
+          {versionDiff && (
+            <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-3 flex-wrap" data-testid="version-diff-summary">
+              <span className="text-xs font-medium text-muted-foreground">vs. previous version:</span>
+              {versionDiff.added > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  {versionDiff.added} site{versionDiff.added !== 1 ? 's' : ''} added
+                </span>
+              )}
+              {versionDiff.removed > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 dark:text-red-400">
+                  <MinusCircle className="h-3.5 w-3.5" />
+                  {versionDiff.removed} site{versionDiff.removed !== 1 ? 's' : ''} removed
+                </span>
+              )}
+              {versionDiff.added === 0 && versionDiff.removed === 0 && (
+                <span className="text-xs text-muted-foreground">No site changes detected</span>
+              )}
+            </div>
+          )}
         </div>
 
         {relatedMmps.length > 0 && (

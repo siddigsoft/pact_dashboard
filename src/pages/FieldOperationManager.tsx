@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import type { MMPStatus } from '@/types';
 import jsPDF from 'jspdf'; // npm install jspdf
 import autoTable from 'jspdf-autotable'; // npm install jspdf-autotable
+import { CycleProgressBar } from '@/components/mmp/CycleProgressBar';
 
 const FIELD_OP_ROLE = 'fieldOpManager'; // Adjust if your AppRole uses a different value
 
@@ -1259,6 +1260,11 @@ const FieldOperationManagerPage = () => {
                           {summary.total}
                         </span>
                       </div>
+                      {summary.total > 0 && (
+                        <div className="mt-3 w-full">
+                          <CycleProgressBar covered={summary.covered} total={summary.total} size="sm" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
@@ -1300,6 +1306,11 @@ const FieldOperationManagerPage = () => {
                           {summary.total}
                         </span>
                       </div>
+                      {summary.total > 0 && (
+                        <div className="mt-3 w-full">
+                          <CycleProgressBar covered={summary.covered} total={summary.total} size="sm" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))

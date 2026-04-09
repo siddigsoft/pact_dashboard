@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList, ExternalLink } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList, ExternalLink, ArrowUpDown, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SiteDetailDialog from './SiteDetailDialog';
 import { PostponementDialog } from './PostponementDialog';
@@ -93,6 +93,7 @@ const MMPSiteEntriesTable = ({
   const [enumeratorFilter, setEnumeratorFilter] = useState("all");
   const [activityTypeFilter, setActivityTypeFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [sortUnclaimedFirst, setSortUnclaimedFirst] = useState(false);
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -335,6 +336,32 @@ const MMPSiteEntriesTable = ({
 
   const activeFilterCount = [hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter].filter(f => f !== 'all').length;
 
+  const dispatchSummaryByLocality = useMemo(() => {
+    const map: Record<string, { claimed: number; unclaimed: number; total: number }> = {};
+    for (const site of siteEntries) {
+      const norm = normalizeSite(site);
+      const locality = norm.locality && norm.locality !== '—' ? norm.locality : 'Unknown';
+      if (!map[locality]) map[locality] = { claimed: 0, unclaimed: 0, total: 0 };
+      const status = (norm.status || '').toLowerCase();
+      const acceptedBy = site.accepted_by || site.acceptedBy;
+      const isClaimed = acceptedBy || ['accepted', 'claimed', 'ongoing', 'in_progress', 'inprogress', 'in progress', 'completed', 'verified'].some(s => status.includes(s));
+      map[locality].total += 1;
+      if (isClaimed) map[locality].claimed += 1;
+      else map[locality].unclaimed += 1;
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1].unclaimed - a[1].unclaimed)
+      .map(([locality, counts]) => ({ locality, ...counts }));
+  }, [siteEntries]);
+
+  const totalClaimed = useMemo(() => siteEntries.filter(site => {
+    const norm = normalizeSite(site);
+    const status = (norm.status || '').toLowerCase();
+    const acceptedBy = site.accepted_by || site.acceptedBy;
+    return acceptedBy || ['accepted', 'claimed', 'ongoing', 'in_progress', 'inprogress', 'in progress', 'completed', 'verified'].some(s => status.includes(s));
+  }).length, [siteEntries]);
+  const totalUnclaimed = siteEntries.length - totalClaimed;
+
   const clearAllFilters = () => {
     setHubFilter("all");
     setStateFilter("all");
@@ -378,8 +405,24 @@ const MMPSiteEntriesTable = ({
       });
     }
 
-    return results.map(({ raw }) => raw);
-  }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter]);
+    let mapped = results.map(({ raw }) => raw);
+
+    if (sortUnclaimedFirst) {
+      mapped = [...mapped].sort((a, b) => {
+        const isClaimed = (site: any) => {
+          const norm = normalizeSite(site);
+          const status = (norm.status || '').toLowerCase();
+          const acceptedBy = site.accepted_by || site.acceptedBy;
+          return acceptedBy || ['accepted', 'claimed', 'ongoing', 'in_progress', 'inprogress', 'in progress', 'completed', 'verified'].some(s => status.includes(s));
+        };
+        const aClaimed = isClaimed(a) ? 1 : 0;
+        const bClaimed = isClaimed(b) ? 1 : 0;
+        return aClaimed - bClaimed;
+      });
+    }
+
+    return mapped;
+  }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter, activityTypeFilter, sortUnclaimedFirst]);
 
   useEffect(() => {
     if (onFilteredSiteIdsChange) {
@@ -582,6 +625,46 @@ const MMPSiteEntriesTable = ({
                 </Button>
               </div>
             )}
+          </div>
+        )}
+        {/* Dispatch Summary Bar */}
+        {siteEntries.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border/50">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">Dispatch Status:</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300 dark:bg-green-900/20 dark:text-green-400 dark:border-green-700">
+                    {totalClaimed} claimed
+                  </Badge>
+                  {totalUnclaimed > 0 && (
+                    <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-700">
+                      {totalUnclaimed} unclaimed
+                    </Badge>
+                  )}
+                  {dispatchSummaryByLocality.length > 1 && dispatchSummaryByLocality.slice(0, 3).map(loc => loc.unclaimed > 0 && (
+                    <Badge key={loc.locality} variant="secondary" className="text-xs">
+                      {loc.locality}: {loc.unclaimed} open
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              {totalUnclaimed > 0 && (
+                <Button
+                  variant={sortUnclaimedFirst ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs shrink-0"
+                  onClick={() => setSortUnclaimedFirst(v => !v)}
+                  data-testid="button-sort-unclaimed-first"
+                >
+                  <ArrowUpDown className="h-3 w-3 mr-1" />
+                  {sortUnclaimedFirst ? 'Sorting: Unclaimed First' : 'Sort Unclaimed First'}
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </CardHeader>

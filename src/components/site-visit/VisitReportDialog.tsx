@@ -44,6 +44,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const [photos, setPhotos] = useState<File[]>([]);
   const [draftPhotoUrls, setDraftPhotoUrls] = useState<string[]>([]); // Track already-uploaded photo URLs from drafts
   const [visitDuration, setVisitDuration] = useState(0);
+  const [visitElapsedSeconds, setVisitElapsedSeconds] = useState(0);
   const [visitStartTime, setVisitStartTime] = useState<Date | null>(null);
   const [coordinates, setCoordinates] = useState<{latitude: number; longitude: number; accuracy: number} | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -197,8 +198,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     if (visitStartTime && open) {
       interval = setInterval(() => {
         const now = new Date();
-        const elapsed = Math.floor((now.getTime() - visitStartTime.getTime()) / 1000 / 60);
-        setVisitDuration(elapsed);
+        const totalSeconds = Math.floor((now.getTime() - visitStartTime.getTime()) / 1000);
+        setVisitElapsedSeconds(totalSeconds);
+        setVisitDuration(Math.floor(totalSeconds / 60));
       }, 1000);
     }
     return () => {
@@ -755,6 +757,16 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
+  const formatLiveDuration = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   if (!site) return null;
 
   return (
@@ -892,9 +904,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
               </div>
               <div>
                 <p className="text-xs text-black/40 dark:text-white/40 uppercase">Duration</p>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-black/10 text-black dark:bg-white/10 dark:text-white">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-black/10 text-black dark:bg-white/10 dark:text-white font-mono">
                   <Clock className="h-3 w-3 mr-1" />
-                  {formatDuration(visitDuration)}
+                  {visitStartTime ? formatLiveDuration(visitElapsedSeconds) : formatDuration(visitDuration)}
                 </span>
               </div>
             </div>

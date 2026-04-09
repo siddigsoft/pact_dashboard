@@ -40,7 +40,8 @@ import {
   Shield,
   Briefcase,
   Plus,
-  GitBranch
+  GitBranch,
+  AlertTriangle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -110,6 +111,10 @@ export const FOMZone: React.FC = () => {
   // Financial data
   const [financialData, setFinancialData] = useState<any>(null);
   const [financialLoading, setFinancialLoading] = useState(false);
+
+  // Sites at risk (uncovered, ≤3 days to cycle close)
+  const [sitesAtRisk, setSitesAtRisk] = useState<{ mmpName: string; mmpId: string; deadline: string; daysLeft: number; uncoveredCount: number }[]>([]);
+  const [sitesAtRiskDismissed, setSitesAtRiskDismissed] = useState(false);
 
   // Load MMPs forwarded to this FOM
   const loadForwarded = async () => {
@@ -222,6 +227,57 @@ export const FOMZone: React.FC = () => {
     const interval = setInterval(loadAllMMPs, 120000);
     return () => clearInterval(interval);
   }, [isAdminOrSuperUser, userProjectIds]);
+
+  // Load sites at risk (uncovered with ≤3 days to cycle close deadline)
+  useEffect(() => {
+    let cancelled = false;
+    const loadSitesAtRisk = async () => {
+      try {
+        const now = new Date();
+        const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+        const { data: mmpsNearDeadline, error } = await supabase
+          .from('mmp_files')
+          .select('id, name, mmp_id, cycle_close_deadline')
+          .not('cycle_close_deadline', 'is', null)
+          .lte('cycle_close_deadline', threeDaysLater.toISOString())
+          .gte('cycle_close_deadline', now.toISOString())
+          .neq('status', 'archived')
+          .neq('status', 'deleted');
+        
+        if (error || !mmpsNearDeadline || mmpsNearDeadline.length === 0) {
+          if (!cancelled) setSitesAtRisk([]);
+          return;
+        }
+
+        const risks: { mmpName: string; mmpId: string; deadline: string; daysLeft: number; uncoveredCount: number }[] = [];
+        for (const mmp of mmpsNearDeadline) {
+          const deadline = (mmp as any).cycle_close_deadline;
+          const daysLeft = Math.ceil((new Date(deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const { count } = await supabase
+            .from('mmp_site_entries')
+            .select('id', { count: 'exact', head: true })
+            .eq('mmp_id', mmp.id)
+            .not('status', 'in', '("completed","verified","covered")');
+          
+          if ((count ?? 0) > 0) {
+            risks.push({
+              mmpName: mmp.name || mmp.mmp_id || mmp.id,
+              mmpId: mmp.id,
+              deadline,
+              daysLeft,
+              uncoveredCount: count ?? 0,
+            });
+          }
+        }
+
+        if (!cancelled) setSitesAtRisk(risks.sort((a, b) => a.daysLeft - b.daysLeft));
+      } catch {
+        if (!cancelled) setSitesAtRisk([]);
+      }
+    };
+    loadSitesAtRisk();
+    return () => { cancelled = true; };
+  }, []);
 
   // Real-time subscription for automatic updates without page refresh
   useEffect(() => {
@@ -421,6 +477,38 @@ export const FOMZone: React.FC = () => {
         </div>
       </div>
 
+      {/* Sites at Risk Alert Banner */}
+      {sitesAtRisk.length > 0 && !sitesAtRiskDismissed && (
+        <div className="rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30 p-4" data-testid="sites-at-risk-banner">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                  {sitesAtRisk.reduce((sum, r) => sum + r.uncoveredCount, 0)} uncovered sites approaching deadline
+                </p>
+                <div className="mt-1.5 space-y-1">
+                  {sitesAtRisk.map(risk => (
+                    <p key={risk.mmpId} className="text-xs text-red-700 dark:text-red-400 cursor-pointer hover:underline" onClick={() => navigate(`/mmp/${risk.mmpId}`)}>
+                      <span className="font-medium">{risk.mmpName}</span>: {risk.uncoveredCount} site{risk.uncoveredCount !== 1 ? 's' : ''} uncovered — {risk.daysLeft === 0 ? 'deadline today!' : `${risk.daysLeft} day${risk.daysLeft !== 1 ? 's' : ''} left`}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-red-600 hover:text-red-800 hover:bg-red-100 shrink-0"
+              onClick={() => setSitesAtRiskDismissed(true)}
+              data-testid="button-dismiss-sites-at-risk"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <GradientStatCard
@@ -469,12 +557,12 @@ export const FOMZone: React.FC = () => {
         />
 
         <GradientStatCard
-          title="Performance"
-          value={`${permitAttachmentRate}%`}
-          subtitle="Permit attachment rate"
-          icon={TrendingUp}
-          color="purple"
-          onClick={() => navigate('/dashboard')}
+          title="Sites at Risk"
+          value={sitesAtRisk.reduce((s, r) => s + r.uncoveredCount, 0)}
+          subtitle={sitesAtRisk.length > 0 ? `${sitesAtRisk.length} MMP${sitesAtRisk.length !== 1 ? 's' : ''} near deadline` : 'No sites at risk'}
+          icon={AlertTriangle}
+          color="red"
+          onClick={() => navigate('/field-operation-manager')}
         />
       </div>
 
@@ -754,6 +842,30 @@ export const FOMZone: React.FC = () => {
                     )}
                   </CardContent>
                 </Card>
+
+                {sitesAtRisk.length > 0 && (
+                  <Card className="border-red-200 dark:border-red-800" data-testid="sites-at-risk-card">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2 text-red-700 dark:text-red-400">
+                        <AlertTriangle className="h-4 w-4" />
+                        Sites at Risk
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {sitesAtRisk.map(risk => (
+                          <div key={risk.mmpId} className="flex items-center justify-between text-sm cursor-pointer hover:bg-muted/50 rounded p-1 -mx-1" onClick={() => navigate(`/mmp/${risk.mmpId}`)}>
+                            <span className="font-medium truncate flex-1 mr-2">{risk.mmpName}</span>
+                            <div className="text-right shrink-0">
+                              <div className="font-bold text-red-700 dark:text-red-400">{risk.uncoveredCount} sites</div>
+                              <div className="text-xs text-muted-foreground">{risk.daysLeft}d left</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </TabsContent>
 
