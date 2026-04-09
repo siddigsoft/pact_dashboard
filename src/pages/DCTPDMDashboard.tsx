@@ -1077,7 +1077,14 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   }, [filtered]);
 
   // ── Coverage chart scope toggle ──────────────────────────────────────────
-  const [coverageScope, setCoverageScope] = useState<'all' | 'cycle'>('all');
+  const [coverageScope, setCoverageScope] = useState<'all' | 'cycle'>('cycle');
+  // Cycle date boundaries — default to current month start and today
+  const defaultCycleStart = useMemo(() => {
+    const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
+  }, []);
+  const defaultCycleEnd = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [cycleStartDate, setCycleStartDate] = useState(defaultCycleStart);
+  const [cycleEndDate, setCycleEndDate] = useState(defaultCycleEnd);
 
   // ── Site-visit PDM coverage (preferred source) ───────────────────────────
   const { data: siteVisitPDMRows } = useQuery({
@@ -1099,19 +1106,11 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
   const coverageOverTime = useMemo(() => {
     const useSiteVisits = (siteVisitPDMRows?.length ?? 0) > 0;
 
-    // Determine cycle boundaries from the underlying data
-    const allDates = useSiteVisits
-      ? siteVisitPDMRows!.map(sv => (sv.completed_at ?? sv.scheduled_date ?? '').slice(0, 10)).filter(Boolean)
-      : records.map(r => r.submission?.slice(0, 10) ?? '').filter(Boolean);
-    const sortedDates = [...allDates].sort();
-    const cycleStart = sortedDates[0] ?? '';
-    const cycleEnd   = sortedDates[sortedDates.length - 1] ?? '';
-
     // Filter source records by scope
     const inScope = (dateStr: string) => {
       if (coverageScope === 'all') return true;
-      // 'cycle': use the min/max dates of data as cycle boundaries
-      return dateStr >= cycleStart && dateStr <= cycleEnd;
+      // 'cycle': use user-defined cycle start/end date boundaries
+      return dateStr >= cycleStartDate && dateStr <= cycleEndDate;
     };
 
     const weekMap: Record<string, number> = {};
@@ -1162,7 +1161,7 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
       data: rows,
       source: useSiteVisits ? 'site_visits' : 'survey_upload',
     };
-  }, [records, siteVisitPDMRows, coverageScope]);
+  }, [records, siteVisitPDMRows, coverageScope, cycleStartDate, cycleEndDate]);
 
   // ── Demographics ──────────────────────────────────────────────────────────
   const sexData = useMemo(() => [
@@ -2853,9 +2852,18 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 sub={`Weekly cumulative HHs vs. target ${TICKER_TOTAL_PLANNED.toLocaleString()} — ${coverageOverTime.source === 'site_visits' ? 'site visits (PDM)' : 'uploaded survey data'}`}
                 count={records.length}
               />
-              <div className="flex items-center gap-1 text-xs border rounded-lg overflow-hidden shrink-0">
-                <button onClick={() => setCoverageScope('all')} className={`px-3 py-1.5 transition-colors font-medium ${coverageScope === 'all' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:text-foreground'}`}>All Data</button>
-                <button onClick={() => setCoverageScope('cycle')} className={`px-3 py-1.5 transition-colors font-medium ${coverageScope === 'cycle' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:text-foreground'}`}>Current Cycle</button>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <div className="flex items-center gap-1 text-xs border rounded-lg overflow-hidden shrink-0">
+                  <button onClick={() => setCoverageScope('all')} className={`px-3 py-1.5 transition-colors font-medium ${coverageScope === 'all' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:text-foreground'}`}>All Data</button>
+                  <button onClick={() => setCoverageScope('cycle')} className={`px-3 py-1.5 transition-colors font-medium ${coverageScope === 'cycle' ? 'bg-[#0F2041] text-white' : 'bg-white dark:bg-slate-900 text-muted-foreground hover:text-foreground'}`}>Current Cycle</button>
+                </div>
+                {coverageScope === 'cycle' && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <input type="date" value={cycleStartDate} onChange={e => setCycleStartDate(e.target.value)} className="border rounded px-1.5 py-1 text-xs bg-background h-7" />
+                    <span className="text-muted-foreground">–</span>
+                    <input type="date" value={cycleEndDate} onChange={e => setCycleEndDate(e.target.value)} className="border rounded px-1.5 py-1 text-xs bg-background h-7" />
+                  </div>
+                )}
               </div>
             </div>
           </CardHeader>
