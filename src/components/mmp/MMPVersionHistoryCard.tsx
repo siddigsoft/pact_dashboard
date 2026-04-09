@@ -71,7 +71,8 @@ export const MMPVersionHistoryCard: React.FC<MMPVersionHistoryCardProps> = ({
     const entries = m.siteEntries || (m as any).sites || (m as any).siteData || [];
     const ids = new Set<string>();
     entries.forEach((s: any) => {
-      const id = s.id || s.site_id || s.siteId || s.siteCode || s.site_code;
+      // Use stable site identifiers (not row PKs which change per upload)
+      const id = s.site_id || s.siteId || s.siteCode || s.site_code || s.siteName || s.site_name;
       if (id) ids.add(String(id));
     });
     return ids;

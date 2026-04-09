@@ -256,8 +256,8 @@ export const FOMZone: React.FC = () => {
           const { count } = await supabase
             .from('mmp_site_entries')
             .select('id', { count: 'exact', head: true })
-            .eq('mmp_id', mmp.id)
-            .not('status', 'in', '("completed","verified","covered")');
+            .eq('mmp_file_id', mmp.id)
+            .not('status', 'in', '("completed","verified","covered","visited","approved")');
           
           if ((count ?? 0) > 0) {
             risks.push({

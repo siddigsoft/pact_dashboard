@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
-  Search, ArrowLeft, CheckCircle, Download, 
+  Search, ArrowLeft, CheckCircle, Download, X,
   FileSpreadsheet as FileSpreadsheetIcon, Upload, Calendar, Wrench, AlertTriangle,
   Archive, Trash2, History, Shield, Eye, RefreshCw, FileCheck, Edit, Send,
   MapPin, Users, Clock, BarChart3, FileText, RotateCcw
@@ -68,6 +68,7 @@ const MMPDetailView = () => {
   const [forwardedLocal, setForwardedLocal] = useState(false);
   const [forwardedCount, setForwardedCount] = useState<number | null>(null);
   const [forwardToCoordinatorsOpen, setForwardToCoordinatorsOpen] = useState(false);
+  const [deadlineBannerDismissed, setDeadlineBannerDismissed] = useState(false);
   
   const mmpFile = id ? getMmpById(id) : undefined;
   
@@ -626,8 +627,8 @@ const MMPDetailView = () => {
         </Card>
       )}
 
-      {/* Deadline Warning Banner */}
-      {daysToDeadline !== null && daysToDeadline <= 3 && (
+      {/* Deadline Warning Banner — only shown when there are uncovered sites and within 3 days of deadline */}
+      {!deadlineBannerDismissed && daysToDeadline !== null && daysToDeadline <= 3 && (siteEntries.length - coveredSitesCount) > 0 && (
         <Card className="shadow-md bg-gradient-to-r from-red-50/80 to-rose-50/50 dark:from-red-900/20 dark:to-rose-900/10 border-red-200 dark:border-red-800" data-testid="card-deadline-warning">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -646,6 +647,14 @@ const MMPDetailView = () => {
                   {siteEntries.length - coveredSitesCount} site{siteEntries.length - coveredSitesCount !== 1 ? 's' : ''} still uncovered — urgent action required.
                 </p>
               </div>
+              <button
+                onClick={() => setDeadlineBannerDismissed(true)}
+                className="flex-shrink-0 text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors"
+                aria-label="Dismiss deadline warning"
+                data-testid="button-dismiss-deadline-warning"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </CardContent>
         </Card>

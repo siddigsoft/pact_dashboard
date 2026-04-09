@@ -154,7 +154,10 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         setMdmQuestionnaires('');
       }
 
-      setVisitStartTime(new Date());
+      // Use persisted visit_started_at when available (avoids drift on dialog reopen)
+      const persistedStart = (site as any).visit_started_at || (site as any).visitStartedAt
+        || (site as any).additional_data?.visit_started_at;
+      setVisitStartTime(persistedStart ? new Date(persistedStart) : new Date());
       startLocationMonitoring();
 
       locationTimeoutRef.current = setTimeout(() => {
