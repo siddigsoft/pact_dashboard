@@ -1447,6 +1447,9 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardCurrency, setRewardCurrency] = useState('USD');
+  const [dependencies, setDependencies] = useState<string[]>([]);
+  const [depInput, setDepInput] = useState('');
+  const [depDuplicate, setDepDuplicate] = useState(false);
 
   // Load all departments once to build the managed-dept hierarchy
   const { data: allDepts = [] } = useQuery({
@@ -1529,9 +1532,19 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
     setDueDate(''); setNotes(''); setAssignMode('self');
     setSelectedUsers([]); setUserSearch(''); setSelectedDeptId('');
     setRewardAmount(''); setRewardCurrency('USD');
+    setDependencies([]); setDepInput(''); setDepDuplicate(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
+
+  const handleAddDep = () => {
+    const val = depInput.trim();
+    if (!val) return;
+    if (dependencies.includes(val)) { setDepDuplicate(true); return; }
+    setDependencies(prev => [...prev, val]);
+    setDepInput('');
+    setDepDuplicate(false);
+  };
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
@@ -1559,6 +1572,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
           targetDepartmentId: selectedDeptId,
           completionRewardAmount: reward,
           completionRewardCurrency: reward ? rewardCurrency : null,
+          dependencies: dependencies.length > 0 ? dependencies : undefined,
         });
       }
     } else {
@@ -1573,6 +1587,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
         coAssignees: coAssignees.length > 0 ? coAssignees : [],
         completionRewardAmount: reward,
         completionRewardCurrency: reward ? rewardCurrency : null,
+        dependencies: dependencies.length > 0 ? dependencies : undefined,
       });
     }
     reset();
@@ -1798,8 +1813,8 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
             )}
           </div>
 
-          {/* Completion Reward (admin only) */}
-          {isAdmin && (
+          {/* Completion Reward (admin / super admin / dept manager only) */}
+          {(isAdmin || isManager) && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium flex items-center gap-1.5">
                 <Trophy className="h-3.5 w-3.5 text-emerald-600" />
@@ -1828,6 +1843,58 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
               </div>
             </div>
           )}
+
+          {/* Dependencies — any user can add */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1.5">
+              <Link2 className="h-3.5 w-3.5 text-blue-500" />
+              Dependencies <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            {dependencies.length > 0 && (
+              <div className="space-y-1 rounded-lg border bg-muted/30 p-2">
+                {dependencies.map((dep, i) => (
+                  <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/50 group/dep">
+                    <div className="h-2 w-2 rounded-full bg-[#1D3461]/50 flex-shrink-0 mt-1.5" />
+                    <span className="text-xs flex-1 leading-snug">{dep}</span>
+                    <button
+                      type="button"
+                      onClick={() => setDependencies(prev => prev.filter((_, idx) => idx !== i))}
+                      className="text-muted-foreground/40 hover:text-destructive transition-colors opacity-0 group-hover/dep:opacity-100"
+                      data-testid={`new-task-remove-dep-${i}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder="e.g. 'Site survey complete' or 'Approval received'"
+                value={depInput}
+                onChange={e => { setDepInput(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddDep(); } }}
+                className={cn('h-8 text-sm flex-1', depDuplicate && 'border-amber-400')}
+                data-testid="input-new-task-dep"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant={depInput.trim() ? 'default' : 'outline'}
+                onClick={handleAddDep}
+                disabled={!depInput.trim()}
+                className={cn('h-8 px-3 text-xs', depInput.trim() ? 'bg-[#1D3461] hover:bg-[#0F2041] text-white' : '')}
+                data-testid="btn-new-task-add-dep"
+              >
+                <Plus className="h-3 w-3 mr-1" />Add
+              </Button>
+            </div>
+            {depDuplicate && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />Already listed
+              </p>
+            )}
+          </div>
 
           {/* Notes */}
           <div className="space-y-1.5">
