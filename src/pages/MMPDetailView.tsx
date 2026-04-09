@@ -165,10 +165,8 @@ const MMPDetailView = () => {
   }, [siteEntries]);
 
   const coveredSitesCount = useMemo(() => {
-    return siteEntries.filter((s: any) => {
-      const st = (s.status || '').toLowerCase();
-      return st === 'completed' || st === 'visited' || st === 'verified' || st === 'approved';
-    }).length;
+    const COVERED = new Set(['completed', 'visited', 'verified', 'approved', 'covered']);
+    return siteEntries.filter((s: any) => COVERED.has((s.status || '').toLowerCase())).length;
   }, [siteEntries]);
 
   const daysToDeadline = useMemo(() => {
