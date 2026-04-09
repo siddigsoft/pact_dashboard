@@ -26,6 +26,7 @@ import {
   Wallet,
   Shield,
   PenTool,
+  Users,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -572,7 +573,7 @@ const Reports: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1 p-1 h-auto">
           <TabsTrigger value="executive" className="py-2 text-xs data-[state=active]:bg-blue-50">
             <span className="flex items-center gap-1">
               <LayoutDashboard className="h-3 w-3" />
@@ -625,6 +626,12 @@ const Reports: React.FC = () => {
             <span className="flex items-center gap-1">
               <FileText className="h-3 w-3" />
               <span className="hidden sm:inline">Templates</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="hr_summary" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <Users className="h-3 w-3" />
+              <span className="hidden sm:inline">HR Summary</span>
             </span>
           </TabsTrigger>
         </TabsList>
@@ -694,9 +701,211 @@ const Reports: React.FC = () => {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="hr_summary" className="mt-4">
+          <HRSummaryReport />
+        </TabsContent>
       </Tabs>
     </div>
   );
 };
+
+// ── HR Summary Report Component ───────────────────────────────────────────────
+
+interface LeaveBalance { name: string; email: string; annual: number; sick: number; emergency: number; maternity: number; }
+interface CertRow { name: string; email: string; type: string; issued: string | null; expiry: string | null; status: string; }
+
+function HRSummaryReport() {
+  const { toast } = useToast();
+  const [loading, setLoading] = React.useState(false);
+  const [leaveBalances, setLeaveBalances] = React.useState<LeaveBalance[]>([]);
+  const [certRows, setCertRows] = React.useState<CertRow[]>([]);
+  const [dataLoaded, setDataLoaded] = React.useState(false);
+
+  const loadData = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [{ data: leaves }, { data: certs }] = await Promise.all([
+        supabase.from('leave_requests')
+          .select('staff_name, staff_email, leave_type, status, start_date, end_date')
+          .eq('status', 'approved'),
+        supabase.from('staff_certifications')
+          .select('staff_name, staff_email, certification_type, issue_date, expiry_date, status'),
+      ]);
+
+      // Aggregate leave days per person per type
+      const balanceMap: Record<string, LeaveBalance> = {};
+      (leaves ?? []).forEach((l: any) => {
+        const key = l.staff_email || l.staff_name || 'Unknown';
+        if (!balanceMap[key]) balanceMap[key] = { name: l.staff_name || '—', email: l.staff_email || '—', annual: 0, sick: 0, emergency: 0, maternity: 0 };
+        const start = l.start_date ? new Date(l.start_date) : null;
+        const end   = l.end_date   ? new Date(l.end_date)   : null;
+        const days  = start && end ? Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1) : 1;
+        const type  = (l.leave_type || '').toLowerCase();
+        if (type.includes('annual'))    balanceMap[key].annual    += days;
+        else if (type.includes('sick')) balanceMap[key].sick      += days;
+        else if (type.includes('emergency')) balanceMap[key].emergency += days;
+        else if (type.includes('maternity')) balanceMap[key].maternity += days;
+      });
+      setLeaveBalances(Object.values(balanceMap));
+
+      setCertRows((certs ?? []).map((c: any) => ({
+        name: c.staff_name || '—',
+        email: c.staff_email || '—',
+        type: c.certification_type || '—',
+        issued: c.issue_date ?? null,
+        expiry: c.expiry_date ?? null,
+        status: c.status || '—',
+      })));
+      setDataLoaded(true);
+    } catch (err) {
+      toast({ title: 'Failed to load HR data', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  React.useEffect(() => { loadData(); }, [loadData]);
+
+  const exportToExcel = async () => {
+    setLoading(true);
+    try {
+      const XLSXLib = (await import('xlsx')).default;
+      const wb = XLSXLib.utils.book_new();
+
+      // Sheet 1: Leave Balances
+      const leaveData = [
+        ['Name', 'Email', 'Annual (days)', 'Sick (days)', 'Emergency (days)', 'Maternity (days)', 'Total (days)'],
+        ...leaveBalances.map(r => [r.name, r.email, r.annual, r.sick, r.emergency, r.maternity, r.annual + r.sick + r.emergency + r.maternity]),
+      ];
+      XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(leaveData), 'Leave Balances');
+
+      // Sheet 2: Certifications
+      const certData = [
+        ['Name', 'Email', 'Certification Type', 'Issue Date', 'Expiry Date', 'Status'],
+        ...certRows.map(r => [r.name, r.email, r.type, r.issued ?? '—', r.expiry ?? '—', r.status]),
+      ];
+      XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(certData), 'Certifications');
+
+      XLSXLib.writeFile(wb, `HR_Summary_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      toast({ title: 'HR Summary exported successfully' });
+    } catch (err) {
+      toast({ title: 'Export failed', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                HR Summary Report
+              </CardTitle>
+              <CardDescription>Leave balances and staff certifications — approved records only</CardDescription>
+            </div>
+            <Button onClick={exportToExcel} disabled={loading || !dataLoaded} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="btn-hr-summary-export">
+              <Download className="h-4 w-4" />
+              Export to Excel
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading && <p className="text-sm text-muted-foreground py-4 text-center">Loading HR data…</p>}
+          {!loading && dataLoaded && (
+            <div className="space-y-6">
+              {/* Leave Balances */}
+              <div>
+                <h3 className="text-sm font-semibold mb-2 text-foreground">Leave Balances (approved leaves)</h3>
+                {leaveBalances.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No approved leave records found.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead className="text-center">Annual</TableHead>
+                          <TableHead className="text-center">Sick</TableHead>
+                          <TableHead className="text-center">Emergency</TableHead>
+                          <TableHead className="text-center">Maternity</TableHead>
+                          <TableHead className="text-center font-bold">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {leaveBalances.map((r, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium text-sm">{r.name}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{r.email}</TableCell>
+                            <TableCell className="text-center">{r.annual || '—'}</TableCell>
+                            <TableCell className="text-center">{r.sick || '—'}</TableCell>
+                            <TableCell className="text-center">{r.emergency || '—'}</TableCell>
+                            <TableCell className="text-center">{r.maternity || '—'}</TableCell>
+                            <TableCell className="text-center font-bold text-blue-700">{r.annual + r.sick + r.emergency + r.maternity}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              {/* Certifications */}
+              <div>
+                <h3 className="text-sm font-semibold mb-2 text-foreground">Staff Certifications</h3>
+                {certRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No certification records found.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Certification</TableHead>
+                          <TableHead>Issue Date</TableHead>
+                          <TableHead>Expiry Date</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {certRows.map((r, i) => {
+                          const expired = r.expiry && new Date(r.expiry) < new Date();
+                          return (
+                            <TableRow key={i}>
+                              <TableCell className="font-medium text-sm">{r.name}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{r.email}</TableCell>
+                              <TableCell className="text-sm">{r.type}</TableCell>
+                              <TableCell className="text-sm">{r.issued ? format(new Date(r.issued), 'dd MMM yyyy') : '—'}</TableCell>
+                              <TableCell className={`text-sm ${expired ? 'text-red-600 font-semibold' : ''}`}>
+                                {r.expiry ? format(new Date(r.expiry), 'dd MMM yyyy') : '—'}
+                                {expired && <span className="ml-1 text-[10px] bg-red-100 text-red-700 px-1 rounded">Expired</span>}
+                              </TableCell>
+                              <TableCell>
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  r.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
+                                  r.status === 'expired' ? 'bg-red-100 text-red-700' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>{r.status}</span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default Reports;

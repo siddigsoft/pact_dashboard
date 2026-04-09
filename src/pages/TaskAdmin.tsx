@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import {
   Plus, Trash2, Edit2, Loader2, ChevronDown, ChevronUp,
   Building2, DollarSign, FileDown, ListTodo, Users,
@@ -592,6 +593,65 @@ function usePayrollData(deptId: string, fromDate: string, toDate: string) {
   });
 }
 
+// ── Earnings Trend (last 12 weeks) ────────────────────────────────────────────
+function useEarningsTrend() {
+  return useQuery({
+    queryKey: ['earnings_trend_weekly'],
+    queryFn: async () => {
+      const since = format(subDays(new Date(), 84), 'yyyy-MM-dd');
+      const { data: txns } = await supabase
+        .from('wallet_transactions')
+        .select('created_at, amount, type')
+        .eq('type', 'wallet_credit')
+        .gte('created_at', since + 'T00:00:00');
+      if (!txns?.length) return [];
+      const weekMap: Record<string, number> = {};
+      txns.forEach((t: any) => {
+        const d = new Date(t.created_at);
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        const key = format(monday, 'MM/dd');
+        weekMap[key] = (weekMap[key] ?? 0) + Number(t.amount ?? 0);
+      });
+      return Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b))
+        .map(([week, total]) => ({ week, total: Math.round(total * 100) / 100 }));
+    },
+    staleTime: 60_000,
+  });
+}
+
+function EarningsTrendChart() {
+  const { data: trendData = [], isLoading } = useEarningsTrend();
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading trend…
+    </div>
+  );
+  if (!trendData.length) return null;
+
+  const maxVal = Math.max(...trendData.map(d => d.total));
+
+  return (
+    <div className="rounded-xl border bg-muted/10 p-4">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Reward Credits — Last 12 Weeks</p>
+      <ResponsiveContainer width="100%" height={130}>
+        <BarChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+          <XAxis dataKey="week" tick={{ fontSize: 9, fill: '#94a3b8' }} />
+          <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+          <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: any) => [v.toFixed(2), 'Credits']} />
+          <Bar dataKey="total" name="Credits" radius={[4, 4, 0, 0]}>
+            {trendData.map((entry, i) => (
+              <Cell key={i} fill={entry.total >= maxVal * 0.8 ? '#1D3461' : entry.total >= maxVal * 0.4 ? '#4f86c6' : '#93c5fd'} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function PayrollPanel() {
   const { toast } = useToast();
   const { data: departments = [] } = useDepartments();
@@ -717,6 +777,9 @@ function PayrollPanel() {
             <Users className="h-3.5 w-3.5" /> Email Members
           </Button>
         </div>
+
+        {/* Earnings trend chart */}
+        <EarningsTrendChart />
 
         {/* Summary stats */}
         {rows.length > 0 && (

@@ -277,6 +277,108 @@ function StatRow({ label, value, sub, color }: { label: string; value: string | 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Milestone Timeline Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GANTT_COLORS: Record<string, string> = {
+  'on-track': '#22c55e',
+  'at-risk':  '#f59e0b',
+  'stalled':  '#ef4444',
+  completed:  '#94a3b8',
+  draft:      '#cbd5e1',
+};
+
+interface EnrichedProject {
+  id: string; name: string; project_code: string;
+  start_date: string | null; end_date: string | null;
+  health: HealthSignal; status: string;
+}
+
+function MilestoneTimeline({
+  milestones, projects, onNavigate,
+}: {
+  milestones: MilestoneRow[];
+  projects: EnrichedProject[];
+  onNavigate: (projectId: string) => void;
+}) {
+  const today = startOfToday();
+
+  const items = useMemo(() => {
+    const future = milestones
+      .filter(m => m.due_date)
+      .map(m => {
+        const due = safeDate(m.due_date)!;
+        const project = projects.find(p => p.id === m.project_id);
+        const isOverdue = isBefore(due, today) && m.status !== 'completed';
+        const daysLeft = differenceInDays(due, today);
+        return { ...m, due, daysLeft, isOverdue, projectName: project?.name ?? '—', projectCode: project?.project_code ?? '', projectId: m.project_id, health: project?.health ?? 'on-track' };
+      })
+      .sort((a, b) => a.daysLeft - b.daysLeft)
+      .slice(0, 20);
+    return future;
+  }, [milestones, projects, today]);
+
+  if (!items.length) return null;
+
+  const minDate = items.reduce((min, m) => isBefore(m.due, min) ? m.due : min, items[0].due);
+  const maxDate = items.reduce((max, m) => isAfter(m.due, max) ? m.due : max, items[0].due);
+  const spanDays = Math.max(differenceInDays(maxDate, minDate) + 1, 7);
+
+  return (
+    <SectionCard icon={Flag} title="Milestone Timeline" noPad>
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: 540 }} className="p-4 space-y-1.5">
+          {/* Header ruler */}
+          <div className="flex items-center gap-2 mb-3 pl-[180px]">
+            <div className="flex-1 flex justify-between text-[9px] text-muted-foreground select-none">
+              <span>{format(minDate, 'dd MMM')}</span>
+              <span className="font-semibold text-[#1D3461]">Today ({format(today, 'dd MMM')})</span>
+              <span>{format(maxDate, 'dd MMM')}</span>
+            </div>
+          </div>
+
+          {/* Today marker + bars */}
+          {items.map(m => {
+            const offsetPct = Math.max(0, Math.min(100, (differenceInDays(m.due, minDate) / spanDays) * 100));
+            const isCompleted = m.status === 'completed';
+            const barColor = isCompleted ? '#94a3b8' : m.isOverdue ? '#ef4444' : m.daysLeft <= 7 ? '#f59e0b' : GANTT_COLORS[m.health] ?? '#1D3461';
+            return (
+              <div key={m.id} className="flex items-center gap-2 group">
+                <button
+                  onClick={() => onNavigate(m.projectId)}
+                  className="w-[176px] flex-shrink-0 text-right pr-2 hover:underline"
+                  title={`${m.projectName} — ${m.title}`}
+                >
+                  <p className="text-[10px] font-semibold text-foreground truncate">{m.title}</p>
+                  <p className="text-[9px] text-muted-foreground truncate">{m.projectCode}</p>
+                </button>
+                <div className="flex-1 relative h-6 bg-muted/30 rounded-full overflow-hidden">
+                  {/* Today line */}
+                  <div
+                    className="absolute top-0 bottom-0 w-px bg-[#1D3461]/40 z-10"
+                    style={{ left: `${Math.max(0, Math.min(100, (differenceInDays(today, minDate) / spanDays) * 100))}%` }}
+                  />
+                  {/* Milestone bar */}
+                  <div
+                    className="absolute top-1 bottom-1 w-2 rounded-full transition-all"
+                    style={{ left: `calc(${offsetPct}% - 4px)`, backgroundColor: barColor }}
+                    title={fmtDate(m.due_date)}
+                  />
+                </div>
+                <span className={cn('text-[10px] font-bold w-12 text-right flex-shrink-0',
+                  isCompleted ? 'text-slate-400' : m.isOverdue ? 'text-red-600' : m.daysLeft <= 7 ? 'text-amber-600' : 'text-muted-foreground')}>
+                  {isCompleted ? 'Done' : m.isOverdue ? `${Math.abs(m.daysLeft)}d ago` : `${m.daysLeft}d`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1090,6 +1192,9 @@ export default function PortfolioDashboard() {
                 </div>
               </SectionCard>
             )}
+
+            {/* Milestone Timeline */}
+            <MilestoneTimeline milestones={milestones} projects={enriched} onNavigate={(pid) => navigate(`/projects/${pid}?tab=milestones`)} />
           </TabsContent>
 
           {/* ═══════════════ PEOPLE ═══════════════ */}

@@ -6,12 +6,12 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, CartesianGrid } from 'recharts';
 import * as XLSX from 'xlsx';
 
 const PayrollPanel      = lazy(() => import('./Payroll'));
@@ -180,15 +180,91 @@ export default function HRHub() {
 // ── HR Tools Panel ─────────────────────────────────────────────────────────────
 interface OrgPerson { id: string; full_name: string | null; role: string | null; department_name: string | null; reports_to: string | null; }
 
+// ── Leave Trends Chart ────────────────────────────────────────────────────────
+const LEAVE_TYPE_COLORS: Record<string, string> = {
+  annual:       '#1D3461',
+  sick:         '#ef4444',
+  emergency:    '#f97316',
+  maternity:    '#a855f7',
+  paternity:    '#3b82f6',
+  unpaid:       '#94a3b8',
+  study:        '#14b8a6',
+  compassionate: '#f59e0b',
+};
+
+function LeaveTrendsChart() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['leave_trends_monthly'],
+    queryFn: async () => {
+      const { data: rows } = await supabase
+        .from('leave_requests')
+        .select('leave_type, start_date, status')
+        .in('status', ['approved', 'pending']);
+      if (!rows?.length) return { chartData: [], leaveTypes: [] };
+
+      const monthMap: Record<string, Record<string, number>> = {};
+      const typeSet = new Set<string>();
+      rows.forEach((r: any) => {
+        const month = String(r.start_date ?? '').slice(0, 7);
+        if (!month || month.length < 7) return;
+        const type = r.leave_type ?? 'other';
+        typeSet.add(type);
+        if (!monthMap[month]) monthMap[month] = {};
+        monthMap[month][type] = (monthMap[month][type] ?? 0) + 1;
+      });
+
+      const months = Object.keys(monthMap).sort();
+      const leaveTypes = Array.from(typeSet).sort();
+      const chartData = months.map(m => {
+        const entry: Record<string, any> = { month: m.slice(0, 7) };
+        leaveTypes.forEach(t => { entry[t] = monthMap[m][t] ?? 0; });
+        return entry;
+      });
+      return { chartData, leaveTypes };
+    },
+    staleTime: 120_000,
+  });
+
+  if (isLoading) return (
+    <div className="flex items-center justify-center h-48 text-muted-foreground gap-2 text-sm">
+      <div className="h-5 w-5 rounded-full border-2 border-[#1D3461] border-t-transparent animate-spin" />
+      Loading leave data…
+    </div>
+  );
+
+  if (!data?.chartData.length) return (
+    <div className="flex items-center justify-center h-32 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
+      No leave request data available
+    </div>
+  );
+
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data.chartData} margin={{ top: 4, right: 8, left: 0, bottom: 30 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+        <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#94a3b8' }} angle={-20} textAnchor="end" interval={0} />
+        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} />
+        <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+        <Legend iconSize={9} iconType="circle" formatter={(v) => <span className="text-[10px] capitalize">{v.replace(/_/g,' ')}</span>} />
+        {(data.leaveTypes).map(type => (
+          <Bar key={type} dataKey={type} name={type.replace(/_/g,' ')} stackId="a"
+            fill={LEAVE_TYPE_COLORS[type] ?? '#64748b'} radius={[0,0,0,0]} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 function HRToolsPanel() {
-  const [toolTab, setToolTab] = useState<'projection' | 'orgchart'>('projection');
+  const [toolTab, setToolTab] = useState<'projection' | 'orgchart' | 'leave-trends'>('projection');
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 space-y-5">
       <div className="flex gap-2 flex-wrap">
         {([
-          { id: 'projection', label: 'Staff Cost Projection', icon: <Calculator className="h-3.5 w-3.5" /> },
-          { id: 'orgchart',   label: 'Org Chart',             icon: <GitBranch className="h-3.5 w-3.5" /> },
+          { id: 'projection',   label: 'Staff Cost Projection', icon: <Calculator className="h-3.5 w-3.5" /> },
+          { id: 'orgchart',     label: 'Org Chart',             icon: <GitBranch className="h-3.5 w-3.5" /> },
+          { id: 'leave-trends', label: 'Leave Trends',          icon: <BarChart2 className="h-3.5 w-3.5" /> },
         ] as const).map(t => (
           <button key={t.id} onClick={() => setToolTab(t.id)}
             className={cn('flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-xl font-medium transition-all border',
@@ -197,8 +273,21 @@ function HRToolsPanel() {
           </button>
         ))}
       </div>
-      {toolTab === 'projection' && <StaffCostProjection />}
-      {toolTab === 'orgchart'   && <OrgChartView />}
+      {toolTab === 'projection'   && <StaffCostProjection />}
+      {toolTab === 'orgchart'     && <OrgChartView />}
+      {toolTab === 'leave-trends' && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div>
+              <h3 className="text-sm font-semibold">Leave Trends by Month</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Approved & pending leave requests grouped by type per month</p>
+            </div>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <LeaveTrendsChart />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

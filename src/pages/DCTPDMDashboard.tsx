@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import rawData from '@/data/pdm_data.json';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, Area, AreaChart,
+  PieChart, Pie, Cell, Legend, Area, AreaChart, LineChart, Line, ReferenceLine,
 } from 'recharts';
 import {
   Users, MapPin, CheckCircle2, TrendingUp,
@@ -1074,6 +1074,27 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
     return Object.entries(m).sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date: date.slice(5), count }));
   }, [filtered]);
+
+  // ── Coverage Over Time (cumulative) ──────────────────────────────────────
+  const coverageOverTime = useMemo(() => {
+    const m: Record<string, number> = {};
+    records.forEach(r => {
+      if (r.submission) {
+        const d = r.submission.slice(0, 10);
+        m[d] = (m[d] || 0) + 1;
+      }
+    });
+    let cumulative = 0;
+    return Object.entries(m).sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => {
+        cumulative += count;
+        return {
+          date: date.slice(5),
+          cumulative,
+          pct: TICKER_TOTAL_PLANNED > 0 ? Math.round((cumulative / TICKER_TOTAL_PLANNED) * 100) : 0,
+        };
+      });
+  }, [records]);
 
   // ── Demographics ──────────────────────────────────────────────────────────
   const sexData = useMemo(() => [
@@ -2753,6 +2774,38 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Coverage Over Time ── */}
+      {coverageOverTime.length > 0 && (
+        <Card className="border shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-5">
+            <SectionTitle title="Coverage Over Time" sub={`Cumulative HHs surveyed vs. ${TICKER_TOTAL_PLANNED.toLocaleString()} planned — all filters cleared`} count={records.length} />
+          </CardHeader>
+          <CardContent className="px-3 pb-4">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={coverageOverTime} margin={{ left: 0, right: 16, top: 5, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="covGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 9 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                  formatter={(value: any, name: string) => name === 'pct' ? [`${value}%`, 'Coverage %'] : [value.toLocaleString(), 'HHs Surveyed']}
+                />
+                <ReferenceLine yAxisId="left" y={TICKER_TOTAL_PLANNED} stroke="#1D3461" strokeDasharray="4 4" label={{ value: 'Target', position: 'insideTopRight', fontSize: 10, fill: '#1D3461' }} />
+                <Line yAxisId="left" type="monotone" dataKey="cumulative" name="cumulative" stroke="#22c55e" strokeWidth={2.5} dot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="pct" name="pct" stroke="#1D3461" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Row 1: Geographic + Timeline ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
