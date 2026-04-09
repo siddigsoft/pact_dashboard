@@ -857,8 +857,6 @@ const AuthForm = ({ mode }: AuthFormProps) => {
               <SelectItem value="dataCollector">Data Collector</SelectItem>
               <SelectItem value="coordinator">Coordinator</SelectItem>
               <SelectItem value="supervisor">Supervisor</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
-              <SelectItem value="ict">ICT</SelectItem>
               <SelectItem value="fom">FOM</SelectItem>
               <SelectItem value="employee">Employee</SelectItem>
             </SelectContent>
