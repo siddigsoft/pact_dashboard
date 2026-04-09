@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAppContext } from '@/context/AppContext';
-import { useAuthorization } from '@/hooks/useAuthorization';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { getReadIds, saveReadIds, matchesRole } from '@/lib/changelog-utils';
 import { format, parseISO } from 'date-fns';
 import {
