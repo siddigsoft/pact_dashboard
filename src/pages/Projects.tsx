@@ -1,29 +1,76 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStalledAlert } from '@/hooks/useProjectStalledAlert';
-import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3, ClipboardList, LayoutTemplate, X, GitBranch, ChevronRight } from 'lucide-react';
+import {
+  Plus,
+  FolderKanban,
+  CheckCircle2,
+  Clock,
+  BarChart3,
+  ClipboardList,
+  LayoutTemplate,
+  LayoutList,
+  Kanban,
+  GanttChartSquare,
+  Search,
+  X,
+  GitBranch,
+  ChevronRight,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import ProjectList from '@/components/project/ProjectList';
+import ProjectBoardView from '@/components/project/ProjectBoardView';
+import ProjectTimelineView from '@/components/project/ProjectTimelineView';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { PROJECT_TEMPLATES } from '@/config/projectTypeConfig';
-import { getProjectFlow } from '@/config/projectFlows';
+import { getProjectFlow, PROJECT_TYPE_OPTIONS } from '@/config/projectFlows';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+type ViewMode = 'list' | 'board' | 'timeline';
+
+const VIEW_KEY = 'projects_view_mode';
+
+function getInitialView(): ViewMode {
+  const stored = localStorage.getItem(VIEW_KEY);
+  if (stored === 'board' || stored === 'timeline') return stored;
+  return 'list';
+}
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
   useProjectStalledAlert();
   const { hasAnyRole, isSuperAdmin } = useAuthorization();
-  
+
   const projectContext = useProjectContext();
   const { projects, loading } = projectContext;
 
   const [showTemplates, setShowTemplates] = useState(false);
   const [previewType, setPreviewType] = useState<string | null>(null);
+
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialView);
+
+  const [filterType, setFilterType] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPM, setFilterPM] = useState('all');
+  const [filterSearch, setFilterSearch] = useState('');
+
+  const handleViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_KEY, mode);
+  };
 
   const handleViewProject = (projectId: string) => {
     navigate(`/projects/${projectId}`);
@@ -35,7 +82,6 @@ const ProjectsPage = () => {
     const active = projects.filter(p => p.status === 'active' || p.status === 'onHold').length;
     const pending = projects.filter(p => p.status === 'draft').length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
     return { total, completed, active, pending, completionRate };
   }, [projects]);
 
@@ -45,6 +91,30 @@ const ProjectsPage = () => {
   const handleUseTemplate = (type: string) => {
     setShowTemplates(false);
     navigate(`/projects/create?template=${type}`);
+  };
+
+  const pmOptions = useMemo(() => {
+    const pms = new Set<string>();
+    for (const p of projects) {
+      if (p.team?.projectManager) pms.add(p.team.projectManager);
+    }
+    return Array.from(pms).sort();
+  }, [projects]);
+
+  const boardFilters = {
+    type: filterType,
+    status: filterStatus,
+    pm: filterPM,
+    search: filterSearch,
+  };
+
+  const hasActiveFilters = filterType !== 'all' || filterStatus !== 'all' || filterPM !== 'all' || filterSearch !== '';
+
+  const clearFilters = () => {
+    setFilterType('all');
+    setFilterStatus('all');
+    setFilterPM('all');
+    setFilterSearch('');
   };
 
   return (
@@ -99,7 +169,6 @@ const ProjectsPage = () => {
           size="sm"
           data-testid="card-stat-total-projects"
         />
-
         <GradientStatCard
           title="Completed"
           value={projectStats.completed}
@@ -109,7 +178,6 @@ const ProjectsPage = () => {
           size="sm"
           data-testid="card-stat-completed-projects"
         />
-
         <GradientStatCard
           title="Active"
           value={projectStats.active}
@@ -119,7 +187,6 @@ const ProjectsPage = () => {
           size="sm"
           data-testid="card-stat-active-projects"
         />
-
         <GradientStatCard
           title="Pending"
           value={projectStats.pending}
@@ -130,14 +197,127 @@ const ProjectsPage = () => {
           data-testid="card-stat-pending-projects"
         />
       </div>
-      
-      {/* Project List */}
-      <div className="bg-card rounded-md border p-3">
-        <ProjectList 
-          projects={projects} 
-          onViewProject={handleViewProject}
-          loading={loading}
-        />
+
+      {/* View toggle + filter bar */}
+      <div className="bg-card rounded-md border">
+        {/* View toggle row */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/60">
+          <div className="flex items-center gap-1 rounded-md bg-muted p-0.5">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2.5 text-xs gap-1.5"
+              onClick={() => handleViewMode('list')}
+              data-testid="button-view-list"
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              List
+            </Button>
+            <Button
+              variant={viewMode === 'board' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2.5 text-xs gap-1.5"
+              onClick={() => handleViewMode('board')}
+              data-testid="button-view-board"
+            >
+              <Kanban className="h-3.5 w-3.5" />
+              Board
+            </Button>
+            <Button
+              variant={viewMode === 'timeline' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2.5 text-xs gap-1.5"
+              onClick={() => handleViewMode('timeline')}
+              data-testid="button-view-timeline"
+            >
+              <GanttChartSquare className="h-3.5 w-3.5" />
+              Timeline
+            </Button>
+          </div>
+
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground" onClick={clearFilters} data-testid="button-clear-filters">
+              <X className="h-3 w-3 mr-1" />
+              Clear filters
+            </Button>
+          )}
+        </div>
+
+        {/* Shared filter bar for board and timeline */}
+        {viewMode !== 'list' && (
+          <div className="flex flex-wrap gap-2 px-3 py-2 border-b border-border/60">
+            <div className="relative flex-1 min-w-[160px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search projects…"
+                value={filterSearch}
+                onChange={e => setFilterSearch(e.target.value)}
+                className="pl-8 h-8 text-xs"
+                data-testid="input-board-search"
+              />
+            </div>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-board-type">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {PROJECT_TYPE_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-8 w-[140px] text-xs" data-testid="select-board-status">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="onHold">On Hold</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+            {pmOptions.length > 0 && (
+              <Select value={filterPM} onValueChange={setFilterPM}>
+                <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-board-pm">
+                  <SelectValue placeholder="All PMs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All PMs</SelectItem>
+                  {pmOptions.map(pm => (
+                    <SelectItem key={pm} value={pm}>{pm}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
+
+        {/* View content */}
+        <div className="p-3">
+          {viewMode === 'list' && (
+            <ProjectList
+              projects={projects}
+              onViewProject={handleViewProject}
+              loading={loading}
+            />
+          )}
+          {viewMode === 'board' && (
+            <ProjectBoardView
+              projects={projects.filter(p => !p.archived)}
+              filters={boardFilters}
+            />
+          )}
+          {viewMode === 'timeline' && (
+            <ProjectTimelineView
+              projects={projects.filter(p => !p.archived)}
+              filters={boardFilters}
+            />
+          )}
+        </div>
       </div>
 
       {/* Project Templates Dialog */}
