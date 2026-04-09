@@ -1448,34 +1448,65 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardCurrency, setRewardCurrency] = useState('USD');
 
-  const { data: users = [], isLoading: loadingUsers } = useQuery({
-    queryKey: ['profiles-for-task-assign', isSuperAdmin, currentUserDepartmentId],
+  // Load all departments once to build the managed-dept hierarchy
+  const { data: allDepts = [] } = useQuery({
+    queryKey: ['all-depts-hierarchy-task'],
     queryFn: async () => {
+      const { data } = await supabase
+        .from('departments')
+        .select('id, name, parent_department_id, manager_user_id');
+      return (data ?? []) as { id: string; name: string; parent_department_id: string | null; manager_user_id: string | null }[];
+    },
+    enabled: open,
+    staleTime: 60_000,
+  });
+
+  // Compute the set of department IDs this user can assign into:
+  // - Super Admin  → null (no filter, all allowed)
+  // - Dept Manager → their dept + all sub-depts recursively
+  // - Everyone else → [] (empty, cannot assign to others)
+  const managedDeptIds = useMemo(() => {
+    if (isSuperAdmin) return null;
+    const direct = allDepts
+      .filter(d => d.manager_user_id === currentUserId)
+      .map(d => d.id);
+    if (direct.length === 0) return [];
+    const result = new Set<string>(direct);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const d of allDepts) {
+        if (!result.has(d.id) && d.parent_department_id && result.has(d.parent_department_id)) {
+          result.add(d.id);
+          changed = true;
+        }
+      }
+    }
+    return Array.from(result);
+  }, [allDepts, currentUserId, isSuperAdmin]);
+
+  // true if this user is allowed to assign tasks to others
+  const isManager = isSuperAdmin || (managedDeptIds !== null && managedDeptIds.length > 0);
+
+  // Departments the user can bulk-assign to (for "Dept" mode — super admin only)
+  const departments = useMemo(() =>
+    isSuperAdmin ? allDepts : (managedDeptIds ?? []).map(id => allDepts.find(d => d.id === id)!).filter(Boolean),
+  [allDepts, isSuperAdmin, managedDeptIds]);
+
+  // People the user can assign tasks to
+  const { data: users = [], isLoading: loadingUsers } = useQuery({
+    queryKey: ['profiles-for-task-assign', isSuperAdmin, managedDeptIds?.join(',') ?? 'all'],
+    queryFn: async () => {
+      if (!isSuperAdmin && managedDeptIds !== null && managedDeptIds.length === 0) return [];
       let q = supabase.from('profiles').select('id, full_name, role, status, department_id').order('full_name');
-      if (!isSuperAdmin && currentUserDepartmentId) {
-        q = q.eq('department_id', currentUserDepartmentId);
-      } else if (!isSuperAdmin && !currentUserDepartmentId) {
-        return [];
+      if (!isSuperAdmin && managedDeptIds !== null && managedDeptIds.length > 0) {
+        q = q.in('department_id', managedDeptIds);
       }
       const { data } = await q;
       return (data ?? []) as { id: string; full_name: string; role: string; status: string; department_id: string | null }[];
     },
-    enabled: open,
+    enabled: open && isManager,
     staleTime: 5 * 60_000,
-  });
-
-  const { data: departments = [] } = useQuery({
-    queryKey: ['departments-list-task', isSuperAdmin, currentUserDepartmentId],
-    queryFn: async () => {
-      if (!isSuperAdmin && currentUserDepartmentId) {
-        const { data } = await supabase.from('departments').select('id, name').eq('id', currentUserDepartmentId);
-        return (data ?? []) as { id: string; name: string }[];
-      }
-      const { data } = await supabase.from('departments').select('id, name').order('name');
-      return (data ?? []) as { id: string; name: string }[];
-    },
-    enabled: open && isSuperAdmin,
-    staleTime: 60_000,
   });
 
   const filteredUsers = users.filter(u =>
@@ -1632,13 +1663,16 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
                 <span className="truncate">Myself</span>
               </button>
               <button
-                onClick={() => setAssignMode('other')}
+                onClick={() => isManager && setAssignMode('other')}
                 data-testid="button-assign-other"
+                disabled={!isManager}
+                title={!isManager ? 'Only department managers can assign tasks to others' : undefined}
                 className={cn(
                   'flex items-center gap-1.5 px-2 py-2 rounded-lg border text-xs font-medium transition-all',
                   assignMode === 'other'
                     ? 'bg-[#1D3461] text-white border-[#1D3461]'
-                    : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40',
+                  !isManager && 'opacity-40 cursor-not-allowed'
                 )}
               >
                 <Users className="h-3.5 w-3.5 flex-shrink-0" />
