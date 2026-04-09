@@ -14,7 +14,7 @@ import {
   ChevronUp, Eye, EyeOff, Award, Lightbulb, BookOpen,
   GanttChartSquare, HelpCircle, Info, Building2, ListChecks, DollarSign,
   Tag, FileText, StickyNote, ArrowUpDown, Layers, Hash, ExternalLink,
-  Link2, Wrench, Paperclip,
+  Link2, Wrench, Paperclip, Check,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -57,7 +57,7 @@ import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
   materialiseDailyTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type CreatePersonalTask,
-  type TaskAssignee, type AssignedProjectTask,
+  type TaskAssignee, type AssignedProjectTask, type Dependency, type DependencyType,
 } from '@/hooks/usePersonalTasks';
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -515,12 +515,16 @@ function TaskDetailSheet({
   const [dirty, setDirty] = useState(false);
   const [coAssignees, setCoAssignees] = useState<TaskAssignee[]>([]);
   const [coUserSearch, setCoUserSearch] = useState('');
-  const [dependencies, setDependencies] = useState<string[]>([]);
-  const [depInput, setDepInput] = useState('');
+  const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const [depType, setDepType] = useState<DependencyType>('custom');
+  const [depText, setDepText] = useState('');
+  const [depDate, setDepDate] = useState('');
+  const [depUserSearch, setDepUserSearch] = useState('');
+  const [depSelectedUser, setDepSelectedUser] = useState<{ id: string; name: string } | null>(null);
+  const [depDeptId, setDepDeptId] = useState('');
   const [depDuplicate, setDepDuplicate] = useState(false);
   const [tools, setTools] = useState('');
   const tagInputRef = useRef<HTMLInputElement>(null);
-  const depInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-for-task-assign'],
@@ -528,8 +532,18 @@ function TaskDetailSheet({
       const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
       return (data ?? []) as { id: string; full_name: string; role: string }[];
     },
-    enabled: isAdmin && !!task,
+    enabled: !!task,
     staleTime: 5 * 60_000,
+  });
+
+  const { data: depAllDepts = [] } = useQuery({
+    queryKey: ['all-depts-for-dep-picker'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return (data ?? []) as { id: string; name: string }[];
+    },
+    enabled: !!task && depType === 'department',
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -604,18 +618,44 @@ function TaskDetailSheet({
   };
 
   const handleAddDep = () => {
-    const d = depInput.trim();
-    if (!d) return;
-    if (dependencies.includes(d)) {
-      setDepDuplicate(true);
-      setTimeout(() => setDepDuplicate(false), 2000);
-      return;
+    let dep: Dependency;
+    switch (depType) {
+      case 'custom': {
+        if (!depText.trim()) return;
+        dep = { type: 'custom', label: depText.trim(), value: depText.trim() };
+        break;
+      }
+      case 'date': {
+        if (!depDate) return;
+        dep = { type: 'date', label: depDate, value: depDate };
+        break;
+      }
+      case 'user': {
+        if (!depSelectedUser) return;
+        dep = { type: 'user', label: depSelectedUser.name, userId: depSelectedUser.id, userName: depSelectedUser.name };
+        break;
+      }
+      case 'department': {
+        if (!depDeptId) return;
+        const dept = depAllDepts.find(d => d.id === depDeptId);
+        if (!dept) return;
+        dep = { type: 'department', label: dept.name, deptId: dept.id, deptName: dept.name };
+        break;
+      }
+      default: return;
     }
-    setDependencies(prev => [...prev, d]);
+    const isDup = dependencies.some(d =>
+      d.type === dep.type &&
+      (dep.type === 'custom' ? d.value === dep.value :
+       dep.type === 'date'   ? d.value === dep.value :
+       dep.type === 'user'   ? d.userId === dep.userId :
+       d.deptId === dep.deptId)
+    );
+    if (isDup) { setDepDuplicate(true); setTimeout(() => setDepDuplicate(false), 2000); return; }
+    setDependencies(prev => [...prev, dep]);
     markDirty();
-    setDepInput('');
+    setDepText(''); setDepDate(''); setDepSelectedUser(null); setDepUserSearch(''); setDepDeptId('');
     setDepDuplicate(false);
-    setTimeout(() => depInputRef.current?.focus(), 50);
   };
 
   const handleAddSubtask = async () => {
@@ -877,12 +917,25 @@ function TaskDetailSheet({
             {/* Dependencies */}
             <div>
               <SectionLabel icon={<Link2 className="h-3.5 w-3.5" />}>Dependencies</SectionLabel>
+
+              {/* Existing deps list */}
               {dependencies.length > 0 && (
                 <div className="space-y-1 mb-3 rounded-xl border bg-muted/30 p-2">
                   {dependencies.map((dep, i) => (
-                    <div key={i} className="flex items-start gap-2 px-2.5 py-2 rounded-lg hover:bg-muted/50 transition-colors group/dep">
-                      <div className="h-2 w-2 rounded-full bg-[#1D3461]/50 flex-shrink-0 mt-1.5" />
-                      <span className="text-[13px] flex-1 text-foreground leading-snug">{dep}</span>
+                    <div key={i} className="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-muted/50 transition-colors group/dep">
+                      {dep.type === 'date'       ? <Calendar   className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                       : dep.type === 'user'     ? <User       className="h-3.5 w-3.5 text-violet-500 flex-shrink-0" />
+                       : dep.type === 'department' ? <Building2 className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+                       : <Link2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
+                      <span className="text-[13px] flex-1 text-foreground leading-snug">
+                        {dep.type === 'date'       ? `After ${dep.value}`
+                         : dep.type === 'user'     ? dep.userName ?? dep.label
+                         : dep.type === 'department' ? `${dep.deptName ?? dep.label} sign-off`
+                         : dep.label}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide hidden group-hover/dep:inline">
+                        {dep.type}
+                      </span>
                       <button
                         type="button"
                         onClick={() => { setDependencies(prev => prev.filter((_, idx) => idx !== i)); markDirty(); }}
@@ -895,23 +948,103 @@ function TaskDetailSheet({
                   ))}
                 </div>
               )}
+
+              {/* Type selector */}
+              <div className="flex gap-1 mb-2 flex-wrap">
+                {([ ['custom','Custom','#6B7280'], ['date','Date','#3B82F6'], ['user','User','#8B5CF6'], ['department','Department','#F97316'] ] as [DependencyType, string, string][]).map(([t, label]) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setDepType(t); setDepText(''); setDepDate(''); setDepSelectedUser(null); setDepUserSearch(''); setDepDeptId(''); }}
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
+                      depType === t
+                        ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                        : 'bg-muted text-muted-foreground border-transparent hover:border-border'
+                    )}
+                  >
+                    {t === 'custom'     ? '📝' : t === 'date' ? '📅' : t === 'user' ? '👤' : '🏢'} {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Type-specific input */}
               <div className="flex gap-2">
-                <Input
-                  ref={depInputRef}
-                  placeholder="Blocked by or depends on — e.g. 'Site survey complete'"
-                  value={depInput}
-                  onChange={e => { setDepInput(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddDep(); } }}
-                  className={cn('h-10 text-[14px] flex-1 transition-colors', depDuplicate && 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/10 focus-visible:ring-amber-400/30')}
-                  data-testid="sheet-input-dependency"
-                />
+                {depType === 'custom' && (
+                  <Input
+                    placeholder="e.g. 'Site survey complete', 'Approval received'"
+                    value={depText}
+                    onChange={e => { setDepText(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddDep(); } }}
+                    className={cn('h-10 text-[14px] flex-1', depDuplicate && 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/10')}
+                    data-testid="sheet-input-dep-custom"
+                  />
+                )}
+                {depType === 'date' && (
+                  <Input
+                    type="date"
+                    value={depDate}
+                    onChange={e => { setDepDate(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                    className={cn('h-10 text-[14px] flex-1', depDuplicate && 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/10')}
+                    data-testid="sheet-input-dep-date"
+                  />
+                )}
+                {depType === 'user' && (
+                  <div className="flex-1 relative">
+                    <Input
+                      placeholder="Search user…"
+                      value={depUserSearch}
+                      onChange={e => { setDepUserSearch(e.target.value); setDepSelectedUser(null); }}
+                      className="h-10 text-[14px]"
+                      data-testid="sheet-input-dep-user"
+                    />
+                    {depUserSearch && !depSelectedUser && (
+                      <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-popover border rounded-xl shadow-lg max-h-44 overflow-y-auto">
+                        {allProfiles
+                          .filter(p => p.full_name.toLowerCase().includes(depUserSearch.toLowerCase()))
+                          .slice(0, 10)
+                          .map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-[13px] hover:bg-muted"
+                              onClick={() => { setDepSelectedUser({ id: p.id, name: p.full_name }); setDepUserSearch(p.full_name); }}
+                            >
+                              {p.full_name}
+                              <span className="ml-1.5 text-[10px] text-muted-foreground">{p.role}</span>
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                    {depSelectedUser && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <Check className="h-3.5 w-3.5 text-green-500" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {depType === 'department' && (
+                  <select
+                    value={depDeptId}
+                    onChange={e => { setDepDeptId(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                    className="h-10 flex-1 rounded-md border bg-background px-3 text-[14px]"
+                    data-testid="sheet-select-dep-dept"
+                  >
+                    <option value="">Select department…</option>
+                    {depAllDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                )}
                 <Button
                   type="button"
                   size="sm"
-                  variant={depInput.trim() ? 'default' : 'outline'}
                   onClick={handleAddDep}
-                  disabled={!depInput.trim()}
-                  className={cn('h-10 px-4 text-sm transition-all', depInput.trim() ? 'bg-[#1D3461] hover:bg-[#0F2041] text-white' : '')}
+                  disabled={
+                    depType === 'custom'     ? !depText.trim() :
+                    depType === 'date'       ? !depDate :
+                    depType === 'user'       ? !depSelectedUser :
+                    !depDeptId
+                  }
+                  className="h-10 px-4 text-sm bg-[#1D3461] hover:bg-[#0F2041] text-white disabled:opacity-40"
                   data-testid="sheet-btn-add-dep"
                 >
                   <Plus className="h-3.5 w-3.5 mr-1" />Add
@@ -922,7 +1055,7 @@ function TaskDetailSheet({
                   <AlertTriangle className="h-3 w-3" />This dependency is already listed
                 </p>
               ) : (
-                <p className="text-[12px] text-muted-foreground mt-1.5">List tasks, approvals, or conditions that must be completed before this task can start.</p>
+                <p className="text-[12px] text-muted-foreground mt-1.5">Conditions, approvals, dates, people, or teams that must be ready before this task can start.</p>
               )}
             </div>
 
@@ -1450,9 +1583,14 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardCurrency, setRewardCurrency] = useState('USD');
-  const [dependencies, setDependencies] = useState<string[]>([]);
-  const [depInput, setDepInput] = useState('');
-  const [depDuplicate, setDepDuplicate] = useState(false);
+  const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const [depType, setDepType]               = useState<DependencyType>('custom');
+  const [depText, setDepText]               = useState('');
+  const [depDate, setDepDate]               = useState('');
+  const [depUserSearch, setDepUserSearch]   = useState('');
+  const [depSelectedUser, setDepSelectedUser] = useState<{ id: string; name: string } | null>(null);
+  const [depDeptId, setDepDeptId]           = useState('');
+  const [depDuplicate, setDepDuplicate]     = useState(false);
 
   // Load all departments once to build the managed-dept hierarchy
   const { data: allDepts = [] } = useQuery({
@@ -1515,6 +1653,17 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
     staleTime: 5 * 60_000,
   });
 
+  // All profiles for dep-type 'user' picker (no scope restriction)
+  const { data: depAllUsers = [] } = useQuery({
+    queryKey: ['all-profiles-for-dep-new'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      return (data ?? []) as { id: string; full_name: string; role: string }[];
+    },
+    enabled: open && depType === 'user',
+    staleTime: 5 * 60_000,
+  });
+
   const filteredUsers = users.filter(u =>
     u.id !== currentUserId &&
     !selectedUsers.some(s => s.id === u.id) &&
@@ -1535,17 +1684,49 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
     setDueDate(''); setNotes(''); setAssignMode('self');
     setSelectedUsers([]); setUserSearch(''); setSelectedDeptId('');
     setRewardAmount(''); setRewardCurrency('USD');
-    setDependencies([]); setDepInput(''); setDepDuplicate(false);
+    setDependencies([]); setDepType('custom'); setDepText(''); setDepDate('');
+    setDepUserSearch(''); setDepSelectedUser(null); setDepDeptId(''); setDepDuplicate(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
 
   const handleAddDep = () => {
-    const val = depInput.trim();
-    if (!val) return;
-    if (dependencies.includes(val)) { setDepDuplicate(true); return; }
-    setDependencies(prev => [...prev, val]);
-    setDepInput('');
+    let dep: Dependency;
+    switch (depType) {
+      case 'custom': {
+        if (!depText.trim()) return;
+        dep = { type: 'custom', label: depText.trim(), value: depText.trim() };
+        break;
+      }
+      case 'date': {
+        if (!depDate) return;
+        dep = { type: 'date', label: depDate, value: depDate };
+        break;
+      }
+      case 'user': {
+        if (!depSelectedUser) return;
+        dep = { type: 'user', label: depSelectedUser.name, userId: depSelectedUser.id, userName: depSelectedUser.name };
+        break;
+      }
+      case 'department': {
+        if (!depDeptId) return;
+        const dept = allDepts.find(d => d.id === depDeptId);
+        if (!dept) return;
+        dep = { type: 'department', label: dept.name, deptId: dept.id, deptName: dept.name };
+        break;
+      }
+      default: return;
+    }
+    const isDup = dependencies.some(d =>
+      d.type === dep.type &&
+      (dep.type === 'custom' ? d.value === dep.value :
+       dep.type === 'date'   ? d.value === dep.value :
+       dep.type === 'user'   ? d.userId === dep.userId :
+       d.deptId === dep.deptId)
+    );
+    if (isDup) { setDepDuplicate(true); return; }
+    setDependencies(prev => [...prev, dep]);
+    setDepText(''); setDepDate(''); setDepSelectedUser(null); setDepUserSearch(''); setDepDeptId('');
     setDepDuplicate(false);
   };
 
@@ -1853,12 +2034,22 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
               <Link2 className="h-3.5 w-3.5 text-blue-500" />
               Dependencies <span className="text-muted-foreground font-normal">(optional)</span>
             </Label>
+
+            {/* Existing deps list */}
             {dependencies.length > 0 && (
-              <div className="space-y-1 rounded-lg border bg-muted/30 p-2">
+              <div className="space-y-0.5 rounded-lg border bg-muted/30 p-1.5">
                 {dependencies.map((dep, i) => (
-                  <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/50 group/dep">
-                    <div className="h-2 w-2 rounded-full bg-[#1D3461]/50 flex-shrink-0 mt-1.5" />
-                    <span className="text-xs flex-1 leading-snug">{dep}</span>
+                  <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 group/dep">
+                    {dep.type === 'date'         ? <Calendar   className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                     : dep.type === 'user'       ? <User       className="h-3 w-3 text-violet-500 flex-shrink-0" />
+                     : dep.type === 'department' ? <Building2  className="h-3 w-3 text-orange-500 flex-shrink-0" />
+                     : <Link2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
+                    <span className="text-xs flex-1 leading-snug">
+                      {dep.type === 'date'         ? `After ${dep.value}`
+                       : dep.type === 'user'       ? dep.userName ?? dep.label
+                       : dep.type === 'department' ? `${dep.deptName ?? dep.label} sign-off`
+                       : dep.label}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setDependencies(prev => prev.filter((_, idx) => idx !== i))}
@@ -1871,22 +2062,103 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
                 ))}
               </div>
             )}
+
+            {/* Type selector pills */}
+            <div className="flex gap-1 flex-wrap">
+              {([ ['custom','Custom'], ['date','Date'], ['user','User'], ['department','Department'] ] as [DependencyType, string][]).map(([t, label]) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setDepType(t); setDepText(''); setDepDate(''); setDepSelectedUser(null); setDepUserSearch(''); setDepDeptId(''); }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all',
+                    depType === t
+                      ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                      : 'bg-muted text-muted-foreground border-transparent hover:border-border'
+                  )}
+                >
+                  {t === 'custom' ? '📝' : t === 'date' ? '📅' : t === 'user' ? '👤' : '🏢'} {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Type-specific input row */}
             <div className="flex gap-2">
-              <Input
-                placeholder="e.g. 'Site survey complete' or 'Approval received'"
-                value={depInput}
-                onChange={e => { setDepInput(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddDep(); } }}
-                className={cn('h-8 text-sm flex-1', depDuplicate && 'border-amber-400')}
-                data-testid="input-new-task-dep"
-              />
+              {depType === 'custom' && (
+                <Input
+                  placeholder="e.g. 'Site survey complete', 'Approval received'"
+                  value={depText}
+                  onChange={e => { setDepText(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddDep(); } }}
+                  className={cn('h-8 text-sm flex-1', depDuplicate && 'border-amber-400')}
+                  data-testid="input-new-task-dep-custom"
+                />
+              )}
+              {depType === 'date' && (
+                <Input
+                  type="date"
+                  value={depDate}
+                  onChange={e => { setDepDate(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                  className={cn('h-8 text-sm flex-1', depDuplicate && 'border-amber-400')}
+                  data-testid="input-new-task-dep-date"
+                />
+              )}
+              {depType === 'user' && (
+                <div className="flex-1 relative">
+                  <Input
+                    placeholder="Search user…"
+                    value={depUserSearch}
+                    onChange={e => { setDepUserSearch(e.target.value); setDepSelectedUser(null); }}
+                    className="h-8 text-sm"
+                    data-testid="input-new-task-dep-user"
+                  />
+                  {depUserSearch && !depSelectedUser && (
+                    <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-popover border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                      {depAllUsers
+                        .filter(p => p.full_name.toLowerCase().includes(depUserSearch.toLowerCase()))
+                        .slice(0, 10)
+                        .map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted"
+                            onClick={() => { setDepSelectedUser({ id: p.id, name: p.full_name }); setDepUserSearch(p.full_name); }}
+                          >
+                            {p.full_name}
+                            <span className="ml-1 text-[10px] text-muted-foreground">{p.role}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                  {depSelectedUser && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <Check className="h-3 w-3 text-green-500" />
+                    </div>
+                  )}
+                </div>
+              )}
+              {depType === 'department' && (
+                <select
+                  value={depDeptId}
+                  onChange={e => { setDepDeptId(e.target.value); if (depDuplicate) setDepDuplicate(false); }}
+                  className="h-8 flex-1 rounded-md border bg-background px-2 text-sm"
+                  data-testid="select-new-task-dep-dept"
+                >
+                  <option value="">Select department…</option>
+                  {allDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              )}
               <Button
                 type="button"
                 size="sm"
-                variant={depInput.trim() ? 'default' : 'outline'}
                 onClick={handleAddDep}
-                disabled={!depInput.trim()}
-                className={cn('h-8 px-3 text-xs', depInput.trim() ? 'bg-[#1D3461] hover:bg-[#0F2041] text-white' : '')}
+                disabled={
+                  depType === 'custom'     ? !depText.trim() :
+                  depType === 'date'       ? !depDate :
+                  depType === 'user'       ? !depSelectedUser :
+                  !depDeptId
+                }
+                className="h-8 px-3 text-xs bg-[#1D3461] hover:bg-[#0F2041] text-white disabled:opacity-40"
                 data-testid="btn-new-task-add-dep"
               >
                 <Plus className="h-3 w-3 mr-1" />Add

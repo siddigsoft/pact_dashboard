@@ -4,6 +4,17 @@ import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-f
 
 export type PersonalTaskPriority = 'low' | 'medium' | 'high' | 'critical';
 export type PersonalTaskStatus = 'todo' | 'inprogress' | 'done' | 'cancelled';
+export type DependencyType = 'custom' | 'date' | 'user' | 'department';
+
+export interface Dependency {
+  type: DependencyType;
+  label: string;
+  value?: string;
+  userId?: string;
+  userName?: string;
+  deptId?: string;
+  deptName?: string;
+}
 
 export interface TaskAssignee {
   id: string;
@@ -37,7 +48,7 @@ export interface PersonalTask {
   templateId: string | null;
   dailyTaskDate: string | null;
   // Extra fields
-  dependencies: string[];
+  dependencies: Dependency[];
   tools: string | null;
   // Proof & recurrence fields
   proofRequired: boolean;
@@ -70,7 +81,7 @@ export interface CreatePersonalTask {
   templateId?: string | null;
   dailyTaskDate?: string | null;
   // Extra fields
-  dependencies?: string[];
+  dependencies?: Dependency[];
   tools?: string | null;
   // Proof & recurrence fields
   proofRequired?: boolean;
@@ -125,7 +136,13 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     recurrence: (r.recurrence as string) ?? 'none',
     templateId: (r.template_id as string) ?? null,
     dailyTaskDate: (r.daily_task_date as string) ?? null,
-    dependencies: Array.isArray(r.dependencies) ? (r.dependencies as string[]) : [],
+    dependencies: Array.isArray(r.dependencies)
+      ? (r.dependencies as unknown[]).map(d =>
+          typeof d === 'string'
+            ? { type: 'custom' as DependencyType, label: d, value: d }
+            : (d as Dependency)
+        )
+      : [],
     tools: (r.tools as string) ?? null,
     proofRequired: (r.proof_required as boolean) ?? false,
     proofNote: (r.proof_note as string) ?? null,
