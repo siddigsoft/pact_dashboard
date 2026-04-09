@@ -21,10 +21,12 @@ import {
 } from '@/components/ui/select';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useUser } from '@/context/user/UserContext';
-import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail, KeyRound, Loader2, Trash2 } from 'lucide-react';
+import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail, KeyRound, Loader2, Trash2, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { isProtectedOwner, PROTECTED_OWNER_EMAIL } from '@/lib/protected-accounts';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 export function SuperAdminManagementPage() {
   const { toast } = useToast();
@@ -56,11 +58,93 @@ export function SuperAdminManagementPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // OTP email confirmation state for super admin creation
+  const [otpStep, setOtpStep] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [otpExpiry, setOtpExpiry] = useState<Date | null>(null);
+  const [sendingOtp, setSendingOtp] = useState(false);
+
+  const emailService = new EmailNotificationService();
+
+  const isOwner = isProtectedOwner(currentUser?.id);
+
+  const resetCreateDialog = () => {
+    setShowCreateDialog(false);
+    setSelectedUserId('');
+    setAppointmentReason('');
+    setOtpStep(false);
+    setGeneratedOtp('');
+    setOtpInput('');
+    setOtpExpiry(null);
+  };
+
   const handleCreate = async () => {
     if (!currentUser || !selectedUserId) return;
 
+    if (!isOwner) {
+      toast({ title: 'Not Authorised', description: 'Only the platform owner can appoint super administrators.', variant: 'destructive' });
+      return;
+    }
+
     if (!appointmentReason.trim()) {
       toast({ title: 'Reason Required', description: 'Please provide a reason for this appointment.', variant: 'destructive' });
+      return;
+    }
+
+    // Generate 6-digit OTP and send to owner email
+    setSendingOtp(true);
+    try {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      const targetUser = users.find(u => u.id === selectedUserId);
+
+      await emailService.sendEmail({
+        to: PROTECTED_OWNER_EMAIL,
+        subject: '🔐 Super Admin Appointment Confirmation',
+        recipientName: currentUser.name || 'Platform Owner',
+        priority: 'urgent',
+        html: `
+          <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+            <div style="background:#0F2041;padding:24px;border-radius:8px 8px 0 0">
+              <h2 style="color:white;margin:0">Super Admin Appointment</h2>
+            </div>
+            <div style="background:#f9f9f9;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e0e0e0">
+              <p>A request has been made to appoint <strong>${targetUser?.name || 'a user'}</strong> (${targetUser?.email || ''}) as a <strong>Super Administrator</strong>.</p>
+              <p style="margin-top:12px"><strong>Reason:</strong> ${appointmentReason}</p>
+              <p style="margin-top:16px">Your confirmation code is:</p>
+              <div style="font-size:36px;font-weight:bold;letter-spacing:8px;text-align:center;padding:16px;background:white;border:2px solid #0F2041;border-radius:8px;margin:12px 0">${code}</div>
+              <p style="color:#666;font-size:13px">This code expires in <strong>5 minutes</strong>. If you did not initiate this action, contact your security team immediately.</p>
+            </div>
+          </div>
+        `,
+      });
+
+      setGeneratedOtp(code);
+      setOtpExpiry(expiry);
+      setOtpInput('');
+      setOtpStep(true);
+      toast({ title: 'Code Sent', description: `A confirmation code was sent to ${PROTECTED_OWNER_EMAIL}` });
+    } catch (err: any) {
+      toast({ title: 'Failed to Send Code', description: err.message || 'Could not send confirmation email', variant: 'destructive' });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyAndCreate = async () => {
+    if (!currentUser || !selectedUserId) return;
+
+    if (!otpExpiry || new Date() > otpExpiry) {
+      toast({ title: 'Code Expired', description: 'The confirmation code has expired. Please start again.', variant: 'destructive' });
+      setOtpStep(false);
+      setGeneratedOtp('');
+      setOtpInput('');
+      return;
+    }
+
+    if (otpInput.trim() !== generatedOtp) {
+      toast({ title: 'Incorrect Code', description: 'The code you entered does not match. Please try again.', variant: 'destructive' });
       return;
     }
 
@@ -70,12 +154,10 @@ export function SuperAdminManagementPage() {
       appointedBy: currentUser.id,
       appointmentReason,
     });
-
     setProcessing(false);
+
     if (success) {
-      setShowCreateDialog(false);
-      setSelectedUserId('');
-      setAppointmentReason('');
+      resetCreateDialog();
     }
   };
 
@@ -258,7 +340,7 @@ export function SuperAdminManagementPage() {
             Manage super-admin accounts with complete system control
           </p>
         </div>
-        {canAddSuperAdmin && (
+        {canAddSuperAdmin && isOwner && (
           <Button onClick={() => setShowCreateDialog(true)} data-testid="button-add-super-admin">
             <UserPlus className="h-4 w-4 mr-2" />
             Add Super-Admin
@@ -491,57 +573,121 @@ export function SuperAdminManagementPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog open={showCreateDialog} onOpenChange={(open) => { if (!open) resetCreateDialog(); }}>
         <DialogContent data-testid="dialog-create-super-admin">
           <DialogHeader>
-            <DialogTitle>Add New Super-Admin</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {otpStep ? <><Lock className="h-5 w-5 text-amber-500" /> Email Confirmation Required</> : 'Add New Super-Admin'}
+            </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 rounded-md">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                Super-admins have complete system control including deletion privileges. Maximum 3
-                accounts allowed.
-              </p>
-            </div>
+          {!otpStep ? (
+            <>
+              <div className="space-y-4">
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 rounded-md">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    Super-admins have complete system control including deletion privileges. Maximum 3
+                    accounts allowed. A confirmation code will be sent to your email.
+                  </p>
+                </div>
 
-            <div>
-              <Label htmlFor="select-user">Select Admin User</Label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger data-testid="select-user">
-                  <SelectValue placeholder="Choose a user..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {eligibleUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.name} ({user.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                <div>
+                  <Label htmlFor="select-user">Select Admin User</Label>
+                  <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                    <SelectTrigger data-testid="select-user">
+                      <SelectValue placeholder="Choose a user..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eligibleUsers.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name} ({user.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div>
-              <Label htmlFor="appointment-reason">Appointment Reason *</Label>
-              <Textarea
-                id="appointment-reason"
-                value={appointmentReason}
-                onChange={(e) => setAppointmentReason(e.target.value)}
-                placeholder="Explain why this user should be a super-admin..."
-                rows={3}
-                data-testid="textarea-appointment-reason"
-              />
-            </div>
-          </div>
+                <div>
+                  <Label htmlFor="appointment-reason">Appointment Reason *</Label>
+                  <Textarea
+                    id="appointment-reason"
+                    value={appointmentReason}
+                    onChange={(e) => setAppointmentReason(e.target.value)}
+                    placeholder="Explain why this user should be a super-admin..."
+                    rows={3}
+                    data-testid="textarea-appointment-reason"
+                  />
+                </div>
+              </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)} data-testid="button-cancel">
-              Cancel
-            </Button>
-            <Button onClick={handleCreate} disabled={processing || !selectedUserId} data-testid="button-confirm-create">
-              {processing ? 'Creating...' : 'Create Super-Admin'}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button variant="outline" onClick={resetCreateDialog} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreate}
+                  disabled={sendingOtp || !selectedUserId}
+                  data-testid="button-send-otp"
+                >
+                  {sendingOtp ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending Code...</> : <><Mail className="h-4 w-4 mr-2" />Send Confirmation Code</>}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 p-4 rounded-md flex gap-3">
+                  <Mail className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      Check your email
+                    </p>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                      A 6-digit confirmation code was sent to <strong>{PROTECTED_OWNER_EMAIL}</strong>. Enter it below to confirm the appointment.
+                    </p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                      Expires at {otpExpiry ? otpExpiry.toLocaleTimeString() : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="otp-input">Confirmation Code</Label>
+                  <Input
+                    id="otp-input"
+                    value={otpInput}
+                    onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit code"
+                    className="text-center text-2xl tracking-[0.5em] font-mono h-14"
+                    maxLength={6}
+                    autoFocus
+                    data-testid="input-otp-code"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && otpInput.length === 6) handleVerifyAndCreate(); }}
+                  />
+                </div>
+
+                <button
+                  className="text-xs text-muted-foreground underline hover:text-foreground transition-colors"
+                  onClick={() => { setOtpStep(false); setGeneratedOtp(''); setOtpInput(''); }}
+                >
+                  ← Go back and change selection
+                </button>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={resetCreateDialog} data-testid="button-cancel-otp">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleVerifyAndCreate}
+                  disabled={processing || otpInput.length !== 6}
+                  data-testid="button-confirm-otp"
+                >
+                  {processing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirming...</> : <><ShieldCheck className="h-4 w-4 mr-2" />Confirm & Create</>}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
