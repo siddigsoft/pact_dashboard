@@ -594,58 +594,91 @@ function usePayrollData(deptId: string, fromDate: string, toDate: string) {
 }
 
 // ── Earnings Trend (last 12 weeks) ────────────────────────────────────────────
+interface MonthlyEarningRow { month: string; [name: string]: string | number; }
+
 function useEarningsTrend() {
   return useQuery({
-    queryKey: ['earnings_trend_weekly'],
-    queryFn: async () => {
-      const since = format(subDays(new Date(), 84), 'yyyy-MM-dd');
-      const { data: txns } = await supabase
-        .from('wallet_transactions')
-        .select('created_at, amount, type')
-        .eq('type', 'wallet_credit')
-        .gte('created_at', since + 'T00:00:00');
-      if (!txns?.length) return [];
-      const weekMap: Record<string, number> = {};
+    queryKey: ['earnings_trend_monthly_staff'],
+    queryFn: async (): Promise<{ chartData: MonthlyEarningRow[]; names: string[] }> => {
+      const since = format(subDays(new Date(), 92), 'yyyy-MM-dd');
+      const [{ data: txns }, { data: profiles }] = await Promise.all([
+        supabase
+          .from('wallet_transactions')
+          .select('created_at, amount, user_id, type')
+          .eq('type', 'wallet_credit')
+          .gte('created_at', since + 'T00:00:00'),
+        supabase.from('profiles').select('id, full_name'),
+      ]);
+      if (!txns?.length) return { chartData: [], names: [] };
+
+      const nameMap: Record<string, string> = {};
+      (profiles ?? []).forEach((p: any) => { nameMap[p.id] = p.full_name ?? p.id.slice(0, 8); });
+
+      // Build 3 months
+      const now = new Date();
+      const months: string[] = [];
+      for (let i = 2; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push(format(d, 'yyyy-MM'));
+      }
+
+      // Aggregate per user per month
+      const userMonthMap: Record<string, Record<string, number>> = {};
       txns.forEach((t: any) => {
-        const d = new Date(t.created_at);
-        const monday = new Date(d);
-        monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-        const key = format(monday, 'MM/dd');
-        weekMap[key] = (weekMap[key] ?? 0) + Number(t.amount ?? 0);
+        const month = String(t.created_at ?? '').slice(0, 7);
+        if (!months.includes(month)) return;
+        const uid = t.user_id ?? 'unknown';
+        if (!userMonthMap[uid]) userMonthMap[uid] = {};
+        userMonthMap[uid][month] = (userMonthMap[uid][month] ?? 0) + Number(t.amount ?? 0);
       });
-      return Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b))
-        .map(([week, total]) => ({ week, total: Math.round(total * 100) / 100 }));
+
+      // Top 8 earners by total
+      const totals = Object.entries(userMonthMap).map(([uid, m]) => ({ uid, total: Object.values(m).reduce((a, b) => a + b, 0) }));
+      totals.sort((a, b) => b.total - a.total);
+      const top = totals.slice(0, 8).map(t => t.uid);
+
+      const names = top.map(uid => nameMap[uid] ?? uid.slice(0, 8));
+
+      const chartData: MonthlyEarningRow[] = months.map(month => {
+        const row: MonthlyEarningRow = { month: month.slice(5) };
+        top.forEach((uid, i) => {
+          row[names[i]] = Math.round((userMonthMap[uid]?.[month] ?? 0) * 100) / 100;
+        });
+        return row;
+      });
+
+      return { chartData, names };
     },
     staleTime: 60_000,
   });
 }
 
+const STAFF_COLORS = ['#1D3461','#4f86c6','#22c55e','#f59e0b','#ef4444','#a855f7','#14b8a6','#f97316'];
+
 function EarningsTrendChart() {
-  const { data: trendData = [], isLoading } = useEarningsTrend();
+  const { data, isLoading } = useEarningsTrend();
 
   if (isLoading) return (
     <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
       <Loader2 className="h-4 w-4 animate-spin" /> Loading trend…
     </div>
   );
-  if (!trendData.length) return null;
-
-  const maxVal = Math.max(...trendData.map(d => d.total));
+  if (!data?.chartData?.length || !data?.names?.length) return null;
 
   return (
     <div className="rounded-xl border bg-muted/10 p-4">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Reward Credits — Last 12 Weeks</p>
-      <ResponsiveContainer width="100%" height={130}>
-        <BarChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        Staff Reward Credits — Last 3 Months (top earners)
+      </p>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={data.chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-          <XAxis dataKey="week" tick={{ fontSize: 9, fill: '#94a3b8' }} />
+          <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} />
           <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
-          <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: any) => [v.toFixed(2), 'Credits']} />
-          <Bar dataKey="total" name="Credits" radius={[4, 4, 0, 0]}>
-            {trendData.map((entry, i) => (
-              <Cell key={i} fill={entry.total >= maxVal * 0.8 ? '#1D3461' : entry.total >= maxVal * 0.4 ? '#4f86c6' : '#93c5fd'} />
-            ))}
-          </Bar>
+          <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: any, name: string) => [v.toFixed(2), name]} />
+          {data.names.map((name, i) => (
+            <Bar key={name} dataKey={name} name={name} stackId="a" fill={STAFF_COLORS[i % STAFF_COLORS.length]} radius={i === data.names.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     </div>

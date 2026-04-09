@@ -194,12 +194,16 @@ const LEAVE_TYPE_COLORS: Record<string, string> = {
 
 function LeaveTrendsChart() {
   const { data, isLoading } = useQuery({
-    queryKey: ['leave_trends_monthly'],
+    queryKey: ['leave_trends_monthly_6m'],
     queryFn: async () => {
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const since = sixMonthsAgo.toISOString().slice(0, 10);
       const { data: rows } = await supabase
         .from('leave_requests')
-        .select('leave_type, start_date, status')
-        .in('status', ['approved', 'pending']);
+        .select('leave_type, start_date, end_date, status')
+        .in('status', ['approved', 'pending'])
+        .gte('start_date', since);
       if (!rows?.length) return { chartData: [], leaveTypes: [] };
 
       const monthMap: Record<string, Record<string, number>> = {};
@@ -210,7 +214,10 @@ function LeaveTrendsChart() {
         const type = r.leave_type ?? 'other';
         typeSet.add(type);
         if (!monthMap[month]) monthMap[month] = {};
-        monthMap[month][type] = (monthMap[month][type] ?? 0) + 1;
+        const start = r.start_date ? new Date(r.start_date) : null;
+        const end   = r.end_date   ? new Date(r.end_date)   : start;
+        const days  = start && end ? Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1) : 1;
+        monthMap[month][type] = (monthMap[month][type] ?? 0) + days;
       });
 
       const months = Object.keys(monthMap).sort();
@@ -244,7 +251,7 @@ function LeaveTrendsChart() {
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
         <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#94a3b8' }} angle={-20} textAnchor="end" interval={0} />
         <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} />
-        <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+        <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: any, name: string) => [`${v} day${v !== 1 ? 's' : ''}`, name.replace(/_/g,' ')]} />
         <Legend iconSize={9} iconType="circle" formatter={(v) => <span className="text-[10px] capitalize">{v.replace(/_/g,' ')}</span>} />
         {(data.leaveTypes).map(type => (
           <Bar key={type} dataKey={type} name={type.replace(/_/g,' ')} stackId="a"

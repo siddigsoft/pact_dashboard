@@ -280,7 +280,7 @@ function StatRow({ label, value, sub, color }: { label: string; value: string | 
 // Milestone Timeline Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GANTT_COLORS: Record<string, string> = {
+const GANTT_HEALTH_COLOR: Record<string, string> = {
   'on-track': '#22c55e',
   'at-risk':  '#f59e0b',
   'stalled':  '#ef4444',
@@ -303,75 +303,135 @@ function MilestoneTimeline({
 }) {
   const today = startOfToday();
 
-  const items = useMemo(() => {
-    const future = milestones
-      .filter(m => m.due_date)
-      .map(m => {
-        const due = safeDate(m.due_date)!;
-        const project = projects.find(p => p.id === m.project_id);
-        const isOverdue = isBefore(due, today) && m.status !== 'completed';
-        const daysLeft = differenceInDays(due, today);
-        return { ...m, due, daysLeft, isOverdue, projectName: project?.name ?? '—', projectCode: project?.project_code ?? '', projectId: m.project_id, health: project?.health ?? 'on-track' };
-      })
-      .sort((a, b) => a.daysLeft - b.daysLeft)
-      .slice(0, 20);
-    return future;
-  }, [milestones, projects, today]);
+  // Build per-project rows: one bar per active project, with milestone markers on it
+  const rows = useMemo(() => {
+    const active = projects.filter(p =>
+      p.status !== 'archived' && p.status !== 'cancelled' && (p.start_date || p.end_date)
+    ).slice(0, 15);
 
-  if (!items.length) return null;
+    return active.map(p => {
+      const start  = safeDate(p.start_date);
+      const end    = safeDate(p.end_date);
+      const pMilestones = milestones
+        .filter(m => m.project_id === p.id && m.due_date)
+        .map(m => {
+          const due = safeDate(m.due_date)!;
+          const isOverdue  = isBefore(due, today) && m.status !== 'completed';
+          const isCompleted = m.status === 'completed';
+          return { ...m, due, isOverdue, isCompleted };
+        });
+      return { project: p, start, end, milestones: pMilestones };
+    }).filter(r => r.start || r.end);
+  }, [projects, milestones, today]);
 
-  const minDate = items.reduce((min, m) => isBefore(m.due, min) ? m.due : min, items[0].due);
-  const maxDate = items.reduce((max, m) => isAfter(m.due, max) ? m.due : max, items[0].due);
-  const spanDays = Math.max(differenceInDays(maxDate, minDate) + 1, 7);
+  if (!rows.length) return null;
+
+  // Global date span across all project start/end dates + milestone dates
+  const allDates: Date[] = [today];
+  rows.forEach(r => {
+    if (r.start) allDates.push(r.start);
+    if (r.end)   allDates.push(r.end);
+    r.milestones.forEach(m => allDates.push(m.due));
+  });
+  const minDate = allDates.reduce((a, b) => isBefore(a, b) ? a : b);
+  const maxDate = allDates.reduce((a, b) => isAfter(a, b)  ? a : b);
+  const spanDays = Math.max(differenceInDays(maxDate, minDate) + 1, 30);
+
+  const toPct = (d: Date) =>
+    Math.max(0, Math.min(100, (differenceInDays(d, minDate) / spanDays) * 100));
+  const todayPct = toPct(today);
 
   return (
-    <SectionCard icon={Flag} title="Milestone Timeline" noPad>
+    <SectionCard icon={Flag} title="Project Timeline" noPad>
       <div className="overflow-x-auto">
-        <div style={{ minWidth: 540 }} className="p-4 space-y-1.5">
+        <div style={{ minWidth: 600 }} className="p-4 space-y-2">
           {/* Header ruler */}
-          <div className="flex items-center gap-2 mb-3 pl-[180px]">
+          <div className="flex gap-2 mb-3 pl-[176px] pr-14">
             <div className="flex-1 flex justify-between text-[9px] text-muted-foreground select-none">
-              <span>{format(minDate, 'dd MMM')}</span>
+              <span>{format(minDate, 'dd MMM yy')}</span>
               <span className="font-semibold text-[#1D3461]">Today ({format(today, 'dd MMM')})</span>
-              <span>{format(maxDate, 'dd MMM')}</span>
+              <span>{format(maxDate, 'dd MMM yy')}</span>
             </div>
           </div>
 
-          {/* Today marker + bars */}
-          {items.map(m => {
-            const offsetPct = Math.max(0, Math.min(100, (differenceInDays(m.due, minDate) / spanDays) * 100));
-            const isCompleted = m.status === 'completed';
-            const barColor = isCompleted ? '#94a3b8' : m.isOverdue ? '#ef4444' : m.daysLeft <= 7 ? '#f59e0b' : GANTT_COLORS[m.health] ?? '#1D3461';
+          {/* One row per project */}
+          {rows.map(({ project: p, start, end, milestones: ms }) => {
+            const barLeft  = start ? toPct(start) : 0;
+            const barRight = end   ? 100 - toPct(end) : 0;
+            const barWidth = Math.max(1, 100 - barLeft - barRight);
+            const barColor = GANTT_HEALTH_COLOR[p.health] ?? '#1D3461';
+            const isCompleted = p.status === 'completed';
             return (
-              <div key={m.id} className="flex items-center gap-2 group">
+              <div key={p.id} className="flex items-center gap-2">
+                {/* Project label */}
                 <button
-                  onClick={() => onNavigate(m.projectId)}
-                  className="w-[176px] flex-shrink-0 text-right pr-2 hover:underline"
-                  title={`${m.projectName} — ${m.title}`}
+                  onClick={() => onNavigate(p.id)}
+                  className="w-[172px] flex-shrink-0 text-right pr-2 hover:underline"
+                  title={p.name}
                 >
-                  <p className="text-[10px] font-semibold text-foreground truncate">{m.title}</p>
-                  <p className="text-[9px] text-muted-foreground truncate">{m.projectCode}</p>
+                  <p className="text-[10px] font-semibold text-foreground truncate">{p.name}</p>
+                  <p className="text-[9px] text-muted-foreground">{p.project_code}</p>
                 </button>
-                <div className="flex-1 relative h-6 bg-muted/30 rounded-full overflow-hidden">
+
+                {/* Gantt track */}
+                <div className="flex-1 relative h-7 bg-muted/20 rounded">
                   {/* Today line */}
                   <div
-                    className="absolute top-0 bottom-0 w-px bg-[#1D3461]/40 z-10"
-                    style={{ left: `${Math.max(0, Math.min(100, (differenceInDays(today, minDate) / spanDays) * 100))}%` }}
+                    className="absolute top-0 bottom-0 w-px bg-[#1D3461]/50 z-20 pointer-events-none"
+                    style={{ left: `${todayPct}%` }}
                   />
-                  {/* Milestone bar */}
+                  {/* Project bar */}
                   <div
-                    className="absolute top-1 bottom-1 w-2 rounded-full transition-all"
-                    style={{ left: `calc(${offsetPct}% - 4px)`, backgroundColor: barColor }}
-                    title={fmtDate(m.due_date)}
+                    className="absolute top-1.5 bottom-1.5 rounded transition-all"
+                    style={{
+                      left:  `${barLeft}%`,
+                      width: `${barWidth}%`,
+                      backgroundColor: isCompleted ? '#94a3b8' : barColor,
+                      opacity: 0.35,
+                    }}
+                    title={`${fmtDate(p.start_date)} → ${fmtDate(p.end_date)}`}
                   />
+                  {/* Milestone markers on the bar */}
+                  {ms.map(m => {
+                    const mPct = toPct(m.due);
+                    const mColor = m.isCompleted ? '#94a3b8' : m.isOverdue ? '#ef4444' : differenceInDays(m.due, today) <= 7 ? '#f59e0b' : barColor;
+                    return (
+                      <div
+                        key={m.id}
+                        className="absolute top-0 bottom-0 flex items-center z-10"
+                        style={{ left: `${mPct}%` }}
+                        title={`${m.title}: ${fmtDate(m.due_date)}`}
+                      >
+                        <div
+                          className="w-2.5 h-2.5 rounded-sm rotate-45 border border-white/60"
+                          style={{ backgroundColor: mColor, marginLeft: '-5px' }}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-                <span className={cn('text-[10px] font-bold w-12 text-right flex-shrink-0',
-                  isCompleted ? 'text-slate-400' : m.isOverdue ? 'text-red-600' : m.daysLeft <= 7 ? 'text-amber-600' : 'text-muted-foreground')}>
-                  {isCompleted ? 'Done' : m.isOverdue ? `${Math.abs(m.daysLeft)}d ago` : `${m.daysLeft}d`}
+
+                {/* Health badge */}
+                <span className="text-[9px] font-bold w-12 text-right flex-shrink-0" style={{ color: isCompleted ? '#94a3b8' : barColor }}>
+                  {p.health.replace('-', ' ')}
                 </span>
               </div>
             );
           })}
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 pt-2 pl-[176px] flex-wrap">
+            {[['on-track','#22c55e'],['at-risk','#f59e0b'],['stalled','#ef4444'],['completed','#94a3b8']].map(([label, color]) => (
+              <span key={label} className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                <span className="w-2.5 h-2.5 rounded-sm inline-block rotate-45" style={{ backgroundColor: color }} />
+                {label}
+              </span>
+            ))}
+            <span className="flex items-center gap-1 text-[9px] text-muted-foreground">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm rotate-45 border border-[#ef4444] bg-[#ef4444]" />
+              overdue milestone
+            </span>
+          </div>
         </div>
       </div>
     </SectionCard>
