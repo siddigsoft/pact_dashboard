@@ -144,6 +144,7 @@ const PageAccessControl = lazy(() => import('./pages/PageAccessControl'));
 const FieldOperationManager = lazy(() => import('./pages/FieldOperationManager'));
 const MMPManagementPage = lazy(() => import('./pages/MMPManagementPage'));
 const FileViewer = lazy(() => import('./pages/FileViewer'));
+const ApprovalsHub = lazy(() => import('./pages/ApprovalsHub'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -393,6 +394,7 @@ const AppRoutes = () => {
   <Route path="/hub-management" element={<HubManagement />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
         <Route path="/signatures" element={<SignaturesPage />} />
+        <Route path="/approvals" element={<ApprovalsHub />} />
         <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
         <Route path="/admin/monitoring" element={<MonitoringDashboard />} />
         <Route path="/audit-logs" element={<AuditLogs />} />

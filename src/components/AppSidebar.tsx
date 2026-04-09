@@ -57,7 +57,8 @@
     Handshake,
     FolderOpen,
     Compass,
-    Lock
+    Lock,
+    Inbox
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -392,6 +393,9 @@
     if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: "My Money", order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
 
     const approvalItems: MenuGroup['items'] = [];
+    if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+      approvalItems.push({ id: 'approvals-hub', title: "Approvals Hub", url: "/approvals", icon: Inbox, priority: 0, isPinned: isPinned('/approvals') });
+    }
     if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM)) {
       approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
     }
@@ -708,6 +712,27 @@
     const pendingWalletCount = counts.pendingWallet;
     const myTasksOverdueCount = counts.myTasksOverdue;
 
+    // Aggregate approvals hub badge — mirrors useApprovalsData status-scope exactly.
+    // Uses the same role gates and status filters as the useApprovalsData hook sections:
+    // §1 withdrawal pending (supervisor): supervisor/FOM/admin
+    // §2 withdrawal supervisor_approved (finance): financialAdmin/FOM/admin
+    // §3 cost tier-1 pending: supervisor/FOM/admin
+    // §4 cost tier-2 pending: FOM/admin
+    // §5 DP pending_supervisor: supervisor/FOM/admin
+    // §6 DP pending_admin: admin/FOM/financialAdmin (pendingDpAdmin now fetched for all these roles)
+    // §7 pending users: admin only
+    // §8 MMP unassigned: FOM/admin
+    const isStrictAdmin = isSuperAdmin || hasAnyRole(['admin', 'Admin']);
+    const approvalsHubCount =
+      ((roleIsSupervisor || roleIsFomOrAdmin) ? counts.pendingWithdrawals : 0)        // §1
+      + (roleIsFinance ? counts.pendingFinanceWithdrawals : 0)                         // §2
+      + ((roleIsSupervisor || roleIsFomOrAdmin) ? pendingCostApprovalCount : 0)        // §3
+      + (roleIsFomOrAdmin ? pendingTier2CostCount : 0)                                 // §4
+      + ((roleIsSupervisor || roleIsFomOrAdmin) ? pendingDownPaymentCount : 0)         // §5
+      + ((roleIsFomOrAdmin || roleIsFinance) ? counts.pendingDpAdmin : 0)              // §6
+      + (isStrictAdmin ? counts.pendingUsers : 0)                                      // §7
+      + (roleIsFomOrAdmin ? pendingMmpCount : 0);                                      // §8
+
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
       return savedPrefs ? { ...DEFAULT_MENU_PREFERENCES, ...savedPrefs } : DEFAULT_MENU_PREFERENCES;
@@ -942,6 +967,11 @@
                               }`}
                             />
                             <span className="truncate flex-1">{item.title}</span>
+                            {item.id === 'approvals-hub' && approvalsHubCount > 0 && (
+                              <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none" data-testid="badge-approvals-hub-count">
+                                {approvalsHubCount > 99 ? '99+' : approvalsHubCount}
+                              </span>
+                            )}
                             {item.id === 'advance-requests-report' && pendingReclaimCount > 0 && (
                               <span className="ml-auto shrink-0 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-orange-500 text-white text-[9px] font-bold leading-none" data-testid="badge-reconciliation-count">
                                 {pendingReclaimCount > 99 ? '99+' : pendingReclaimCount}

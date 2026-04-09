@@ -21,6 +21,8 @@ export interface NavBadgeCounts {
   pendingWallet: number;
   pendingReclaimCount: number;
   myTasksOverdue: number;
+  pendingWithdrawals: number;
+  pendingFinanceWithdrawals: number;
 }
 
 const emptyCounts = (): NavBadgeCounts => ({
@@ -39,6 +41,8 @@ const emptyCounts = (): NavBadgeCounts => ({
   pendingWallet: 0,
   pendingReclaimCount: 0,
   myTasksOverdue: 0,
+  pendingWithdrawals: 0,
+  pendingFinanceWithdrawals: 0,
 });
 
 interface UseNavBadgeCountsParams {
@@ -130,6 +134,8 @@ export function useNavBadgeCounts({
           pendingWallet: num('pendingWallet'),
           pendingReclaimCount: num('pendingReclaimCount'),
           myTasksOverdue: 0,
+          pendingWithdrawals: num('pendingWithdrawals'),
+          pendingFinanceWithdrawals: num('pendingFinanceWithdrawals'),
         };
         // My Tasks overdue: personal + project tasks — runs client-side for all users
         const today = new Date().toISOString().split('T')[0];
@@ -169,9 +175,39 @@ export function useNavBadgeCounts({
             .eq('hub_id', hubId)
             .eq('status', 'pending_supervisor')
         );
+        // Withdrawal requests pending supervisor — hub-scoped via team member IDs
+        const { data: hubMembers } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('hub_id', hubId)
+          .neq('id', currentUserId);
+        const memberIds = (hubMembers || []).map((m: { id: string }) => m.id);
+        if (memberIds.length > 0) {
+          next.pendingWithdrawals = await headCount(
+            supabase
+              .from('withdrawal_requests')
+              .select('id', { count: 'exact', head: true })
+              .eq('status', 'pending')
+              .in('user_id', memberIds)
+          );
+        }
       }
 
       if (roleIsFomOrAdmin) {
+        // All pending tier-1 costs (FOM/admin see across hubs — used for approvals hub badge §3)
+        next.pendingCostTier1Hub = await headCount(
+          supabase
+            .from('operational_cost_submissions')
+            .select('id', { count: 'exact', head: true })
+            .eq('tier1_status', 'pending')
+        );
+        // All pending_supervisor down-payments (FOM/admin see across hubs — used for §5)
+        next.pendingDpSupervisor = await headCount(
+          supabase
+            .from('down_payment_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending_supervisor')
+        );
         next.pendingTier2Cost = await headCount(
           supabase
             .from('operational_cost_submissions')
@@ -179,18 +215,19 @@ export function useNavBadgeCounts({
             .eq('tier1_status', 'approved')
             .eq('tier2_status', 'pending')
         );
+        // pending_admin down-payments: visible to FOM and admin in hub
+        next.pendingDpAdmin = await headCount(
+          supabase
+            .from('down_payment_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending_admin')
+        );
         if (includeAdminBellCounts) {
           next.pendingUsers = await headCount(
             supabase
               .from('profiles')
               .select('id', { count: 'exact', head: true })
               .eq('status', 'pending')
-          );
-          next.pendingDpAdmin = await headCount(
-            supabase
-              .from('down_payment_requests')
-              .select('id', { count: 'exact', head: true })
-              .eq('status', 'pending_admin')
           );
         }
         if (includeFomVerifiedCounts) {
@@ -201,6 +238,20 @@ export function useNavBadgeCounts({
               .eq('status', 'verified')
           );
         }
+        // All pending supervisor-stage withdrawals (FOM/Admin see all hubs)
+        next.pendingWithdrawals = await headCount(
+          supabase
+            .from('withdrawal_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending')
+        );
+        // Finance-stage withdrawals (supervisor_approved)
+        next.pendingFinanceWithdrawals = await headCount(
+          supabase
+            .from('withdrawal_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'supervisor_approved')
+        );
       }
 
       if (roleIsCoordinator) {
@@ -235,6 +286,24 @@ export function useNavBadgeCounts({
             .select('id', { count: 'exact', head: true })
             .in('status', ['supervisor_approved', 'pending_admin'])
         );
+        // Finance-stage withdrawal requests (if not already set by roleIsFomOrAdmin block)
+        if (!next.pendingFinanceWithdrawals) {
+          next.pendingFinanceWithdrawals = await headCount(
+            supabase
+              .from('withdrawal_requests')
+              .select('id', { count: 'exact', head: true })
+              .eq('status', 'supervisor_approved')
+          );
+        }
+        // pending_admin down-payments for Finance roles not already covered by FomOrAdmin block
+        if (!next.pendingDpAdmin) {
+          next.pendingDpAdmin = await headCount(
+            supabase
+              .from('down_payment_requests')
+              .select('id', { count: 'exact', head: true })
+              .eq('status', 'pending_admin')
+          );
+        }
 
         const { data: reclaimRows } = await supabase
           .from('down_payment_requests')
