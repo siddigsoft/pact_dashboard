@@ -17,7 +17,8 @@ import {
   Handshake, FileText, CreditCard, UserCheck, Building2, ArrowRight,
   Receipt, TrendingDown, Star, MapPin, Globe, Siren, BadgeDollarSign,
   Wallet, FileWarning, Timer, ClipboardList, AlertCircle, CheckSquare,
-  LayoutDashboard, FolderPlus,
+  LayoutDashboard, FolderPlus, Download, Filter,
+  Layers, BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { normaliseProjectType } from '@/types/project';
 import { getProjectFlow } from '@/config/projectFlows';
 import { useAuthorization } from '@/hooks/use-authorization';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -137,6 +140,66 @@ function getHealth(p: ProjectRow, lastAdvanced: Record<string, string>): HealthS
   if (last) { const d = safeDate(last); if (d && differenceInDays(new Date(), d) > STALL_DAYS) return 'stalled'; }
   if (p.end_date) { const end = safeDate(p.end_date); if (end && isBefore(end, new Date())) return 'at-risk'; }
   return 'on-track';
+}
+
+// RAG (Red/Amber/Green) status per spec:
+// Timeline: Red = past end date, Amber = within 2 weeks of end, Green = on track
+// Budget: Red = >20% over budget, Amber = 10-20% over, Green = under 10% over
+// Stall: Red = 14+ days no activity
+type RAGStatus = 'red' | 'amber' | 'green' | 'grey';
+interface RAGResult {
+  overall: RAGStatus;
+  timeline: RAGStatus;
+  budget: RAGStatus;
+  stall: RAGStatus;
+  isStalled: boolean;
+  daysOverdue: number;
+  budgetVariancePct: number;
+}
+function getRAGStatus(p: ProjectRow, budgetMap: Record<string, BudgetRow>, lastAdvanced: Record<string, string>): RAGResult {
+  if (p.status === 'completed' || p.status === 'cancelled') {
+    return { overall: 'grey', timeline: 'grey', budget: 'grey', stall: 'grey', isStalled: false, daysOverdue: 0, budgetVariancePct: 0 };
+  }
+  const today = new Date();
+  // Timeline
+  let timeline: RAGStatus = 'green';
+  let daysOverdue = 0;
+  if (p.end_date) {
+    const end = safeDate(p.end_date);
+    if (end) {
+      if (isBefore(end, today)) {
+        daysOverdue = differenceInDays(today, end);
+        timeline = 'red';
+      } else if (differenceInDays(end, today) <= 14) {
+        timeline = 'amber';
+      }
+    }
+  }
+  // Budget
+  let budget: RAGStatus = 'green';
+  let budgetVariancePct = 0;
+  const db = budgetMap[p.id];
+  if (db && db.total_budget_cents > 0) {
+    const variance = ((db.spent_budget_cents - db.total_budget_cents) / db.total_budget_cents) * 100;
+    budgetVariancePct = variance;
+    if (variance > 20) budget = 'red';
+    else if (variance > 10) budget = 'amber';
+  }
+  // Stall
+  let stall: RAGStatus = 'green';
+  let isStalled = false;
+  const last = lastAdvanced[p.id];
+  if (last) {
+    const d = safeDate(last);
+    if (d && differenceInDays(today, d) >= STALL_DAYS) {
+      stall = 'red';
+      isStalled = true;
+    }
+  }
+  // Overall = worst
+  const rank = (s: RAGStatus) => s === 'red' ? 3 : s === 'amber' ? 2 : s === 'green' ? 1 : 0;
+  const worst = [timeline, budget, stall].reduce((a, b) => rank(a) >= rank(b) ? a : b);
+  return { overall: worst, timeline, budget, stall, isStalled, daysOverdue, budgetVariancePct };
 }
 function getFlowProgress(p: ProjectRow): { current: number; total: number; stageName: string } {
   const flow = getProjectFlow(normaliseProjectType(p.project_type));
@@ -474,8 +537,14 @@ function MilestoneTimeline({
 
 export default function PortfolioDashboard() {
   const navigate = useNavigate();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
   const canFinance = hasAnyRole(['super_admin', 'admin', 'finance', 'fom', 'financial_admin']);
+
+  // Access control: only Country Director, Super Admin, Admin, PM can access executive view
+  const canAccessExecutive = isSuperAdmin() || hasAnyRole([
+    'super_admin', 'superAdmin', 'admin', 'Admin', 'country_director', 'countryDirector',
+    'projectManager', 'project_manager',
+  ]);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['portfolio_csuite'],
@@ -484,10 +553,17 @@ export default function PortfolioDashboard() {
     refetchOnWindowFocus: false,
   });
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('executive');
   const [projectSearch, setProjectSearch] = useState('');
   const [projectStatusFilter, setProjectStatusFilter] = useState('all');
   const [projectSort, setProjectSort] = useState<{ field: string; dir: 'asc' | 'desc' }>({ field: 'health', dir: 'asc' });
+
+  // Global filters for executive view
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterProjectType, setFilterProjectType] = useState('all');
+  const [filterClient, setFilterClient] = useState('all');
+
 
   const d = data;
   const projects = d?.projects ?? [];
@@ -508,14 +584,163 @@ export default function PortfolioDashboard() {
       const burnPct = budget.total > 0 ? Math.round((budget.spent / budget.total) * 100) : 0;
       const flow = getFlowProgress(p);
       const health = getHealth(p, latestAdvanced);
+      const rag = getRAGStatus(p, budgetMap, latestAdvanced);
       const overdueMilestones = milestones.filter(m =>
         m.project_id === p.id && m.status !== 'completed' && m.due_date && isBefore(parseISO(m.due_date), new Date())
       ).length;
       const nextMilestone = milestones.find(m =>
         m.project_id === p.id && m.status !== 'completed' && m.due_date && isAfter(parseISO(m.due_date), new Date())
       );
-      return { ...p, budget, burnPct, flow, health, overdueMilestones, nextMilestone };
+      return { ...p, budget, burnPct, flow, health, rag, overdueMilestones, nextMilestone };
     }), [projects, budgetMap, milestones, latestAdvanced]);
+
+  // ── Executive View: Filtered dataset ─────────────────────────────────────
+
+  // All unique client names for filter dropdown
+  const clientOptions = useMemo(() => {
+    const names = new Set<string>();
+    projects.forEach(p => { if (p.client_name) names.add(p.client_name); });
+    return Array.from(names).sort();
+  }, [projects]);
+
+  // Apply global executive filters
+  const execFiltered = useMemo(() => {
+    return enriched.filter(p => {
+      if (filterProjectType !== 'all' && normaliseProjectType(p.project_type) !== filterProjectType) return false;
+      if (filterClient !== 'all' && p.client_name !== filterClient) return false;
+      if (filterDateFrom) {
+        const start = safeDate(p.start_date);
+        if (start && isBefore(start, safeDate(filterDateFrom)!)) return false;
+      }
+      if (filterDateTo) {
+        const end = safeDate(p.end_date);
+        if (end && isAfter(end, safeDate(filterDateTo)!)) return false;
+      }
+      return true;
+    });
+  }, [enriched, filterProjectType, filterClient, filterDateFrom, filterDateTo]);
+
+  // ── Business Pipeline ────────────────────────────────────────────────────
+  const businessPipeline = useMemo(() => {
+    const opptys = d?.crmOpptys ?? [];
+    const prospectVal = opptys.filter(o => o.stage === 'prospect').reduce((s, o) => s + (o.value_usd ?? 0), 0);
+    const proposalVal = opptys.filter(o => o.stage === 'proposal').reduce((s, o) => s + (o.value_usd ?? 0), 0);
+    const negotiationVal = opptys.filter(o => o.stage === 'negotiation').reduce((s, o) => s + (o.value_usd ?? 0), 0);
+    const wonVal = opptys.filter(o => o.stage === 'won').reduce((s, o) => s + (o.value_usd ?? 0), 0);
+    const activeProjectVal = execFiltered
+      .filter(p => p.status === 'active')
+      .reduce((s, p) => s + (p.budget.total / 100), 0);
+    const completedProjectVal = execFiltered
+      .filter(p => p.status === 'completed')
+      .reduce((s, p) => s + (p.budget.total / 100), 0);
+    const funnelData = [
+      { name: 'Prospect', value: prospectVal, count: opptys.filter(o => o.stage === 'prospect').length, fill: '#94a3b8' },
+      { name: 'Proposal', value: proposalVal, count: opptys.filter(o => o.stage === 'proposal').length, fill: '#60a5fa' },
+      { name: 'Negotiation', value: negotiationVal, count: opptys.filter(o => o.stage === 'negotiation').length, fill: '#f59e0b' },
+      { name: 'Won', value: wonVal, count: opptys.filter(o => o.stage === 'won').length, fill: '#34d399' },
+    ].filter(s => s.value > 0 || s.count > 0);
+    const stageBarData = [
+      { stage: 'Prospect', value: prospectVal, count: opptys.filter(o => o.stage === 'prospect').length, fill: '#94a3b8' },
+      { stage: 'Proposal', value: proposalVal, count: opptys.filter(o => o.stage === 'proposal').length, fill: '#60a5fa' },
+      { stage: 'Negotiation', value: negotiationVal, count: opptys.filter(o => o.stage === 'negotiation').length, fill: '#f59e0b' },
+      { stage: 'Won (CRM)', value: wonVal, count: opptys.filter(o => o.stage === 'won').length, fill: '#34d399' },
+      { stage: 'Active Projects', value: activeProjectVal, count: execFiltered.filter(p => p.status === 'active').length, fill: '#1D3461' },
+      { stage: 'Completed', value: completedProjectVal, count: execFiltered.filter(p => p.status === 'completed').length, fill: '#a78bfa' },
+    ];
+    const totalPipelineValue = opptys.filter(o => !['won','lost'].includes(o.stage)).reduce((s,o)=>s+(o.value_usd??0),0);
+    return { funnelData, stageBarData, prospectVal, proposalVal, negotiationVal, wonVal, activeProjectVal, completedProjectVal, totalPipelineValue, topOpptys: opptys.filter(o => !['won','lost'].includes(o.stage)).sort((a,b)=>(b.value_usd??0)-(a.value_usd??0)).slice(0,5) };
+  }, [d, execFiltered]);
+
+  // ── Delivery Health ──────────────────────────────────────────────────────
+  const deliveryHealth = useMemo(() => {
+    const active = execFiltered.filter(p => p.status === 'active' || p.status === 'onHold');
+    const ragCounts = { red: 0, amber: 0, green: 0, grey: 0 };
+    active.forEach(p => { ragCounts[p.rag.overall]++; });
+    const stalledList = active.filter(p => p.rag.isStalled);
+    const overdueList = active.filter(p => p.rag.timeline === 'red');
+    const overBudgetList = active.filter(p => p.rag.budget === 'red');
+    return { active, ragCounts, stalledList, overdueList, overBudgetList };
+  }, [execFiltered]);
+
+  // ── Financial Overview ───────────────────────────────────────────────────
+  const financialOverview = useMemo(() => {
+    const totalBudget = execFiltered.reduce((s, p) => s + p.budget.total, 0);
+    const totalSpent = execFiltered.reduce((s, p) => s + p.budget.spent, 0);
+    const costSubs = d?.costSubs ?? [];
+    const downPays = d?.downPays ?? [];
+    const opCosts = d?.opCosts ?? [];
+    const pendingApprovalsValue = [
+      ...costSubs.filter(c => c.status === 'pending').map(c => c.total_cost_cents ?? 0),
+      ...downPays.filter(dp => dp.status === 'pending_supervisor' || dp.status === 'pending_admin').map(dp => (dp.requested_amount ?? 0) * 100),
+      ...opCosts.filter(o => o.tier1_status === 'pending' || o.tier2_status === 'pending').map(o => o.amount_cents ?? 0),
+    ].reduce((s, v) => s + v, 0);
+    const pendingApprovalsCount =
+      costSubs.filter(c => c.status === 'pending').length +
+      downPays.filter(dp => dp.status === 'pending_supervisor' || dp.status === 'pending_admin').length +
+      opCosts.filter(o => o.tier1_status === 'pending' || o.tier2_status === 'pending').length;
+    const outstandingWithdrawalsCount = downPays.filter(dp => ['approved','paid'].includes(dp.status)).length;
+    const outstandingWithdrawalsValue = downPays.filter(dp => ['approved','paid'].includes(dp.status)).reduce((s,dp)=>s+(dp.requested_amount??0)*100,0);
+    const burnPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+    // Mini sparkline: budget by project type
+    const byType: Record<string, number> = {};
+    execFiltered.forEach(p => { const k = TYPE_LABELS[normaliseProjectType(p.project_type)] ?? p.project_type; byType[k] = (byType[k] ?? 0) + p.budget.total; });
+    const typeSpend = Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name, val]) => ({ name, value: Math.round(val/100) }));
+    return { totalBudget, totalSpent, burnPct, pendingApprovalsValue, pendingApprovalsCount, outstandingWithdrawalsCount, outstandingWithdrawalsValue, typeSpend };
+  }, [execFiltered, d]);
+
+  // ── People & Capacity ────────────────────────────────────────────────────
+  const peopleCapacity = useMemo(() => {
+    const profiles = d?.profiles ?? [];
+    // Build staff utilization: count active project assignments per person
+    const assignmentCount: Record<string, number> = {};
+    const assignedProjects: Record<string, string[]> = {};
+    execFiltered.filter(p => p.status === 'active').forEach(p => {
+      const team = p.team;
+      if (!team) return;
+      const members: string[] = [];
+      if (team.projectManager) members.push(team.projectManager);
+      if ((team as any).members && Array.isArray((team as any).members)) {
+        members.push(...(team as any).members);
+      }
+      if ((team as any).teamComposition && Array.isArray((team as any).teamComposition)) {
+        (team as any).teamComposition.forEach((m: any) => { if (m?.userId) members.push(m.userId); });
+      }
+      members.forEach(uid => {
+        assignmentCount[uid] = (assignmentCount[uid] ?? 0) + 1;
+        if (!assignedProjects[uid]) assignedProjects[uid] = [];
+        assignedProjects[uid].push(p.name);
+      });
+    });
+
+    const overCapacityThreshold = 3;
+    const staffUtil = profiles
+      .filter(p => p.status !== 'inactive' && p.status !== 'suspended')
+      .map(p => ({
+        ...p,
+        activeAssignments: assignmentCount[p.id] ?? 0,
+        assignedProjectNames: assignedProjects[p.id] ?? [],
+        isOverCapacity: (assignmentCount[p.id] ?? 0) >= overCapacityThreshold,
+      }))
+      .filter(p => p.activeAssignments > 0)
+      .sort((a, b) => b.activeAssignments - a.activeAssignments);
+
+    const overCapacityList = staffUtil.filter(p => p.isOverCapacity);
+
+    // Upcoming project end dates (next 60 days) — will free up capacity
+    const today = startOfToday();
+    const upcoming = execFiltered
+      .filter(p => p.status === 'active' && p.end_date)
+      .map(p => ({ ...p, daysLeft: differenceInDays(safeDate(p.end_date)!, today) }))
+      .filter(p => p.daysLeft >= 0 && p.daysLeft <= 60)
+      .sort((a, b) => a.daysLeft - b.daysLeft)
+      .slice(0, 8);
+
+    const totalActive = profiles.filter(p => p.status !== 'inactive' && p.status !== 'suspended').length;
+    const assignedCount = Object.keys(assignmentCount).length;
+    const avgAssignments = assignedCount > 0 ? (Object.values(assignmentCount).reduce((s,v)=>s+v,0) / assignedCount).toFixed(1) : '0';
+
+    return { staffUtil: staffUtil.slice(0, 10), overCapacityList, upcoming, totalActive, assignedCount, avgAssignments };
+  }, [d, execFiltered]);
 
   // ── Global KPIs ──────────────────────────────────────────────────────────
 
@@ -782,6 +1007,155 @@ export default function PortfolioDashboard() {
   }, [enriched]);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // PDF Export
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function exportExecutivePDF() {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pw = doc.internal.pageSize.width;
+    const ph = doc.internal.pageSize.height;
+    const ml = 14; const mr = 14;
+    const today = format(new Date(), 'dd MMM yyyy');
+
+    // Header
+    doc.setFillColor(15, 32, 65);
+    doc.rect(0, 0, pw, 36, 'F');
+    doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+    doc.text('PACT – Portfolio Executive Report', ml + 2, 16);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${today}`, ml + 2, 23);
+    const filters: string[] = [];
+    if (filterProjectType !== 'all') filters.push(`Type: ${TYPE_LABELS[filterProjectType] ?? filterProjectType}`);
+    if (filterClient !== 'all') filters.push(`Client: ${filterClient}`);
+    if (filterDateFrom) filters.push(`From: ${filterDateFrom}`);
+    if (filterDateTo) filters.push(`To: ${filterDateTo}`);
+    if (filters.length) doc.text(`Filters: ${filters.join(' | ')}`, ml + 2, 29);
+    doc.setFontSize(8); doc.setTextColor(190, 205, 225);
+    doc.text(`${execFiltered.length} projects in scope`, pw - mr, 23, { align: 'right' });
+
+    let y = 44;
+
+    // 1. Business Pipeline
+    doc.setFontSize(13); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('1. Business Pipeline', ml, y); y += 7;
+    autoTable(doc, {
+      startY: y,
+      head: [['Stage', 'Count / Value']],
+      body: businessPipeline.stageBarData.map(r => [r.stage, r.value > 0 ? `${r.count} opp — $${r.value >= 1e6 ? (r.value/1e6).toFixed(1)+'M' : r.value >= 1000 ? (r.value/1000).toFixed(0)+'K' : r.value.toFixed(0)}` : `${r.count}`]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [15, 32, 65], textColor: [255,255,255] },
+      margin: { left: ml, right: mr },
+    });
+    y = (doc as any).lastAutoTable?.finalY + 8 || y + 30;
+
+    // 2. Delivery Health
+    if (y > ph - 60) { doc.addPage(); y = 14; }
+    doc.setFontSize(13); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('2. Delivery Health', ml, y); y += 7;
+    const ragSummaryRows = [
+      ['Red (Critical Issues)', String(deliveryHealth.ragCounts.red)],
+      ['Amber (At Risk)', String(deliveryHealth.ragCounts.amber)],
+      ['Green (On Track)', String(deliveryHealth.ragCounts.green)],
+      ['Stalled Projects', String(deliveryHealth.stalledList.length)],
+      ['Past End Date', String(deliveryHealth.overdueList.length)],
+      ['Over Budget', String(deliveryHealth.overBudgetList.length)],
+    ];
+    autoTable(doc, {
+      startY: y, head: [['Metric', 'Count']],
+      body: ragSummaryRows,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [15, 32, 65], textColor: [255,255,255] },
+      margin: { left: ml, right: mr },
+    });
+    y = (doc as any).lastAutoTable?.finalY + 4 || y + 30;
+    if (deliveryHealth.active.length > 0) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Project', 'Type', 'RAG', 'Timeline', 'Budget%', 'End Date']],
+        body: deliveryHealth.active.slice(0,15).map(p => [
+          p.name.substring(0, 30),
+          TYPE_LABELS[normaliseProjectType(p.project_type)] ?? p.project_type,
+          p.rag.overall.toUpperCase(),
+          p.rag.timeline.toUpperCase(),
+          p.budget.total > 0 ? `${p.burnPct}%` : '—',
+          fmtDate(p.end_date),
+        ]),
+        styles: { fontSize: 7.5, cellPadding: 2 },
+        headStyles: { fillColor: [15, 32, 65], textColor: [255,255,255] },
+        margin: { left: ml, right: mr },
+      });
+      y = (doc as any).lastAutoTable?.finalY + 8 || y + 40;
+    }
+
+    // 3. Financial Overview
+    if (y > ph - 60) { doc.addPage(); y = 14; }
+    doc.setFontSize(13); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('3. Financial Overview', ml, y); y += 7;
+    autoTable(doc, {
+      startY: y,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Committed Budget', fmtMoney(financialOverview.totalBudget)],
+        ['Total Expenditure to Date', fmtMoney(financialOverview.totalSpent)],
+        ['Portfolio Burn Rate', `${financialOverview.burnPct}%`],
+        ['Pending Approvals (count)', String(financialOverview.pendingApprovalsCount)],
+        ['Pending Approvals (value)', fmtMoney(financialOverview.pendingApprovalsValue)],
+        ['Outstanding Withdrawals', `${financialOverview.outstandingWithdrawalsCount} requests`],
+      ],
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [15, 32, 65], textColor: [255,255,255] },
+      margin: { left: ml, right: mr },
+    });
+    y = (doc as any).lastAutoTable?.finalY + 8 || y + 30;
+
+    // 4. People & Capacity
+    if (y > ph - 60) { doc.addPage(); y = 14; }
+    doc.setFontSize(13); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('4. People & Capacity', ml, y); y += 7;
+    autoTable(doc, {
+      startY: y,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Active Staff', String(peopleCapacity.totalActive)],
+        ['Staff Assigned to Projects', String(peopleCapacity.assignedCount)],
+        ['Avg. Project Assignments', String(peopleCapacity.avgAssignments)],
+        ['Over-Capacity Staff (≥3 projects)', String(peopleCapacity.overCapacityList.length)],
+        ['Projects Ending in 60 Days', String(peopleCapacity.upcoming.length)],
+      ],
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [15, 32, 65], textColor: [255,255,255] },
+      margin: { left: ml, right: mr },
+    });
+    y = (doc as any).lastAutoTable?.finalY + 4 || y + 30;
+    if (peopleCapacity.overCapacityList.length > 0) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Staff Member', 'Role', 'Active Assignments']],
+        body: peopleCapacity.overCapacityList.slice(0, 10).map(p => [
+          p.full_name ?? 'Unknown',
+          p.role?.replace(/_/g,' ') ?? '—',
+          String(p.activeAssignments),
+        ]),
+        styles: { fontSize: 7.5, cellPadding: 2 },
+        headStyles: { fillColor: [15, 32, 65], textColor: [255,255,255] },
+        margin: { left: ml, right: mr },
+      });
+    }
+
+    // Footer
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFillColor(15, 32, 65);
+      doc.rect(0, ph - 12, pw, 12, 'F');
+      doc.setFontSize(7); doc.setTextColor(180, 195, 220);
+      doc.text(`Page ${i} of ${totalPages}  |  PACT Portfolio Executive Report  |  ${today}`, pw / 2, ph - 5, { align: 'center' });
+    }
+
+    doc.save(`PACT-Executive-Report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -822,6 +1196,14 @@ export default function PortfolioDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {canAccessExecutive && (
+              <Button variant="outline" size="sm" onClick={exportExecutivePDF}
+                className="border-white/30 text-white hover:bg-white/10 gap-1.5"
+                data-testid="button-export-report">
+                <Download className="h-3.5 w-3.5" />
+                Export Report
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}
               className="border-white/30 text-white hover:bg-white/10 gap-1.5">
               {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -871,6 +1253,7 @@ export default function PortfolioDashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex flex-row flex-wrap h-auto w-full justify-start bg-muted/50 p-1 rounded-xl gap-0.5">
             {[
+              ...(canAccessExecutive ? [{ id: 'executive', icon: Layers, label: 'Executive View' }] : []),
               { id: 'overview',   icon: LayoutDashboard, label: 'Overview' },
               { id: 'operations', icon: ClipboardList,   label: 'Operations' },
               { id: 'financial',  icon: DollarSign,      label: 'Financial', badge: totalPendingApprovals > 0 ? totalPendingApprovals : undefined },
@@ -880,16 +1263,386 @@ export default function PortfolioDashboard() {
               { id: 'pipeline',   icon: TrendingUp,      label: 'Business Pipeline', badge: data.crmOpptys.filter((o: any) => ['negotiating','won'].includes(o.stage)).length > 0 ? data.crmOpptys.filter((o: any) => ['negotiating','won'].includes(o.stage)).length : undefined },
               { id: 'risk',       icon: ShieldAlert,     label: 'Risk & Safety', badge: kpis.openIncidents > 0 ? kpis.openIncidents : undefined },
             ].map(t => (
-              <TabsTrigger key={t.id} value={t.id} className="gap-1.5 text-xs font-semibold relative">
+              <TabsTrigger key={t.id} value={t.id} className={cn('gap-1.5 text-xs font-semibold relative', t.id === 'executive' && 'bg-[#1D3461]/10 data-[state=active]:bg-[#1D3461] data-[state=active]:text-white')}>
                 <t.icon className="h-3.5 w-3.5" />{t.label}
-                {t.badge !== undefined && (
+                {(t as any).badge !== undefined && (
                   <span className="ml-0.5 h-4 min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
-                    {t.badge}
+                    {(t as any).badge}
                   </span>
                 )}
               </TabsTrigger>
             ))}
           </TabsList>
+
+          {/* ═══════════════ EXECUTIVE VIEW ═══════════════ */}
+          {canAccessExecutive && (
+          <TabsContent value="executive" className="mt-4 space-y-5">
+
+            {/* Global Filter Bar */}
+            <div className="flex flex-wrap gap-3 items-center p-4 bg-card border rounded-2xl shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground flex-shrink-0">
+                <Filter className="h-4 w-4" />
+                Filters
+              </div>
+              <div className="flex flex-wrap gap-2 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-muted-foreground font-medium">From</label>
+                  <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+                    className="h-8 px-2 text-xs rounded-lg border bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                    data-testid="filter-date-from" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-muted-foreground font-medium">To</label>
+                  <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+                    className="h-8 px-2 text-xs rounded-lg border bg-background focus:outline-none focus:ring-1 focus:ring-[#1D3461]"
+                    data-testid="filter-date-to" />
+                </div>
+                <Select value={filterProjectType} onValueChange={setFilterProjectType}>
+                  <SelectTrigger className="h-8 w-40 text-xs" data-testid="filter-project-type">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    {Object.entries(TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v} className="text-xs">{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={filterClient} onValueChange={setFilterClient}>
+                  <SelectTrigger className="h-8 w-44 text-xs" data-testid="filter-client">
+                    <SelectValue placeholder="All Clients" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients / Donors</SelectItem>
+                    {clientOptions.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {(filterDateFrom || filterDateTo || filterProjectType !== 'all' || filterClient !== 'all') && (
+                  <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setFilterProjectType('all'); setFilterClient('all'); }}>
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground flex-shrink-0">
+                <span className="font-semibold text-foreground">{execFiltered.length}</span> projects in scope
+              </div>
+            </div>
+
+            {/* Section 1: Business Pipeline */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-blue-600/10 flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">1. Business Pipeline</h2>
+                  <p className="text-[11px] text-muted-foreground">Revenue funnel from prospect to delivered value</p>
+                </div>
+                <button onClick={() => navigate('/crm/opportunities')} className="ml-auto text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                  Open CRM <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {businessPipeline.stageBarData.map(stage => (
+                  <button key={stage.stage}
+                    onClick={() => navigate(stage.stage.includes('Project') || stage.stage === 'Completed' ? '/projects' : '/crm/opportunities')}
+                    className="rounded-xl border bg-card p-3 text-left hover:shadow-md hover:border-[#1D3461]/30 transition-all"
+                    data-testid={`pipeline-stage-${stage.stage.toLowerCase().replace(/\s+/g,'-')}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.fill }} />
+                      <span className="text-[11px] font-semibold text-muted-foreground truncate">{stage.stage}</span>
+                    </div>
+                    <div className="text-xl font-bold text-foreground">
+                      {stage.value > 0 ? (stage.value >= 1e6 ? `$${(stage.value/1e6).toFixed(1)}M` : stage.value >= 1000 ? `$${(stage.value/1000).toFixed(0)}K` : `$${stage.value.toFixed(0)}`) : stage.count}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{stage.count} {stage.count === 1 ? 'item' : 'items'}</div>
+                  </button>
+                ))}
+              </div>
+              {businessPipeline.topOpptys.length > 0 && (
+                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+                    <span className="text-xs font-bold flex-1">Top Open Opportunities</span>
+                    <button onClick={() => navigate('/crm/opportunities')} className="text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                      View all <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="divide-y">
+                    {businessPipeline.topOpptys.map(o => {
+                      const stageCfg = CRM_STAGE_CFG[o.stage] ?? { label: o.stage, color: '#94a3b8' };
+                      return (
+                        <div key={o.id} onClick={() => navigate('/crm/opportunities')}
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors">
+                          <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: stageCfg.color }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold truncate">{o.title}</p>
+                            <p className="text-[10px] text-muted-foreground">{fmtDate(o.expected_close_date)}</p>
+                          </div>
+                          <span className="text-xs font-bold text-[#1D3461]">{fmtUSD(o.value_usd)}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: stageCfg.color+'20', color: stageCfg.color }}>{stageCfg.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Delivery Health */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-emerald-600/10 flex items-center justify-center flex-shrink-0">
+                  <Activity className="h-3.5 w-3.5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">2. Delivery Health</h2>
+                  <p className="text-[11px] text-muted-foreground">RAG status across active projects — timeline, budget, and stall indicators</p>
+                </div>
+                <button onClick={() => setActiveTab('portfolio')} className="ml-auto text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                  All Projects <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              {/* RAG summary chips */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'Red — Critical', count: deliveryHealth.ragCounts.red, bg: 'bg-red-50 dark:bg-red-900/20 border-red-200', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500' },
+                  { label: 'Amber — At Risk', count: deliveryHealth.ragCounts.amber, bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+                  { label: 'Green — On Track', count: deliveryHealth.ragCounts.green, bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
+                  { label: 'Stalled Projects', count: deliveryHealth.stalledList.length, bg: deliveryHealth.stalledList.length > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200' : 'bg-muted/30 border-border', text: deliveryHealth.stalledList.length > 0 ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground', dot: 'bg-slate-400' },
+                ].map(r => (
+                  <div key={r.label} className={cn('rounded-xl border p-4', r.bg)}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={cn('h-2 w-2 rounded-full flex-shrink-0', r.dot)} />
+                      <span className="text-[11px] text-muted-foreground font-medium">{r.label}</span>
+                    </div>
+                    <div className={cn('text-2xl font-bold', r.text)}>{r.count}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">active projects</div>
+                  </div>
+                ))}
+              </div>
+              {/* Active project RAG table */}
+              {deliveryHealth.active.length > 0 && (
+                <div className="rounded-xl border overflow-hidden bg-card shadow-sm">
+                  <div className="grid grid-cols-[minmax(140px,2fr)_80px_90px_90px_90px_80px_36px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b px-4 py-2.5 gap-2">
+                    <span>Project</span><span>Type</span><span>RAG</span><span>Timeline</span><span>Budget</span><span>Stall</span><span />
+                  </div>
+                  <div className="divide-y max-h-[50vh] overflow-y-auto">
+                    {deliveryHealth.active
+                      .sort((a,b) => {
+                        const r = (s: RAGStatus) => s === 'red' ? 3 : s === 'amber' ? 2 : s === 'green' ? 1 : 0;
+                        return r(b.rag.overall) - r(a.rag.overall);
+                      })
+                      .map(p => {
+                        const ragColor = (s: RAGStatus) =>
+                          s === 'red' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                          s === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                          s === 'green' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                          'bg-slate-100 text-slate-500';
+                        return (
+                          <div key={p.id} className="grid grid-cols-[minmax(140px,2fr)_80px_90px_90px_90px_80px_36px] gap-2 px-4 py-2.5 items-center hover:bg-muted/30 transition-colors group">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold truncate">{p.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">{p.project_code}</p>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground truncate">{TYPE_LABELS[normaliseProjectType(p.project_type)] ?? p.project_type}</span>
+                            <span className={cn('inline-flex items-center justify-center text-[10px] font-bold px-2 py-0.5 rounded-full', ragColor(p.rag.overall))}>{p.rag.overall.toUpperCase()}</span>
+                            <span className={cn('inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full', ragColor(p.rag.timeline))}>
+                              {p.rag.timeline === 'red' ? `${p.rag.daysOverdue}d overdue` : p.rag.timeline === 'amber' ? 'Due soon' : 'On Track'}
+                            </span>
+                            <span className={cn('inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full', ragColor(p.rag.budget))}>
+                              {p.rag.budgetVariancePct > 0 ? `+${p.rag.budgetVariancePct.toFixed(0)}%` : p.budget.total > 0 ? `${p.burnPct}%` : '—'}
+                            </span>
+                            <span className={cn('inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full', ragColor(p.rag.stall))}>
+                              {p.rag.isStalled ? 'Stalled' : 'Active'}
+                            </span>
+                            <button onClick={() => navigate(`/projects/${p.id}`)} className="p-1 rounded text-muted-foreground hover:text-[#1D3461] opacity-0 group-hover:opacity-100 transition-all">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+              {deliveryHealth.active.length === 0 && (
+                <div className="flex flex-col items-center py-10 text-muted-foreground gap-2 border-2 border-dashed rounded-2xl">
+                  <CheckCircle2 className="h-8 w-8 opacity-30" />
+                  <p className="text-sm">No active projects found for the selected filters</p>
+                </div>
+              )}
+            </div>
+
+            {/* Section 3: Financial Overview */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-violet-600/10 flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="h-3.5 w-3.5 text-violet-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">3. Financial Overview</h2>
+                  <p className="text-[11px] text-muted-foreground">Consolidated budget, expenditure, approvals, and withdrawals</p>
+                </div>
+                <button onClick={() => setActiveTab('financial')} className="ml-auto text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                  Finance Detail <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: 'Total Budget Committed', value: fmtMoney(financialOverview.totalBudget), sub: `${execFiltered.filter(p=>p.budget.total>0).length} projects`, bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200', icon: Wallet, iconCls: 'text-blue-600', action: () => setActiveTab('financial') },
+                  { label: 'Total Expenditure', value: fmtMoney(financialOverview.totalSpent), sub: `${financialOverview.burnPct}% burn rate`, bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200', icon: TrendingUp, iconCls: 'text-amber-600', action: () => setActiveTab('financial') },
+                  { label: 'Pending Approvals', value: String(financialOverview.pendingApprovalsCount), sub: fmtMoney(financialOverview.pendingApprovalsValue) + ' value', bg: financialOverview.pendingApprovalsCount > 10 ? 'bg-red-50 dark:bg-red-900/20 border-red-200' : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200', icon: ClipboardList, iconCls: financialOverview.pendingApprovalsCount > 10 ? 'text-red-600' : 'text-orange-600', action: () => setActiveTab('financial') },
+                  { label: 'Outstanding Withdrawals', value: String(financialOverview.outstandingWithdrawalsCount), sub: 'approved / paid requests', bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200', icon: Receipt, iconCls: 'text-emerald-600', action: () => navigate('/finance') },
+                ].map(k => (
+                  <button key={k.label} onClick={k.action}
+                    className={cn('rounded-2xl border p-4 text-left hover:shadow-md transition-all', k.bg)}
+                    data-testid={`fin-kpi-${k.label.toLowerCase().replace(/\s+/g,'-')}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <k.icon className={cn('h-4 w-4', k.iconCls)} />
+                      <span className="text-[11px] text-muted-foreground font-medium">{k.label}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-foreground">{k.value}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">{k.sub}</div>
+                  </button>
+                ))}
+              </div>
+              {/* Budget by type sparkline */}
+              {financialOverview.typeSpend.length > 0 && (
+                <div className="rounded-2xl border bg-card shadow-sm p-4">
+                  <p className="text-xs font-bold mb-3">Budget Committed by Project Type</p>
+                  <div className="h-40">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={financialOverview.typeSpend} margin={{ top: 4, right: 8, left: 0, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#94a3b8' }} angle={-15} textAnchor="end" interval={0} />
+                        <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} />
+                        <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: number) => [`SDG ${v.toLocaleString()}`, 'Budget']} />
+                        <Bar dataKey="value" fill="#1D3461" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 4: People & Capacity */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-purple-600/10 flex items-center justify-center flex-shrink-0">
+                  <Users className="h-3.5 w-3.5 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">4. People & Capacity</h2>
+                  <p className="text-[11px] text-muted-foreground">Team utilization, over-allocation, and upcoming capacity releases</p>
+                </div>
+                <button onClick={() => setActiveTab('people')} className="ml-auto text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                  People Detail <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'Active Staff', value: String(peopleCapacity.totalActive), icon: Users },
+                  { label: 'Assigned to Projects', value: String(peopleCapacity.assignedCount), icon: Briefcase },
+                  { label: 'Avg. Assignments', value: String(peopleCapacity.avgAssignments), icon: BarChart3 },
+                  { label: 'Over-Capacity (≥3)', value: String(peopleCapacity.overCapacityList.length), icon: AlertTriangle, urgent: peopleCapacity.overCapacityList.length > 0 },
+                ].map(k => (
+                  <div key={k.label} className={cn('rounded-xl border bg-card p-4 text-center', (k as any).urgent && k.value !== '0' ? 'border-red-200 bg-red-50 dark:bg-red-900/10' : '')}>
+                    <k.icon className={cn('h-4 w-4 mx-auto mb-2', (k as any).urgent && k.value !== '0' ? 'text-red-500' : 'text-muted-foreground')} />
+                    <div className={cn('text-2xl font-bold', (k as any).urgent && k.value !== '0' ? 'text-red-700 dark:text-red-400' : 'text-foreground')}>{k.value}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{k.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Over-capacity staff */}
+                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+                    <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                    <span className="text-xs font-bold flex-1">Over-Capacity Staff ({peopleCapacity.overCapacityList.length})</span>
+                    <button onClick={() => navigate('/admin/staff-profiles')} className="text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
+                      Staff Directory <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {peopleCapacity.overCapacityList.length === 0 ? (
+                    <div className="flex items-center gap-2 py-6 text-emerald-700 dark:text-emerald-400 justify-center">
+                      <CheckCircle2 className="h-5 w-5" /><span className="text-sm">All staff within capacity</span>
+                    </div>
+                  ) : (
+                    <div className="divide-y max-h-64 overflow-y-auto">
+                      {peopleCapacity.overCapacityList.map(p => (
+                        <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                          <div className="h-7 w-7 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0 text-xs font-bold text-red-700">
+                            {p.full_name ? p.full_name.charAt(0).toUpperCase() : '?'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold truncate">{p.full_name ?? 'Unknown'}</p>
+                            <p className="text-[10px] text-muted-foreground capitalize">{p.role?.replace(/_/g,' ')}</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="text-sm font-bold text-red-700 dark:text-red-400">{p.activeAssignments}</div>
+                            <div className="text-[10px] text-muted-foreground">projects</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Upcoming capacity releases */}
+                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+                    <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="text-xs font-bold flex-1">Upcoming Capacity Releases (60d)</span>
+                  </div>
+                  {peopleCapacity.upcoming.length === 0 ? (
+                    <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">No projects ending in 60 days</div>
+                  ) : (
+                    <div className="divide-y max-h-64 overflow-y-auto">
+                      {peopleCapacity.upcoming.map(p => (
+                        <div key={p.id} onClick={() => navigate(`/projects/${p.id}`)}
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors">
+                          <div className={cn('h-7 w-7 rounded-lg flex flex-col items-center justify-center flex-shrink-0 text-xs font-bold',
+                            p.daysLeft <= 7 ? 'bg-red-100 text-red-700' : p.daysLeft <= 14 ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700')}>
+                            {p.daysLeft}d
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold truncate">{p.name}</p>
+                            <p className="text-[10px] text-muted-foreground">Ends {fmtDate(p.end_date)}</p>
+                          </div>
+                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Staff utilization list */}
+              {peopleCapacity.staffUtil.length > 0 && (
+                <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
+                    <BarChart3 className="h-3.5 w-3.5 text-[#1D3461]" />
+                    <span className="text-xs font-bold flex-1">Staff Utilization — Most Assigned</span>
+                  </div>
+                  <div className="p-4 space-y-2.5">
+                    {peopleCapacity.staffUtil.map(p => {
+                      const pct = Math.min(100, (p.activeAssignments / 5) * 100);
+                      const barColor = p.activeAssignments >= 3 ? 'bg-red-500' : p.activeAssignments >= 2 ? 'bg-amber-500' : 'bg-emerald-500';
+                      return (
+                        <div key={p.id} className="flex items-center gap-3">
+                          <div className="w-28 text-xs font-medium truncate flex-shrink-0">{p.full_name ?? 'Unknown'}</div>
+                          <div className="flex-1 bg-muted/30 rounded-full h-2">
+                            <div className={cn('h-2 rounded-full transition-all', barColor)} style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span className="text-xs font-bold w-4 text-right">{p.activeAssignments}</span>
+                            <span className="text-[10px] text-muted-foreground">proj</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+          )}
 
           {/* ═══════════════ OVERVIEW ═══════════════ */}
           <TabsContent value="overview" className="mt-4 space-y-4">
