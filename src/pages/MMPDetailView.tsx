@@ -627,8 +627,8 @@ const MMPDetailView = () => {
         </Card>
       )}
 
-      {/* Deadline Warning Banner — only shown when there are uncovered sites and within 3 days of deadline */}
-      {!deadlineBannerDismissed && daysToDeadline !== null && daysToDeadline <= 3 && (siteEntries.length - coveredSitesCount) > 0 && (
+      {/* Deadline Warning Banner — only shown when there are uncovered sites and within 0-3 days of deadline */}
+      {!deadlineBannerDismissed && daysToDeadline !== null && daysToDeadline >= 0 && daysToDeadline <= 3 && (siteEntries.length - coveredSitesCount) > 0 && (
         <Card className="shadow-md bg-gradient-to-r from-red-50/80 to-rose-50/50 dark:from-red-900/20 dark:to-rose-900/10 border-red-200 dark:border-red-800" data-testid="card-deadline-warning">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">

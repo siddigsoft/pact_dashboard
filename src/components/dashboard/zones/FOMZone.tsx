@@ -228,56 +228,66 @@ export const FOMZone: React.FC = () => {
     return () => clearInterval(interval);
   }, [isAdminOrSuperUser, userProjectIds]);
 
-  // Load sites at risk (uncovered with ≤3 days to cycle close deadline)
-  useEffect(() => {
-    let cancelled = false;
-    const loadSitesAtRisk = async () => {
-      try {
-        const now = new Date();
-        const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-        const { data: mmpsNearDeadline, error } = await supabase
-          .from('mmp_files')
-          .select('id, name, mmp_id, cycle_close_deadline')
-          .not('cycle_close_deadline', 'is', null)
-          .lte('cycle_close_deadline', threeDaysLater.toISOString())
-          .gte('cycle_close_deadline', now.toISOString())
-          .neq('status', 'archived')
-          .neq('status', 'deleted');
-        
-        if (error || !mmpsNearDeadline || mmpsNearDeadline.length === 0) {
-          if (!cancelled) setSitesAtRisk([]);
-          return;
-        }
-
-        const risks: { mmpName: string; mmpId: string; deadline: string; daysLeft: number; uncoveredCount: number }[] = [];
-        for (const mmp of mmpsNearDeadline) {
-          const deadline = (mmp as any).cycle_close_deadline;
-          const daysLeft = Math.ceil((new Date(deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          const { count } = await supabase
-            .from('mmp_site_entries')
-            .select('id', { count: 'exact', head: true })
-            .eq('mmp_file_id', mmp.id)
-            .not('status', 'in', '("completed","verified","covered","visited","approved")');
-          
-          if ((count ?? 0) > 0) {
-            risks.push({
-              mmpName: mmp.name || mmp.mmp_id || mmp.id,
-              mmpId: mmp.id,
-              deadline,
-              daysLeft,
-              uncoveredCount: count ?? 0,
-            });
-          }
-        }
-
-        if (!cancelled) setSitesAtRisk(risks.sort((a, b) => a.daysLeft - b.daysLeft));
-      } catch {
-        if (!cancelled) setSitesAtRisk([]);
+  // Load sites at risk (uncovered with 0-3 days to cycle close deadline)
+  // Extracted so it can be triggered by realtime events
+  const loadSitesAtRisk = React.useCallback(async (signal?: { cancelled: boolean }) => {
+    try {
+      const now = new Date();
+      const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const { data: mmpsNearDeadline, error } = await supabase
+        .from('mmp_files')
+        .select('id, name, mmp_id, cycle_close_deadline')
+        .not('cycle_close_deadline', 'is', null)
+        .lte('cycle_close_deadline', threeDaysLater.toISOString())
+        .gte('cycle_close_deadline', now.toISOString())
+        .neq('status', 'archived')
+        .neq('status', 'deleted');
+      
+      if (error || !mmpsNearDeadline || mmpsNearDeadline.length === 0) {
+        if (!signal?.cancelled) setSitesAtRisk([]);
+        return;
       }
-    };
-    loadSitesAtRisk();
-    return () => { cancelled = true; };
+
+      // Covered statuses — checked case-insensitively client-side to avoid
+      // Postgres case-sensitivity issues with mixed-case status values in DB
+      const COVERED = new Set(['completed', 'verified', 'covered', 'visited', 'approved']);
+
+      const risks: { mmpName: string; mmpId: string; deadline: string; daysLeft: number; uncoveredCount: number }[] = [];
+      for (const mmp of mmpsNearDeadline) {
+        const deadline = (mmp as any).cycle_close_deadline;
+        const daysLeft = Math.ceil((new Date(deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        // Fetch all entries for this MMP and filter client-side (case-insensitive)
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, status')
+          .eq('mmp_file_id', mmp.id);
+        
+        const uncoveredCount = (entries || []).filter(
+          (e: any) => !COVERED.has((e.status || '').toLowerCase())
+        ).length;
+        
+        if (uncoveredCount > 0) {
+          risks.push({
+            mmpName: mmp.name || mmp.mmp_id || mmp.id,
+            mmpId: mmp.id,
+            deadline,
+            daysLeft,
+            uncoveredCount,
+          });
+        }
+      }
+
+      if (!signal?.cancelled) setSitesAtRisk(risks.sort((a, b) => a.daysLeft - b.daysLeft));
+    } catch {
+      if (!signal?.cancelled) setSitesAtRisk([]);
+    }
   }, []);
+
+  useEffect(() => {
+    const signal = { cancelled: false };
+    loadSitesAtRisk(signal);
+    return () => { signal.cancelled = true; };
+  }, [loadSitesAtRisk]);
 
   // Real-time subscription for automatic updates without page refresh
   useEffect(() => {
@@ -290,6 +300,7 @@ export const FOMZone: React.FC = () => {
       debounceTimer = setTimeout(() => {
         loadForwarded();
         loadAllMMPs();
+        loadSitesAtRisk();
         debounceTimer = null;
       }, 1000); // 1s debounce to avoid double-fetch storms
     };
