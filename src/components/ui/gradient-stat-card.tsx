@@ -1,5 +1,6 @@
+import { type ReactNode } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { LucideIcon } from 'lucide-react';
+import { type LucideIcon } from 'lucide-react';
 
 type GradientColor = 'blue' | 'green' | 'purple' | 'orange' | 'cyan' | 'pink' | 'indigo' | 'teal' | 'red';
 type CardSize = 'sm' | 'default';
@@ -20,8 +21,9 @@ interface GradientStatCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
-  icon: LucideIcon;
+  icon: LucideIcon | ReactNode;
   color?: GradientColor;
+  gradient?: string;
   size?: CardSize;
   onClick?: () => void;
   className?: string;
@@ -32,8 +34,9 @@ export function GradientStatCard({
   title,
   value,
   subtitle,
-  icon: Icon,
+  icon,
   color = 'blue',
+  gradient,
   size = 'default',
   onClick,
   className = '',
@@ -43,11 +46,23 @@ export function GradientStatCard({
   const isClickable = !!onClick;
   const isSmall = size === 'sm';
 
+  const isComponentIcon = typeof icon === 'function';
+  const IconComponent = isComponentIcon ? (icon as LucideIcon) : null;
+  const iconNode = !isComponentIcon ? (icon as ReactNode) : null;
+
+  const iconContainerClass = gradient
+    ? `bg-gradient-to-br ${gradient} text-white`
+    : cfg.icon;
+
+  const borderClass = gradient
+    ? 'border-l-gray-400'
+    : cfg.border;
+
   return (
     <Card
       className={`
         border border-gray-200 dark:border-gray-800
-        border-l-4 ${cfg.border}
+        border-l-4 ${borderClass}
         bg-white dark:bg-gray-900
         overflow-hidden
         shadow-none
@@ -72,8 +87,10 @@ export function GradientStatCard({
               </p>
             )}
           </div>
-          <div className={`rounded-lg p-2 shrink-0 ${cfg.icon} ${isSmall ? 'p-1.5' : 'p-2'}`}>
-            <Icon className={isSmall ? 'h-4 w-4' : 'h-5 w-5'} />
+          <div className={`rounded-lg shrink-0 ${iconContainerClass} ${isSmall ? 'p-1.5' : 'p-2'}`}>
+            {IconComponent
+              ? <IconComponent className={isSmall ? 'h-4 w-4' : 'h-5 w-5'} />
+              : iconNode}
           </div>
         </div>
       </CardContent>
