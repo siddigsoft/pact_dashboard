@@ -792,15 +792,15 @@ function HRSummaryReport() {
       const XLSXLib = xlsxModule.default ?? xlsxModule;
       const wb = XLSXLib.utils.book_new();
 
-      // Sheet 1: Leave Balances
+      // Sheet 1: Leave Taken (approved leave days per category)
       const leaveData = [
-        ['Name', 'Email', 'Annual (days)', 'Sick (days)', 'Emergency (days)', 'Maternity (days)', 'Other (days)', 'Total (days)'],
+        ['Name', 'Email', 'Annual (days taken)', 'Sick (days taken)', 'Emergency (days taken)', 'Maternity (days taken)', 'Other (days taken)', 'Total Days Taken'],
         ...leaveBalances.map(r => {
           const total = r.annual + r.sick + r.emergency + r.maternity + r.other;
           return [r.name, r.email, r.annual, r.sick, r.emergency, r.maternity, r.other, total];
         }),
       ];
-      XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(leaveData), 'Leave Balances');
+      XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(leaveData), 'Leave Taken');
 
       // Sheet 2: Certifications
       const certData = [
@@ -842,7 +842,7 @@ function HRSummaryReport() {
             <div className="space-y-6">
               {/* Leave Balances */}
               <div>
-                <h3 className="text-sm font-semibold mb-2 text-foreground">Leave Balances (approved leaves)</h3>
+                <h3 className="text-sm font-semibold mb-2 text-foreground">Leave Taken — Approved Days by Category</h3>
                 {leaveBalances.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">No approved leave records found.</p>
                 ) : (

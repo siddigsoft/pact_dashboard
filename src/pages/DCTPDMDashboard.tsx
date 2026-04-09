@@ -1121,18 +1121,25 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
         }
       });
     }
+    const sorted = Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b));
+    const totalWeeks = sorted.length;
     let cumulative = 0;
+    const rows = sorted.map(([weekStart, count], idx) => {
+      cumulative += count;
+      // Linear target: evenly spread TICKER_TOTAL_PLANNED over the cycle weeks
+      const weeklyTarget = totalWeeks > 0 && TICKER_TOTAL_PLANNED > 0
+        ? Math.round(((idx + 1) / totalWeeks) * TICKER_TOTAL_PLANNED)
+        : 0;
+      return {
+        week: weekStart.slice(5),
+        count,
+        cumulative,
+        weeklyTarget,
+        pct: TICKER_TOTAL_PLANNED > 0 ? Math.round((cumulative / TICKER_TOTAL_PLANNED) * 100) : 0,
+      };
+    });
     return {
-      data: Object.entries(weekMap).sort(([a], [b]) => a.localeCompare(b))
-        .map(([weekStart, count]) => {
-          cumulative += count;
-          return {
-            week: weekStart.slice(5),
-            count,
-            cumulative,
-            pct: TICKER_TOTAL_PLANNED > 0 ? Math.round((cumulative / TICKER_TOTAL_PLANNED) * 100) : 0,
-          };
-        }),
+      data: rows,
       source: useSiteVisits ? 'site_visits' : 'survey_upload',
     };
   }, [records, siteVisitPDMRows]);
@@ -2836,13 +2843,15 @@ export default function DCTPDMDashboard({ publicMode = false }: { publicMode?: b
                 <Tooltip
                   contentStyle={{ fontSize: 11, borderRadius: 8 }}
                   formatter={(value: any, name: string) =>
-                    name === 'pct' ? [`${value}%`, 'Coverage %'] :
-                    name === 'count' ? [value.toLocaleString(), 'This Week'] :
-                    [value.toLocaleString(), 'Cumulative HHs']}
+                    name === 'Coverage %' ? [`${value}%`, 'Coverage %'] :
+                    name === 'This Week' ? [value.toLocaleString(), 'This Week'] :
+                    name === 'Linear Target' ? [value.toLocaleString(), 'Linear Target (HHs)'] :
+                    [value.toLocaleString(), name]}
                 />
-                <ReferenceLine yAxisId="left" y={TICKER_TOTAL_PLANNED} stroke="#1D3461" strokeDasharray="4 4" label={{ value: 'Target', position: 'insideTopRight', fontSize: 10, fill: '#1D3461' }} />
-                <Line yAxisId="left" type="monotone" dataKey="cumulative" name="cumulative" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 3 }} />
-                <Line yAxisId="right" type="monotone" dataKey="pct" name="pct" stroke="#1D3461" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
+                <ReferenceLine yAxisId="left" y={TICKER_TOTAL_PLANNED} stroke="#64748b" strokeDasharray="4 4" label={{ value: 'Total Target', position: 'insideTopRight', fontSize: 9, fill: '#64748b' }} />
+                <Line yAxisId="left" type="linear" dataKey="weeklyTarget" name="Linear Target" stroke="#f59e0b" strokeWidth={1.5} dot={false} strokeDasharray="5 3" />
+                <Line yAxisId="left" type="monotone" dataKey="cumulative" name="Actual HHs" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line yAxisId="right" type="monotone" dataKey="pct" name="Coverage %" stroke="#1D3461" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
