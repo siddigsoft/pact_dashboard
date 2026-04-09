@@ -364,13 +364,23 @@ function LeaveTrendsChart() {
         .select('leave_type, start_date, end_date, status')
         .eq('status', 'approved')
         .gte('start_date', since);
-      if (!rows?.length) return { chartData: [], leaveTypes: [] };
+      // Build guaranteed 6-month axis (includes months with no data as zeros)
+      const last6Months: string[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() - i);
+        last6Months.push(d.toISOString().slice(0, 7));
+      }
 
       const monthMap: Record<string, Record<string, number>> = {};
+      // Pre-seed all 6 months so they always appear
+      last6Months.forEach(m => { monthMap[m] = {}; });
+
       const typeSet = new Set<string>();
-      rows.forEach((r: any) => {
+      (rows ?? []).forEach((r: any) => {
         const month = String(r.start_date ?? '').slice(0, 7);
-        if (!month || month.length < 7) return;
+        if (!month || month.length < 7 || !last6Months.includes(month)) return;
         const type = r.leave_type ?? 'other';
         typeSet.add(type);
         if (!monthMap[month]) monthMap[month] = {};
@@ -380,11 +390,10 @@ function LeaveTrendsChart() {
         monthMap[month][type] = (monthMap[month][type] ?? 0) + days;
       });
 
-      const months = Object.keys(monthMap).sort();
       const leaveTypes = Array.from(typeSet).sort();
-      const chartData = months.map(m => {
-        const entry: Record<string, any> = { month: m.slice(0, 7) };
-        leaveTypes.forEach(t => { entry[t] = monthMap[m][t] ?? 0; });
+      const chartData = last6Months.map(m => {
+        const entry: Record<string, any> = { month: m };
+        leaveTypes.forEach(t => { entry[t] = monthMap[m]?.[t] ?? 0; });
         return entry;
       });
       return { chartData, leaveTypes };
