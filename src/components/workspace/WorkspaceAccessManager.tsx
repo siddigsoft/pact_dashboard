@@ -954,7 +954,7 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
                                         onValueChange={v => handleSetClearance(u.id, v as ClearanceLevel)}
                                       >
                                         <SelectTrigger
-                                          className="h-6 w-[100px] text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          className="h-6 w-[100px] text-[10px] shrink-0"
                                           data-testid={`select-clearance-${u.id}`}
                                         >
                                           <SelectValue />
