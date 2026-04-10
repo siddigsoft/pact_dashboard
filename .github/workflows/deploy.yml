@@ -41,7 +41,7 @@ jobs:
 
             # Rebuild
             npm install
-            npm run build
+            NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
             # Set safe permissions for Nginx (world-readable)
             find dist -type d -exec chmod 755 {} \;
