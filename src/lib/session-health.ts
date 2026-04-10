@@ -70,7 +70,9 @@ export async function testConnection(timeoutMs: number = 3000): Promise<boolean>
       });
 
       clearTimeout(timeoutId);
-      return response.ok || response.status === 404; // 404 is OK, means server is reachable
+      // Any HTTP response (including 401/403/404) means the server is reachable.
+      // Only network-level failures (timeout, DNS, no connection) should return false.
+      return response.status < 500;
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {

@@ -109,20 +109,17 @@ export async function safeUploadFile(
       };
     }
 
-    // 🔐 CRITICAL: Test connection first to detect frozen Supabase client
-    // This prevents the upload from hanging forever
-    // Keep timeout short (2s) to not delay upload too much
+    // Test connection to detect a truly frozen Supabase client.
+    // Use a generous timeout (8s) to handle slow/high-latency networks.
+    // A failing test is treated as a warning — the upload is still attempted
+    // so that transient DNS delays don't silently block legitimate uploads.
     if (isDev) {
       console.log('[SafeUpload] Testing connection before upload...');
     }
-    const connectionOk = await testConnection(2000);
+    const connectionOk = await testConnection(8000);
     if (!connectionOk) {
-      return {
-        success: false,
-        error: 'Connection test failed. The Supabase client may be frozen. Please refresh the page and try again.'
-      };
-    }
-    if (isDev) {
+      console.warn('[SafeUpload] Connection test failed — attempting upload anyway (frozen client guard still active via upload timeout).');
+    } else if (isDev) {
       console.log('[SafeUpload] Connection test passed, proceeding with upload...');
     }
 
