@@ -2165,6 +2165,7 @@ const MMP = () => {
     });
   };
 
+  const isSuperAdmin = hasRole(['Super Admin', 'superadmin', 'super admin']);
   const isAdmin = hasRole(['Admin', 'admin', 'Super Admin', 'superadmin', 'super admin']);
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);

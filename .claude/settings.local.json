@@ -13,7 +13,10 @@
       "Bash(supabase projects:*)",
       "Bash(supabase logs:*)",
       "Bash(supabase --help)",
-      "Bash(supabase inspect:*)"
+      "Bash(supabase inspect:*)",
+      "Bash(python3:*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(npm i:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
