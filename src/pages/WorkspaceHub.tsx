@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid, formatDistanceToNow, isBefore } from 'date-fns';
 import {
@@ -789,6 +790,14 @@ export default function WorkspaceHub() {
   const effectiveClearance: SecurityLevel = isSuperAdmin ? 'top_secret' : (myClearance ?? 'internal');
 
   const [accessManagerOpen, setAccessManagerOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'manage-access' && isSuperAdmin) {
+      setAccessManagerOpen(true);
+    }
+  }, [location.search, isSuperAdmin]);
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());

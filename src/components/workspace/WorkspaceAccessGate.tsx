@@ -121,7 +121,7 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
           status: 'pending',
           triggered_by: currentUser.id,
           triggered_by_name: currentUser.name ?? '',
-          action_url: '/workspace',
+          action_url: '/workspace?action=manage-access',
           email_sent: false,
         })));
       }
