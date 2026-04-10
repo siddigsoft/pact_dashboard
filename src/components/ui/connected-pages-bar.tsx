@@ -59,13 +59,14 @@ const PAGES = [
   },
 ];
 
-export function ConnectedPagesBar({ exclude }: { exclude?: string }) {
+export function ConnectedPagesBar({ exclude, include }: { exclude?: string; include?: string[] }) {
   const { pathname } = useLocation();
   const { isSuperAdmin, hasAnyRole } = useAuthorization();
   const superAdmin = isSuperAdmin();
 
   const visible = PAGES.filter(p => {
     if (p.id === exclude) return false;
+    if (include && !include.includes(p.id)) return false;
     if (p.roles.length === 0) return true; // public page
     if (superAdmin) return true;
     return hasAnyRole(p.roles);
