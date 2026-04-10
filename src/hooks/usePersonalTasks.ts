@@ -22,6 +22,14 @@ export interface TaskAssignee {
   email?: string | null;
 }
 
+export type TaskType = 'project-task' | 'day-to-day';
+
+export interface TaskAttachment {
+  name: string;
+  url: string;
+  uploadedAt: string;
+}
+
 export interface PersonalTask {
   id: string;
   userId: string;
@@ -57,6 +65,9 @@ export interface PersonalTask {
   proofSubmittedAt: string | null;
   recurrenceDays: number[];
   recurrenceMonthlyDay: number | null;
+  // Task #30 additions
+  taskType: TaskType | null;
+  attachments: TaskAttachment[];
 }
 
 export interface CreatePersonalTask {
@@ -90,6 +101,9 @@ export interface CreatePersonalTask {
   proofSubmittedAt?: string | null;
   recurrenceDays?: number[];
   recurrenceMonthlyDay?: number | null;
+  // Task #30 additions
+  taskType?: TaskType | null;
+  attachments?: TaskAttachment[] | null;
 }
 
 export interface DailyTaskDefinition {
@@ -109,6 +123,50 @@ export interface DailyTaskDefinition {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+  // Task #30 additions
+  taskType: 'project' | 'day_to_day' | 'general' | null;
+}
+
+// ── Task metadata helpers (stored in tools field as JSON prefix) ──────────────
+
+interface ToolsMeta { taskType?: TaskType | null; attachments?: TaskAttachment[]; text?: string }
+
+function parseToolsMeta(raw: string | null): ToolsMeta {
+  if (!raw) return {};
+  if (raw.startsWith('__meta:')) {
+    try {
+      return JSON.parse(raw.slice(7)) as ToolsMeta;
+    } catch { /* fall through */ }
+  }
+  return { text: raw };
+}
+
+function parseToolsText(raw: string | null): string | null {
+  const meta = parseToolsMeta(raw);
+  return meta.text ?? null;
+}
+
+function parseTaskType(raw: string | null): TaskType | null {
+  const meta = parseToolsMeta(raw);
+  return meta.taskType ?? null;
+}
+
+function parseAttachments(raw: string | null): TaskAttachment[] {
+  const meta = parseToolsMeta(raw);
+  return meta.attachments ?? [];
+}
+
+function encodeToolsMeta(tools: string | null | undefined, taskType: TaskType | null | undefined, attachments: TaskAttachment[] | null | undefined): string | null {
+  const hasType = taskType !== undefined && taskType !== null;
+  const hasAttachments = attachments != null && attachments.length > 0;
+  const hasTools = tools !== undefined && tools !== null && tools.trim() !== '';
+  if (!hasType && !hasAttachments && !hasTools) return null;
+  if (!hasType && !hasAttachments && hasTools) return tools!;
+  const meta: ToolsMeta = {};
+  if (hasTools) meta.text = tools!;
+  if (hasType) meta.taskType = taskType;
+  if (hasAttachments) meta.attachments = attachments;
+  return `__meta:${JSON.stringify(meta)}`;
 }
 
 function mapRow(r: Record<string, unknown>): PersonalTask {
@@ -143,12 +201,14 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
             : (d as Dependency)
         )
       : [],
-    tools: (r.tools as string) ?? null,
+    tools: parseToolsText(r.tools as string | null),
     proofRequired: (r.proof_required as boolean) ?? false,
     proofNote: (r.proof_note as string) ?? null,
     proofFileUrl: (r.proof_file_url as string) ?? null,
     proofSubmittedAt: (r.proof_submitted_at as string) ?? null,
     recurrenceDays: Array.isArray(r.recurrence_days) ? (r.recurrence_days as number[]) : [],
+    taskType: parseTaskType(r.tools as string | null),
+    attachments: parseAttachments(r.tools as string | null),
     recurrenceMonthlyDay: (r.recurrence_monthly_day as number) ?? null,
   };
 }
@@ -171,6 +231,7 @@ function mapDefRow(r: Record<string, unknown>): DailyTaskDefinition {
     createdBy: (r.created_by as string) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
+    taskType: (r.task_type as 'project' | 'day_to_day' | 'general' | null) ?? null,
   };
 }
 
@@ -183,7 +244,7 @@ async function sendTaskNotification(opts: {
   taskId: string;
   title: string;
   priority: PersonalTaskPriority;
-  event: 'created_due_today' | 'created_overdue' | 'completed' | 'assigned' | 'reward_credited' | 'subtasks_done';
+  event: 'created_due_today' | 'created_overdue' | 'completed' | 'assigned' | 'reward_credited' | 'subtasks_done' | 'dependency_added' | 'dependency_resolved';
   extra?: string;
 }) {
   const msgs: Record<typeof opts.event, { titleEn: string; titleAr: string; msgEn: string; msgAr: string }> = {
@@ -222,6 +283,18 @@ async function sendTaskNotification(opts: {
       titleAr: `تم إكمال جميع المهام الفرعية`,
       msgEn: `All subtasks for "${opts.title}" are done — consider marking the parent task as done.`,
       msgAr: `تم إكمال جميع المهام الفرعية لـ "${opts.title}" — ضع في اعتبارك إنهاء المهمة الأصلية.`,
+    },
+    dependency_added: {
+      titleEn: `Task Dependency Added`,
+      titleAr: `تمت إضافة اعتماد للمهمة`,
+      msgEn: `A new dependency was added to your task "${opts.title}"${opts.extra ? `: ${opts.extra}` : ''}.`,
+      msgAr: `تمت إضافة اعتماد جديد لمهمتك "${opts.title}"${opts.extra ? `: ${opts.extra}` : ''}.`,
+    },
+    dependency_resolved: {
+      titleEn: `Task Dependency Resolved`,
+      titleAr: `تم حل اعتماد المهمة`,
+      msgEn: `A dependency on your task "${opts.title}" has been resolved${opts.extra ? `: ${opts.extra}` : ''}.`,
+      msgAr: `تم حل اعتماد مهمتك "${opts.title}"${opts.extra ? `: ${opts.extra}` : ''}.`,
     },
   };
 
@@ -419,7 +492,7 @@ export function usePersonalTasks(userId: string | undefined) {
           daily_task_date: task.dailyTaskDate ?? null,
           co_assignees: task.coAssignees ?? [],
           dependencies: task.dependencies ?? [],
-          tools: task.tools ?? null,
+          tools: encodeToolsMeta(task.tools, task.taskType, task.attachments),
         })
         .select('id')
         .single();
@@ -476,7 +549,8 @@ export function usePersonalTasks(userId: string | undefined) {
       _userEmail?: string | null;
       _taskPriority?: PersonalTaskPriority;
     }): Promise<{ creditOk: boolean }> => {
-      const { id, _prevStatus, _userId, _userEmail, _taskPriority, ...updates } = opts;
+      const { id, _prevStatus, _userId, _userEmail, _taskPriority, ...rawUpdates } = opts;
+      let updates: typeof rawUpdates = rawUpdates;
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (updates.title !== undefined)       patch.title = updates.title;
       if (updates.description !== undefined) patch.description = updates.description;
@@ -490,7 +564,28 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.completionRewardCurrency !== undefined) patch.completion_reward_currency = updates.completionRewardCurrency;
       if (updates.coAssignees !== undefined)     patch.co_assignees = updates.coAssignees;
       if (updates.dependencies !== undefined)    patch.dependencies = updates.dependencies;
-      if (updates.tools !== undefined)           patch.tools = updates.tools;
+      if (updates.tools !== undefined || updates.taskType !== undefined || updates.attachments !== undefined) {
+        // Fetch current tools field to preserve existing metadata when only partial fields are updated
+        let existingRaw: string | null = null;
+        if (updates.tools === undefined || updates.taskType === undefined || updates.attachments === undefined) {
+          const { data: currentRow } = await supabase
+            .from('personal_tasks')
+            .select('tools')
+            .eq('id', id)
+            .maybeSingle();
+          existingRaw = (currentRow as { tools?: string | null } | null)?.tools ?? null;
+          const existingMeta = parseToolsMeta(existingRaw);
+          // Use existing values for fields not being updated
+          if (updates.tools === undefined && existingMeta.text) updates = { ...updates, tools: existingMeta.text };
+          if (updates.taskType === undefined && existingMeta.taskType) updates = { ...updates, taskType: existingMeta.taskType };
+          if (updates.attachments === undefined && existingMeta.attachments) updates = { ...updates, attachments: existingMeta.attachments };
+        }
+        patch.tools = encodeToolsMeta(
+          updates.tools,
+          updates.taskType,
+          updates.attachments,
+        );
+      }
       if (updates.proofRequired !== undefined)   patch.proof_required = updates.proofRequired;
       if (updates.proofNote !== undefined)       patch.proof_note = updates.proofNote;
       if (updates.proofFileUrl !== undefined)    patch.proof_file_url = updates.proofFileUrl;
@@ -500,6 +595,66 @@ export function usePersonalTasks(userId: string | undefined) {
 
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;
+
+      // Dependency-added notification: only fires when new dependencies are actually added (diff old vs new)
+      if (updates.dependencies !== undefined && updates.dependencies.length > 0) {
+        try {
+          const { data: taskRow } = await supabase
+            .from('personal_tasks')
+            .select('title, priority, assigned_to, user_id, dependencies')
+            .eq('id', id)
+            .maybeSingle();
+          if (taskRow) {
+            // Compare old vs new to find actually-new dependency entries
+            const oldDeps = Array.isArray(taskRow.dependencies) ? (taskRow.dependencies as { type?: string; taskId?: string; text?: string }[]) : [];
+            const newDeps = updates.dependencies;
+            const hasActuallyNew = newDeps.some(nd => {
+              // A dep is new if it doesn't appear in oldDeps (match by taskId for task type, or text for custom)
+              return !oldDeps.some(od =>
+                nd.type === 'task' ? od.type === 'task' && od.taskId === nd.taskId : od.text === nd.text
+              );
+            });
+            if (hasActuallyNew) {
+              const depTitle = updates.title ?? (taskRow.title as string) ?? 'Task';
+              const depPriority = (_taskPriority ?? updates.priority ?? taskRow.priority ?? 'medium') as PersonalTaskPriority;
+              const recipientId = (taskRow.assigned_to as string | null) ?? (taskRow.user_id as string | null);
+              if (recipientId) {
+                await sendTaskNotification({ userId: recipientId, taskId: id, title: depTitle, priority: depPriority, event: 'dependency_added' });
+                const { data: prof } = await supabase.from('profiles').select('email').eq('id', recipientId).maybeSingle();
+                if (prof?.email) {
+                  await sendTaskEmail({ email: prof.email as string, titleEn: 'Task Dependency Added', body: `A dependency was added to your task "${depTitle}". View your tasks: https://app.pactorg.com/my-tasks` });
+                }
+              }
+            }
+          }
+        } catch { /* non-critical */ }
+      }
+
+      // Dependency-resolved notification: when a task is marked done, notify owners of tasks that depended on it
+      if (updates.status === 'done' && _prevStatus && _prevStatus !== 'done') {
+        try {
+          // Find tasks that have this task as a dependency
+          const { data: dependentTasks } = await supabase
+            .from('personal_tasks')
+            .select('id, title, priority, assigned_to, user_id, dependencies')
+            .neq('status', 'done');
+          const nowDoneTitle = updates.title;
+          for (const dt of (dependentTasks ?? []) as Record<string, unknown>[]) {
+            const deps = Array.isArray(dt.dependencies) ? dt.dependencies as { type?: string; taskId?: string; text?: string }[] : [];
+            const hasDep = deps.some(d => d.type === 'task' && d.taskId === id);
+            if (!hasDep) continue;
+            const ownerIdResolved = (dt.assigned_to as string | null) ?? (dt.user_id as string | null);
+            if (!ownerIdResolved) continue;
+            const dtTitle = (dt.title as string) ?? 'your task';
+            const dtPriority = (dt.priority as PersonalTaskPriority) ?? 'medium';
+            await sendTaskNotification({ userId: ownerIdResolved, taskId: dt.id as string, title: dtTitle, priority: dtPriority, event: 'dependency_resolved', extra: nowDoneTitle ?? undefined });
+            const { data: ownerProf } = await supabase.from('profiles').select('email').eq('id', ownerIdResolved).maybeSingle();
+            if (ownerProf?.email) {
+              await sendTaskEmail({ email: ownerProf.email as string, titleEn: 'Task Dependency Resolved', body: `A dependency on your task "${dtTitle}" has been resolved${nowDoneTitle ? ` (${nowDoneTitle} is now done)` : ''}. View your tasks: https://app.pactorg.com/my-tasks` });
+            }
+          }
+        } catch { /* non-critical */ }
+      }
 
       if (updates.status === 'done' && _prevStatus && _prevStatus !== 'done' && _userId) {
         // Fetch the task row to get title/priority when not supplied by caller (e.g. subtask toggle)

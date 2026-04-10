@@ -183,6 +183,7 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
   const [rewardAmount, setRewardAmount] = useState(initial?.rewardAmount?.toString() ?? '');
   const [rewardCurrency, setRewardCurrency] = useState(initial?.rewardCurrency ?? 'USD');
   const [active, setActive] = useState(initial?.active ?? true);
+  const [taskType, setTaskType] = useState<'project' | 'day_to_day' | 'general' | null>(initial?.taskType ?? null);
 
   const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const toggleWeekday = (day: number) => {
@@ -205,6 +206,7 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
       rewardCurrency: rewardCurrency || 'USD',
       active,
       proofRequired: false,
+      taskType: taskType,
     });
   };
 
@@ -234,6 +236,20 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
           </Select>
         </div>
         <div className="space-y-1">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Task Type</Label>
+          <Select value={taskType ?? 'none'} onValueChange={v => setTaskType(v === 'none' ? null : v as 'project' | 'day_to_day' | 'general')}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Not specified</SelectItem>
+              <SelectItem value="project">Project Task</SelectItem>
+              <SelectItem value="day_to_day">Day-to-Day</SelectItem>
+              <SelectItem value="general">General</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2 space-y-1">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Recurrence</Label>
           <Select value={recurrence} onValueChange={setRecurrence}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
@@ -330,6 +346,22 @@ function DailyTemplatesPanel() {
   const { data: departments = [] } = useDepartments();
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<DailyTaskDefinition | null>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templatePriorityFilter, setTemplatePriorityFilter] = useState<PersonalTaskPriority | 'all'>('all');
+  const [templateDeptFilter, setTemplateDeptFilter] = useState('all');
+  const [templateRecurrenceFilter, setTemplateRecurrenceFilter] = useState('all');
+  const [templateTaskTypeFilter, setTemplateTaskTypeFilter] = useState<'project' | 'day_to_day' | 'general' | 'all'>('all');
+
+  const filteredDefinitions = useMemo(() => {
+    return definitions.filter(def => {
+      const matchesSearch = !templateSearch || def.title.toLowerCase().includes(templateSearch.toLowerCase());
+      const matchesPriority = templatePriorityFilter === 'all' || def.priority === templatePriorityFilter;
+      const matchesDept = templateDeptFilter === 'all' || def.departmentId === templateDeptFilter;
+      const matchesRecurrence = templateRecurrenceFilter === 'all' || def.recurrence === templateRecurrenceFilter;
+      const matchesTaskType = templateTaskTypeFilter === 'all' || def.taskType === templateTaskTypeFilter;
+      return matchesSearch && matchesPriority && matchesDept && matchesRecurrence && matchesTaskType;
+    });
+  }, [definitions, templateSearch, templatePriorityFilter, templateDeptFilter, templateRecurrenceFilter, templateTaskTypeFilter]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: { id?: string } & Omit<DailyTaskDefinition, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) => {
@@ -347,6 +379,7 @@ function DailyTemplatesPanel() {
         reward_currency: rest.rewardCurrency,
         active: rest.active,
         proof_required: rest.proofRequired ?? false,
+        task_type: rest.taskType ?? null,
         updated_at: new Date().toISOString(),
       };
 
@@ -402,15 +435,88 @@ function DailyTemplatesPanel() {
         <p className="text-xs text-muted-foreground mb-3">
           Templates are materialised into personal tasks when eligible users log in. Daily templates run every day; weekly templates run on Mondays.
         </p>
+
+        {/* Filter bar */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          <div className="relative flex-1 min-w-[160px]">
+            <input
+              type="text"
+              placeholder="Search templates…"
+              value={templateSearch}
+              onChange={e => setTemplateSearch(e.target.value)}
+              className="w-full h-8 pl-3 pr-3 text-xs border border-border/70 rounded-lg bg-muted/30 focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
+            />
+          </div>
+          <Select value={templatePriorityFilter} onValueChange={v => setTemplatePriorityFilter(v as PersonalTaskPriority | 'all')}>
+            <SelectTrigger className="h-8 w-auto min-w-[110px] text-xs border-border/70 bg-muted/30">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All priorities</SelectItem>
+              <SelectItem value="low" className="text-xs">Low</SelectItem>
+              <SelectItem value="medium" className="text-xs">Medium</SelectItem>
+              <SelectItem value="high" className="text-xs">High</SelectItem>
+              <SelectItem value="critical" className="text-xs">Critical</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={templateDeptFilter} onValueChange={setTemplateDeptFilter}>
+            <SelectTrigger className="h-8 w-auto min-w-[130px] text-xs border-border/70 bg-muted/30">
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All departments</SelectItem>
+              {departments.map(d => <SelectItem key={d.id} value={d.id} className="text-xs">{d.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={templateRecurrenceFilter} onValueChange={setTemplateRecurrenceFilter}>
+            <SelectTrigger className="h-8 w-auto min-w-[120px] text-xs border-border/70 bg-muted/30">
+              <SelectValue placeholder="Recurrence" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All recurrence</SelectItem>
+              <SelectItem value="daily" className="text-xs">Daily</SelectItem>
+              <SelectItem value="weekly" className="text-xs">Weekly</SelectItem>
+              <SelectItem value="biweekly" className="text-xs">Bi-weekly</SelectItem>
+              <SelectItem value="weekdays" className="text-xs">Mon–Fri</SelectItem>
+              <SelectItem value="specific_days" className="text-xs">Specific days</SelectItem>
+              <SelectItem value="monthly" className="text-xs">Monthly</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={templateTaskTypeFilter} onValueChange={v => setTemplateTaskTypeFilter(v as typeof templateTaskTypeFilter)}>
+            <SelectTrigger className="h-8 w-auto min-w-[120px] text-xs border-border/70 bg-muted/30">
+              <SelectValue placeholder="Task Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All types</SelectItem>
+              <SelectItem value="project" className="text-xs">Project Task</SelectItem>
+              <SelectItem value="day_to_day" className="text-xs">Day-to-Day</SelectItem>
+              <SelectItem value="general" className="text-xs">General</SelectItem>
+            </SelectContent>
+          </Select>
+          {(templateSearch || templatePriorityFilter !== 'all' || templateDeptFilter !== 'all' || templateRecurrenceFilter !== 'all' || templateTaskTypeFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => { setTemplateSearch(''); setTemplatePriorityFilter('all'); setTemplateDeptFilter('all'); setTemplateRecurrenceFilter('all'); setTemplateTaskTypeFilter('all'); }}
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            >
+              <XCircle className="h-3.5 w-3.5" /> Clear
+            </button>
+          )}
+        </div>
+
         {isLoading ? (
           <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
         ) : definitions.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed rounded-xl">
             No recurring task templates yet. Create one to automatically assign daily tasks to your team.
           </div>
+        ) : filteredDefinitions.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground border-2 border-dashed rounded-xl">
+            No templates match the current filters.
+          </div>
         ) : (
           <div className="space-y-2">
-            {definitions.map(def => {
+            {filteredDefinitions.map(def => {
               const deptName = departments.find(d => d.id === def.departmentId)?.name;
               return (
                 <div key={def.id} className={cn('flex items-start gap-3 rounded-lg border p-3', !def.active && 'opacity-50')}>
@@ -438,6 +544,7 @@ function DailyTemplatesPanel() {
                       {deptName && <span className="flex items-center gap-0.5"><Building2 className="h-3 w-3" />{deptName}</span>}
                       {def.roleTargets.length > 0 && <span className="flex items-center gap-0.5"><Users className="h-3 w-3" />{def.roleTargets.join(', ')}</span>}
                       {def.rewardAmount && <span className="flex items-center gap-0.5 text-emerald-600"><DollarSign className="h-3 w-3" />{def.rewardCurrency} {def.rewardAmount}</span>}
+                      {def.taskType && <span className="text-[9px] px-1.5 py-0 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{def.taskType === 'project' ? 'Project' : def.taskType === 'day_to_day' ? 'Day-to-Day' : 'General'}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">

@@ -58,6 +58,7 @@ import {
   materialiseDailyTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type CreatePersonalTask,
   type TaskAssignee, type AssignedProjectTask, type Dependency, type DependencyType,
+  type TaskType, type TaskAttachment,
 } from '@/hooks/usePersonalTasks';
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -115,7 +116,7 @@ function matchFilter(dueDate: string | null | undefined, status: string, filter:
 // ── Quick-add bar ───────────────────────────────────────────────────────────
 
 interface QuickAddProps {
-  onAdd: (title: string, priority: PersonalTaskPriority, dueDate: string) => void;
+  onAdd: (title: string, priority: PersonalTaskPriority, dueDate: string, taskType: TaskType | null) => void;
   isCreating: boolean;
 }
 
@@ -123,57 +124,73 @@ function QuickAddBar({ onAdd, isCreating }: QuickAddProps) {
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<PersonalTaskPriority>('medium');
   const [dueDate, setDueDate] = useState('');
+  const [taskType, setTaskType] = useState<TaskType | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const submit = () => {
     const t = title.trim();
     if (!t) return;
-    onAdd(t, priority, dueDate);
+    onAdd(t, priority, dueDate, taskType);
     setTitle('');
     setDueDate('');
     setPriority('medium');
+    setTaskType(null);
     inputRef.current?.focus();
   };
 
   return (
-    <div className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-[#1D3461]/20 bg-[#1D3461]/3 dark:bg-[#1D3461]/10 hover:border-[#1D3461]/40 transition-colors">
-      <div className="h-5 w-5 rounded-full border-2 border-[#1D3461]/40 flex items-center justify-center flex-shrink-0">
-        <Plus className="h-3 w-3 text-[#1D3461]/60" />
+    <div className="flex flex-col gap-2 p-3 rounded-xl border-2 border-dashed border-[#1D3461]/20 bg-[#1D3461]/3 dark:bg-[#1D3461]/10 hover:border-[#1D3461]/40 transition-colors">
+      <div className="flex items-center gap-2">
+        <div className="h-5 w-5 rounded-full border-2 border-[#1D3461]/40 flex items-center justify-center flex-shrink-0">
+          <Plus className="h-3 w-3 text-[#1D3461]/60" />
+        </div>
+        <Input
+          ref={inputRef}
+          placeholder="Add a personal task… press Enter to save"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+          className="border-0 bg-transparent shadow-none p-0 h-7 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60 flex-1"
+          data-testid="input-quick-add-task"
+        />
+        <Button
+          size="sm"
+          className="h-7 px-3 text-xs bg-[#1D3461] hover:bg-[#0F2041] text-white"
+          onClick={submit}
+          disabled={!title.trim() || isCreating}
+          data-testid="button-add-personal-task"
+        >
+          {isCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+        </Button>
       </div>
-      <Input
-        ref={inputRef}
-        placeholder="Add a personal task… press Enter to save"
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') submit(); }}
-        className="border-0 bg-transparent shadow-none p-0 h-7 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60 flex-1"
-        data-testid="input-quick-add-task"
-      />
-      <Select value={priority} onValueChange={v => setPriority(v as PersonalTaskPriority)}>
-        <SelectTrigger className="h-7 w-24 text-xs border-0 bg-muted/60 focus:ring-0">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(['low', 'medium', 'high', 'critical'] as PersonalTaskPriority[]).map(p => (
-            <SelectItem key={p} value={p} className="text-xs">{PRIORITY_CFG[p].label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Input
-        type="date"
-        value={dueDate}
-        onChange={e => setDueDate(e.target.value)}
-        className="h-7 w-32 text-xs border-0 bg-muted/60 focus:ring-0"
-      />
-      <Button
-        size="sm"
-        className="h-7 px-3 text-xs bg-[#1D3461] hover:bg-[#0F2041] text-white"
-        onClick={submit}
-        disabled={!title.trim() || isCreating}
-        data-testid="button-add-personal-task"
-      >
-        {isCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-      </Button>
+      <div className="flex items-center gap-2 pl-7">
+        <Select value={taskType ?? 'general'} onValueChange={v => setTaskType(v === 'general' ? null : v as TaskType)}>
+          <SelectTrigger className="h-6 w-auto text-[10px] border border-border/60 bg-muted/40 focus:ring-0 px-2 gap-1" data-testid="quickadd-select-tasktype">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="general" className="text-[10px]">General</SelectItem>
+            <SelectItem value="project-task" className="text-[10px]">Project Task</SelectItem>
+            <SelectItem value="day-to-day" className="text-[10px]">Day-to-Day</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={priority} onValueChange={v => setPriority(v as PersonalTaskPriority)}>
+          <SelectTrigger className="h-6 w-20 text-[10px] border border-border/60 bg-muted/40 focus:ring-0 px-2">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(['low', 'medium', 'high', 'critical'] as PersonalTaskPriority[]).map(p => (
+              <SelectItem key={p} value={p} className="text-[10px]">{PRIORITY_CFG[p].label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="date"
+          value={dueDate}
+          onChange={e => setDueDate(e.target.value)}
+          className="h-6 w-32 text-[10px] border border-border/60 bg-muted/40 focus:ring-0 px-2"
+        />
+      </div>
     </div>
   );
 }
@@ -287,16 +304,53 @@ function PersonalTaskCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           {/* Health chip row */}
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className={cn(
               'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ring-1',
               hCfg.bg, hCfg.text, hCfg.ring,
             )}>
               {hCfg.icon} {hCfg.label}
             </span>
+            {task.taskType === 'project-task' && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                <FolderOpen className="h-3 w-3" /> Project
+              </span>
+            )}
+            {task.taskType === 'day-to-day' && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                <RefreshCw className="h-3 w-3" /> Day-to-Day
+              </span>
+            )}
             {task.notes && <StickyNote className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" title="Has notes" />}
+            {task.attachments && task.attachments.length > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground" title={`${task.attachments.length} attachment${task.attachments.length !== 1 ? 's' : ''}`}>
+                <Paperclip className="h-3 w-3" />{task.attachments.length}
+              </span>
+            )}
+            {/* Attachment download links (shown inline on card) */}
+            {task.attachments && task.attachments.length > 0 && task.attachments.map((att, i) => (
+              <a
+                key={i}
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] underline text-[#1D3461]/70 hover:text-[#1D3461] truncate max-w-[120px] flex items-center gap-0.5"
+                title={att.name}
+                data-testid={`card-attachment-link-${task.id}-${i}`}
+                onClick={e => e.stopPropagation()}
+              >
+                <Paperclip className="h-2.5 w-2.5 flex-shrink-0" />{att.name.length > 18 ? att.name.slice(0, 16) + '…' : att.name}
+              </a>
+            ))}
             {task.recurrence && task.recurrence !== 'none' && (
-              <span className="text-[11px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full capitalize">{task.recurrence}</span>
+              <span className="text-[11px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize flex items-center gap-1">
+                <RefreshCw className="h-2.5 w-2.5" />{task.recurrence}
+              </span>
+            )}
+            {task.completionRewardAmount && task.completionRewardAmount > 0 && (
+              <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-0.5 font-semibold">
+                <Trophy className="h-2.5 w-2.5" />+{task.completionRewardCurrency} {task.completionRewardAmount}
+              </span>
             )}
           </div>
 
@@ -336,11 +390,6 @@ function PersonalTaskCard({
             )}
             {task.category && task.category !== 'personal' && (
               <span className="text-[11px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border/60">{task.category}</span>
-            )}
-            {task.completionRewardAmount && task.completionRewardAmount > 0 && (
-              <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-0.5 font-medium">
-                +{task.completionRewardCurrency} {task.completionRewardAmount}
-              </span>
             )}
             {(task.tags ?? []).slice(0, 3).map(tag => (
               <span key={tag} className="text-[11px] flex items-center gap-0.5 bg-[#1D3461]/8 text-[#1D3461] border border-[#1D3461]/15 px-2 py-0.5 rounded-full font-medium">
@@ -524,6 +573,9 @@ function TaskDetailSheet({
   const [depDeptId, setDepDeptId] = useState('');
   const [depDuplicate, setDepDuplicate] = useState(false);
   const [tools, setTools] = useState('');
+  const [attachments, setAttachments] = useState<{ name: string; url: string; uploadedAt: string; size?: number; type?: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allProfiles = [] } = useQuery({
@@ -561,6 +613,7 @@ function TaskDetailSheet({
       setCoAssignees(task.coAssignees ?? []);
       setDependencies(task.dependencies ?? []);
       setTools(task.tools ?? '');
+      setAttachments(task.attachments ?? []);
       setDirty(false);
       setTagInput('');
       setDepInput('');
@@ -593,8 +646,31 @@ function TaskDetailSheet({
       coAssignees,
       dependencies,
       tools: tools.trim() || null,
+      attachments: attachments.length > 0 ? attachments : null,
     });
     setDirty(false);
+  };
+
+  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !task) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop() ?? 'bin';
+      const path = `task-attachments/${task.id}/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from('chat-files').upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('chat-files').getPublicUrl(path);
+      const url = urlData.publicUrl;
+      const newAtt = { name: file.name, url, uploadedAt: new Date().toISOString(), size: file.size, type: file.type || ext };
+      setAttachments(prev => [...prev, newAtt]);
+      markDirty();
+    } catch (err) {
+      console.error('Attachment upload error:', err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleAddTag = () => {
@@ -1220,6 +1296,62 @@ function TaskDetailSheet({
               <p className="text-[12px] text-muted-foreground mt-1.5">Any links, system access, equipment, or contacts required to complete this task.</p>
             </div>
 
+            {/* File Attachments */}
+            <div>
+              <SectionLabel icon={<Paperclip className="h-3.5 w-3.5" />}>Attachments</SectionLabel>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleAttachmentUpload}
+                data-testid="sheet-input-attachment-file"
+              />
+              {attachments.length > 0 && (
+                <div className="space-y-1.5 mb-3">
+                  {attachments.map((att, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-muted/40 border border-border/60 rounded-lg px-3 py-2 group">
+                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-[#1D3461] hover:underline flex-1 min-w-0 truncate"
+                        data-testid={`attachment-link-${idx}`}
+                      >
+                        {att.name}
+                      </a>
+                      {att.size && (
+                        <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                          {att.size < 1024 ? `${att.size}B` : att.size < 1048576 ? `${(att.size / 1024).toFixed(1)}KB` : `${(att.size / 1048576).toFixed(1)}MB`}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => { setAttachments(prev => prev.filter((_, i) => i !== idx)); markDirty(); }}
+                        className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all"
+                        data-testid={`remove-attachment-${idx}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 border-dashed border-border/70 hover:border-[#1D3461]/40 hover:text-[#1D3461] w-full"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                data-testid="button-add-attachment"
+              >
+                {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                {uploading ? 'Uploading…' : 'Attach a file'}
+              </Button>
+              <p className="text-[12px] text-muted-foreground mt-1.5">Attach photos, reports, or documents relevant to this task. Files are stored securely.</p>
+            </div>
+
           </TabsContent>
 
           {/* ── Tab: Reward ── */}
@@ -1306,14 +1438,80 @@ interface ProjectTaskCardProps {
   isUpdating: boolean;
 }
 
+function useProjectTaskAcknowledge(taskId: string, userId: string | undefined) {
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [comment, setComment] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId || !taskId) { setLoading(false); return; }
+    supabase
+      .from('field_task_comments')
+      .select('id, body')
+      .eq('task_id', taskId)
+      .eq('author_id', userId)
+      .then(({ data }) => {
+        const rows = data ?? [];
+        setAcknowledged(rows.some(r => r.body === '__ack__'));
+        const noteRow = rows.find(r => r.body !== '__ack__');
+        setComment(noteRow?.body ?? '');
+        setLoading(false);
+      });
+  }, [taskId, userId]);
+
+  const acknowledge = async () => {
+    if (!userId || !taskId) return;
+    const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+    const { error } = await supabase.from('field_task_comments').insert({
+      task_id: taskId,
+      author_id: userId,
+      author_name: prof?.full_name ?? 'User',
+      body: '__ack__',
+    });
+    if (!error) setAcknowledged(true);
+  };
+
+  const saveComment = async (text: string, authorName?: string) => {
+    if (!userId || !taskId) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const { data: existing } = await supabase
+      .from('field_task_comments')
+      .select('id')
+      .eq('task_id', taskId)
+      .eq('author_id', userId)
+      .neq('body', '__ack__')
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      await supabase.from('field_task_comments').update({ body: trimmed }).eq('id', existing[0].id);
+    } else {
+      const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
+      await supabase.from('field_task_comments').insert({
+        task_id: taskId,
+        author_id: userId,
+        author_name: authorName ?? prof?.full_name ?? 'User',
+        body: trimmed,
+      });
+    }
+    setComment(trimmed);
+  };
+
+  return { acknowledged, acknowledge, comment, saveComment, loading };
+}
+
 function ProjectTaskCard({ task, onStatusChange, isUpdating }: ProjectTaskCardProps) {
   const navigate = useNavigate();
+  const { currentUser } = useUser();
   const dueDateStr = typeof task.dueDate === 'string' ? task.dueDate : null;
   const statusStr = typeof task.status === 'string' ? task.status : 'todo';
   const overdue = isOverdue(dueDateStr, statusStr);
   const isDone = statusStr === 'done';
   const isInProgress = statusStr === 'inprogress';
   const pCfg = PRIORITY_CFG[task.priority as PersonalTaskPriority] ?? PRIORITY_CFG.medium;
+  const [showComment, setShowComment] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const { acknowledged, acknowledge, comment, saveComment } = useProjectTaskAcknowledge(task.id, currentUser?.id);
 
   const borderColor = isDone ? 'border-l-emerald-500'
     : isInProgress ? 'border-l-[#1D3461]'
@@ -1323,94 +1521,160 @@ function ProjectTaskCard({ task, onStatusChange, isUpdating }: ProjectTaskCardPr
   return (
     <div
       className={cn(
-        'group flex items-start gap-3 px-3 py-2.5 rounded-lg border border-l-4 bg-card hover:shadow-sm transition-all',
+        'rounded-lg border border-l-4 bg-card hover:shadow-sm transition-all duration-150',
         borderColor,
         isDone && 'opacity-60',
       )}
       data-testid={`project-task-card-${task.id}`}
     >
-      {/* Status toggle circle */}
-      <button
-        type="button"
-        disabled={isUpdating}
-        className={cn(
-          'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
-          isDone ? 'border-emerald-500 bg-emerald-500'
-            : isInProgress ? 'border-[#1D3461] bg-[#1D3461]/10'
-            : 'border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50',
-        )}
-        onClick={() => onStatusChange(task.id, isDone ? 'todo' : 'done')}
-        title={isDone ? 'Click to reopen' : 'Click to mark as done'}
-        data-testid={`project-task-toggle-${task.id}`}
-      >
-        {isDone
-          ? <CheckCircle2 className="h-3 w-3 text-white" />
-          : isInProgress
-          ? <div className="h-2 w-2 rounded-full bg-[#1D3461]" />
-          : <CheckCircle2 className="h-3 w-3 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
-        }
-      </button>
-
-      {/* Content — clicking navigates to project field tasks */}
-      <div
-        className="flex-1 min-w-0 cursor-pointer"
-        onClick={() => navigate(`/projects/${task.projectId}?tab=field_tasks`)}
-      >
-        <p className={cn('text-sm font-medium leading-snug', isDone && 'line-through text-muted-foreground')}>
-          {task.title}
-        </p>
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          <span className="text-[9px] flex items-center gap-0.5 text-muted-foreground font-medium">
-            <FolderOpen className="h-2.5 w-2.5" />
-            {task.projectName}
-          </span>
-          <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
-            {pCfg.label}
-          </span>
-          {dueDateStr && (
-            <span className={cn(
-              'text-[10px] flex items-center gap-0.5',
-              overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(dueDateStr)) && isToday(parseISO(dueDateStr))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
-            )}>
-              <Calendar className="h-2.5 w-2.5" />
-              {overdue && '⚠ '}{fmtDate(dueDateStr)}
-            </span>
+      <div className="group flex items-start gap-3 px-3 py-2.5">
+        {/* Status toggle circle */}
+        <button
+          type="button"
+          disabled={isUpdating}
+          className={cn(
+            'mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all hover:scale-110',
+            isDone ? 'border-emerald-500 bg-emerald-500'
+              : isInProgress ? 'border-[#1D3461] bg-[#1D3461]/10'
+              : 'border-muted-foreground/40 hover:border-emerald-500 hover:bg-emerald-50',
           )}
+          onClick={() => onStatusChange(task.id, isDone ? 'todo' : 'done')}
+          title={isDone ? 'Click to reopen' : 'Click to mark as done'}
+          data-testid={`project-task-toggle-${task.id}`}
+        >
+          {isDone
+            ? <CheckCircle2 className="h-3 w-3 text-white" />
+            : isInProgress
+            ? <div className="h-2 w-2 rounded-full bg-[#1D3461]" />
+            : <CheckCircle2 className="h-3 w-3 text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity" />
+          }
+        </button>
+
+        {/* Content — clicking navigates to project field tasks */}
+        <div
+          className="flex-1 min-w-0 cursor-pointer"
+          onClick={() => navigate(`/projects/${task.projectId}?tab=field_tasks`)}
+        >
+          <p className={cn('text-sm font-medium leading-snug', isDone && 'line-through text-muted-foreground')}>
+            {task.title}
+          </p>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className="text-[9px] flex items-center gap-0.5 text-muted-foreground font-medium">
+              <FolderOpen className="h-2.5 w-2.5" />
+              {task.projectName}
+            </span>
+            <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', pCfg.color)}>
+              {pCfg.label}
+            </span>
+            {dueDateStr && (
+              <span className={cn(
+                'text-[10px] flex items-center gap-0.5',
+                overdue ? 'text-red-600 font-semibold' : (isValid(parseISO(dueDateStr)) && isToday(parseISO(dueDateStr))) ? 'text-amber-600 font-medium' : 'text-muted-foreground',
+              )}>
+                <Calendar className="h-2.5 w-2.5" />
+                {overdue && '⚠ '}{fmtDate(dueDateStr)}
+              </span>
+            )}
+            {acknowledged && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5">
+                <Check className="h-2.5 w-2.5" /> Acknowledged
+              </span>
+            )}
+            {comment && (
+              <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                <StickyNote className="h-2.5 w-2.5" /> Note
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Acknowledge button */}
+          {!acknowledged && (
+            <button
+              type="button"
+              onClick={acknowledge}
+              className="text-[10px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Acknowledge this task"
+              data-testid={`project-task-ack-${task.id}`}
+            >
+              <Eye className="h-3 w-3" /> Ack
+            </button>
+          )}
+          {/* Comment toggle */}
+          <button
+            type="button"
+            onClick={() => { setShowComment(v => !v); setCommentDraft(comment); }}
+            className={cn(
+              'text-muted-foreground hover:text-[#1D3461] p-1 rounded-lg transition-all',
+              showComment && 'bg-[#1D3461]/10 text-[#1D3461]',
+              !showComment && 'opacity-0 group-hover:opacity-100',
+            )}
+            title={showComment ? 'Close comment' : 'Add note'}
+            data-testid={`project-task-comment-${task.id}`}
+          >
+            <StickyNote className="h-3.5 w-3.5" />
+          </button>
+          {/* Inline status actions */}
+          {!isDone && !isInProgress && (
+            <button
+              type="button"
+              onClick={() => onStatusChange(task.id, 'inprogress')}
+              className="text-[10px] font-medium text-[#1D3461] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Mark as In Progress"
+              data-testid={`project-task-inprogress-${task.id}`}
+            >
+              <PlayCircle className="h-3 w-3" /> Start
+            </button>
+          )}
+          {!isDone && (
+            <button
+              type="button"
+              onClick={() => onStatusChange(task.id, 'done')}
+              className="text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              data-testid={`project-task-done-${task.id}`}
+            >
+              <CheckCircle2 className="h-3 w-3" /> Done
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate(`/projects/${task.projectId}?tab=field_tasks`)}
+            className="text-[10px] text-muted-foreground hover:text-[#1D3461] p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Open in project"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
-      {/* Inline status actions (hover) */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-        {!isDone && !isInProgress && (
-          <button
-            type="button"
-            onClick={() => onStatusChange(task.id, 'inprogress')}
-            className="text-[10px] font-medium text-[#1D3461] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1"
-            title="Mark as In Progress"
-            data-testid={`project-task-inprogress-${task.id}`}
-          >
-            <PlayCircle className="h-3 w-3" /> Start
-          </button>
-        )}
-        {!isDone && (
-          <button
-            type="button"
-            onClick={() => onStatusChange(task.id, 'done')}
-            className="text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1"
-            data-testid={`project-task-done-${task.id}`}
-          >
-            <CheckCircle2 className="h-3 w-3" /> Done
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => navigate(`/projects/${task.projectId}?tab=field_tasks`)}
-          className="text-[10px] text-muted-foreground hover:text-[#1D3461] p-0.5"
-          title="Open in project"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
+      {/* Collapsible comment panel */}
+      {showComment && (
+        <div className="px-3 pb-3 pt-0 ml-8 border-t border-dashed border-muted/70 mt-1">
+          <div className="flex gap-2 mt-2">
+            <Textarea
+              value={commentDraft}
+              onChange={e => setCommentDraft(e.target.value)}
+              placeholder="Add a private note about this task…"
+              rows={2}
+              className="resize-none text-xs flex-1 bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/60"
+              data-testid={`project-task-comment-input-${task.id}`}
+            />
+            <Button
+              size="sm"
+              className="h-auto px-3 text-xs bg-[#1D3461] hover:bg-[#0F2041] text-white self-start mt-0.5"
+              onClick={async () => { await saveComment(commentDraft); setShowComment(false); }}
+              data-testid={`project-task-comment-save-${task.id}`}
+            >
+              Save
+            </Button>
+          </div>
+          {comment && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1.5 italic">Saved: "{comment}"</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1583,6 +1847,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardCurrency, setRewardCurrency] = useState('USD');
+  const [taskType, setTaskType] = useState<TaskType | null>(null);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [depType, setDepType]               = useState<DependencyType>('custom');
   const [depText, setDepText]               = useState('');
@@ -1591,6 +1856,9 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
   const [depSelectedUser, setDepSelectedUser] = useState<{ id: string; name: string } | null>(null);
   const [depDeptId, setDepDeptId]           = useState('');
   const [depDuplicate, setDepDuplicate]     = useState(false);
+  const [dialogAttachments, setDialogAttachments] = useState<{ name: string; url: string; uploadedAt: string; size?: number; type?: string }[]>([]);
+  const [dialogUploading, setDialogUploading] = useState(false);
+  const dialogFileRef = useRef<HTMLInputElement>(null);
 
   // Load all departments once to build the managed-dept hierarchy
   const { data: allDepts = [] } = useQuery({
@@ -1686,6 +1954,27 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
     setRewardAmount(''); setRewardCurrency('USD');
     setDependencies([]); setDepType('custom'); setDepText(''); setDepDate('');
     setDepUserSearch(''); setDepSelectedUser(null); setDepDeptId(''); setDepDuplicate(false);
+    setDialogAttachments([]);
+    setTaskType(null);
+  };
+
+  const handleDialogAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setDialogUploading(true);
+    try {
+      const ext = file.name.split('.').pop() ?? 'bin';
+      const path = `task-attachments/new/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from('chat-files').upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('chat-files').getPublicUrl(path);
+      setDialogAttachments(prev => [...prev, { name: file.name, url: urlData.publicUrl, uploadedAt: new Date().toISOString(), size: file.size, type: file.type || ext }]);
+    } catch (err) {
+      console.error('Attachment upload error:', err);
+    } finally {
+      setDialogUploading(false);
+      if (dialogFileRef.current) dialogFileRef.current.value = '';
+    }
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -1750,6 +2039,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
           priority,
           dueDate: dueDate || null,
           notes: notes.trim() || null,
+          taskType: taskType ?? null,
           assignedTo: member.id,
           assignedToName: member.full_name,
           assignedToEmail: member.email,
@@ -1757,6 +2047,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
           completionRewardAmount: reward,
           completionRewardCurrency: reward ? rewardCurrency : null,
           dependencies: dependencies.length > 0 ? dependencies : undefined,
+          attachments: dialogAttachments.length > 0 ? dialogAttachments : undefined,
         });
       }
     } else {
@@ -1766,12 +2057,14 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
         priority,
         dueDate: dueDate || null,
         notes: notes.trim() || null,
+        taskType: taskType ?? null,
         assignedTo: primaryUser?.id ?? null,
         assignedToName: primaryUser?.name ?? null,
         coAssignees: coAssignees.length > 0 ? coAssignees : [],
         completionRewardAmount: reward,
         completionRewardCurrency: reward ? rewardCurrency : null,
         dependencies: dependencies.length > 0 ? dependencies : undefined,
+        attachments: dialogAttachments.length > 0 ? dialogAttachments : undefined,
       });
     }
     reset();
@@ -1812,6 +2105,33 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
               className="resize-none text-sm min-h-[72px]"
               data-testid="input-new-task-description"
             />
+          </div>
+
+          {/* Task Type */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Task Type <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <div className="flex gap-2">
+              {([
+                { value: null, label: 'General', icon: <Circle className="h-3.5 w-3.5" /> },
+                { value: 'project-task' as TaskType, label: 'Project Task', icon: <FolderOpen className="h-3.5 w-3.5" /> },
+                { value: 'day-to-day' as TaskType, label: 'Day-to-Day', icon: <RefreshCw className="h-3.5 w-3.5" /> },
+              ] as { value: TaskType | null; label: string; icon: React.ReactNode }[]).map(opt => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => setTaskType(opt.value)}
+                  data-testid={`task-type-${opt.value ?? 'general'}`}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all',
+                    taskType === opt.value
+                      ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:border-[#1D3461]/40',
+                  )}
+                >
+                  {opt.icon}{opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Priority + Due date row */}
@@ -2181,6 +2501,44 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
               className="resize-none text-sm min-h-[56px]"
               data-testid="input-new-task-notes"
             />
+          </div>
+
+          {/* File Attachments */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1.5">
+              <Paperclip className="h-3 w-3" /> Attachments
+            </Label>
+            <input
+              ref={dialogFileRef}
+              type="file"
+              className="hidden"
+              onChange={handleDialogAttachment}
+              data-testid="newtask-input-attachment-file"
+            />
+            {dialogAttachments.length > 0 && (
+              <div className="space-y-1">
+                {dialogAttachments.map((att, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-muted/40 border border-border/60 rounded-lg px-2.5 py-1.5 group">
+                    <Paperclip className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs text-[#1D3461] flex-1 truncate">{att.name}</span>
+                    {att.size && <span className="text-[10px] text-muted-foreground flex-shrink-0">{att.size < 1048576 ? `${(att.size / 1024).toFixed(0)}KB` : `${(att.size / 1048576).toFixed(1)}MB`}</span>}
+                    <button type="button" onClick={() => setDialogAttachments(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button type="button" variant="outline" size="sm"
+              className="h-7 text-xs gap-1.5 border-dashed border-border/70 w-full"
+              onClick={() => dialogFileRef.current?.click()}
+              disabled={dialogUploading}
+              data-testid="newtask-button-add-attachment"
+            >
+              {dialogUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              {dialogUploading ? 'Uploading…' : 'Attach file'}
+            </Button>
           </div>
         </div>
 
@@ -3752,6 +4110,7 @@ export default function MyTasks() {
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [personalView, setPersonalView] = useState<'list' | 'board' | 'calendar'>('list');
+  const [projectView, setProjectView] = useState<'list' | 'board'>('list');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [bulkMode, setBulkMode] = useState(false);
@@ -3899,9 +4258,9 @@ export default function MyTasks() {
   const selectedTask = useMemo(() => allPersonalTasks.find(t => t.id === selectedTaskId) ?? null, [allPersonalTasks, selectedTaskId]);
   const selectedTaskSubtasks = useMemo(() => selectedTask ? allPersonalTasks.filter(t => t.parentTaskId === selectedTask.id) : [], [allPersonalTasks, selectedTask]);
 
-  const handleQuickAdd = async (title: string, priority: PersonalTaskPriority, dueDate: string) => {
+  const handleQuickAdd = async (title: string, priority: PersonalTaskPriority, dueDate: string, taskType: TaskType | null) => {
     try {
-      await createTask({ title, priority, dueDate: dueDate || null, category: 'personal' });
+      await createTask({ title, priority, dueDate: dueDate || null, category: 'personal', taskType: taskType ?? null });
       toast({ title: 'Task added' });
     } catch {
       toast({ title: 'Failed to add task', variant: 'destructive' });
@@ -4122,63 +4481,6 @@ export default function MyTasks() {
         />
       )}
 
-      {/* ── Search ── */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          placeholder="Search tasks by title, project, or category…"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className="pl-9 h-9 text-sm bg-muted/40 border-muted"
-          data-testid="input-search-tasks"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-
-      {/* ── Tag & Category filters ── */}
-      {(allTags.length > 0 || allCategories.length > 0) && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {allCategories.length > 0 && (
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 shadow-sm" data-testid="select-category-filter">
-                <Hash className="h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">All categories</SelectItem>
-                {allCategories.map(c => <SelectItem key={c} value={c} className="text-xs capitalize">{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          {allTags.length > 0 && (
-            <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 shadow-sm" data-testid="select-tag-filter">
-                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder="Tag" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">All tags</SelectItem>
-                {allTags.map(t => <SelectItem key={t} value={t} className="text-xs">#{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          {(tagFilter !== 'all' || categoryFilter !== 'all') && (
-            <button type="button" onClick={() => { setTagFilter('all'); setCategoryFilter('all'); }}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 h-8 px-2">
-              <X className="h-3 w-3" />Clear filters
-            </button>
-          )}
-        </div>
-      )}
-
       {/* ── Planning Hub ── */}
       <PlanningHub allTasks={[
         ...personalTasks,
@@ -4189,96 +4491,264 @@ export default function MyTasks() {
         })),
       ]} />
 
-      {/* ── Quick Add ── */}
-      <QuickAddBar onAdd={handleQuickAdd} isCreating={isCreating} />
-
-      {/* ── Filter bar ── */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <Filter className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        {FILTERS.map(f => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className={cn(
-              'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all border',
-              filter === f.key
-                ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm'
-                : 'bg-card text-muted-foreground border-border hover:border-[#1D3461]/40 hover:text-[#1D3461]',
-            )}
-            data-testid={`filter-${f.key}`}
-          >
-            {f.label}
-            {(f.count ?? 0) > 0 && (
-              <span className={cn(
-                'inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full text-[9px] font-bold',
-                filter === f.key ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground',
-              )}>
-                {f.count}
-              </span>
-            )}
-          </button>
-        ))}
-        {filter !== 'all' && (
-          <button type="button" onClick={() => setFilter('all')} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 ml-1">
-            <X className="h-3 w-3" /> Clear
-          </button>
-        )}
-      </div>
-
-      {/* ── Project Tasks Section ── */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div>
-            <h2 className="text-sm font-semibold flex items-center gap-2">
-              <FolderOpen className="h-4 w-4 text-[#1D3461]" />
-              Project Tasks Assigned to Me
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredProject.length}</Badge>
-              <TooltipProvider>
-                <UITooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs leading-relaxed">
-                    These are field tasks from active projects where you are the assigned team member.
-                    Click a task to navigate to the project. Status changes made here are reflected in the project's field tasks view.
-                  </TooltipContent>
-                </UITooltip>
-              </TooltipProvider>
-            </h2>
-            <p className="text-[11px] text-muted-foreground ml-6">Tasks assigned to you across all active projects — click any task to navigate to its project</p>
-          </div>
-          <a href="/projects" className="text-xs text-[#1D3461] hover:underline flex items-center gap-0.5 flex-shrink-0">
-            All Projects <ArrowRight className="h-3 w-3" />
-          </a>
+      {/* ── Main Task Tabs ── */}
+      <Tabs defaultValue="assigned" className="space-y-0">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <TabsList className="h-10 bg-muted/50 border border-border/60 rounded-xl p-1 gap-1">
+            <TabsTrigger
+              value="assigned"
+              className="rounded-lg px-4 text-sm font-semibold data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
+              data-testid="tab-assigned"
+            >
+              <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
+              Assigned to Me
+              {projectTasks.filter(t => String(t.status) !== 'done').length > 0 && (
+                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/20">
+                  {projectTasks.filter(t => String(t.status) !== 'done').length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="personal"
+              className="rounded-lg px-4 text-sm font-semibold data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
+              data-testid="tab-personal"
+            >
+              <Star className="h-3.5 w-3.5 mr-1.5" />
+              Personal Tasks
+              {personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length > 0 && (
+                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/20">
+                  {personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+          <Button size="sm" variant="ghost" className="text-muted-foreground h-8 text-xs"
+            onClick={() => refetchProject()} data-testid="button-refresh-tasks-inner">
+            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh
+          </Button>
         </div>
 
-        {loadingProject ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        {/* ── Assigned to Me Tab ── */}
+        <TabsContent value="assigned" className="space-y-3 mt-0">
+          {/* Search + filter */}
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search project tasks by title or project…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 text-sm bg-muted/40 border-muted"
+                data-testid="input-search-tasks"
+              />
+              {searchQuery && (
+                <button type="button" onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              {FILTERS.map(f => (
+                <button key={f.key} type="button" onClick={() => setFilter(f.key)}
+                  className={cn(
+                    'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all border',
+                    filter === f.key
+                      ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm'
+                      : 'bg-card text-muted-foreground border-border hover:border-[#1D3461]/40 hover:text-[#1D3461]',
+                  )}
+                  data-testid={`filter-${f.key}`}
+                >
+                  {f.label}
+                  {(f.count ?? 0) > 0 && (
+                    <span className={cn('inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full text-[9px] font-bold',
+                      filter === f.key ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>
+                      {f.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+              {filter !== 'all' && (
+                <button type="button" onClick={() => setFilter('all')} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 ml-1">
+                  <X className="h-3 w-3" /> Clear
+                </button>
+              )}
+            </div>
           </div>
-        ) : filteredProject.length === 0 ? (
-          <div className="flex flex-col items-center py-8 border-2 border-dashed rounded-xl gap-2">
-            <Inbox className="h-8 w-8 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">
-              {filter === 'all' ? 'No project tasks assigned to you' : `No project tasks for "${FILTERS.find(f => f.key === filter)?.label}"`}
-            </p>
+
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">Field tasks from active projects where you are assigned · click to view in project</p>
+            <div className="flex items-center gap-2">
+              {/* View toggle */}
+              <div className="flex items-center h-7 bg-muted/60 border border-border/60 rounded-lg p-0.5 gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setProjectView('list')}
+                  className={cn('flex items-center gap-1 px-2 h-full text-[10px] font-semibold rounded-md transition-all', projectView === 'list' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                  title="List view" data-testid="assigned-view-list"
+                >
+                  <LayoutList className="h-3 w-3" /> List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProjectView('board')}
+                  className={cn('flex items-center gap-1 px-2 h-full text-[10px] font-semibold rounded-md transition-all', projectView === 'board' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                  title="Board view" data-testid="assigned-view-board"
+                >
+                  <LayoutGrid className="h-3 w-3" /> Board
+                </button>
+              </div>
+              <a href="/projects" className="text-xs text-[#1D3461] hover:underline flex items-center gap-0.5 flex-shrink-0">
+                All Projects <ArrowRight className="h-3 w-3" />
+              </a>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-1.5">
-            {filteredProject.map((task: any) => (
-              <ProjectTaskCard
+
+          {loadingProject ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredProject.length === 0 ? (
+            <div className="flex flex-col items-center py-10 border-2 border-dashed rounded-xl gap-2">
+              <Inbox className="h-8 w-8 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">
+                {filter === 'all' ? 'No project tasks assigned to you' : `No project tasks for "${FILTERS.find(f => f.key === filter)?.label}"`}
+              </p>
+            </div>
+          ) : projectView === 'board' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {(['todo', 'inprogress', 'done'] as const).map(col => {
+                const colTasks = filteredProject.filter((t: any) => String(t.status) === col);
+                const colLabel = col === 'todo' ? 'To Do' : col === 'inprogress' ? 'In Progress' : 'Done';
+                const colBg = col === 'todo' ? 'bg-slate-50 dark:bg-slate-900/40 border-slate-200' : col === 'inprogress' ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200' : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200';
+                const dot = col === 'todo' ? 'bg-slate-400' : col === 'inprogress' ? 'bg-[#1D3461]' : 'bg-emerald-500';
+                return (
+                  <div key={col} className={cn('rounded-xl border p-3 space-y-2 min-h-[120px]', colBg)}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={cn('h-2 w-2 rounded-full', dot)} />
+                      <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{colLabel}</span>
+                      <span className="ml-auto text-xs font-bold text-muted-foreground bg-white/70 dark:bg-black/20 px-1.5 py-0.5 rounded-full">{colTasks.length}</span>
+                    </div>
+                    {colTasks.length === 0 ? (
+                      <div className="flex items-center justify-center py-4 opacity-40">
+                        <Circle className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {colTasks.map((task: any) => (
+                          <ProjectTaskCard
+                            key={task.id}
+                            task={task}
+                            onStatusChange={handleProjectTaskStatusChange}
+                            isUpdating={updateProjectTaskStatus.isPending}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {filteredProject.map((task: any) => (
+                <ProjectTaskCard
                   key={task.id}
                   task={task}
                   onStatusChange={handleProjectTaskStatusChange}
                   isUpdating={updateProjectTaskStatus.isPending}
                 />
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
 
-      <Separator />
+        {/* ── Personal Tasks Tab ── */}
+        <TabsContent value="personal" className="space-y-3 mt-0">
+          {/* Quick Add */}
+          <QuickAddBar onAdd={handleQuickAdd} isCreating={isCreating} />
+
+          {/* Search + Tag/Category filter for personal tasks */}
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search personal tasks by title, tag, or category…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 text-sm bg-muted/40 border-muted"
+                data-testid="input-search-personal-tasks"
+              />
+              {searchQuery && (
+                <button type="button" onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              {FILTERS.map(f => (
+                <button key={f.key} type="button" onClick={() => setFilter(f.key)}
+                  className={cn(
+                    'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all border',
+                    filter === f.key
+                      ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm'
+                      : 'bg-card text-muted-foreground border-border hover:border-[#1D3461]/40 hover:text-[#1D3461]',
+                  )}
+                  data-testid={`filter-personal-${f.key}`}
+                >
+                  {f.label}
+                  {(f.count ?? 0) > 0 && (
+                    <span className={cn('inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full text-[9px] font-bold',
+                      filter === f.key ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground')}>
+                      {f.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+              {filter !== 'all' && (
+                <button type="button" onClick={() => setFilter('all')} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 ml-1">
+                  <X className="h-3 w-3" /> Clear
+                </button>
+              )}
+            </div>
+            {(allTags.length > 0 || allCategories.length > 0) && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {allCategories.length > 0 && (
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 shadow-sm" data-testid="select-category-filter">
+                      <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All categories</SelectItem>
+                      {allCategories.map(c => <SelectItem key={c} value={c} className="text-xs capitalize">{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {allTags.length > 0 && (
+                  <Select value={tagFilter} onValueChange={setTagFilter}>
+                    <SelectTrigger className="h-8 w-auto text-xs gap-1.5 border border-border/70 bg-card hover:bg-muted transition-colors rounded-lg px-2.5 shadow-sm" data-testid="select-tag-filter">
+                      <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                      <SelectValue placeholder="Tag" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All tags</SelectItem>
+                      {allTags.map(t => <SelectItem key={t} value={t} className="text-xs">#{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                {(tagFilter !== 'all' || categoryFilter !== 'all') && (
+                  <button type="button" onClick={() => { setTagFilter('all'); setCategoryFilter('all'); }}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 h-8 px-2">
+                    <X className="h-3 w-3" />Clear filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
       {/* ── Personal Tasks Section ── */}
       <div className="space-y-3">
@@ -4511,7 +4981,8 @@ export default function MyTasks() {
             ))}
           </div>
         )}
-      </div>
+        </TabsContent>
+      </Tabs>
 
       {/* ── Team Task Health (admin only) ── */}
       {isAdmin && (
