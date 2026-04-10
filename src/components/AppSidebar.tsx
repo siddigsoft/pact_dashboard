@@ -62,6 +62,7 @@
     FileBarChart,
     CalendarCheck,
     Sparkles,
+    FilePlus,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -331,6 +332,9 @@
     if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || isDataTeam || perms.mmp || isCoordinator || isSupervisor || isDataCollector || isFOM)) {
       const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 4, isPinned: isPinned('/mmp') });
+    }
+    if (!isHidden('/mmp?tab=adhoc') && (isSuperAdmin || isAdmin || isFOM || isCoordinator)) {
+      planningItems.push({ id: 'adhoc-visits', title: "Ad-hoc Visits", url: "/mmp?tab=adhoc", icon: FilePlus, priority: 5, isPinned: isPinned('/mmp?tab=adhoc') });
     }
     if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
       planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 4, isPinned: isPinned('/hub-operations') });

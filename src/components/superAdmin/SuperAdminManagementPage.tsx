@@ -65,7 +65,7 @@ export function SuperAdminManagementPage() {
   const [otpExpiry, setOtpExpiry] = useState<Date | null>(null);
   const [sendingOtp, setSendingOtp] = useState(false);
 
-  const emailService = new EmailNotificationService();
+  const emailService = EmailNotificationService;
 
   const isOwner = isProtectedOwner(currentUser?.id);
 

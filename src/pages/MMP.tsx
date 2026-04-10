@@ -1,6 +1,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -47,6 +47,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
 import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
+import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
 import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/utils/hubAccessControl';
 import { MmpFilterBar } from '@/components/mmp/MmpFilterBar';
 import { getStateName, normalizeStateId } from '@/utils/siteNormalization';
@@ -390,6 +391,7 @@ const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verified
 
 const MMP = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const { mmpFiles, loading, updateMMP, refreshMMPFiles, siteEntryCounts: contextCounts, refreshSiteEntryCounts, loadSiteEntriesForMMPs } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
@@ -398,7 +400,16 @@ const MMP = () => {
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { startSiteVisit: startSiteVisitOffline, completeSiteVisit: completeSiteVisitOffline } = useOfflineSiteVisit();
   const { queuePhotoUpload } = useOffline();
-  const [activeTab, setActiveTab] = useState('new');
+  const initialTab = new URLSearchParams(location.search).get('tab') || 'new';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    const tabParam = new URLSearchParams(location.search).get('tab');
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [location.search]);
+
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
@@ -4801,6 +4812,13 @@ const MMP = () => {
                     {t('mmpPage.tabs.mmpTracker')}
                   </TabsTrigger>
                 )}
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+                  <TabsTrigger value="adhoc" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
+                    data-testid="tab-adhoc-visits">
+                    <FilePlus className="h-3.5 w-3.5" />
+                    Ad-hoc Visits
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -6503,6 +6521,13 @@ const MMP = () => {
                     coordinators={coordinatorsList.map(c => ({ id: c.id, name: c.fullName || c.email || 'Unknown' }))}
                   />
                 )}
+              </TabsContent>
+            )}
+
+            {/* Ad-hoc Site Visits Tab */}
+            {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+              <TabsContent value="adhoc">
+                <AdhocSiteVisitsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
               </TabsContent>
             )}
           </Tabs>

@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { isValidElement, createElement, type ReactNode } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { type LucideIcon } from 'lucide-react';
 
@@ -46,10 +46,6 @@ export function GradientStatCard({
   const isClickable = !!onClick;
   const isSmall = size === 'sm';
 
-  const isComponentIcon = typeof icon === 'function';
-  const IconComponent = isComponentIcon ? (icon as LucideIcon) : null;
-  const iconNode = !isComponentIcon ? (icon as ReactNode) : null;
-
   const iconContainerClass = gradient
     ? `bg-gradient-to-br ${gradient} text-white`
     : cfg.icon;
@@ -57,6 +53,12 @@ export function GradientStatCard({
   const borderClass = gradient
     ? 'border-l-gray-400'
     : cfg.border;
+
+  // isValidElement = already rendered JSX (e.g. <FolderKanban className="h-4 w-4" />)
+  // anything else = a component reference (function OR forwardRef object like Lucide icons)
+  const renderedIcon = isValidElement(icon)
+    ? icon
+    : createElement(icon as LucideIcon, { className: isSmall ? 'h-4 w-4' : 'h-5 w-5' });
 
   return (
     <Card
@@ -88,9 +90,7 @@ export function GradientStatCard({
             )}
           </div>
           <div className={`rounded-lg shrink-0 ${iconContainerClass} ${isSmall ? 'p-1.5' : 'p-2'}`}>
-            {IconComponent
-              ? <IconComponent className={isSmall ? 'h-4 w-4' : 'h-5 w-5'} />
-              : iconNode}
+            {renderedIcon}
           </div>
         </div>
       </CardContent>
