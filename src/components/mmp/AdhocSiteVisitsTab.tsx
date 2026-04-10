@@ -274,6 +274,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
             (c.full_name || '').toLowerCase() === assignToName.toLowerCase() ||
             (c.email || '').toLowerCase() === assignToName.toLowerCase()
           );
+          const unmatchedAssignee = assignToName && !matchedCollector;
           const r: AdhocRow = {
             siteName: get(row, 'site name', 'sitename', 'name'),
             siteCode: get(row, 'site code', 'sitecode', 'code'),
@@ -286,6 +287,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
             dueDate: get(row, 'due date', 'duedate', 'due'),
           };
           r._errors = validateRow(r);
+          if (unmatchedAssignee) {
+            r._errors = [...(r._errors || []), `Enumerator "${assignToName}" not found — will be left open for claim`];
+          }
           return r;
         }).filter(r => r.siteName || r.state || r.locality);
 
