@@ -4981,6 +4981,7 @@ export default function MyTasks() {
             ))}
           </div>
         )}
+      </div>
         </TabsContent>
       </Tabs>
 
