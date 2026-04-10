@@ -66,10 +66,11 @@ export function ConnectedPagesBar({ exclude, include }: { exclude?: string; incl
 
   const visible = PAGES.filter(p => {
     if (p.id === exclude) return false;
-    if (include && !include.includes(p.id)) return false;
-    if (p.roles.length === 0) return true; // public page
-    if (superAdmin) return true;
-    return hasAnyRole(p.roles);
+    if (p.roles.length === 0 || superAdmin || hasAnyRole(p.roles)) {
+      if (include && !include.includes(p.id)) return false;
+      return true;
+    }
+    return false;
   });
 
   if (visible.length === 0) return null;
