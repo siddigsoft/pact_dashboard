@@ -4422,6 +4422,86 @@ export default function MyTasks() {
     { key: 'done',    label: 'Done',     count: stats.done },
   ];
 
+  // Shared view-mode toggle pill rendered inside each full-page view's header
+  const viewToggle = (
+    <div className="flex items-center bg-white/10 border border-white/20 rounded-lg p-0.5 h-8 gap-0.5">
+      <button
+        type="button"
+        onClick={() => setAndPersistViewMode('briefing')}
+        className={cn(
+          'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+          viewMode === 'briefing' ? 'bg-white text-[#1D3461] shadow-sm' : 'text-white/70 hover:text-white',
+        )}
+        data-testid="button-view-briefing"
+      >
+        <Sparkles className="h-3 w-3" /> Briefing
+      </button>
+      <button
+        type="button"
+        onClick={() => setAndPersistViewMode('matrix')}
+        className={cn(
+          'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+          viewMode === 'matrix' ? 'bg-white text-[#1D3461] shadow-sm' : 'text-white/70 hover:text-white',
+        )}
+        data-testid="button-view-matrix"
+      >
+        <LayoutGrid className="h-3 w-3" /> Matrix
+      </button>
+      <button
+        type="button"
+        onClick={() => setAndPersistViewMode('list')}
+        className={cn(
+          'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+          viewMode === 'list' ? 'bg-white text-[#1D3461] shadow-sm' : 'text-white/70 hover:text-white',
+        )}
+        data-testid="button-view-list"
+      >
+        <LayoutList className="h-3 w-3" /> List
+      </button>
+    </div>
+  );
+
+  // ── Full-page Briefing view ────────────────────────────────────────────────
+  if (viewMode === 'briefing') {
+    return (
+      <div className="flex flex-col" style={{ margin: '-1.5rem -1.5rem 0', minHeight: 'calc(100vh - 57px)' }}>
+        <DailyBriefing
+          personalTasks={personalTasks}
+          allPersonalTasks={allPersonalTasks}
+          projectTasks={projectTasks}
+          currentUserFullName={currentUser?.fullName}
+          currentUserId={currentUser?.id}
+          currentUserEmail={currentUser?.email}
+          isLoading={loadingPersonal}
+          onMarkPersonalDone={async (id, prevStatus) => { await handleStatusChange(id, 'done', prevStatus); }}
+          onMarkProjectDone={async (id) => { await handleProjectTaskStatusChange(id, 'done'); }}
+          onOpenNewTask={() => setShowNewTask(true)}
+          viewToggle={viewToggle}
+        />
+        {showNewTask && newTaskDialog}
+      </div>
+    );
+  }
+
+  // ── Full-page Matrix view ─────────────────────────────────────────────────
+  if (viewMode === 'matrix') {
+    return (
+      <div className="flex flex-col" style={{ margin: '-1.5rem -1.5rem 0', minHeight: 'calc(100vh - 57px)' }}>
+        <PriorityMatrix
+          personalTasks={personalTasks}
+          allPersonalTasks={allPersonalTasks}
+          projectTasks={projectTasks}
+          isLoading={loadingPersonal || loadingProject}
+          onMarkPersonalDone={async (id, prevStatus) => { await handleStatusChange(id, 'done', prevStatus); }}
+          onMarkProjectDone={async (id) => { await handleProjectTaskStatusChange(id, 'done'); }}
+          onOpenNewTask={() => setShowNewTask(true)}
+          viewToggle={viewToggle}
+        />
+        {showNewTask && newTaskDialog}
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       {/* ── Header ── */}
@@ -4446,7 +4526,7 @@ export default function MyTasks() {
                 viewMode === 'briefing' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
               title="Daily Briefing view"
-              data-testid="button-view-briefing"
+              data-testid="button-view-briefing-list"
             >
               <Sparkles className="h-3 w-3" /> Briefing
             </button>
@@ -4458,7 +4538,7 @@ export default function MyTasks() {
                 viewMode === 'matrix' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
               title="Eisenhower Priority Matrix"
-              data-testid="button-view-matrix"
+              data-testid="button-view-matrix-list"
             >
               <LayoutGrid className="h-3 w-3" /> Matrix
             </button>
@@ -4470,7 +4550,7 @@ export default function MyTasks() {
                 viewMode === 'list' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
               title="Full list view"
-              data-testid="button-view-list"
+              data-testid="button-view-list-list"
             >
               <LayoutList className="h-3 w-3" /> List
             </button>
@@ -4541,43 +4621,6 @@ export default function MyTasks() {
           priority: typeof t.priority === 'string' ? t.priority : 'medium',
         })),
       ]} />}
-
-      {/* ── Daily Briefing View ── */}
-      {viewMode === 'briefing' && (
-        <DailyBriefing
-          personalTasks={personalTasks}
-          allPersonalTasks={allPersonalTasks}
-          projectTasks={projectTasks}
-          currentUserFullName={currentUser?.fullName}
-          currentUserId={currentUser?.id}
-          currentUserEmail={currentUser?.email}
-          isLoading={loadingPersonal}
-          onMarkPersonalDone={async (id, prevStatus) => {
-            await handleStatusChange(id, 'done', prevStatus);
-          }}
-          onMarkProjectDone={async (id) => {
-            await handleProjectTaskStatusChange(id, 'done');
-          }}
-          onOpenNewTask={() => setShowNewTask(true)}
-        />
-      )}
-
-      {/* ── Priority Matrix View ── */}
-      {viewMode === 'matrix' && (
-        <PriorityMatrix
-          personalTasks={personalTasks}
-          allPersonalTasks={allPersonalTasks}
-          projectTasks={projectTasks}
-          isLoading={loadingPersonal || loadingProject}
-          onMarkPersonalDone={async (id, prevStatus) => {
-            await handleStatusChange(id, 'done', prevStatus);
-          }}
-          onMarkProjectDone={async (id) => {
-            await handleProjectTaskStatusChange(id, 'done');
-          }}
-          onOpenNewTask={() => setShowNewTask(true)}
-        />
-      )}
 
       {/* ── Main Task Tabs ── */}
       {viewMode === 'list' && <Tabs defaultValue="assigned" className="space-y-0">
