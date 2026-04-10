@@ -54,6 +54,7 @@ import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import { DailyBriefing } from '@/components/tasks/DailyBriefing';
+import { PriorityMatrix } from '@/components/tasks/PriorityMatrix';
 import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
   materialiseDailyTasks,
@@ -4106,10 +4107,10 @@ export default function MyTasks() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const [viewMode, setViewMode] = useState<'briefing' | 'list'>(() => {
-    try { return (localStorage.getItem('pact_mytasks_viewmode') as 'briefing' | 'list') ?? 'list'; } catch { return 'list'; }
+  const [viewMode, setViewMode] = useState<'briefing' | 'matrix' | 'list'>(() => {
+    try { return (localStorage.getItem('pact_mytasks_viewmode') as 'briefing' | 'matrix' | 'list') ?? 'list'; } catch { return 'list'; }
   });
-  const setAndPersistViewMode = (m: 'briefing' | 'list') => {
+  const setAndPersistViewMode = (m: 'briefing' | 'matrix' | 'list') => {
     try { localStorage.setItem('pact_mytasks_viewmode', m); } catch {}
     setViewMode(m);
   };
@@ -4451,6 +4452,18 @@ export default function MyTasks() {
             </button>
             <button
               type="button"
+              onClick={() => setAndPersistViewMode('matrix')}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+                viewMode === 'matrix' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+              title="Eisenhower Priority Matrix"
+              data-testid="button-view-matrix"
+            >
+              <LayoutGrid className="h-3 w-3" /> Matrix
+            </button>
+            <button
+              type="button"
               onClick={() => setAndPersistViewMode('list')}
               className={cn(
                 'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
@@ -4537,6 +4550,23 @@ export default function MyTasks() {
           currentUserId={currentUser?.id}
           currentUserEmail={currentUser?.email}
           isLoading={loadingPersonal}
+          onMarkPersonalDone={async (id, prevStatus) => {
+            await handleStatusChange(id, 'done', prevStatus);
+          }}
+          onMarkProjectDone={async (id) => {
+            await handleProjectTaskStatusChange(id, 'done');
+          }}
+          onOpenNewTask={() => setShowNewTask(true)}
+        />
+      )}
+
+      {/* ── Priority Matrix View ── */}
+      {viewMode === 'matrix' && (
+        <PriorityMatrix
+          personalTasks={personalTasks}
+          allPersonalTasks={allPersonalTasks}
+          projectTasks={projectTasks}
+          isLoading={loadingPersonal || loadingProject}
           onMarkPersonalDone={async (id, prevStatus) => {
             await handleStatusChange(id, 'done', prevStatus);
           }}
