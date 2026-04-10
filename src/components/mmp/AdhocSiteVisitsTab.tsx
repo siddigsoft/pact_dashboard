@@ -195,8 +195,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, assigned_to, transport_fee, enumerator_fee, due_date, created_at, dispatched_at')
         .in('mmp_file_id', fileIds)
-        .order('created_at', { ascending: false })
-        .limit(500);
+        .order('created_at', { ascending: false });
 
       if (!entries) { setExistingEntries([]); return; }
 
@@ -254,14 +253,14 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       try {
         const wb = XLSX.read(e.target?.result, { type: 'binary', cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as (string | number)[][];
         if (raw.length < 2) {
           toast({ title: 'Empty file', description: 'No data rows found.', variant: 'destructive' });
           return;
         }
 
-        const headers = (raw[0] as string[]).map(h => String(h).trim().toLowerCase());
-        const get = (row: any[], ...keys: string[]) => {
+        const headers = raw[0].map(h => String(h).trim().toLowerCase());
+        const get = (row: (string | number)[], ...keys: string[]) => {
           for (const k of keys) {
             const idx = headers.indexOf(k);
             if (idx >= 0 && row[idx] !== undefined && row[idx] !== '') return String(row[idx]).trim();
@@ -314,7 +313,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
       ['Site Name', 'Site Code', 'State', 'Locality', 'Transport Fee', 'Enumerator Fee', 'Assign To', 'Due Date'],
-      ['Example Site', 'EX-001', 'Khartoum', 'Khartoum', '500', '200', 'Collector Full Name or Email', '2026-04-30'],
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Ad-hoc Sites Template');
@@ -380,8 +378,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       if (createMode === 'upload') { setUploadedRows([]); setUploadedFileName(''); }
       else setManualRows([]);
       setRefreshTrigger(t => t + 1);
-    } catch (err: any) {
-      toast({ title: 'Failed to create site visits', description: err?.message || 'Unknown error', variant: 'destructive' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      toast({ title: 'Failed to create site visits', description: msg, variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
@@ -419,8 +418,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       toast({ title: 'Updated successfully' });
       setEditEntry(null);
       setRefreshTrigger(t => t + 1);
-    } catch (err: any) {
-      toast({ title: 'Update failed', description: err?.message, variant: 'destructive' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      toast({ title: 'Update failed', description: msg, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -438,8 +438,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       toast({ title: 'Site recalled', description: `"${recallEntry.site_name}" removed from enumerators' view.` });
       setRecallEntry(null);
       setRefreshTrigger(t => t + 1);
-    } catch (err: any) {
-      toast({ title: 'Recall failed', description: err?.message, variant: 'destructive' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Recall failed';
+      toast({ title: 'Recall failed', description: msg, variant: 'destructive' });
     } finally {
       setRecalling(false);
     }
@@ -480,7 +481,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs value={createMode} onValueChange={(v: any) => setCreateMode(v)}>
+            <Tabs value={createMode} onValueChange={(v) => setCreateMode(v as 'manual' | 'upload')}>
               <TabsList className="mb-4">
                 <TabsTrigger value="manual" data-testid="tab-manual-entry">
                   <PlusCircle className="h-3.5 w-3.5 mr-1.5" />

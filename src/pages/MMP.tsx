@@ -4804,7 +4804,7 @@ const MMP = () => {
                     {t('mmpPage.tabs.mmpTracker')}
                   </TabsTrigger>
                 )}
-                {(isAdmin || isFOM || isCoordinator) && (
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
                   <TabsTrigger value="adhoc" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
                     data-testid="tab-adhoc-visits">
                     <FilePlus className="h-3.5 w-3.5" />
@@ -6517,9 +6517,9 @@ const MMP = () => {
             )}
 
             {/* Ad-hoc Site Visits Tab */}
-            {(isAdmin || isFOM || isCoordinator) && (
+            {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
               <TabsContent value="adhoc">
-                <AdhocSiteVisitsTab canManage={isAdmin || isFOM || isCoordinator} />
+                <AdhocSiteVisitsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
               </TabsContent>
             )}
           </Tabs>
