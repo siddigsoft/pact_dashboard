@@ -91,7 +91,7 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
       // Check if they already have a pending/approved request
       if (existingRequest?.status === 'pending') return;
 
-      const { error } = await supabase.from('workspace_access_requests').upsert({
+      const { error } = await supabase.from('workspace_access_requests').insert({
         user_id: currentUser.id,
         user_name: currentUser.name ?? '',
         user_role: currentUser.role ?? '',
@@ -101,7 +101,7 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
         reviewed_by: null,
         reviewed_at: null,
         reviewer_notes: null,
-      }, { onConflict: 'user_id' });
+      });
 
       if (error) throw error;
 
@@ -109,9 +109,9 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('id')
-        .eq('role', 'super_admin');
+        .eq('role', 'SuperAdmin');
       if (superAdmins?.length) {
-        await supabase.from('notifications').insert(superAdmins.map((a: any) => ({
+        await supabase.from('notifications').insert(superAdmins.map((a: { id: string }) => ({
           recipient_id: a.id,
           event_type: 'workspace_access_request',
           entity_type: 'workspace',
@@ -129,8 +129,9 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
       toast({ title: 'Access request sent', description: 'A super admin will review your request.' });
       qc.invalidateQueries({ queryKey: ['workspace_access_request_mine', currentUser.id] });
       setReason('');
-    } catch (e: any) {
-      toast({ title: 'Error sending request', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Something went wrong';
+      toast({ title: 'Error sending request', description: msg, variant: 'destructive' });
     } finally {
       setRequesting(false);
     }
