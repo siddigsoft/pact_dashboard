@@ -4499,28 +4499,30 @@ export default function MyTasks() {
       {/* Quick Navigation */}
       <ConnectedPagesBar exclude="my-tasks" />
 
-      {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Due Today',  value: stats.dueToday,  icon: ListTodo,     color: 'text-amber-600',  bg: 'bg-amber-50 dark:bg-amber-900/20',   border: 'border-amber-200 dark:border-amber-800' },
-          { label: 'This Week',  value: stats.dueWeek,   icon: Calendar,     color: 'text-[#1D3461]',  bg: 'bg-blue-50 dark:bg-blue-900/20',     border: 'border-blue-200 dark:border-blue-800' },
-          { label: 'Overdue',    value: stats.overdue,   icon: AlertTriangle, color: 'text-red-600',    bg: 'bg-red-50 dark:bg-red-900/20',       border: 'border-red-200 dark:border-red-800' },
-          { label: 'Completed',  value: stats.done,      icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' },
-        ].map(({ label, value, icon: Icon, color, bg, border }) => (
-          <div key={label} className={cn('rounded-xl border p-3.5 flex items-center gap-3', bg, border)}>
-            <div className={cn('h-9 w-9 rounded-lg flex items-center justify-center', bg)}>
-              <Icon className={cn('h-4.5 w-4.5', color)} />
+      {/* ── Stat cards — List mode only ── */}
+      {viewMode === 'list' && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Due Today',  value: stats.dueToday,  icon: ListTodo,     color: 'text-amber-600',  bg: 'bg-amber-50 dark:bg-amber-900/20',   border: 'border-amber-200 dark:border-amber-800' },
+            { label: 'This Week',  value: stats.dueWeek,   icon: Calendar,     color: 'text-[#1D3461]',  bg: 'bg-blue-50 dark:bg-blue-900/20',     border: 'border-blue-200 dark:border-blue-800' },
+            { label: 'Overdue',    value: stats.overdue,   icon: AlertTriangle, color: 'text-red-600',    bg: 'bg-red-50 dark:bg-red-900/20',       border: 'border-red-200 dark:border-red-800' },
+            { label: 'Completed',  value: stats.done,      icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' },
+          ].map(({ label, value, icon: Icon, color, bg, border }) => (
+            <div key={label} className={cn('rounded-xl border p-3.5 flex items-center gap-3', bg, border)}>
+              <div className={cn('h-9 w-9 rounded-lg flex items-center justify-center', bg)}>
+                <Icon className={cn('h-4.5 w-4.5', color)} />
+              </div>
+              <div>
+                <p className={cn('text-2xl font-bold leading-none', color)}>{value}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+              </div>
             </div>
-            <div>
-              <p className={cn('text-2xl font-bold leading-none', color)}>{value}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* ── Smart Insights ── */}
-      {showInsights && (
+      {/* ── Smart Insights — List mode only ── */}
+      {viewMode === 'list' && showInsights && (
         <SmartInsightsPanel
           stats={stats}
           totalPersonal={personalTasks.length}
@@ -4530,15 +4532,15 @@ export default function MyTasks() {
         />
       )}
 
-      {/* ── Planning Hub ── */}
-      <PlanningHub allTasks={[
+      {/* ── Planning Hub — List mode only ── */}
+      {viewMode === 'list' && <PlanningHub allTasks={[
         ...personalTasks,
         ...projectTasks.map(t => ({
           dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
           status: typeof t.status === 'string' ? t.status : 'todo',
           priority: typeof t.priority === 'string' ? t.priority : 'medium',
         })),
-      ]} />
+      ]} />}
 
       {/* ── Daily Briefing View ── */}
       {viewMode === 'briefing' && (
