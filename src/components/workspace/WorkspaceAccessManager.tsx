@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
+import { EmailNotificationService } from '@/services/email-notification.service';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -413,11 +414,29 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         email_sent: false,
       });
 
+      // Send email notification to the requester
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', req.user_id)
+        .maybeSingle();
+      if (profile?.email) {
+        await EmailNotificationService.sendApprovalApproved(
+          profile.email,
+          profile.full_name ?? req.user_name ?? 'User',
+          'Workspace Hub Access',
+          'Workspace Hub',
+          currentUser.name ?? 'Admin',
+          new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        );
+      }
+
       toast({ title: 'Request approved', description: `${req.user_name ?? 'User'} now has viewer access` });
       refetchRequests(); refetchGrants();
       qc.invalidateQueries({ queryKey: ['workspace_access_grant'] });
-    } catch (e: any) {
-      toast({ title: 'Error approving', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      toast({ title: 'Error approving', description: msg, variant: 'destructive' });
     } finally {
       setActioningId(null);
     }
@@ -447,10 +466,28 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         email_sent: false,
       });
 
+      // Send email notification to the requester
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', req.user_id)
+        .maybeSingle();
+      if (profile?.email) {
+        await EmailNotificationService.sendApprovalRejected(
+          profile.email,
+          profile.full_name ?? req.user_name ?? 'User',
+          'Workspace Hub Access',
+          'Workspace Hub',
+          currentUser.name ?? 'Admin',
+          'Your access request was not approved. Please contact your administrator for more information.'
+        );
+      }
+
       toast({ title: 'Request rejected' });
       refetchRequests();
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
     } finally {
       setActioningId(null);
     }
