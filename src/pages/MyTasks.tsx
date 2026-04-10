@@ -53,6 +53,7 @@ import { useNavigate } from 'react-router-dom';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
+import { DailyBriefing } from '@/components/tasks/DailyBriefing';
 import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
   materialiseDailyTasks,
@@ -4105,6 +4106,14 @@ export default function MyTasks() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  const [viewMode, setViewMode] = useState<'briefing' | 'list'>(() => {
+    try { return (localStorage.getItem('pact_mytasks_viewmode') as 'briefing' | 'list') ?? 'list'; } catch { return 'list'; }
+  });
+  const setAndPersistViewMode = (m: 'briefing' | 'list') => {
+    try { localStorage.setItem('pact_mytasks_viewmode', m); } catch {}
+    setViewMode(m);
+  };
+
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
@@ -4426,6 +4435,33 @@ export default function MyTasks() {
           <p className="text-sm text-muted-foreground ml-10">{today} · {currentUser?.fullName}</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center bg-muted/60 border border-border/60 rounded-lg p-0.5 h-8 gap-0.5">
+            <button
+              type="button"
+              onClick={() => setAndPersistViewMode('briefing')}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+                viewMode === 'briefing' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+              title="Daily Briefing view"
+              data-testid="button-view-briefing"
+            >
+              <Sparkles className="h-3 w-3" /> Briefing
+            </button>
+            <button
+              type="button"
+              onClick={() => setAndPersistViewMode('list')}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+                viewMode === 'list' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+              title="Full list view"
+              data-testid="button-view-list"
+            >
+              <LayoutList className="h-3 w-3" /> List
+            </button>
+          </div>
           <Button
             size="sm"
             className="bg-[#1D3461] hover:bg-[#0F2041] text-white gap-1.5"
@@ -4491,8 +4527,28 @@ export default function MyTasks() {
         })),
       ]} />
 
+      {/* ── Daily Briefing View ── */}
+      {viewMode === 'briefing' && (
+        <DailyBriefing
+          personalTasks={personalTasks}
+          allPersonalTasks={allPersonalTasks}
+          projectTasks={projectTasks}
+          currentUserFullName={currentUser?.fullName}
+          currentUserId={currentUser?.id}
+          currentUserEmail={currentUser?.email}
+          isLoading={loadingPersonal}
+          onMarkPersonalDone={async (id, prevStatus) => {
+            await handleStatusChange(id, 'done', prevStatus);
+          }}
+          onMarkProjectDone={async (id) => {
+            await handleProjectTaskStatusChange(id, 'done');
+          }}
+          onOpenNewTask={() => setShowNewTask(true)}
+        />
+      )}
+
       {/* ── Main Task Tabs ── */}
-      <Tabs defaultValue="assigned" className="space-y-0">
+      {viewMode === 'list' && <Tabs defaultValue="assigned" className="space-y-0">
         <div className="flex items-center justify-between gap-3 mb-3">
           <TabsList className="h-10 bg-muted/50 border border-border/60 rounded-xl p-1 gap-1">
             <TabsTrigger
@@ -4983,7 +5039,7 @@ export default function MyTasks() {
         )}
       </div>
         </TabsContent>
-      </Tabs>
+      </Tabs>}
 
       {/* ── Team Task Health (admin only) ── */}
       {isAdmin && (
