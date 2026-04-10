@@ -4422,49 +4422,58 @@ export default function MyTasks() {
     { key: 'done',    label: 'Done',     count: stats.done },
   ];
 
-  // Shared view-mode toggle pill rendered inside each full-page view's header
-  const viewToggle = (
+  // Toggle for dark backgrounds (Briefing banner)
+  const viewToggleDark = (
     <div className="flex items-center bg-white/10 border border-white/20 rounded-lg p-0.5 h-8 gap-0.5">
-      <button
-        type="button"
-        onClick={() => setAndPersistViewMode('briefing')}
-        className={cn(
-          'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
-          viewMode === 'briefing' ? 'bg-white text-[#1D3461] shadow-sm' : 'text-white/70 hover:text-white',
-        )}
-        data-testid="button-view-briefing"
-      >
-        <Sparkles className="h-3 w-3" /> Briefing
-      </button>
-      <button
-        type="button"
-        onClick={() => setAndPersistViewMode('matrix')}
-        className={cn(
-          'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
-          viewMode === 'matrix' ? 'bg-white text-[#1D3461] shadow-sm' : 'text-white/70 hover:text-white',
-        )}
-        data-testid="button-view-matrix"
-      >
-        <LayoutGrid className="h-3 w-3" /> Matrix
-      </button>
-      <button
-        type="button"
-        onClick={() => setAndPersistViewMode('list')}
-        className={cn(
-          'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
-          viewMode === 'list' ? 'bg-white text-[#1D3461] shadow-sm' : 'text-white/70 hover:text-white',
-        )}
-        data-testid="button-view-list"
-      >
-        <LayoutList className="h-3 w-3" /> List
-      </button>
+      {([
+        { mode: 'briefing' as const, icon: <Sparkles className="h-3 w-3" />, label: 'Briefing', testId: 'button-view-briefing' },
+        { mode: 'matrix'   as const, icon: <LayoutGrid className="h-3 w-3" />, label: 'Matrix',   testId: 'button-view-matrix' },
+        { mode: 'list'     as const, icon: <LayoutList className="h-3 w-3" />, label: 'List',     testId: 'button-view-list' },
+      ] as const).map(({ mode, icon, label, testId }) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setAndPersistViewMode(mode)}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+            viewMode === mode ? 'bg-white text-[#1D3461] shadow-sm' : 'text-white/70 hover:text-white',
+          )}
+          data-testid={testId}
+        >
+          {icon} {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  // Toggle for light backgrounds (Matrix header)
+  const viewToggleLight = (
+    <div className="flex items-center bg-muted/60 border border-border/60 rounded-lg p-0.5 h-8 gap-0.5">
+      {([
+        { mode: 'briefing' as const, icon: <Sparkles className="h-3 w-3" />, label: 'Briefing', testId: 'button-view-briefing' },
+        { mode: 'matrix'   as const, icon: <LayoutGrid className="h-3 w-3" />, label: 'Matrix',   testId: 'button-view-matrix' },
+        { mode: 'list'     as const, icon: <LayoutList className="h-3 w-3" />, label: 'List',     testId: 'button-view-list' },
+      ] as const).map(({ mode, icon, label, testId }) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setAndPersistViewMode(mode)}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
+            viewMode === mode ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
+          )}
+          data-testid={testId}
+        >
+          {icon} {label}
+        </button>
+      ))}
     </div>
   );
 
   // ── Full-page Briefing view ────────────────────────────────────────────────
   if (viewMode === 'briefing') {
     return (
-      <div className="flex flex-col" style={{ margin: '-1.5rem -1.5rem 0', minHeight: 'calc(100vh - 57px)' }}>
+      <div className="flex flex-col w-full" style={{ minHeight: 'calc(100vh - 120px)' }}>
         <DailyBriefing
           personalTasks={personalTasks}
           allPersonalTasks={allPersonalTasks}
@@ -4476,9 +4485,19 @@ export default function MyTasks() {
           onMarkPersonalDone={async (id, prevStatus) => { await handleStatusChange(id, 'done', prevStatus); }}
           onMarkProjectDone={async (id) => { await handleProjectTaskStatusChange(id, 'done'); }}
           onOpenNewTask={() => setShowNewTask(true)}
-          viewToggle={viewToggle}
+          viewToggle={viewToggleDark}
         />
-        {showNewTask && newTaskDialog}
+        <NewTaskDialog
+          open={showNewTask}
+          onClose={() => setShowNewTask(false)}
+          onCreate={handleNewTaskCreate}
+          isCreating={isCreating}
+          isAdmin={isAdmin}
+          isSuperAdmin={isSuperAdmin}
+          currentUserId={userId ?? ''}
+          currentUserName={currentUser?.fullName ?? 'Me'}
+          currentUserDepartmentId={currentUser?.departmentId ?? null}
+        />
       </div>
     );
   }
@@ -4486,7 +4505,7 @@ export default function MyTasks() {
   // ── Full-page Matrix view ─────────────────────────────────────────────────
   if (viewMode === 'matrix') {
     return (
-      <div className="flex flex-col" style={{ margin: '-1.5rem -1.5rem 0', minHeight: 'calc(100vh - 57px)' }}>
+      <div className="flex flex-col w-full" style={{ minHeight: 'calc(100vh - 120px)' }}>
         <PriorityMatrix
           personalTasks={personalTasks}
           allPersonalTasks={allPersonalTasks}
@@ -4495,9 +4514,19 @@ export default function MyTasks() {
           onMarkPersonalDone={async (id, prevStatus) => { await handleStatusChange(id, 'done', prevStatus); }}
           onMarkProjectDone={async (id) => { await handleProjectTaskStatusChange(id, 'done'); }}
           onOpenNewTask={() => setShowNewTask(true)}
-          viewToggle={viewToggle}
+          viewToggle={viewToggleLight}
         />
-        {showNewTask && newTaskDialog}
+        <NewTaskDialog
+          open={showNewTask}
+          onClose={() => setShowNewTask(false)}
+          onCreate={handleNewTaskCreate}
+          isCreating={isCreating}
+          isAdmin={isAdmin}
+          isSuperAdmin={isSuperAdmin}
+          currentUserId={userId ?? ''}
+          currentUserName={currentUser?.fullName ?? 'Me'}
+          currentUserDepartmentId={currentUser?.departmentId ?? null}
+        />
       </div>
     );
   }

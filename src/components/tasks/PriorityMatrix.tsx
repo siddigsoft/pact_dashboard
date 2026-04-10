@@ -143,6 +143,7 @@ interface PriorityMatrixProps {
   onMarkPersonalDone: (id: string, prevStatus: PersonalTaskStatus) => Promise<void>;
   onMarkProjectDone: (id: string) => Promise<void>;
   onOpenNewTask: () => void;
+  viewToggle?: React.ReactNode;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -153,6 +154,7 @@ export function PriorityMatrix({
   onMarkPersonalDone,
   onMarkProjectDone,
   onOpenNewTask,
+  viewToggle,
 }: PriorityMatrixProps) {
   const { toast } = useToast();
 
@@ -258,8 +260,8 @@ export function PriorityMatrix({
 
   return (
     <div
-      className="flex flex-col -mx-4 sm:-mx-6 -mt-2"
-      style={{ fontFamily: "'Inter',system-ui,sans-serif", minHeight: 'calc(100vh - 120px)' }}
+      className="flex flex-col w-full"
+      style={{ fontFamily: "'Inter',system-ui,sans-serif" }}
     >
       {/* ── White header bar ── */}
       <div className="bg-white dark:bg-card border-b border-slate-200 dark:border-border px-6 sm:px-8 py-4 flex items-center justify-between gap-4 flex-wrap flex-shrink-0">
@@ -282,6 +284,7 @@ export function PriorityMatrix({
               </span>
             ))}
           </div>
+          {viewToggle}
           <button
             onClick={onOpenNewTask}
             className="flex items-center gap-1.5 text-[12px] font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-3.5 h-9 transition-colors"

@@ -61,6 +61,7 @@ interface DailyBriefingProps {
   onMarkPersonalDone: (id: string, prevStatus: PersonalTaskStatus) => Promise<void>;
   onMarkProjectDone: (id: string) => Promise<void>;
   onOpenNewTask: () => void;
+  viewToggle?: React.ReactNode;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ export function DailyBriefing({
   onMarkPersonalDone,
   onMarkProjectDone,
   onOpenNewTask,
+  viewToggle,
 }: DailyBriefingProps) {
   const { toast } = useToast();
   const now = new Date();
@@ -233,8 +235,8 @@ export function DailyBriefing({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
-      className="flex flex-col -mx-4 sm:-mx-6 -mt-2"
-      style={{ fontFamily: "'Inter',system-ui,sans-serif", minHeight: 'calc(100vh - 120px)' }}
+      className="flex flex-col w-full"
+      style={{ fontFamily: "'Inter',system-ui,sans-serif" }}
     >
       {/* ── Full-width dark banner ── */}
       <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] text-white px-6 sm:px-8 py-5 sm:py-6">
@@ -266,9 +268,12 @@ export function DailyBriefing({
               )}
             </p>
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Sparkles className="h-4 w-4 text-amber-300" />
-            <span className="text-[11.5px] text-white/50 hidden sm:inline">Daily Briefing</span>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {viewToggle}
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-amber-300" />
+              <span className="text-[11.5px] text-white/50 hidden sm:inline">Daily Briefing</span>
+            </div>
           </div>
         </div>
 
