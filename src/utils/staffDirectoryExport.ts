@@ -44,6 +44,12 @@ export interface ExportProfile {
 }
 
 const ROLE_LABELS: Record<string, string> = {
+  /* ── PascalCase (actual DB values) ── */
+  SuperAdmin: 'Super Admin', Admin: 'Admin', Coordinator: 'Coordinator',
+  DataCollector: 'Data Collector', DataTeam: 'Data Team', Supervisor: 'Supervisor',
+  'Field Operation Manager (FOM)': 'Field Operation Manager', Reviewer: 'Reviewer',
+  employee: 'Employee',
+  /* ── Legacy snake_case (kept for safety) ── */
   super_admin: 'Super Admin', admin: 'Admin', country_director: 'Country Director',
   fom: 'FOM', supervisor: 'Supervisor', coordinator: 'Coordinator',
   data_team: 'Data Team', financial_auditor: 'Financial Auditor', enumerator: 'Enumerator',

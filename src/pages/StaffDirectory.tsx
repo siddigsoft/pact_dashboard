@@ -64,11 +64,34 @@ interface StaffProfile {
 }
 
 const ROLE_LABELS: Record<string, string> = {
+  /* ── PascalCase (actual DB values) ── */
+  SuperAdmin: 'Super Admin', Admin: 'Admin', Coordinator: 'Coordinator',
+  DataCollector: 'Data Collector', DataTeam: 'Data Team', Supervisor: 'Supervisor',
+  'Field Operation Manager (FOM)': 'Field Operation Manager', Reviewer: 'Reviewer',
+  employee: 'Employee',
+  /* ── Legacy snake_case (kept for safety) ── */
   super_admin: 'Super Admin', admin: 'Admin', country_director: 'Country Director',
   fom: 'FOM', supervisor: 'Supervisor', coordinator: 'Coordinator',
   data_team: 'Data Team', financial_auditor: 'Financial Auditor', enumerator: 'Enumerator',
 };
+/* Canonical order for dropdown (PascalCase DB values only) */
+const ROLE_OPTIONS: [string, string][] = [
+  ['SuperAdmin', 'Super Admin'], ['Admin', 'Admin'], ['Coordinator', 'Coordinator'],
+  ['DataCollector', 'Data Collector'], ['DataTeam', 'Data Team'], ['Supervisor', 'Supervisor'],
+  ['Field Operation Manager (FOM)', 'Field Operation Manager'], ['Reviewer', 'Reviewer'],
+];
 const ROLE_COLORS: Record<string, string> = {
+  /* ── PascalCase ── */
+  SuperAdmin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200 border-purple-200 dark:border-purple-800',
+  Admin: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800',
+  Coordinator: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
+  DataCollector: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 border-blue-200 dark:border-blue-800',
+  DataTeam: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border-amber-200 dark:border-amber-800',
+  Supervisor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border-teal-200 dark:border-teal-800',
+  'Field Operation Manager (FOM)': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200 border-cyan-200 dark:border-cyan-800',
+  Reviewer: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200 border-orange-200 dark:border-orange-800',
+  employee: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+  /* ── Legacy snake_case ── */
   super_admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200 border-purple-200 dark:border-purple-800',
   admin: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800',
   country_director: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 border-blue-200 dark:border-blue-800',
@@ -879,7 +902,7 @@ export default function StaffDirectory() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            {Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            {ROLE_OPTIONS.map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
 

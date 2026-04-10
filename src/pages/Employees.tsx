@@ -9,6 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Users, Search, Building2, MapPin,
   RefreshCw, ChevronRight, Pencil, Check,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
@@ -16,14 +20,18 @@ import {
   FileText, FileDown, GitBranch, UserX,
   TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle,
   Landmark, LayoutGrid, List, Shield, Layers, Briefcase,
+  Download, FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { sudanStates } from "@/data/sudanStates";
+import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
 import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
+import {
+  exportStaffToExcel, exportStaffToPDF, exportStaffToCSV, type ExportProfile,
+} from "@/utils/staffDirectoryExport";
 
 /* ─── Types ────────────────────────────────────────────────── */
 interface BankAccount {
@@ -70,11 +78,34 @@ function ContractBadge({ type }: { type: string | null }) {
 }
 
 const ROLE_LABELS: Record<string, string> = {
+  /* ── PascalCase (actual DB values) ── */
+  SuperAdmin: 'Super Admin', Admin: 'Admin', Coordinator: 'Coordinator',
+  DataCollector: 'Data Collector', DataTeam: 'Data Team', Supervisor: 'Supervisor',
+  'Field Operation Manager (FOM)': 'Field Operation Manager', Reviewer: 'Reviewer',
+  employee: 'Employee',
+  /* ── Legacy snake_case (kept for safety) ── */
   super_admin: 'Super Admin', admin: 'Admin', country_director: 'Country Director',
   fom: 'FOM', supervisor: 'Supervisor', coordinator: 'Coordinator',
   data_team: 'Data Team', financial_auditor: 'Financial Auditor', enumerator: 'Enumerator',
 };
+/* Canonical order for dropdown (PascalCase DB values only) */
+const ROLE_OPTIONS: [string, string][] = [
+  ['SuperAdmin', 'Super Admin'], ['Admin', 'Admin'], ['Coordinator', 'Coordinator'],
+  ['DataCollector', 'Data Collector'], ['DataTeam', 'Data Team'], ['Supervisor', 'Supervisor'],
+  ['Field Operation Manager (FOM)', 'Field Operation Manager'], ['Reviewer', 'Reviewer'],
+];
 const ROLE_COLORS: Record<string, string> = {
+  /* ── PascalCase ── */
+  SuperAdmin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200 border-purple-200 dark:border-purple-800',
+  Admin: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800',
+  Coordinator: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
+  DataCollector: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 border-blue-200 dark:border-blue-800',
+  DataTeam: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border-amber-200 dark:border-amber-800',
+  Supervisor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200 border-teal-200 dark:border-teal-800',
+  'Field Operation Manager (FOM)': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200 border-cyan-200 dark:border-cyan-800',
+  Reviewer: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200 border-orange-200 dark:border-orange-800',
+  employee: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+  /* ── Legacy snake_case ── */
   super_admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200 border-purple-200 dark:border-purple-800',
   admin: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800',
   country_director: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 border-blue-200 dark:border-blue-800',
@@ -924,30 +955,45 @@ export default function Employees() {
     fetchFin();
   }, []);
 
+  /* Departments */
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+
   /* Filters */
   const [search, setSearch]               = useState('');
   const [hubFilter, setHubFilter]         = useState('all');
+  const [stateFilter, setStateFilter]     = useState('all');
+  const [localityFilter, setLocalFilter]  = useState('all');
   const [roleFilter, setRoleFilter]       = useState('all');
   const [bankFilter, setBankFilter]       = useState('all');
   const [contractFilter, setContractFilter] = useState('all');
+  const [deptFilter, setDeptFilter]       = useState('all');
   const [showUnregistered, setShowUnregistered] = useState(false);
   const [viewMode, setViewMode]           = useState<'cards' | 'table'>('table');
   const [activeTab, setActiveTab]   = useState('roster');
+
+  /* Derived geo lists */
+  const availableLocalities = useMemo(
+    () => stateFilter === 'all' ? [] : getLocalitiesByState(stateFilter),
+    [stateFilter]
+  );
 
   /* ── Data loading ── */
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const { data: hubsData } = await (supabase as any).from('hubs').select('id, name').order('name');
-      if (hubsData?.length) setDbHubs(hubsData);
+      const [hubsRes, deptsRes, pRes] = await Promise.all([
+        (supabase as any).from('hubs').select('id, name').order('name'),
+        (supabase as any).from('departments').select('id, name').order('name'),
+        (supabase as any)
+          .from('profiles')
+          .select('id, full_name, email, phone, role, employee_id, is_employee, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
+          .order('full_name'),
+      ]);
+      if (hubsRes.data?.length) setDbHubs(hubsRes.data);
+      if (deptsRes.data?.length) setDepartments(deptsRes.data);
 
-      const { data: pData } = await (supabase as any)
-        .from('profiles')
-        .select('id, full_name, email, phone, role, employee_id, is_employee, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
-        .order('full_name');
-
-      if (pData) {
-        setProfiles(pData.map((p: any) => {
+      if (pRes.data) {
+        setProfiles(pRes.data.map((p: any) => {
           let raw = p.bank_account;
           if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
           const ba = normalizeBA(raw);
@@ -967,6 +1013,29 @@ export default function Employees() {
 
   useEffect(() => { load(); }, [load]);
 
+  /* ── Real-time: update profiles when any row changes ── */
+  useEffect(() => {
+    const ch = (supabase as any)
+      .channel('employees-profiles-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: any) => {
+        const rec = payload.new as any;
+        if (!rec?.id) return;
+        let raw = rec.bank_account;
+        if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
+        const ba = normalizeBA(raw);
+        const last_activity = rec.last_activity || (rec.device_info ? rec.updated_at : null);
+        const presence = presenceFromActivity(last_activity, rec.updated_at);
+        setProfiles(prev => {
+          const exists = prev.findIndex(p => p.id === rec.id);
+          const updated = { ...rec, bank_account: ba, last_activity, device_info: rec.device_info || null, app_version: rec.app_version || null, presence, is_employee: !!rec.is_employee };
+          if (exists >= 0) return prev.map(p => p.id === rec.id ? updated : p);
+          return [...prev, updated].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+        });
+      })
+      .subscribe();
+    return () => { (supabase as any).removeChannel(ch); };
+  }, []);
+
   /* Enrich with live presence */
   const enriched = useMemo<EmployeeProfile[]>(() =>
     profiles.map(p => ({
@@ -983,13 +1052,16 @@ export default function Employees() {
       if (!showUnregistered && !p.is_employee) return false;
       if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
       if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
+      if (stateFilter !== 'all' && p.state_id !== stateFilter) return false;
+      if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
       if (roleFilter !== 'all' && p.role !== roleFilter) return false;
       if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (contractFilter !== 'all' && (p.contract_type || 'salary') !== contractFilter) return false;
+      if (deptFilter !== 'all' && p.department_id !== deptFilter) return false;
       return true;
     });
-  }, [enriched, search, hubFilter, roleFilter, bankFilter, contractFilter, showUnregistered]);
+  }, [enriched, search, hubFilter, stateFilter, localityFilter, roleFilter, bankFilter, contractFilter, deptFilter, showUnregistered]);
 
   const unregisteredCount = useMemo(
     () => enriched.filter(p => !p.is_employee).length,
@@ -1009,6 +1081,74 @@ export default function Employees() {
     withBank:    registeredEmployees.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
     missingBank: registeredEmployees.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
   }), [registeredEmployees]);
+
+  /* ── Export helpers ── */
+  const toExportProfiles = useCallback((): ExportProfile[] => {
+    return filtered.map(p => {
+      const hub  = dbHubs.find(h => h.id === p.hub_id);
+      const st   = sudanStates.find(s => s.id === p.state_id);
+      return {
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+        phone: p.phone,
+        role: p.role,
+        employee_id: p.employee_id,
+        hub_name: hub?.name || '',
+        state_name: st?.name || '',
+        locality_name: '',
+        availability: p.presence,
+        contract_type: p.contract_type,
+        bank_account: p.bank_account,
+        last_activity: p.last_activity,
+        device_info: p.device_info,
+        app_version: p.app_version,
+        location_sharing: null,
+      };
+    });
+  }, [filtered, dbHubs]);
+
+  function EmployeeExportMenu() {
+    const [busy, setBusy] = useState(false);
+    const exp = async (type: 'excel' | 'pdf' | 'csv') => {
+      if (!filtered.length) { toast({ title: 'No data to export', variant: 'destructive' }); return; }
+      setBusy(true);
+      try {
+        const ep = toExportProfiles();
+        const label = `Employees${activeTab !== 'roster' ? ` – ${activeTab}` : ''}`;
+        if (type === 'excel') await exportStaffToExcel(ep, label);
+        else if (type === 'pdf') exportStaffToPDF(ep, activeTab === 'bank_accounts' ? 'bank_accounts' : 'directory', label);
+        else exportStaffToCSV(ep, activeTab === 'bank_accounts' ? 'bank_accounts' : 'directory');
+        toast({ title: 'Export ready', description: `${filtered.length} records exported.` });
+      } catch (err: any) {
+        toast({ title: 'Export failed', description: err?.message, variant: 'destructive' });
+      } finally { setBusy(false); }
+    };
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" disabled={busy || !filtered.length}
+            className="gap-1.5 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+            data-testid="button-export-menu">
+            <Download className="h-3.5 w-3.5" />
+            {busy ? 'Exporting…' : 'Export'}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem onClick={() => exp('excel')} className="gap-2 cursor-pointer" data-testid="menu-export-excel">
+            <FileSpreadsheet className="h-4 w-4 text-green-700" />Excel (.xlsx)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => exp('pdf')} className="gap-2 cursor-pointer" data-testid="menu-export-pdf">
+            <FileText className="h-4 w-4 text-red-600" />PDF
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => exp('csv')} className="gap-2 cursor-pointer" data-testid="menu-export-csv">
+            <FileDown className="h-4 w-4 text-blue-600" />CSV
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
 
   /* ── Stat Card ── */
   function StatCard({ label, value, icon: Icon, accent, onClick }: {
@@ -1031,8 +1171,11 @@ export default function Employees() {
     );
   }
 
-  const clearFilters = () => { setSearch(''); setHubFilter('all'); setRoleFilter('all'); setBankFilter('all'); setContractFilter('all'); };
-  const hasFilters = !!(search || hubFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all' || contractFilter !== 'all');
+  const clearFilters = () => {
+    setSearch(''); setHubFilter('all'); setStateFilter('all'); setLocalFilter('all');
+    setRoleFilter('all'); setBankFilter('all'); setContractFilter('all'); setDeptFilter('all');
+  };
+  const hasFilters = !!(search || hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all' || contractFilter !== 'all' || deptFilter !== 'all');
 
   /* ── Filter Bar ── */
   const FilterBar = (
@@ -1048,7 +1191,7 @@ export default function Employees() {
             data-testid="input-search"
           />
         </div>
-        <Select value={hubFilter} onValueChange={setHubFilter}>
+        <Select value={hubFilter} onValueChange={v => { setHubFilter(v); }}>
           <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-hub">
             <SelectValue placeholder="All Hubs" />
           </SelectTrigger>
@@ -1057,13 +1200,31 @@ export default function Employees() {
             {dbHubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={stateFilter} onValueChange={v => { setStateFilter(v); setLocalFilter('all'); }}>
+          <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-state">
+            <SelectValue placeholder="All States" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All States</SelectItem>
+            {sudanStates.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={localityFilter} onValueChange={setLocalFilter} disabled={stateFilter === 'all'}>
+          <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-locality">
+            <SelectValue placeholder={stateFilter === 'all' ? 'Pick state first' : 'All Localities'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Localities</SelectItem>
+            {availableLocalities.map((l: any) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
           <SelectTrigger className="h-8 w-[130px] text-xs" data-testid="select-role">
             <SelectValue placeholder="All Roles" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            {Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            {ROLE_OPTIONS.map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={bankFilter} onValueChange={setBankFilter}>
@@ -1087,6 +1248,17 @@ export default function Employees() {
             <SelectItem value="both">Salary + Retainer</SelectItem>
           </SelectContent>
         </Select>
+        {departments.length > 0 && (
+          <Select value={deptFilter} onValueChange={setDeptFilter}>
+            <SelectTrigger className="h-8 w-[140px] text-xs" data-testid="select-dept">
+              <SelectValue placeholder="All Departments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs gap-1 text-muted-foreground" data-testid="button-clear-filters">
             <XCircle className="h-3.5 w-3.5" />Clear
@@ -1156,17 +1328,20 @@ export default function Employees() {
               Employment details · Bank accounts · Financial records
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => load(true)}
-            disabled={refreshing}
-            className="gap-1.5 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
-            data-testid="button-refresh"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <EmployeeExportMenu />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => load(true)}
+              disabled={refreshing}
+              className="gap-1.5 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+              data-testid="button-refresh"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
       </div>
 
