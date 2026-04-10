@@ -23,7 +23,7 @@ interface AdminRoleConfirmDialogProps {
   currentUserName: string;
 }
 
-const emailService = new EmailNotificationService();
+const emailService = EmailNotificationService;
 
 export function AdminRoleConfirmDialog({
   open,
