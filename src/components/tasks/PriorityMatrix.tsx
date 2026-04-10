@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import {
   AlertTriangle, Calendar, Users, Trash2,
   Plus, X, CheckCircle2, Clock, Loader2,
-  GripVertical, FolderOpen, Star,
+  GripVertical, FolderOpen, Star, Zap, ArrowRight,
 } from 'lucide-react';
 import { format, isToday, parseISO, isValid, isBefore, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -14,7 +14,6 @@ import {
 } from '@/hooks/usePersonalTasks';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
 type Quadrant = 'do' | 'schedule' | 'delegate' | 'eliminate';
 
 interface MatrixItem {
@@ -31,7 +30,6 @@ interface MatrixItem {
 }
 
 // ── Quadrant config ───────────────────────────────────────────────────────────
-
 const Q_CONFIG: Record<Quadrant, {
   label: string;
   subtitle: string;
@@ -50,7 +48,7 @@ const Q_CONFIG: Record<Quadrant, {
     headerCls: 'bg-red-500 text-white',
     bgCls: 'bg-red-50 dark:bg-red-950/20',
     borderCls: 'border-red-200 dark:border-red-900/50',
-    dropBorderCls: 'border-red-400',
+    dropBorderCls: 'border-violet-400',
     chipCls: 'bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
     dotColor: 'bg-red-500',
   },
@@ -61,7 +59,7 @@ const Q_CONFIG: Record<Quadrant, {
     headerCls: 'bg-blue-500 text-white',
     bgCls: 'bg-blue-50 dark:bg-blue-950/20',
     borderCls: 'border-blue-200 dark:border-blue-900/50',
-    dropBorderCls: 'border-blue-400',
+    dropBorderCls: 'border-violet-400',
     chipCls: 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
     dotColor: 'bg-blue-500',
   },
@@ -72,7 +70,7 @@ const Q_CONFIG: Record<Quadrant, {
     headerCls: 'bg-amber-500 text-white',
     bgCls: 'bg-amber-50 dark:bg-amber-950/20',
     borderCls: 'border-amber-200 dark:border-amber-900/50',
-    dropBorderCls: 'border-amber-400',
+    dropBorderCls: 'border-violet-400',
     chipCls: 'bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
     dotColor: 'bg-amber-500',
   },
@@ -83,7 +81,7 @@ const Q_CONFIG: Record<Quadrant, {
     headerCls: 'bg-slate-400 text-white',
     bgCls: 'bg-slate-50 dark:bg-slate-900/30',
     borderCls: 'border-slate-200 dark:border-slate-700',
-    dropBorderCls: 'border-slate-400',
+    dropBorderCls: 'border-violet-400',
     chipCls: 'bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
     dotColor: 'bg-slate-400',
   },
@@ -92,7 +90,6 @@ const Q_CONFIG: Record<Quadrant, {
 const QUADRANT_ORDER: Quadrant[] = ['do', 'schedule', 'delegate', 'eliminate'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
 function taskIsOverdue(dueDate?: string | null, status?: string): boolean {
   if (!dueDate || status === 'done' || status === 'cancelled') return false;
   try {
@@ -119,12 +116,7 @@ function fmtDue(iso?: string | null): string | null {
   } catch { return null; }
 }
 
-/** Auto-assign a task to a quadrant based on priority + urgency */
-function autoQuadrant(
-  priority: string,
-  overdue: boolean,
-  todayDue: boolean,
-): Quadrant {
+function autoQuadrant(priority: string, overdue: boolean, todayDue: boolean): Quadrant {
   const urgent = overdue || todayDue;
   if (priority === 'critical') return 'do';
   if (priority === 'high' && urgent) return 'do';
@@ -134,23 +126,15 @@ function autoQuadrant(
   return 'eliminate';
 }
 
-// ── Local storage helpers ─────────────────────────────────────────────────────
-
 const STORAGE_KEY = 'pact_mytasks_matrix_overrides';
-
 function loadOverrides(): Record<string, Quadrant> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, Quadrant>) : {};
-  } catch { return {}; }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'); } catch { return {}; }
 }
-
 function saveOverrides(o: Record<string, Quadrant>) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(o)); } catch {}
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
-
 interface PriorityMatrixProps {
   personalTasks: PersonalTask[];
   allPersonalTasks: PersonalTask[];
@@ -162,10 +146,8 @@ interface PriorityMatrixProps {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-
 export function PriorityMatrix({
   personalTasks,
-  allPersonalTasks,
   projectTasks,
   isLoading,
   onMarkPersonalDone,
@@ -174,26 +156,18 @@ export function PriorityMatrix({
 }: PriorityMatrixProps) {
   const { toast } = useToast();
 
-  // Quadrant overrides: user can drag tasks between quadrants
   const [overrides, setOverrides] = useState<Record<string, Quadrant>>(loadOverrides);
-
-  // In-progress completions
   const [completing, setCompleting] = useState<Set<string>>(new Set());
-  // Completed items (optimistic, hidden until real invalidation)
   const [localDone, setLocalDone] = useState<Set<string>>(new Set());
-
-  // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<Quadrant | null>(null);
 
-  // Build unified item list from all task sources
   const items: MatrixItem[] = useMemo(() => {
     const personal = personalTasks
       .filter(t => !t.parentTaskId && t.status !== 'done' && t.status !== 'cancelled')
       .map(t => {
         const overdue = taskIsOverdue(t.dueDate, t.status);
         const todayDue = taskIsTodayDue(t.dueDate, t.status);
-        const auto = autoQuadrant(t.priority, overdue, todayDue);
         return {
           id: t.id,
           title: t.title,
@@ -203,7 +177,7 @@ export function PriorityMatrix({
           isTodayDue: todayDue,
           priority: t.priority,
           type: 'personal' as const,
-          quadrant: (overrides[t.id] ?? auto) as Quadrant,
+          quadrant: (overrides[t.id] ?? autoQuadrant(t.priority, overdue, todayDue)) as Quadrant,
           originalStatus: t.status,
         };
       });
@@ -216,7 +190,6 @@ export function PriorityMatrix({
         const priority = String(t.priority ?? 'medium');
         const overdue = taskIsOverdue(due, status);
         const todayDue = taskIsTodayDue(due, status);
-        const auto = autoQuadrant(priority, overdue, todayDue);
         return {
           id: String(t.id),
           title: String(t.title ?? 'Project task'),
@@ -226,7 +199,7 @@ export function PriorityMatrix({
           isTodayDue: todayDue,
           priority,
           type: 'project' as const,
-          quadrant: (overrides[String(t.id)] ?? auto) as Quadrant,
+          quadrant: (overrides[String(t.id)] ?? autoQuadrant(priority, overdue, todayDue)) as Quadrant,
           originalStatus: status,
         };
       });
@@ -236,7 +209,6 @@ export function PriorityMatrix({
 
   const activeCount = items.length;
 
-  // ── Move a task to a different quadrant ─────────────────────────────────────
   const moveToQuadrant = useCallback((id: string, q: Quadrant) => {
     setOverrides(prev => {
       const next = { ...prev, [id]: q };
@@ -245,7 +217,6 @@ export function PriorityMatrix({
     });
   }, []);
 
-  // ── Complete a task ──────────────────────────────────────────────────────────
   const completeTask = useCallback(async (item: MatrixItem) => {
     if (completing.has(item.id)) return;
     setCompleting(prev => new Set(prev).add(item.id));
@@ -256,15 +227,10 @@ export function PriorityMatrix({
       } else {
         await onMarkProjectDone(item.id);
       }
-      // Clear override since task is done
       setOverrides(prev => {
-        const next = { ...prev };
-        delete next[item.id];
-        saveOverrides(next);
-        return next;
+        const next = { ...prev }; delete next[item.id]; saveOverrides(next); return next;
       });
     } catch {
-      // Roll back optimistic update
       setLocalDone(prev => { const n = new Set(prev); n.delete(item.id); return n; });
       toast({ title: 'Failed to complete task', variant: 'destructive' });
     } finally {
@@ -272,7 +238,6 @@ export function PriorityMatrix({
     }
   }, [completing, onMarkPersonalDone, onMarkProjectDone, toast]);
 
-  // ── Drag handlers ─────────────────────────────────────────────────────────
   const onDragStart = (id: string) => setDragId(id);
   const onDragEnd = () => { setDragId(null); setDragOver(null); };
   const onDragOver = (e: React.DragEvent, q: Quadrant) => { e.preventDefault(); setDragOver(q); };
@@ -280,37 +245,46 @@ export function PriorityMatrix({
   const onDrop = (e: React.DragEvent, q: Quadrant) => {
     e.preventDefault();
     if (dragId) moveToQuadrant(dragId, q);
-    setDragId(null);
-    setDragOver(null);
+    setDragId(null); setDragOver(null);
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-24">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* ── Legend & controls ── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-4">
-          {QUADRANT_ORDER.map(q => (
-            <div key={q} className="flex items-center gap-1.5">
-              <span className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', Q_CONFIG[q].dotColor)} />
-              <span className="text-[11px] font-medium text-muted-foreground">{Q_CONFIG[q].label}</span>
-            </div>
-          ))}
+    <div
+      className="flex flex-col -mx-4 sm:-mx-6 -mt-2"
+      style={{ fontFamily: "'Inter',system-ui,sans-serif", minHeight: 'calc(100vh - 120px)' }}
+    >
+      {/* ── White header bar ── */}
+      <div className="bg-white dark:bg-card border-b border-slate-200 dark:border-border px-6 sm:px-8 py-4 flex items-center justify-between gap-4 flex-wrap flex-shrink-0">
+        <div>
+          <h2 className="text-[18px] font-bold text-slate-900 dark:text-foreground flex items-center gap-2">
+            <Zap className="h-5 w-5 text-violet-500" />
+            Priority Matrix
+          </h2>
+          <p className="text-[12px] text-slate-500 dark:text-muted-foreground mt-0.5">
+            Drag tasks between quadrants · <span className="font-semibold text-slate-700 dark:text-foreground">{activeCount}</span> tasks remaining
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[11.5px] text-muted-foreground">
-            Drag tasks between quadrants · <span className="font-semibold text-foreground">{activeCount}</span> active
-          </span>
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Legend */}
+          <div className="hidden sm:flex items-center gap-3 text-[11.5px] text-slate-500 dark:text-muted-foreground">
+            {QUADRANT_ORDER.map(q => (
+              <span key={q} className="flex items-center gap-1.5">
+                <span className={cn('h-2.5 w-2.5 rounded-full flex-shrink-0', Q_CONFIG[q].dotColor)} />
+                {Q_CONFIG[q].label}
+              </span>
+            ))}
+          </div>
           <button
             onClick={onOpenNewTask}
-            className="flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#1D3461] hover:bg-[#0F2041] rounded-lg px-3 h-8 transition-colors"
+            className="flex items-center gap-1.5 text-[12px] font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-3.5 h-9 transition-colors"
             data-testid="matrix-button-add-task"
           >
             <Plus className="h-3.5 w-3.5" /> Add task
@@ -318,15 +292,18 @@ export function PriorityMatrix({
         </div>
       </div>
 
-      {/* ── Axis labels ── */}
-      <div className="relative flex items-center justify-center">
-        <p className="text-[10.5px] font-bold text-muted-foreground/50 uppercase tracking-widest">
-          ← Low importance · · · High importance →
-        </p>
+      {/* ── Axis label ── */}
+      <div className="flex items-center justify-center py-2 bg-slate-100/80 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-border/30 flex-shrink-0">
+        <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-slate-400 dark:text-muted-foreground/60 uppercase tracking-widest">
+          <ArrowRight className="h-3 w-3" /> Importance →
+        </div>
       </div>
 
       {/* ── 2×2 Grid ── */}
-      <div className="grid grid-cols-2 gap-3" style={{ minHeight: 520 }}>
+      <div
+        className="flex-1 grid grid-cols-2 gap-3 p-4 sm:p-5 bg-slate-100 dark:bg-slate-900/50"
+        style={{ minHeight: 0 }}
+      >
         {QUADRANT_ORDER.map(q => {
           const cfg = Q_CONFIG[q];
           const { Icon } = cfg;
@@ -342,7 +319,7 @@ export function PriorityMatrix({
               className={cn(
                 'rounded-2xl border-2 flex flex-col overflow-hidden transition-all',
                 cfg.bgCls,
-                isOver ? `${cfg.dropBorderCls} shadow-lg scale-[1.01]` : cfg.borderCls,
+                isOver ? `${cfg.dropBorderCls} shadow-lg scale-[1.005]` : cfg.borderCls,
               )}
             >
               {/* Quadrant header */}
@@ -359,8 +336,8 @@ export function PriorityMatrix({
                 </span>
               </div>
 
-              {/* Task cards */}
-              <div className="flex-1 p-3 space-y-2 overflow-y-auto" style={{ maxHeight: 340 }}>
+              {/* Task list */}
+              <div className="flex-1 p-3 space-y-2 overflow-y-auto">
                 {qItems.map(item => {
                   const isBeingDragged = dragId === item.id;
                   const isCompleting = completing.has(item.id);
@@ -378,7 +355,7 @@ export function PriorityMatrix({
                       data-testid={`matrix-task-${item.id}`}
                     >
                       <div className="flex items-start gap-2">
-                        {/* Complete button */}
+                        {/* Complete button (hover reveal) */}
                         <button
                           onClick={() => completeTask(item)}
                           disabled={isCompleting}
@@ -396,12 +373,11 @@ export function PriorityMatrix({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-1.5 mb-1.5">
                             <GripVertical className="h-3.5 w-3.5 text-muted-foreground/30 flex-shrink-0 mt-0.5" />
-                            <p className="text-[12.5px] font-semibold text-foreground leading-snug">
+                            <p className="text-[12.5px] font-semibold text-slate-800 dark:text-foreground leading-snug">
                               {item.title}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            {/* Source badge */}
                             <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-md flex items-center gap-1', cfg.chipCls)}>
                               {item.type === 'project'
                                 ? <FolderOpen className="h-2.5 w-2.5" />
@@ -409,27 +385,25 @@ export function PriorityMatrix({
                               }
                               {item.project}
                             </span>
-                            {/* Due label */}
                             {item.dueLabel && (
                               <span className={cn(
                                 'text-[10.5px] flex items-center gap-0.5 font-medium',
                                 item.isOverdue ? 'text-red-600 dark:text-red-400' :
                                 item.isTodayDue ? 'text-amber-600 dark:text-amber-400' :
-                                'text-muted-foreground',
+                                'text-slate-400 dark:text-muted-foreground',
                               )}>
                                 <Clock className="h-2.5 w-2.5" />
-                                {item.dueLabel}
-                                {item.isOverdue && ' · Overdue'}
+                                {item.dueLabel}{item.isOverdue ? ' · Overdue' : ''}
                               </span>
                             )}
                           </div>
                         </div>
 
-                        {/* Remove from view (dismiss to eliminate) */}
+                        {/* Dismiss to Eliminate */}
                         {q !== 'eliminate' && (
                           <button
                             onClick={() => moveToQuadrant(item.id, 'eliminate')}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/40 hover:text-muted-foreground flex-shrink-0 mt-0.5"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 dark:text-muted-foreground/40 hover:text-slate-500 flex-shrink-0 mt-0.5"
                             title="Move to Eliminate"
                             data-testid={`matrix-dismiss-${item.id}`}
                           >
@@ -438,8 +412,8 @@ export function PriorityMatrix({
                         )}
                       </div>
 
-                      {/* Quick quadrant re-assign pills */}
-                      <div className="flex items-center gap-1 mt-2 pl-5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Quick move pills */}
+                      <div className="flex items-center gap-1 mt-2 pl-5 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
                         {QUADRANT_ORDER.filter(tq => tq !== q).map(tq => (
                           <button
                             key={tq}
@@ -465,16 +439,16 @@ export function PriorityMatrix({
                     'flex items-center justify-center h-14 rounded-xl border-2 border-dashed transition-colors text-[11.5px]',
                     isOver
                       ? 'border-violet-400 bg-violet-50 dark:bg-violet-950/20 text-violet-600'
-                      : 'border-muted text-muted-foreground/50',
+                      : 'border-slate-200 dark:border-muted text-slate-400 dark:text-muted-foreground/50',
                   )}>
                     {isOver ? '✓ Drop here' : 'Drop tasks here'}
                   </div>
                 )}
 
-                {/* Add here shortcut */}
+                {/* Add here */}
                 <button
                   onClick={onOpenNewTask}
-                  className="flex items-center gap-1.5 w-full text-[11px] text-muted-foreground/60 hover:text-muted-foreground py-1.5 px-2 rounded-lg hover:bg-white/60 dark:hover:bg-white/5 transition-colors"
+                  className="flex items-center gap-1.5 w-full text-[11.5px] text-slate-400 dark:text-muted-foreground/60 hover:text-slate-600 dark:hover:text-muted-foreground py-1.5 px-2 rounded-lg hover:bg-white/60 dark:hover:bg-white/5 transition-colors"
                   data-testid={`matrix-add-${q}`}
                 >
                   <Plus className="h-3.5 w-3.5" /> Add here
@@ -485,15 +459,12 @@ export function PriorityMatrix({
         })}
       </div>
 
-      {/* ── Reset hint ── */}
+      {/* ── Reset overrides ── */}
       {Object.keys(overrides).length > 0 && (
-        <div className="flex justify-end">
+        <div className="flex justify-end px-5 py-2 bg-slate-100 dark:bg-slate-900/50 border-t border-slate-200 dark:border-border/30">
           <button
-            onClick={() => {
-              setOverrides({});
-              saveOverrides({});
-            }}
-            className="text-[11px] text-muted-foreground hover:text-foreground underline transition-colors"
+            onClick={() => { setOverrides({}); saveOverrides({}); }}
+            className="text-[11px] text-slate-400 dark:text-muted-foreground hover:text-slate-700 dark:hover:text-foreground underline transition-colors"
             data-testid="matrix-button-reset"
           >
             Reset to auto-placement
