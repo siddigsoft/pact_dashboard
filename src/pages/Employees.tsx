@@ -864,6 +864,73 @@ function FinSummaryCard({ title, titleAr, icon: Icon, data, accentBg, accentText
   );
 }
 
+/* ── Employee Export Menu (top-level so hooks work correctly) ── */
+function EmployeeExportMenu({
+  filtered, dbHubs, activeTab,
+}: {
+  filtered: EmployeeProfile[];
+  dbHubs: { id: string; name: string }[];
+  activeTab: string;
+}) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+
+  const toExportProfiles = (): ExportProfile[] =>
+    filtered.map(p => {
+      const hub = dbHubs.find(h => h.id === p.hub_id);
+      const st  = sudanStates.find(s => s.id === p.state_id);
+      return {
+        id: p.id, full_name: p.full_name, email: p.email, phone: p.phone,
+        role: p.role, employee_id: p.employee_id,
+        hub_name: hub?.name || '', state_name: st?.name || '', locality_name: '',
+        availability: p.presence, contract_type: p.contract_type,
+        bank_account: p.bank_account, last_activity: p.last_activity,
+        device_info: p.device_info, app_version: p.app_version, location_sharing: null,
+      };
+    });
+
+  const exp = async (type: 'excel' | 'pdf' | 'csv') => {
+    if (!filtered.length) { toast({ title: 'No data to export', variant: 'destructive' }); return; }
+    setBusy(true);
+    try {
+      const ep    = toExportProfiles();
+      const label = `Employees${activeTab !== 'roster' ? ` – ${activeTab}` : ''}`;
+      const pdfTab: 'directory' | 'bank_accounts' = activeTab === 'bank_accounts' ? 'bank_accounts' : 'directory';
+      if (type === 'excel') await exportStaffToExcel(ep, label);
+      else if (type === 'pdf') exportStaffToPDF(ep, pdfTab, label);
+      else exportStaffToCSV(ep, pdfTab);
+      toast({ title: 'Export ready', description: `${filtered.length} records exported.` });
+    } catch (err: any) {
+      toast({ title: 'Export failed', description: err?.message, variant: 'destructive' });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" disabled={busy || !filtered.length}
+          className="gap-1.5 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+          data-testid="button-export-menu">
+          <Download className="h-3.5 w-3.5" />
+          {busy ? 'Exporting…' : 'Export'}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onClick={() => exp('excel')} className="gap-2 cursor-pointer" data-testid="menu-export-excel">
+          <FileSpreadsheet className="h-4 w-4 text-green-700" />Excel (.xlsx)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exp('pdf')} className="gap-2 cursor-pointer" data-testid="menu-export-pdf">
+          <FileText className="h-4 w-4 text-red-600" />PDF
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => exp('csv')} className="gap-2 cursor-pointer" data-testid="menu-export-csv">
+          <FileDown className="h-4 w-4 text-blue-600" />CSV
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════════ */
@@ -1082,74 +1149,6 @@ export default function Employees() {
     missingBank: registeredEmployees.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
   }), [registeredEmployees]);
 
-  /* ── Export helpers ── */
-  const toExportProfiles = useCallback((): ExportProfile[] => {
-    return filtered.map(p => {
-      const hub  = dbHubs.find(h => h.id === p.hub_id);
-      const st   = sudanStates.find(s => s.id === p.state_id);
-      return {
-        id: p.id,
-        full_name: p.full_name,
-        email: p.email,
-        phone: p.phone,
-        role: p.role,
-        employee_id: p.employee_id,
-        hub_name: hub?.name || '',
-        state_name: st?.name || '',
-        locality_name: '',
-        availability: p.presence,
-        contract_type: p.contract_type,
-        bank_account: p.bank_account,
-        last_activity: p.last_activity,
-        device_info: p.device_info,
-        app_version: p.app_version,
-        location_sharing: null,
-      };
-    });
-  }, [filtered, dbHubs]);
-
-  function EmployeeExportMenu() {
-    const [busy, setBusy] = useState(false);
-    const exp = async (type: 'excel' | 'pdf' | 'csv') => {
-      if (!filtered.length) { toast({ title: 'No data to export', variant: 'destructive' }); return; }
-      setBusy(true);
-      try {
-        const ep = toExportProfiles();
-        const label = `Employees${activeTab !== 'roster' ? ` – ${activeTab}` : ''}`;
-        if (type === 'excel') await exportStaffToExcel(ep, label);
-        else if (type === 'pdf') exportStaffToPDF(ep, activeTab === 'bank_accounts' ? 'bank_accounts' : 'directory', label);
-        else exportStaffToCSV(ep, activeTab === 'bank_accounts' ? 'bank_accounts' : 'directory');
-        toast({ title: 'Export ready', description: `${filtered.length} records exported.` });
-      } catch (err: any) {
-        toast({ title: 'Export failed', description: err?.message, variant: 'destructive' });
-      } finally { setBusy(false); }
-    };
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={busy || !filtered.length}
-            className="gap-1.5 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
-            data-testid="button-export-menu">
-            <Download className="h-3.5 w-3.5" />
-            {busy ? 'Exporting…' : 'Export'}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem onClick={() => exp('excel')} className="gap-2 cursor-pointer" data-testid="menu-export-excel">
-            <FileSpreadsheet className="h-4 w-4 text-green-700" />Excel (.xlsx)
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => exp('pdf')} className="gap-2 cursor-pointer" data-testid="menu-export-pdf">
-            <FileText className="h-4 w-4 text-red-600" />PDF
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => exp('csv')} className="gap-2 cursor-pointer" data-testid="menu-export-csv">
-            <FileDown className="h-4 w-4 text-blue-600" />CSV
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-
   /* ── Stat Card ── */
   function StatCard({ label, value, icon: Icon, accent, onClick }: {
     label: string; value: number; icon: any;
@@ -1329,7 +1328,7 @@ export default function Employees() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <EmployeeExportMenu />
+            <EmployeeExportMenu filtered={filtered} dbHubs={dbHubs} activeTab={activeTab} />
             <Button
               variant="outline"
               size="sm"
