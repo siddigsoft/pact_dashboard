@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC, type DragEvent as ReactDragEvent, type ChangeEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { toast } from '@/components/ui/use-toast';
@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-const MMPVerificationPage: React.FC = () => {
+const MMPVerificationPage: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { attachPermitsToMMP, getMMPById, updateMMP, refreshMMPFiles } = useMMP();
@@ -83,7 +83,7 @@ const MMPVerificationPage: React.FC = () => {
   };
   const existingPermits = getExistingDocs();
 
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDrag = (e: ReactDragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.type === 'dragenter' || e.type === 'dragover') {
@@ -93,7 +93,7 @@ const MMPVerificationPage: React.FC = () => {
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: ReactDragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
@@ -125,7 +125,7 @@ const MMPVerificationPage: React.FC = () => {
     setFederalFile(file);
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       validateAndSetFile(e.target.files[0]);
     }

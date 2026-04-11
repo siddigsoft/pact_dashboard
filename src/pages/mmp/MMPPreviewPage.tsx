@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
 
-const MMPPreviewPage: React.FC = () => {
+const MMPPreviewPage: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getMMPById, updateMMP } = useMMP();

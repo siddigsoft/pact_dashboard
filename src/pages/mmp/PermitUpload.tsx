@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
@@ -7,13 +7,13 @@ interface PermitUploadProps {
   submitting: boolean;
 }
 
-const PermitUpload: React.FC<PermitUploadProps> = ({ onSubmit, submitting }) => {
+const PermitUpload: FC<PermitUploadProps> = ({ onSubmit, submitting }) => {
   const [federal, setFederal] = useState<File | null>(null);
   const [state, setState] = useState<File | null>(null);
   const [local, setLocal] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!federal) {
       setError('Federal permit is required.');

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ChangeEvent, type FormEvent, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,7 +121,7 @@ const Register = () => {
     return <MobileRegisterScreen />;
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
@@ -129,7 +129,7 @@ const Register = () => {
     }
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
@@ -194,7 +194,7 @@ const Register = () => {
     setErrors({});
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!validateStep(3)) return;
     setIsLoading(true);
@@ -271,7 +271,7 @@ const Register = () => {
                 const isCompleted = currentStep > step.id;
                 const isCurrent = currentStep === step.id;
                 return (
-                  <React.Fragment key={step.id}>
+                  <Fragment key={step.id}>
                     <div className="flex flex-col items-center gap-1">
                       <div className={`h-9 w-9 rounded-full flex items-center justify-center border-2 transition-colors ${
                         isCompleted ? 'bg-primary border-primary text-primary-foreground' :
@@ -287,7 +287,7 @@ const Register = () => {
                     {idx < 2 && (
                       <div className={`h-0.5 w-16 mt-[-18px] mx-1 transition-colors ${currentStep > step.id ? 'bg-primary' : 'bg-muted-foreground/20'}`} />
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
             </div>

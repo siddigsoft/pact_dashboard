@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, type FC } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +62,7 @@ import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUser } from "@/context/user/UserContext";
 
-const Reports: React.FC = () => {
+const Reports: FC = () => {
   const [activeTab, setActiveTab] = useState("executive");
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -726,13 +726,13 @@ interface CertRow { userId: string; name: string; email: string; title: string; 
 
 function HRSummaryReport() {
   const { toast } = useToast();
-  const [loading, setLoading] = React.useState(false);
-  const [leaveRows, setLeaveRows] = React.useState<LeaveRow[]>([]);
-  const [certRows, setCertRows] = React.useState<CertRow[]>([]);
-  const [dataLoaded, setDataLoaded] = React.useState(false);
-  const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
+  const [loading, setLoading] = useState(false);
+  const [leaveRows, setLeaveRows] = useState<LeaveRow[]>([]);
+  const [certRows, setCertRows] = useState<CertRow[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const loadData = React.useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [{ data: leaves }, { data: entitlements }, { data: certs }, { data: profiles }] = await Promise.all([
@@ -834,7 +834,7 @@ function HRSummaryReport() {
     }
   }, [toast, selectedYear]);
 
-  React.useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const exportToExcel = async () => {
     setLoading(true);

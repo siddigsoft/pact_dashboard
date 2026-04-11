@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FC, Fragment } from 'react';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useNavigate } from 'react-router-dom';
 import { DataFreshnessBadge } from '@/components/realtime';
@@ -21,7 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
-const AdminWallets: React.FC = () => {
+const AdminWallets: FC = () => {
   const [rows, setRows] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [currency, setCurrency] = useState('SDG');
@@ -561,7 +561,7 @@ const AdminWallets: React.FC = () => {
                     const withdrawals = Number(breakdown.withdrawal || 0);
                     
                     return (
-                      <React.Fragment key={wallet.id}>
+                      <Fragment key={wallet.id}>
                         <TableRow 
                           className="hover-elevate"
                           data-testid={`wallet-row-${wallet.user_id}`}
@@ -761,7 +761,7 @@ const AdminWallets: React.FC = () => {
                             </TableCell>
                           </TableRow>
                         )}
-                      </React.Fragment>
+                      </Fragment>
                     );
                   })}
                 </TableBody>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Calendar, Users, ChevronLeft, Layers } from 'lucide-react';
 import { format, isValid, parseISO } from 'date-fns';
@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProjectActivity } from '@/types/project';
 
-const ProjectActivityDetail: React.FC = () => {
+const ProjectActivityDetail: FC = () => {
   const { id, activityId } = useParams<{ id: string; activityId: string }>();
   const navigate = useNavigate();
   const { projects, loading, fetchProjects, getProjectById } = useProjectContext();

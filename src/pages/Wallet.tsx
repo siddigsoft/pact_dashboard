@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
@@ -1578,7 +1578,7 @@ const WalletPage = () => {
                       </TableHeader>
                       <TableBody>
                         {displayWithdrawals.map((request) => (
-                          <React.Fragment key={request.id}>
+                          <Fragment key={request.id}>
                           <TableRow data-testid={`row-withdrawal-${request.id}`} className={request.status === 'rejected' ? 'border-red-800/30' : ''}>
                             <TableCell>
                               <div className="flex flex-col gap-1.5">
@@ -1671,7 +1671,7 @@ const WalletPage = () => {
                               </TableCell>
                             </TableRow>
                           )}
-                          </React.Fragment>
+                          </Fragment>
                         ))}
                       </TableBody>
                     </Table>

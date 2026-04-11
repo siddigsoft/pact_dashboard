@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import { MMPFile, MMPStage, MMPStatus } from '@/types';
 import { getActualSiteCount, debugMMPFiles } from '@/utils/mmpUtils';
 import MMPFileUpload from '@/components/mmp/MMPFileUpload';
 
-const MMPVerification: React.FC = () => {
+const MMPVerification: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getMmpById, updateMMP, mmpFiles } = useMMP();

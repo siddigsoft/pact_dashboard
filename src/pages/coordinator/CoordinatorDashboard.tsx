@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +43,7 @@ interface RecentActivity {
   details: string;
 }
 
-const CoordinatorDashboard: React.FC = () => {
+const CoordinatorDashboard: FC = () => {
   const navigate = useNavigate();
   const { currentUser } = useAppContext();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();

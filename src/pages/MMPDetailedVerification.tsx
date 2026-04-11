@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import { MMPFile, MMPPermitsData, MMPDocument } from '@/types';
 import { getActualSiteCount } from '@/utils/mmpUtils';
 import { ArrowLeft } from 'lucide-react'; 
 
-const MMPDetailedVerification: React.FC = () => {
+const MMPDetailedVerification: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getMmpById, updateMMP, mmpFiles } = useMMP();

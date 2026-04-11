@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, type DragEvent as ReactDragEvent, type ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -650,13 +650,13 @@ export default function TransactionScanner() {
     }
   }, [processBatch]);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
+  const onDrop = useCallback((e: ReactDragEvent) => {
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
     if (files.length) processFiles(files);
   }, [processFiles]);
 
-  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
     if (files.length) processFiles(files);
     e.target.value = '';

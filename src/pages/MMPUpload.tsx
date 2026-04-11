@@ -1,5 +1,5 @@
 import { MMPFile } from '@/types/mmp';
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, type DragEvent as ReactDragEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -452,17 +452,17 @@ const MMPUpload = () => {
     },
   });
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: ReactDragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = (e: ReactDragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: ReactDragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
 

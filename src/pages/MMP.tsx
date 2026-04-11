@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -59,7 +59,7 @@ interface SitesDisplayTableProps {
   title?: string;
 }
 
-const SitesDisplayTable = React.memo(function SitesDisplayTable({ siteRows, mmpId, editable = true, title }: SitesDisplayTableProps) {
+const SitesDisplayTable = memo(function SitesDisplayTable({ siteRows, mmpId, editable = true, title }: SitesDisplayTableProps) {
   const { t } = useTranslation();
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
   
@@ -220,7 +220,7 @@ interface VerifiedSitesDisplayProps {
   onFilteredSiteIdsChange?: (filteredSiteIds: Set<string>, filteredCount: number, hasActiveFilter: boolean, filteredEntries: any[]) => void;
 }
 
-const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, onFilteredSiteIdsChange }: VerifiedSitesDisplayProps) {
+const VerifiedSitesDisplay = memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false, onFilteredSiteIdsChange }: VerifiedSitesDisplayProps) {
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
   // Derive site entries from context using the passed verifiedSites (already filtered by caller)

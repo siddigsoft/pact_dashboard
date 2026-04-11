@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,7 @@ interface FormSiteEntry {
   permitDetails?: { federal: boolean; state: boolean; local: boolean; lastVerified?: string; verifiedBy?: string };
 }
 
-const EditSiteVisit: React.FC = () => {
+const EditSiteVisit: FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();

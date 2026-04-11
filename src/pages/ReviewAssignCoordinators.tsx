@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, type FC } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,7 @@ import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization
 import { sudanStates } from '@/data/sudanStates';
 import { ReclaimFromCoordinatorDialog } from '@/components/mmp/ReclaimFromCoordinatorDialog';
 
-const ReviewAssignCoordinators: React.FC = () => {
+const ReviewAssignCoordinators: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();

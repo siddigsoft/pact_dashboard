@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,7 +29,7 @@ import FieldTeamMapPermissions from '@/components/map/FieldTeamMapPermissions';
 import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
 
-const EditMMP: React.FC = () => {
+const EditMMP: FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

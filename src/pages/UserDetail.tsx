@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type FC } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@/context/user/UserContext";
 import { isProtectedOwner } from "@/lib/protected-accounts";
@@ -34,7 +34,7 @@ import { ProfileCompletenessIndicator } from "@/components/onboarding/ProfileCom
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
 
-const UserDetail: React.FC = () => {
+const UserDetail: FC = () => {
   const { id } = useParams<{ id: string }>();
   const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers, adminConfirmUserEmail, adminUpdateUserEmail } = useUser();
   const [user, setUser] = useState<User | null>(null);

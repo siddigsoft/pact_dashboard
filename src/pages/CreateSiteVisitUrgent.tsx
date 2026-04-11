@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { normalizeRole } from '@/utils/roleMapping';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -299,7 +299,7 @@ const CreateSiteVisitUrgent = () => {
           const stepTitles = ['Site Selection', 'Details & Team', 'Fees & Submit'];
           
           return (
-            <React.Fragment key={step}>
+            <Fragment key={step}>
               <div className="flex items-center space-x-4">
                 <div className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold transition-all duration-200 ${
                   isCompleted 
@@ -326,7 +326,7 @@ const CreateSiteVisitUrgent = () => {
                   currentStep > step + 1 ? 'bg-green-500' : 'bg-border'
                 }`} />
               )}
-            </React.Fragment>
+            </Fragment>
           );
         })}
       </div>
