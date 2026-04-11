@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { type FC, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -101,7 +101,7 @@ const groupNotificationsByDate = (notifications: any[]) => {
   return groups;
 };
 
-const Notifications: React.FC = () => {
+const Notifications: FC = () => {
   const navigate = useNavigate();
   const { notifications, markNotificationAsRead, clearAllNotifications, addNotification } = useNotifications();
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
