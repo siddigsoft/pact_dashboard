@@ -4532,76 +4532,62 @@ export default function MyTasks() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-8 w-8 rounded-lg bg-[#1D3461] flex items-center justify-center">
-              <CheckSquare className="h-4 w-4 text-white" />
-            </div>
-            <h1 className="text-xl font-bold text-[#0F2041] dark:text-white">My Tasks</h1>
-          </div>
-          <p className="text-sm text-muted-foreground ml-10">{today} · {currentUser?.fullName}</p>
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
+      {/* ── Branded Header Banner ── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0F2041] via-[#1D3461] to-[#1a4a8a] px-6 py-5 text-white shadow-lg">
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 80% 10%, rgba(74,144,226,0.25) 0%, transparent 55%)' }} />
+        <div className="absolute bottom-0 right-0 w-48 h-48 pointer-events-none opacity-5">
+          <CheckSquare className="w-full h-full" />
         </div>
-        <div className="flex items-center gap-2">
-          {/* View mode toggle */}
-          <div className="flex items-center bg-muted/60 border border-border/60 rounded-lg p-0.5 h-8 gap-0.5">
-            <button
-              type="button"
-              onClick={() => setAndPersistViewMode('briefing')}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
-                viewMode === 'briefing' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-              title="Daily Briefing view"
-              data-testid="button-view-briefing-list"
-            >
-              <Sparkles className="h-3 w-3" /> Briefing
-            </button>
-            <button
-              type="button"
-              onClick={() => setAndPersistViewMode('matrix')}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
-                viewMode === 'matrix' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-              title="Eisenhower Priority Matrix"
-              data-testid="button-view-matrix-list"
-            >
-              <LayoutGrid className="h-3 w-3" /> Matrix
-            </button>
-            <button
-              type="button"
-              onClick={() => setAndPersistViewMode('list')}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 h-full text-[11px] font-semibold rounded-md transition-all',
-                viewMode === 'list' ? 'bg-[#1D3461] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-              title="Full list view"
-              data-testid="button-view-list-list"
-            >
-              <LayoutList className="h-3 w-3" /> List
-            </button>
+        <div className="relative flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-inner border border-white/20">
+                <CheckSquare className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold leading-none tracking-tight">My Tasks</h1>
+                <p className="text-white/60 text-[11px] mt-0.5 font-medium">{today}</p>
+              </div>
+            </div>
+            {/* Overall completion progress */}
+            {(() => {
+              const total = personalTasks.length + projectTasks.length;
+              const doneCt = personalTasks.filter(t => t.status === 'done').length + projectTasks.filter(t => String(t.status) === 'done').length;
+              const pct = total > 0 ? Math.round((doneCt / total) * 100) : 0;
+              if (total === 0) return null;
+              return (
+                <div className="flex items-center gap-2.5 mt-2">
+                  <div className="w-36 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[11px] font-semibold text-white/75">{pct}% done · {doneCt}/{total} tasks</span>
+                </div>
+              );
+            })()}
           </div>
-          <Button
-            size="sm"
-            className="bg-[#1D3461] hover:bg-[#0F2041] text-white gap-1.5"
-            onClick={() => setShowNewTask(true)}
-            data-testid="button-new-task"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Task
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => refetchProject()}
-            data-testid="button-refresh-tasks"
-          >
-            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {viewToggleDark}
+            <Button
+              size="sm"
+              className="bg-white text-[#1D3461] hover:bg-white/90 gap-1.5 font-semibold shadow-sm border-0"
+              onClick={() => setShowNewTask(true)}
+              data-testid="button-new-task"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Task
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/15 rounded-lg"
+              onClick={() => refetchProject()}
+              data-testid="button-refresh-tasks"
+              title="Refresh tasks"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -4612,20 +4598,29 @@ export default function MyTasks() {
       {viewMode === 'list' && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Due Today',  value: stats.dueToday,  icon: ListTodo,     color: 'text-amber-600',  bg: 'bg-amber-50 dark:bg-amber-900/20',   border: 'border-amber-200 dark:border-amber-800' },
-            { label: 'This Week',  value: stats.dueWeek,   icon: Calendar,     color: 'text-[#1D3461]',  bg: 'bg-blue-50 dark:bg-blue-900/20',     border: 'border-blue-200 dark:border-blue-800' },
-            { label: 'Overdue',    value: stats.overdue,   icon: AlertTriangle, color: 'text-red-600',    bg: 'bg-red-50 dark:bg-red-900/20',       border: 'border-red-200 dark:border-red-800' },
-            { label: 'Completed',  value: stats.done,      icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' },
-          ].map(({ label, value, icon: Icon, color, bg, border }) => (
-            <div key={label} className={cn('rounded-xl border p-3.5 flex items-center gap-3', bg, border)}>
-              <div className={cn('h-9 w-9 rounded-lg flex items-center justify-center', bg)}>
-                <Icon className={cn('h-4.5 w-4.5', color)} />
+            { key: 'today' as FilterType,   label: 'Due Today',  value: stats.dueToday,  icon: ListTodo,      color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-900/20',     border: 'border-amber-200 dark:border-amber-800',   ring: 'hover:ring-amber-300' },
+            { key: 'week'  as FilterType,   label: 'This Week',  value: stats.dueWeek,   icon: Calendar,      color: 'text-[#1D3461]',   bg: 'bg-blue-50 dark:bg-blue-900/20',       border: 'border-blue-200 dark:border-blue-800',     ring: 'hover:ring-blue-300' },
+            { key: 'overdue' as FilterType, label: 'Overdue',    value: stats.overdue,   icon: AlertTriangle, color: 'text-red-600',     bg: 'bg-red-50 dark:bg-red-900/20',         border: 'border-red-200 dark:border-red-800',       ring: 'hover:ring-red-300' },
+            { key: 'done'  as FilterType,   label: 'Completed',  value: stats.done,      icon: CheckCircle2,  color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', ring: 'hover:ring-emerald-300' },
+          ].map(({ key, label, value, icon: Icon, color, bg, border, ring }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setFilter(f => f === key ? 'all' : key)}
+              className={cn(
+                'rounded-xl border p-4 flex items-center gap-3 transition-all hover:shadow-md text-left ring-2 ring-transparent',
+                bg, border, ring,
+                filter === key && 'ring-2 shadow-md',
+              )}
+            >
+              <div className={cn('h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-white/70 dark:bg-black/20 shadow-sm')}>
+                <Icon className={cn('h-5 w-5', color)} />
               </div>
               <div>
-                <p className={cn('text-2xl font-bold leading-none', color)}>{value}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+                <p className={cn('text-2xl font-bold leading-none tabular-nums', color)}>{value}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 font-medium">{label}</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -4653,43 +4648,52 @@ export default function MyTasks() {
 
       {/* ── Main Task Tabs ── */}
       {viewMode === 'list' && <Tabs defaultValue="assigned" className="space-y-0">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <TabsList className="h-10 bg-muted/50 border border-border/60 rounded-xl p-1 gap-1">
-            <TabsTrigger
-              value="assigned"
-              className="rounded-lg px-4 text-sm font-semibold data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
-              data-testid="tab-assigned"
-            >
-              <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
-              Assigned to Me
-              {projectTasks.filter(t => String(t.status) !== 'done').length > 0 && (
-                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/20">
-                  {projectTasks.filter(t => String(t.status) !== 'done').length}
-                </span>
+        <div className="rounded-2xl border border-border/60 bg-card shadow-sm overflow-hidden">
+          {/* Tab header bar */}
+          <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-0 border-b border-border/50 bg-muted/20">
+            <TabsList className="h-11 bg-transparent border-0 shadow-none p-0 gap-0 rounded-none">
+              <TabsTrigger
+                value="assigned"
+                className="h-11 rounded-none px-5 text-sm font-semibold bg-transparent shadow-none border-b-2 border-transparent text-muted-foreground data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all"
+                data-testid="tab-assigned"
+              >
+                <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
+                Assigned to Me
+                {projectTasks.filter(t => String(t.status) !== 'done').length > 0 && (
+                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1D3461]/10 text-[#1D3461]">
+                    {projectTasks.filter(t => String(t.status) !== 'done').length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="personal"
+                className="h-11 rounded-none px-5 text-sm font-semibold bg-transparent shadow-none border-b-2 border-transparent text-muted-foreground data-[state=active]:border-[#1D3461] data-[state=active]:text-[#1D3461] data-[state=active]:bg-transparent data-[state=active]:shadow-none transition-all"
+                data-testid="tab-personal"
+              >
+                <Star className="h-3.5 w-3.5 mr-1.5" />
+                Personal Tasks
+                {personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length > 0 && (
+                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                    {personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+            <div className="flex items-center gap-1.5 pb-2">
+              {!showInsights && (
+                <Button size="sm" variant="ghost" className="text-muted-foreground h-7 text-xs gap-1" onClick={() => setShowInsights(true)}>
+                  <Sparkles className="h-3 w-3" /> Insights
+                </Button>
               )}
-            </TabsTrigger>
-            <TabsTrigger
-              value="personal"
-              className="rounded-lg px-4 text-sm font-semibold data-[state=active]:bg-[#1D3461] data-[state=active]:text-white data-[state=active]:shadow-sm transition-all"
-              data-testid="tab-personal"
-            >
-              <Star className="h-3.5 w-3.5 mr-1.5" />
-              Personal Tasks
-              {personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length > 0 && (
-                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/20">
-                  {personalTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length}
-                </span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-          <Button size="sm" variant="ghost" className="text-muted-foreground h-8 text-xs"
-            onClick={() => refetchProject()} data-testid="button-refresh-tasks-inner">
-            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Refresh
-          </Button>
-        </div>
+              <Button size="sm" variant="ghost" className="text-muted-foreground h-7 text-xs gap-1"
+                onClick={() => refetchProject()} data-testid="button-refresh-tasks-inner">
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
 
         {/* ── Assigned to Me Tab ── */}
-        <TabsContent value="assigned" className="space-y-3 mt-0">
+        <TabsContent value="assigned" className="space-y-3 mt-0 p-4">
           {/* Search + filter */}
           <div className="space-y-2">
             <div className="relative">
@@ -4825,7 +4829,7 @@ export default function MyTasks() {
         </TabsContent>
 
         {/* ── Personal Tasks Tab ── */}
-        <TabsContent value="personal" className="space-y-3 mt-0">
+        <TabsContent value="personal" className="space-y-3 mt-0 p-4">
           {/* Quick Add */}
           <QuickAddBar onAdd={handleQuickAdd} isCreating={isCreating} />
 
@@ -5143,6 +5147,7 @@ export default function MyTasks() {
         )}
       </div>
         </TabsContent>
+        </div>{/* end card container */}
       </Tabs>}
 
       {/* ── Team Task Health (admin only) ── */}
@@ -5268,19 +5273,6 @@ export default function MyTasks() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* ── Re-show insights ── */}
-      {!showInsights && (
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={() => setShowInsights(true)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#1D3461] transition-colors"
-          >
-            <Sparkles className="h-3 w-3" /> Show smart insights
-          </button>
         </div>
       )}
 
