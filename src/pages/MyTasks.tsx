@@ -50,7 +50,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import { DailyBriefing } from '@/components/tasks/DailyBriefing';
@@ -4532,119 +4531,93 @@ export default function MyTasks() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
-      {/* ── Branded Header Banner ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0F2041] via-[#1D3461] to-[#1a4a8a] px-6 py-5 text-white shadow-lg">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 80% 10%, rgba(74,144,226,0.25) 0%, transparent 55%)' }} />
-        <div className="absolute bottom-0 right-0 w-48 h-48 pointer-events-none opacity-5">
-          <CheckSquare className="w-full h-full" />
-        </div>
-        <div className="relative flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-inner border border-white/20">
-                <CheckSquare className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold leading-none tracking-tight">My Tasks</h1>
-                <p className="text-white/60 text-[11px] mt-0.5 font-medium">{today}</p>
-              </div>
-            </div>
-            {/* Overall completion progress */}
-            {(() => {
-              const total = personalTasks.length + projectTasks.length;
-              const doneCt = personalTasks.filter(t => t.status === 'done').length + projectTasks.filter(t => String(t.status) === 'done').length;
-              const pct = total > 0 ? Math.round((doneCt / total) * 100) : 0;
-              if (total === 0) return null;
-              return (
-                <div className="flex items-center gap-2.5 mt-2">
-                  <div className="w-36 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="text-[11px] font-semibold text-white/75">{pct}% done · {doneCt}/{total} tasks</span>
-                </div>
-              );
-            })()}
-          </div>
-          <div className="flex items-center gap-2">
-            {viewToggleDark}
-            <Button
-              size="sm"
-              className="bg-white text-[#1D3461] hover:bg-white/90 gap-1.5 font-semibold shadow-sm border-0"
-              onClick={() => setShowNewTask(true)}
-              data-testid="button-new-task"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Task
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/15 rounded-lg"
-              onClick={() => refetchProject()}
-              data-testid="button-refresh-tasks"
-              title="Refresh tasks"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Navigation */}
-      <ConnectedPagesBar exclude="my-tasks" />
-
-      {/* ── Stat cards — List mode only ── */}
-      {viewMode === 'list' && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { key: 'today' as FilterType,   label: 'Due Today',  value: stats.dueToday,  icon: ListTodo,      color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-900/20',     border: 'border-amber-200 dark:border-amber-800',   ring: 'hover:ring-amber-300' },
-            { key: 'week'  as FilterType,   label: 'This Week',  value: stats.dueWeek,   icon: Calendar,      color: 'text-[#1D3461]',   bg: 'bg-blue-50 dark:bg-blue-900/20',       border: 'border-blue-200 dark:border-blue-800',     ring: 'hover:ring-blue-300' },
-            { key: 'overdue' as FilterType, label: 'Overdue',    value: stats.overdue,   icon: AlertTriangle, color: 'text-red-600',     bg: 'bg-red-50 dark:bg-red-900/20',         border: 'border-red-200 dark:border-red-800',       ring: 'hover:ring-red-300' },
-            { key: 'done'  as FilterType,   label: 'Completed',  value: stats.done,      icon: CheckCircle2,  color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', ring: 'hover:ring-emerald-300' },
-          ].map(({ key, label, value, icon: Icon, color, bg, border, ring }) => (
+    <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+      {/* ── Page Header ── */}
+      <div className="flex items-start justify-between gap-4 pb-4 border-b border-border/60">
+        <div>
+          <h1 className="text-xl font-bold text-foreground flex items-center gap-2.5">
+            <CheckSquare className="h-5 w-5 text-[#1D3461]" />
+            My Tasks
+          </h1>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <p className="text-xs text-muted-foreground">{today}</p>
+            <span className="text-muted-foreground/40 text-xs">·</span>
+            {/* Inline stat chips */}
             <button
-              key={label}
               type="button"
-              onClick={() => setFilter(f => f === key ? 'all' : key)}
+              onClick={() => setFilter(f => f === 'today' ? 'all' : 'today')}
               className={cn(
-                'rounded-xl border p-4 flex items-center gap-3 transition-all hover:shadow-md text-left ring-2 ring-transparent',
-                bg, border, ring,
-                filter === key && 'ring-2 shadow-md',
+                'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors',
+                filter === 'today'
+                  ? 'bg-amber-500 text-white border-amber-500'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800',
               )}
             >
-              <div className={cn('h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-white/70 dark:bg-black/20 shadow-sm')}>
-                <Icon className={cn('h-5 w-5', color)} />
-              </div>
-              <div>
-                <p className={cn('text-2xl font-bold leading-none tabular-nums', color)}>{value}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 font-medium">{label}</p>
-              </div>
+              <ListTodo className="h-3 w-3" />{stats.dueToday} today
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setFilter(f => f === 'week' ? 'all' : 'week')}
+              className={cn(
+                'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors',
+                filter === 'week'
+                  ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800',
+              )}
+            >
+              <Calendar className="h-3 w-3" />{stats.dueWeek} this week
+            </button>
+            {stats.overdue > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilter(f => f === 'overdue' ? 'all' : 'overdue')}
+                className={cn(
+                  'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors',
+                  filter === 'overdue'
+                    ? 'bg-red-500 text-white border-red-500'
+                    : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800',
+                )}
+              >
+                <AlertTriangle className="h-3 w-3" />{stats.overdue} overdue
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setFilter(f => f === 'done' ? 'all' : 'done')}
+              className={cn(
+                'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors',
+                filter === 'done'
+                  ? 'bg-emerald-500 text-white border-emerald-500'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
+              )}
+            >
+              <CheckCircle2 className="h-3 w-3" />{stats.done} done
+            </button>
+          </div>
         </div>
-      )}
-
-      {/* ── Smart Insights — List mode only ── */}
-      {viewMode === 'list' && showInsights && (
-        <SmartInsightsPanel
-          stats={stats}
-          totalPersonal={personalTasks.length}
-          totalProject={projectTasks.length}
-          onFilter={setFilter}
-          onDismiss={() => setShowInsights(false)}
-        />
-      )}
-
-      {/* ── Planning Hub — List mode only ── */}
-      {viewMode === 'list' && <PlanningHub allTasks={[
-        ...personalTasks,
-        ...projectTasks.map(t => ({
-          dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
-          status: typeof t.status === 'string' ? t.status : 'todo',
-          priority: typeof t.priority === 'string' ? t.priority : 'medium',
-        })),
-      ]} />}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {viewToggleLight}
+          <Button
+            size="sm"
+            className="bg-[#1D3461] text-white hover:bg-[#1D3461]/90 gap-1.5 font-semibold h-8"
+            onClick={() => setShowNewTask(true)}
+            data-testid="button-new-task"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Task
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-lg"
+            onClick={() => refetchProject()}
+            data-testid="button-refresh-tasks"
+            title="Refresh tasks"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
 
       {/* ── Main Task Tabs ── */}
       {viewMode === 'list' && <Tabs defaultValue="assigned" className="space-y-0">
