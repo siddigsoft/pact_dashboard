@@ -7,8 +7,9 @@ import { config } from 'dotenv';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { ocrPostProcess } from './src/utils/ocrPostProcess';
 
-// Load environment variables from .env file
-config();
+// Load environment variables from .env file — override: true ensures .env always
+// wins over injected Replit secrets, which may carry stale values.
+config({ override: true });
 
 // ── Persistent quota cache ────────────────────────────────────────────────────
 // Model unavailability marks are written to disk so they survive server restarts.
