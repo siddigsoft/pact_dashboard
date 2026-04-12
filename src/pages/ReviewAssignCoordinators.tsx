@@ -204,7 +204,7 @@ const ReviewAssignCoordinators: FC = () => {
   const entriesLength = mmpFile?.siteEntries?.length || 0;
 
   const allCoordinators = useMemo(() => 
-    users.filter(u => u.role === 'coordinator').map(c => ({
+    users.filter(u => String(u.role || '').trim().toLowerCase() === 'coordinator').map(c => ({
       ...c,
       stateId: normalizeStateId(c.stateId) || c.stateId,
       localityId: c.localityId ? (normalizeLocalityId(c.localityId, normalizeStateId(c.stateId) || c.stateId || '') || c.localityId) : c.localityId,
@@ -212,7 +212,7 @@ const ReviewAssignCoordinators: FC = () => {
     [users]
   );
 
-  const allSupervisors = useMemo(() => users.filter(u => u.role === 'supervisor'), [users]);
+  const allSupervisors = useMemo(() => users.filter(u => String(u.role || '').trim().toLowerCase() === 'supervisor'), [users]);
 
   // Track initialization to prevent unnecessary re-runs
   const initializationKeyRef = useRef<string>('');
