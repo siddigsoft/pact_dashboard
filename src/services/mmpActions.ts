@@ -2,12 +2,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { ensureValidSession } from '@/lib/session-health';
 import { logForwardingAudit, logStatusChangeAudit, logSiteEntryAction } from '@/services/mmpAudit.service';
 
-// Fetch FOM users (role = 'fom')
+// Fetch FOM users — role stored as 'fom' or 'Field Operation Manager (FOM)'
 export async function fetchFomUsers() {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, full_name, username, email, hub_id, state_id, locality_id')
-    .eq('role', 'fom')
+    .in('role', ['fom', 'FOM', 'Field Operation Manager (FOM)', 'field_operation_manager'])
     .order('full_name', { ascending: true });
 
   if (error) throw error;
