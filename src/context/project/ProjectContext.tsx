@@ -50,7 +50,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const { currentUser, roles: userRoles } = useUser();
 
-  const projectsQuery = useProjectsQuery(true);
+  const projectsQuery = useProjectsQuery(!!currentUser);
   const allProjects = projectsQuery.data ?? [];
   const loading = projectsQuery.isLoading;
 
