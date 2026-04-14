@@ -137,7 +137,7 @@ const CRMContacts = lazy(() => import('./pages/CRMContacts'));
 const CRMEngagements = lazy(() => import('./pages/CRMEngagements'));
 const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
 const Helpline = lazy(() => import('./pages/Helpline'));
-const MyTasksPage = lazy(() => import('./pages/MyTasks'));
+const MyTasksPage = lazy(() => import('./pages/MyTasksV2'));
 const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
 const WorkspaceHub = lazy(() => import('./pages/WorkspaceHub'));
 const PageAccessControl = lazy(() => import('./pages/PageAccessControl'));
