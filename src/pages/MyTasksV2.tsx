@@ -8,8 +8,13 @@ import {
   Filter, LayoutDashboard, ListTodo, MoreHorizontal, Plus,
   Search, Users, AlertCircle, Briefcase, User, ChevronUp,
   ChevronDown, Loader2, X, Trash2, Edit2, Check, Bell,
-  MessageSquare, Settings,
+  MessageSquare, Settings, Columns2, Layers, GanttChart, Grid2x2, Sun,
 } from 'lucide-react';
+import { Layout2MissionTabs } from '@/components/tasks/layouts/Layout2MissionTabs';
+import { Layout3BoardGantt } from '@/components/tasks/layouts/Layout3BoardGantt';
+import { Layout4EisenhowerMatrix } from '@/components/tasks/layouts/Layout4EisenhowerMatrix';
+import { Layout5DailyOps } from '@/components/tasks/layouts/Layout5DailyOps';
+import type { LayoutId } from '@/components/tasks/layouts/LayoutTypes';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -499,6 +504,76 @@ function PriorityGroupHeader({ label, count, icon: Icon, iconClass }: { label: s
   );
 }
 
+// ── Layout Switcher ───────────────────────────────────────────────────────────
+
+const LAYOUT_ICONS: Record<LayoutId, typeof Columns2> = {
+  1: Columns2,
+  2: Layers,
+  3: GanttChart,
+  4: Grid2x2,
+  5: Sun,
+};
+const LAYOUT_LABELS: Record<LayoutId, string> = {
+  1: 'Command Split',
+  2: 'Mission Tabs',
+  3: 'Board & Gantt',
+  4: 'Eisenhower',
+  5: 'Daily Ops',
+};
+
+interface LayoutSwitcherProps {
+  current: LayoutId;
+  onChange: (l: LayoutId) => void;
+}
+function LayoutSwitcher({ current, onChange }: LayoutSwitcherProps) {
+  const [open, setOpen] = useState(false);
+  const CurrentIcon = LAYOUT_ICONS[current];
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+      {open && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-2 flex flex-col gap-1 animate-in slide-in-from-bottom-2">
+          {([1, 2, 3, 4, 5] as LayoutId[]).map(id => {
+            const Icon = LAYOUT_ICONS[id];
+            const isActive = current === id;
+            return (
+              <button
+                key={id}
+                onClick={() => { onChange(id); setOpen(false); }}
+                title={LAYOUT_LABELS[id]}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all w-full text-left',
+                  isActive
+                    ? 'bg-[#0F2041] text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100',
+                )}
+                data-testid={`layout-option-${id}`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap">{LAYOUT_LABELS[id]}</span>
+                {isActive && <div className="ml-auto w-2 h-2 rounded-full bg-blue-400" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={`Layout: ${LAYOUT_LABELS[current]}`}
+        className={cn(
+          'w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all border-2',
+          open
+            ? 'bg-[#0F2041] border-[#1D3461] text-white scale-105'
+            : 'bg-white border-slate-200 text-slate-600 hover:border-[#1D3461] hover:text-[#0F2041] hover:shadow-xl',
+        )}
+        data-testid="button-layout-switcher"
+      >
+        <CurrentIcon className="w-5 h-5" />
+      </button>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
@@ -549,6 +624,11 @@ export default function MyTasksV2() {
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [activePlanningTab, setActivePlanningTab] = useState<'briefing' | 'matrix'>('briefing');
   const searchRef = useRef<HTMLInputElement>(null);
+  const [layout, setLayout] = useState<LayoutId>(() => {
+    try { const v = localStorage.getItem('pact-tasks-layout'); return (v && [1,2,3,4,5].includes(Number(v))) ? Number(v) as LayoutId : 1; }
+    catch { return 1; }
+  });
+  const switchLayout = (l: LayoutId) => { setLayout(l); try { localStorage.setItem('pact-tasks-layout', String(l)); } catch {} };
 
   // Stats
   const stats = useMemo(() => {
@@ -649,6 +729,39 @@ export default function MyTasksV2() {
   };
 
   const userInitials = currentUser?.fullName ? initials(currentUser.fullName) : 'ME';
+
+  // Shared layout props (passed to layouts 2-5, defined after all handlers)
+  const layoutProps = {
+    tasks,
+    allTasks,
+    projectTasks,
+    isLoading,
+    isUpdating,
+    onToggleDone: handleToggleDone,
+    onEdit: (task: PersonalTask) => setEditingTask(task),
+    onAdd: () => setShowAdd(true),
+    currentUser: currentUser ? {
+      fullName: currentUser.fullName ?? null,
+      id: currentUser.id,
+      role: currentUser.role ?? null,
+    } : null,
+    stats,
+  };
+
+  // Layouts 2-5: render alternative view + the shared dialogs
+  if (layout !== 1) {
+    return (
+      <>
+        {layout === 2 && <Layout2MissionTabs {...layoutProps} />}
+        {layout === 3 && <Layout3BoardGantt {...layoutProps} />}
+        {layout === 4 && <Layout4EisenhowerMatrix {...layoutProps} />}
+        {layout === 5 && <Layout5DailyOps {...layoutProps} />}
+        <LayoutSwitcher current={layout} onChange={switchLayout} />
+        <QuickAddDialog open={showAdd} onClose={() => setShowAdd(false)} onCreate={handleCreate} isCreating={isCreating} />
+        <EditDialog task={editingTask} onClose={() => setEditingTask(null)} onSave={handleSave} onDelete={handleDelete} isUpdating={isUpdating} />
+      </>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-900">
@@ -1012,6 +1125,7 @@ export default function MyTasksV2() {
         onDelete={handleDelete}
         isUpdating={isUpdating}
       />
+      <LayoutSwitcher current={layout} onChange={switchLayout} />
     </div>
   );
 }
