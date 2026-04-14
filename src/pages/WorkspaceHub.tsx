@@ -761,6 +761,12 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh }: {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+interface TaskDocEntry {
+  taskId: string; taskTitle: string; assignedToName: string | null;
+  dueDate: string | null; status: string;
+  attachments: { name: string; url: string; uploadedAt: string; size?: number; type?: string }[];
+}
+
 export default function WorkspaceHub() {
   const { currentUser } = useAppContext();
   const { hasAnyRole } = useAuthorization();
@@ -768,6 +774,7 @@ export default function WorkspaceHub() {
   const qc = useQueryClient();
   const isAdmin = hasAnyRole(['super_admin', 'admin', 'Admin']);
   const isSuperAdmin = hasAnyRole(['super_admin']);
+  const isExecutive = hasAnyRole(['super_admin', 'admin', 'Admin', 'CEO', 'COO', 'CTO', 'country_director', 'countryDirector']);
 
   const userId = currentUser?.id ?? '';
 
@@ -788,6 +795,43 @@ export default function WorkspaceHub() {
   });
 
   const effectiveClearance: SecurityLevel = isSuperAdmin ? 'top_secret' : (myClearance ?? 'internal');
+
+  // ── Task Documents ─────────────────────────────────────────────────────────
+  const { data: taskDocsRaw = [] } = useQuery<TaskDocEntry[]>({
+    queryKey: ['workspace-task-docs', userId, isExecutive],
+    queryFn: async () => {
+      if (!userId) return [];
+      let q = supabase.from('personal_tasks')
+        .select('id, title, status, due_date, assigned_to_name, tools, user_id, assigned_to, co_assignees')
+        .not('tools', 'is', null)
+        .ilike('tools', '__meta:%')
+        .limit(300);
+      if (!isExecutive) {
+        q = q.or(`user_id.eq.${userId},assigned_to.eq.${userId}`);
+      }
+      const { data } = await q;
+      const results: TaskDocEntry[] = [];
+      for (const row of (data ?? []) as any[]) {
+        try {
+          const meta = JSON.parse(String(row.tools ?? '').slice(7));
+          const atts = meta?.attachments;
+          if (!Array.isArray(atts) || atts.length === 0) continue;
+          // For non-executive: also check co_assignees
+          if (!isExecutive) {
+            const isCreator = row.user_id === userId;
+            const isAssignee = row.assigned_to === userId;
+            const coAssignees: any[] = Array.isArray(row.co_assignees) ? row.co_assignees : (row.co_assignees ? Object.values(row.co_assignees) : []);
+            const isCo = coAssignees.some((a: any) => a?.id === userId);
+            if (!isCreator && !isAssignee && !isCo) continue;
+          }
+          results.push({ taskId: row.id, taskTitle: String(row.title ?? ''), assignedToName: row.assigned_to_name, dueDate: row.due_date, status: row.status, attachments: atts });
+        } catch { /* skip */ }
+      }
+      return results;
+    },
+    enabled: !!userId,
+    staleTime: 60_000,
+  });
 
   const [accessManagerOpen, setAccessManagerOpen] = useState(false);
   const location = useLocation();
@@ -1473,7 +1517,8 @@ export default function WorkspaceHub() {
     return { total: visibleFiles.length, totalSize, byLevel, pinned: visibleFiles.filter(f => f.is_pinned).length, mine: visibleFiles.filter(f => f.created_by === userId).length, root: visibleFiles.filter(f => !f.folder_id).length };
   }, [allFiles, userId, lockedFolderIdSet]);
 
-  const currentFolderName = selectedFolderId === '__pinned__' ? 'Pinned Files' : selectedFolderId === '__recent__' ? 'Recent Files' : selectedFolderId === '__mine__' ? 'My Files' : selectedFolder?.name ?? 'All Files';
+  const currentFolderName = selectedFolderId === '__pinned__' ? 'Pinned Files' : selectedFolderId === '__recent__' ? 'Recent Files' : selectedFolderId === '__mine__' ? 'My Files' : selectedFolderId === '__task_docs__' ? 'Task Documents' : selectedFolder?.name ?? 'All Files';
+  const totalTaskAttachments = taskDocsRaw.reduce((sum, t) => sum + t.attachments.length, 0);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -1519,6 +1564,7 @@ export default function WorkspaceHub() {
               { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false },
               { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false },
               { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false },
+              { id: '__task_docs__', label: 'Task Documents', icon: CheckCircle2, count: totalTaskAttachments, droppable: false },
               { id: null, label: 'All Files', icon: FolderOpen, count: stats.root, droppable: true },
             ].map(item => {
               const isSelected = selectedFolderId === item.id;
@@ -1648,7 +1694,91 @@ export default function WorkspaceHub() {
 
           {/* File area */}
           <div className="flex-1 overflow-y-auto">
-            {selectedFolder && selectedFolder.password_hash && !unlockedFolderIds.has(selectedFolder.id) ? (
+            {selectedFolderId === '__task_docs__' ? (
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200">
+                  <CheckCircle2 className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Task Documents</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      {isExecutive
+                        ? 'Showing all task attachments across the organisation'
+                        : 'Showing attachments from tasks you created or are assigned to'}
+                      {' · '}{totalTaskAttachments} file{totalTaskAttachments !== 1 ? 's' : ''} across {taskDocsRaw.length} task{taskDocsRaw.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                {taskDocsRaw.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+                    <CheckCircle2 className="h-12 w-12 opacity-20" />
+                    <p className="text-sm font-medium">No task attachments found</p>
+                    <p className="text-xs">Attachments added to tasks you participate in will appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {taskDocsRaw.map(task => (
+                      <div key={task.taskId} className="bg-card border rounded-2xl overflow-hidden shadow-sm">
+                        <div className="flex items-center gap-3 px-4 py-3 bg-muted/30 border-b">
+                          <div className={cn('h-2 w-2 rounded-full flex-shrink-0',
+                            task.status === 'done' || task.status === 'completed' ? 'bg-emerald-500' :
+                            task.status === 'inprogress' || task.status === 'in_progress' ? 'bg-amber-500' : 'bg-slate-400'
+                          )} />
+                          <span className="text-sm font-semibold text-foreground flex-1 truncate">{task.taskTitle}</span>
+                          {task.assignedToName && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <User className="h-3 w-3" />{task.assignedToName}
+                            </span>
+                          )}
+                          {task.dueDate && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />{task.dueDate}
+                            </span>
+                          )}
+                          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full',
+                            task.status === 'done' || task.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            task.status === 'inprogress' || task.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
+                            'bg-slate-100 text-slate-600'
+                          )}>
+                            {task.status === 'done' || task.status === 'completed' ? 'Done' :
+                             task.status === 'inprogress' || task.status === 'in_progress' ? 'In Progress' : 'To Do'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">{task.attachments.length} file{task.attachments.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="p-3 flex flex-wrap gap-2">
+                          {task.attachments.map((att, idx) => {
+                            const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
+                            const isImg = ['jpg','jpeg','png','gif','webp','svg'].includes(ext);
+                            const isPdf = ext === 'pdf';
+                            const isDoc = ['doc','docx','xls','xlsx','ppt','pptx'].includes(ext);
+                            return (
+                              <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl border hover:bg-muted/30 hover:shadow-sm transition-all group"
+                                data-testid={`task-doc-link-${task.taskId}-${idx}`}
+                              >
+                                <div className={cn('h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                                  isImg ? 'bg-green-100 text-green-600' :
+                                  isPdf ? 'bg-red-100 text-red-600' :
+                                  isDoc ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'
+                                )}>
+                                  {isImg ? <FileImage className="h-4 w-4" /> :
+                                   isPdf ? <FileText className="h-4 w-4" /> :
+                                   isDoc ? <FileSpreadsheet className="h-4 w-4" /> : <File className="h-4 w-4" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium text-foreground truncate max-w-[160px] group-hover:text-[#1D3461]">{att.name}</p>
+                                  {att.uploadedAt && <p className="text-[10px] text-muted-foreground">{att.uploadedAt.slice(0, 10)}</p>}
+                                </div>
+                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : selectedFolder && selectedFolder.password_hash && !unlockedFolderIds.has(selectedFolder.id) ? (
               <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
                 <div className="h-20 w-20 rounded-3xl bg-amber-50 flex items-center justify-center">
                   <Lock className="h-10 w-10 text-amber-500" />

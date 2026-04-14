@@ -64,7 +64,8 @@ interface EquipRow { id: string; name: string; category: string | null; status: 
 interface CrmPartnerRow { id: string; name: string; type: string | null; status: string | null; }
 interface CrmOpptyRow { id: string; title: string; value_usd: number | null; stage: string; expected_close_date: string | null; }
 interface PayrollRunRow { id: string; status: string; period_start: string | null; period_end: string | null; total_gross_cents: number | null; created_at: string; }
-interface TaskRow { id: string; title: string; status: string; due_date: string | null; assigned_to: string | null; department_id: string | null; updated_at: string | null; created_at: string; }
+interface TaskRow { id: string; title: string; status: string; priority: string | null; due_date: string | null; assigned_to: string | null; assigned_to_name: string | null; user_id: string | null; department_id: string | null; updated_at: string | null; created_at: string; }
+interface ProjectFieldTaskRow { id: string; project_id: string; title: string; status: string; priority: string | null; assigned_to: string | null; due_date: string | null; created_at: string; updated_at: string | null; }
 interface TimesheetRow { id: string; user_id: string; week_start: string; status: string; total_hours: number | null; }
 interface SubscriptionRow { id: string; name: string; status: string; monthly_cost_cents: number | null; renewal_date: string | null; }
 
@@ -238,6 +239,7 @@ async function fetchAll() {
     { data: tasksRaw },
     { data: timesheetsRaw },
     { data: subscriptionsRaw },
+    { data: projectFieldTasksRaw },
   ] = await Promise.all([
     supabase.rpc('get_projects_for_analytics'),
     supabase.from('project_budgets').select('project_id, total_budget_cents, allocated_budget_cents, spent_budget_cents, remaining_budget_cents'),
@@ -256,9 +258,10 @@ async function fetchAll() {
     supabase.from('crm_partners').select('id, name, type, status'),
     supabase.from('crm_opportunities').select('id, title, value_usd, stage, expected_close_date').order('expected_close_date', { ascending: true }),
     supabase.from('payroll_runs').select('id, status, period_start, period_end, total_gross_cents, created_at').order('created_at', { ascending: false }).limit(6),
-    supabase.from('personal_tasks').select('id, title, status, due_date, assigned_to, department_id, updated_at, created_at').limit(500),
+    supabase.from('personal_tasks').select('id, title, status, priority, due_date, assigned_to, assigned_to_name, user_id, department_id, updated_at, created_at').limit(1000),
     supabase.from('timesheets').select('id, user_id, week_start, status, total_hours').order('week_start', { ascending: false }).limit(500),
     supabase.from('organizational_subscriptions').select('id, name, status, monthly_cost_cents, renewal_date').limit(200),
+    supabase.from('project_field_tasks').select('id, project_id, title, status, priority, assigned_to, due_date, created_at, updated_at').limit(500),
   ]);
 
   const latestAdvanced: Record<string, string> = {};
@@ -287,6 +290,7 @@ async function fetchAll() {
     tasks: (tasksRaw ?? []) as TaskRow[],
     timesheets: (timesheetsRaw ?? []) as TimesheetRow[],
     subscriptions: (subscriptionsRaw ?? []) as SubscriptionRow[],
+    projectFieldTasks: (projectFieldTasksRaw ?? []) as ProjectFieldTaskRow[],
   };
 }
 
@@ -1018,6 +1022,97 @@ export default function PortfolioDashboard() {
     };
   }, [d]);
 
+  // ── Employee Task Productivity Assessment ─────────────────────────────────
+
+  const employeeTaskMetrics = useMemo(() => {
+    const tasks = d?.tasks ?? [];
+    const fieldTasks = d?.projectFieldTasks ?? [];
+    const profiles = d?.profiles ?? [];
+    const depts = d?.depts ?? [];
+    const today = new Date();
+
+    // Build profile map
+    const profileMap: Record<string, ProfileRow> = {};
+    profiles.forEach(p => { profileMap[p.id] = p; });
+
+    // Aggregate tasks by user (assigned_to = primary ownership)
+    const userMetrics: Record<string, {
+      userId: string; name: string; role: string | null; dept: string;
+      total: number; completed: number; inProgress: number; overdue: number; todo: number;
+      projectTasks: number; completedOn: Date[];
+    }> = {};
+
+    const initUser = (uid: string) => {
+      if (userMetrics[uid]) return;
+      const p = profileMap[uid];
+      const dept = depts.find(dd => dd.id === p?.department_id);
+      userMetrics[uid] = {
+        userId: uid,
+        name: p?.full_name ?? 'Unknown',
+        role: p?.role ?? null,
+        dept: dept?.name ?? '—',
+        total: 0, completed: 0, inProgress: 0, overdue: 0, todo: 0, projectTasks: 0,
+        completedOn: [],
+      };
+    };
+
+    tasks.forEach(t => {
+      const uid = t.assigned_to ?? t.user_id;
+      if (!uid) return;
+      initUser(uid);
+      const m = userMetrics[uid];
+      m.total++;
+      const isDone = ['done', 'completed', 'complete'].includes(t.status);
+      const isIP = ['inprogress', 'in_progress', 'in-progress', 'doing'].includes(t.status);
+      if (isDone) {
+        m.completed++;
+        const ud = safeDate(t.updated_at);
+        if (ud) m.completedOn.push(ud);
+      } else if (isIP) {
+        m.inProgress++;
+        const due = safeDate(t.due_date);
+        if (due && isBefore(due, today)) m.overdue++;
+      } else {
+        m.todo++;
+        const due = safeDate(t.due_date);
+        if (due && isBefore(due, today)) m.overdue++;
+      }
+    });
+
+    fieldTasks.forEach(ft => {
+      const uid = ft.assigned_to;
+      if (!uid) return;
+      initUser(uid);
+      const m = userMetrics[uid];
+      m.total++;
+      m.projectTasks++;
+      const isDone = ['done', 'completed', 'complete'].includes(ft.status);
+      if (isDone) {
+        m.completed++;
+        const ud = safeDate(ft.updated_at);
+        if (ud) m.completedOn.push(ud);
+      } else {
+        const isIP = ['inprogress', 'in_progress', 'in-progress', 'doing'].includes(ft.status);
+        if (isIP) m.inProgress++;
+        else m.todo++;
+        const due = safeDate(ft.due_date);
+        if (due && isBefore(due, today)) m.overdue++;
+      }
+    });
+
+    return Object.values(userMetrics)
+      .filter(m => m.total > 0)
+      .map(m => {
+        const completionRate = m.total > 0 ? Math.round((m.completed / m.total) * 100) : 0;
+        const overdueRate = m.total > 0 ? Math.round((m.overdue / m.total) * 100) : 0;
+        // Efficiency score: completionRate - overdueRate penalty
+        const efficiencyScore = Math.max(0, completionRate - overdueRate * 0.5);
+        const efficiency = efficiencyScore >= 70 ? 'high' : efficiencyScore >= 40 ? 'medium' : 'low';
+        return { ...m, completionRate, overdueRate, efficiencyScore: Math.round(efficiencyScore), efficiency };
+      })
+      .sort((a, b) => b.total - a.total);
+  }, [d]);
+
   // ── Timesheet / Workload ──────────────────────────────────────────────────
 
   const workloadStats = useMemo(() => {
@@ -1530,6 +1625,7 @@ export default function PortfolioDashboard() {
               { id: 'partners',   icon: Handshake,       label: 'Partners & CRM' },
               { id: 'pipeline',   icon: TrendingUp,      label: 'Business Pipeline', badge: data.crmOpptys.filter((o: any) => ['negotiating','won'].includes(o.stage)).length > 0 ? data.crmOpptys.filter((o: any) => ['negotiating','won'].includes(o.stage)).length : undefined },
               { id: 'risk',       icon: ShieldAlert,     label: 'Risk & Safety', badge: kpis.openIncidents > 0 ? kpis.openIncidents : undefined },
+              { id: 'tasks',      icon: CheckSquare,     label: 'Tasks', badge: taskStats.overdueCount > 0 ? taskStats.overdueCount : undefined },
             ].map(t => (
               <TabsTrigger key={t.id} value={t.id} className={cn('gap-1.5 text-xs font-semibold relative', t.id === 'executive' && 'bg-[#1D3461]/10 data-[state=active]:bg-[#1D3461] data-[state=active]:text-white')}>
                 <t.icon className="h-3.5 w-3.5" />{t.label}
@@ -2899,6 +2995,300 @@ export default function PortfolioDashboard() {
                 </div>
               </SectionCard>
             </div>
+          </TabsContent>
+
+          {/* ═══════════════ TASKS TAB ═══════════════ */}
+          <TabsContent value="tasks" className="mt-4 space-y-5">
+
+            {/* KPI Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { label: 'Total Tasks', value: taskStats.total + (d?.projectFieldTasks?.length ?? 0), sub: 'org-wide all types', icon: CheckSquare, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200' },
+                { label: 'Completed', value: (d?.tasks ?? []).filter(t => ['done','completed','complete'].includes(t.status)).length + (d?.projectFieldTasks ?? []).filter(t => ['done','completed','complete'].includes(t.status)).length, sub: `${taskStats.completedThisMonthCount} this month`, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200' },
+                { label: 'In Progress', value: taskStats.inProgressCount, sub: 'active work', icon: Activity, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200' },
+                { label: 'Overdue', value: taskStats.overdueCount, sub: 'need immediate attention', icon: AlertTriangle, color: taskStats.overdueCount > 0 ? 'text-red-600' : 'text-emerald-600', bg: taskStats.overdueCount > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200' },
+                { label: 'Project Field Tasks', value: d?.projectFieldTasks?.length ?? 0, sub: 'across all projects', icon: Briefcase, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200' },
+                { label: 'Employees Tracked', value: employeeTaskMetrics.length, sub: 'with task assignments', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200' },
+              ].map(k => (
+                <div key={k.label} className={cn('rounded-2xl border p-4 flex flex-col gap-1 transition-all hover:shadow-md', k.bg)}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{k.label}</span>
+                    <k.icon className={cn('h-4 w-4', k.color)} />
+                  </div>
+                  <span className="text-2xl font-bold text-foreground">{k.value}</span>
+                  <span className="text-[11px] text-muted-foreground">{k.sub}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Employee Productivity Assessment */}
+            <div className="bg-card border rounded-2xl shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-4 border-b bg-muted/30">
+                <Users className="h-4 w-4 text-[#1D3461]" />
+                <span className="font-bold text-sm text-foreground">Employee Task Analytics & Productivity Assessment</span>
+                <span className="ml-auto text-[11px] text-muted-foreground">{employeeTaskMetrics.length} employees with tasks</span>
+              </div>
+              {employeeTaskMetrics.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground text-sm">No task data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/20">
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">#</th>
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Employee</th>
+                        <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">Department</th>
+                        <th className="text-center px-3 py-3 font-semibold text-muted-foreground">Total</th>
+                        <th className="text-center px-3 py-3 font-semibold text-muted-foreground">Done</th>
+                        <th className="text-center px-3 py-3 font-semibold text-muted-foreground hidden sm:table-cell">In Progress</th>
+                        <th className="text-center px-3 py-3 font-semibold text-muted-foreground text-red-600">Overdue</th>
+                        <th className="text-center px-3 py-3 font-semibold text-muted-foreground hidden lg:table-cell">Project Tasks</th>
+                        <th className="text-center px-4 py-3 font-semibold text-muted-foreground">Completion %</th>
+                        <th className="text-center px-4 py-3 font-semibold text-muted-foreground">Efficiency</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employeeTaskMetrics.map((m, idx) => (
+                        <tr key={m.userId} className={cn('border-b transition-colors hover:bg-muted/30', idx % 2 === 0 ? '' : 'bg-muted/10')}>
+                          <td className="px-4 py-3 text-muted-foreground font-mono">{idx + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-7 w-7 rounded-full bg-[#1D3461]/10 flex items-center justify-center text-[#1D3461] font-bold text-[10px] flex-shrink-0">
+                                {m.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-foreground">{m.name}</div>
+                                <div className="text-[10px] text-muted-foreground">{m.role ?? '—'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{m.dept}</td>
+                          <td className="px-3 py-3 text-center font-bold text-foreground">{m.total}</td>
+                          <td className="px-3 py-3 text-center text-emerald-600 font-semibold">{m.completed}</td>
+                          <td className="px-3 py-3 text-center text-amber-600 hidden sm:table-cell">{m.inProgress}</td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={cn('font-bold', m.overdue > 0 ? 'text-red-600' : 'text-emerald-600')}>{m.overdue}</span>
+                          </td>
+                          <td className="px-3 py-3 text-center text-purple-600 hidden lg:table-cell">{m.projectTasks}</td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-bold text-foreground">{m.completionRate}%</span>
+                              <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{
+                                  width: `${m.completionRate}%`,
+                                  background: m.completionRate >= 70 ? '#10b981' : m.completionRate >= 40 ? '#f59e0b' : '#ef4444'
+                                }} />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={cn('px-2 py-1 rounded-full text-[10px] font-bold',
+                              m.efficiency === 'high' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
+                              m.efficiency === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
+                              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                            )}>
+                              {m.efficiency === 'high' ? '⚡ High' : m.efficiency === 'medium' ? '⚠ Medium' : '↓ Low'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Task Load by Employee */}
+              <div className="bg-card border rounded-2xl shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart2 className="h-4 w-4 text-[#1D3461]" />
+                  <span className="font-bold text-sm">Task Load by Employee (Top 12)</span>
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={employeeTaskMetrics.slice(0, 12).map(m => ({
+                    name: m.name.split(' ')[0],
+                    completed: m.completed,
+                    inProgress: m.inProgress,
+                    overdue: m.overdue,
+                    todo: m.todo,
+                  }))} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip contentStyle={{ fontSize: 11 }} />
+                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
+                    <Bar dataKey="completed" name="Completed" stackId="a" fill="#10b981" radius={[0,0,0,0]} />
+                    <Bar dataKey="inProgress" name="In Progress" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="overdue" name="Overdue" stackId="a" fill="#ef4444" />
+                    <Bar dataKey="todo" name="To Do" stackId="a" fill="#94a3b8" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Efficiency Distribution */}
+              <div className="bg-card border rounded-2xl shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Target className="h-4 w-4 text-[#1D3461]" />
+                  <span className="font-bold text-sm">Efficiency Distribution</span>
+                </div>
+                {(() => {
+                  const high = employeeTaskMetrics.filter(m => m.efficiency === 'high').length;
+                  const medium = employeeTaskMetrics.filter(m => m.efficiency === 'medium').length;
+                  const low = employeeTaskMetrics.filter(m => m.efficiency === 'low').length;
+                  const total = employeeTaskMetrics.length || 1;
+                  return (
+                    <div className="space-y-4">
+                      <ResponsiveContainer width="100%" height={180}>
+                        <PieChart>
+                          <Pie data={[
+                            { name: 'High Efficiency', value: high, fill: '#10b981' },
+                            { name: 'Medium Efficiency', value: medium, fill: '#f59e0b' },
+                            { name: 'Low Efficiency', value: low, fill: '#ef4444' },
+                          ].filter(d => d.value > 0)} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={3} dataKey="value">
+                          </Pie>
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Tooltip contentStyle={{ fontSize: 11 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 p-3">
+                          <div className="text-xl font-bold text-emerald-600">{high}</div>
+                          <div className="text-muted-foreground">High</div>
+                          <div className="text-[10px] text-muted-foreground">{Math.round(high/total*100)}%</div>
+                        </div>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 p-3">
+                          <div className="text-xl font-bold text-amber-600">{medium}</div>
+                          <div className="text-muted-foreground">Medium</div>
+                          <div className="text-[10px] text-muted-foreground">{Math.round(medium/total*100)}%</div>
+                        </div>
+                        <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 p-3">
+                          <div className="text-xl font-bold text-red-600">{low}</div>
+                          <div className="text-muted-foreground">Low</div>
+                          <div className="text-[10px] text-muted-foreground">{Math.round(low/total*100)}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Task Calendar — next 30 days */}
+            <div className="bg-card border rounded-2xl shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Calendar className="h-4 w-4 text-[#1D3461]" />
+                <span className="font-bold text-sm">Upcoming Task Calendar — Next 30 Days</span>
+                <span className="ml-auto text-[11px] text-muted-foreground">All employees</span>
+              </div>
+              {(() => {
+                const today = new Date();
+                const allTasks = [
+                  ...(d?.tasks ?? []).map(t => ({ ...t, _type: 'personal' as const })),
+                  ...(d?.projectFieldTasks ?? []).map(t => ({ ...t, assigned_to_name: null, user_id: null, department_id: null, updated_at: t.updated_at, _type: 'project' as const })),
+                ];
+                const days = Array.from({ length: 30 }, (_, i) => addDays(today, i));
+                const tasksByDay: Record<string, typeof allTasks> = {};
+                allTasks.forEach(t => {
+                  if (!t.due_date) return;
+                  const d2 = safeDate(t.due_date);
+                  if (!d2) return;
+                  const key = format(d2, 'yyyy-MM-dd');
+                  if (!tasksByDay[key]) tasksByDay[key] = [];
+                  tasksByDay[key].push(t);
+                });
+                const profileMap2: Record<string, ProfileRow> = {};
+                (d?.profiles ?? []).forEach(p => { profileMap2[p.id] = p; });
+                return (
+                  <div className="overflow-x-auto">
+                    <div className="flex gap-1 min-w-max pb-2">
+                      {days.map(day => {
+                        const key = format(day, 'yyyy-MM-dd');
+                        const dayTasks = tasksByDay[key] ?? [];
+                        const isToday2 = format(day, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+                        const hasTasks = dayTasks.length > 0;
+                        return (
+                          <div key={key} className={cn(
+                            'flex flex-col items-center rounded-xl border p-1.5 min-w-[52px] transition-all',
+                            isToday2 ? 'border-[#1D3461] bg-[#1D3461]/10' : hasTasks ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/10' : 'border-border'
+                          )}>
+                            <span className={cn('text-[9px] font-semibold uppercase tracking-wide', isToday2 ? 'text-[#1D3461]' : 'text-muted-foreground')}>{format(day, 'EEE')}</span>
+                            <span className={cn('text-sm font-bold', isToday2 ? 'text-[#1D3461]' : 'text-foreground')}>{format(day, 'd')}</span>
+                            <span className="text-[9px] text-muted-foreground">{format(day, 'MMM')}</span>
+                            {hasTasks && (
+                              <div className="mt-1 flex flex-col items-center gap-0.5 w-full">
+                                <span className={cn('text-[10px] font-bold rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center',
+                                  dayTasks.some(t => t._type === 'project') ? 'bg-purple-500 text-white' : 'bg-amber-500 text-white'
+                                )}>{dayTasks.length}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-4 mt-3 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-amber-500 inline-block" /> Personal Tasks</span>
+                      <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-purple-500 inline-block" /> Project Field Tasks</span>
+                      <span className="flex items-center gap-1.5"><span className="h-3.5 w-3.5 rounded border-2 border-[#1D3461] inline-block" /> Today</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Top Performers & Needs Attention */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-card border rounded-2xl shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Star className="h-4 w-4 text-amber-500" />
+                  <span className="font-bold text-sm">Top Performers</span>
+                </div>
+                <div className="space-y-2">
+                  {[...employeeTaskMetrics].filter(m => m.efficiency === 'high' && m.total >= 3).sort((a, b) => b.completionRate - a.completionRate).slice(0, 5).map((m, i) => (
+                    <div key={m.userId} className="flex items-center gap-3 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100">
+                      <span className="text-sm font-bold text-emerald-600 w-6 text-center">#{i+1}</span>
+                      <div className="h-7 w-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-[10px] flex-shrink-0">
+                        {m.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-foreground truncate">{m.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{m.completed}/{m.total} tasks · {m.completionRate}% rate</div>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 rounded-full px-2 py-0.5">⚡ {m.efficiencyScore}</span>
+                    </div>
+                  ))}
+                  {employeeTaskMetrics.filter(m => m.efficiency === 'high' && m.total >= 3).length === 0 && (
+                    <div className="text-xs text-muted-foreground text-center py-4">No high performers yet — keep working!</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-card border rounded-2xl shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <span className="font-bold text-sm">Needs Attention</span>
+                </div>
+                <div className="space-y-2">
+                  {[...employeeTaskMetrics].filter(m => m.overdue > 0 || m.efficiency === 'low').sort((a, b) => b.overdue - a.overdue).slice(0, 5).map(m => (
+                    <div key={m.userId} className="flex items-center gap-3 p-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100">
+                      <div className="h-7 w-7 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-bold text-[10px] flex-shrink-0">
+                        {m.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-foreground truncate">{m.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{m.total} tasks · {m.overdueRate}% overdue rate</div>
+                      </div>
+                      {m.overdue > 0 && <span className="text-[10px] font-bold text-red-600 bg-red-100 rounded-full px-2 py-0.5">{m.overdue} overdue</span>}
+                    </div>
+                  ))}
+                  {employeeTaskMetrics.filter(m => m.overdue > 0 || m.efficiency === 'low').length === 0 && (
+                    <div className="text-xs text-muted-foreground text-center py-4">All employees are on track!</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
           </TabsContent>
         </Tabs>
       </div>
