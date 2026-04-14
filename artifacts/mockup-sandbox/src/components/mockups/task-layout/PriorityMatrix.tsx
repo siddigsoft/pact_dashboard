@@ -102,7 +102,7 @@ export function PriorityMatrix() {
                     <span>Progress</span>
                     <span>68%</span>
                   </div>
-                  <Progress value={68} className="h-1.5 bg-slate-700" indicatorColor="bg-blue-500" />
+                  <Progress value={68} className="h-1.5 bg-slate-700" />
                 </div>
               </div>
 

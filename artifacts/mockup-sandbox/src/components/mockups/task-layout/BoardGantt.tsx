@@ -234,7 +234,7 @@ function GanttZone() {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <ScrollArea className="flex-1" orientation="horizontal">
+        <ScrollArea className="flex-1">
           <div className="min-w-[1000px] h-full flex flex-col pb-4">
             {/* Days Header */}
             <div className="flex border-b border-slate-100 sticky top-0 bg-white z-10">
