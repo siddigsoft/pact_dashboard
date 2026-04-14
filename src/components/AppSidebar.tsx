@@ -316,9 +316,9 @@
     if (!isHidden('/admin/broadcast') && (isSuperAdmin || isAdmin)) {
       communicationItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 4, isPinned: isPinned('/admin/broadcast') });
     }
-    if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 2, items: communicationItems });
+    if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 3, items: communicationItems });
 
-    // ── 3. Programme Management ───────────────────────────────────────────────
+    // ── 2. Programme Management ───────────────────────────────────────────────
     const planningItems: MenuGroup['items'] = [];
     if (!isHidden('/projects') && isSuperAdmin) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
@@ -339,7 +339,7 @@
     if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager)) {
       planningItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: ClipboardList, priority: 5, isPinned: isPinned('/tracker-preparation-plan') });
     }
-    if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 3, items: planningItems });
+    if (planningItems.length) groups.push({ id: 'programme-management', label: "Programme Management", order: 2, items: planningItems });
 
     // ── 4. Field Operations ───────────────────────────────────────────────────
     const fieldOpsItems: MenuGroup['items'] = [];
