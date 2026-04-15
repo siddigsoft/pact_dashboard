@@ -38,6 +38,10 @@ export const modules: ModuleMap = {
   "./components/mockups/task-layout/BoardGantt.tsx": () => import("../components/mockups/task-layout/BoardGantt.tsx"),
   "./components/mockups/task-layout/CommandSplit.tsx": () => import("../components/mockups/task-layout/CommandSplit.tsx"),
   "./components/mockups/task-layout/DailyOps.tsx": () => import("../components/mockups/task-layout/DailyOps.tsx"),
+  "./components/mockups/task-layout/DayBlocks.tsx": () => import("../components/mockups/task-layout/DayBlocks.tsx"),
+  "./components/mockups/task-layout/HubRadar.tsx": () => import("../components/mockups/task-layout/HubRadar.tsx"),
+  "./components/mockups/task-layout/InboxTriage.tsx": () => import("../components/mockups/task-layout/InboxTriage.tsx"),
   "./components/mockups/task-layout/MissionTabs.tsx": () => import("../components/mockups/task-layout/MissionTabs.tsx"),
-  "./components/mockups/task-layout/PriorityMatrix.tsx": () => import("../components/mockups/task-layout/PriorityMatrix.tsx")
+  "./components/mockups/task-layout/PriorityMatrix.tsx": () => import("../components/mockups/task-layout/PriorityMatrix.tsx"),
+  "./components/mockups/task-layout/StreamView.tsx": () => import("../components/mockups/task-layout/StreamView.tsx")
 };
