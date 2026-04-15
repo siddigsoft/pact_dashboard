@@ -1,13 +1,12 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   format, isToday, isBefore, parseISO, isValid, startOfDay,
-  addDays, isThisWeek, differenceInCalendarDays,
+  addDays, differenceInCalendarDays,
 } from 'date-fns';
 import {
   Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock,
-  Filter, LayoutDashboard, ListTodo, MoreHorizontal, Plus,
-  Search, AlertCircle, Briefcase, User, ChevronUp,
-  ChevronDown, Loader2, X, Trash2, Edit2, Check, Bell,
+  LayoutDashboard, ListTodo, MoreHorizontal, Plus,
+  Search, AlertCircle, Loader2, X, Trash2, Edit2, Check,
   Columns2, Layers, GanttChart, Grid2x2, Sun, Sparkles, Target,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
@@ -19,10 +18,7 @@ import type { LayoutId } from '@/components/tasks/layouts/LayoutTypes';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -612,12 +608,11 @@ export default function MyTasksV2() {
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [teamView, setTeamView] = useState(false);
-  const [planningOpen, setPlanningOpen] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
   const [showAdd, setShowAdd] = useState(false);
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [activePlanningTab, setActivePlanningTab] = useState<'briefing' | 'matrix'>('briefing');
+  const [rightTab, setRightTab] = useState<'timeline' | 'tasks'>('tasks');
   const searchRef = useRef<HTMLInputElement>(null);
   const [layout, setLayout] = useState<LayoutId>(() => {
     try { const v = localStorage.getItem('pact-tasks-layout'); return (v && [1,2,3,4,5].includes(Number(v))) ? Number(v) as LayoutId : 1; }
@@ -777,54 +772,30 @@ export default function MyTasksV2() {
 
   return (
     <div className="flex h-full w-full bg-slate-50 overflow-hidden font-sans text-slate-900">
-
-      {/* Main area — no duplicate sidebar, AppSidebar handles nav */}
       <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
 
-        {/* Top bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-10 gap-3">
-          {/* Left: title + filter chips */}
+        {/* ── Top header bar ── */}
+        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-5 shrink-0 z-10 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div>
-              <p className="text-xs text-slate-400 leading-none mb-0.5">My Workspace</p>
-              <h1 className="text-base font-bold tracking-tight text-[#0F2041] leading-none whitespace-nowrap">My Tasks</h1>
+              <p className="text-[10px] text-slate-400 leading-none mb-0.5 uppercase tracking-wider font-medium">My Workspace</p>
+              <h1 className="text-sm font-bold tracking-tight text-[#0F2041] leading-none">My Tasks</h1>
             </div>
-            <div className="h-6 w-px bg-slate-200 hidden md:block shrink-0" />
-            <div className="hidden md:flex items-center gap-1 flex-wrap">
-              {FILTER_CHIPS.map(chip => (
-                <button
-                  key={chip.key}
-                  onClick={() => setFilterKey(chip.key)}
-                  data-testid={`filter-chip-${chip.key}`}
-                  className={cn(
-                    'px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap border',
-                    filterKey === chip.key
-                      ? 'bg-[#1D3461] text-white border-[#1D3461]'
-                      : chip.alert
-                        ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100',
-                  )}
-                >
-                  {chip.label}
-                  <span className={cn(
-                    'px-1.5 py-0.5 rounded-full text-xs font-semibold',
-                    filterKey === chip.key ? 'bg-white/25 text-white' : chip.alert ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-600',
-                  )}>
-                    {chip.count}
-                  </span>
-                </button>
-              ))}
+            <div className="h-5 w-px bg-slate-200 shrink-0" />
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-500">
+                {stats.all} active · {stats.done} done · {stats.overdue > 0 && <span className="text-red-500 font-semibold">{stats.overdue} overdue</span>}
+              </span>
             </div>
           </div>
 
-          {/* Right: actions */}
           <div className="flex items-center gap-2 shrink-0">
             {showSearch && (
-              <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-3 bg-slate-50">
+              <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-3 bg-slate-50 h-8">
                 <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <input
                   ref={searchRef}
-                  className="h-8 text-sm bg-transparent outline-none w-36"
+                  className="text-sm bg-transparent outline-none w-32"
                   placeholder="Search tasks…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
@@ -838,286 +809,281 @@ export default function MyTasksV2() {
             <button
               onClick={() => { setShowSearch(s => !s); setTimeout(() => searchRef.current?.focus(), 50); }}
               data-testid="button-toggle-search"
-              className="p-2 rounded-lg text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
+              className="p-1.5 rounded-lg text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
               title="Search tasks"
             >
               <Search className="w-4 h-4" />
             </button>
-            <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
-              <Switch
-                id="team-view"
-                checked={teamView}
-                onCheckedChange={setTeamView}
-                className="data-[state=checked]:bg-[#1D3461] scale-90"
-              />
-              <Label htmlFor="team-view" className="text-xs font-medium cursor-pointer text-slate-600 whitespace-nowrap">Team View</Label>
-            </div>
-            <button
-              onClick={() => setPlanningOpen(p => !p)}
-              data-testid="button-toggle-planning"
-              title="Planning Tools"
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
-                planningOpen
-                  ? 'bg-[#1D3461] text-white border-[#1D3461]'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100',
-              )}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Planning</span>
-              {planningOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
             <Button
-              className="bg-[#1D3461] hover:bg-[#0F2041] text-white shadow-sm h-8 px-3 text-sm"
+              className="bg-[#1D3461] hover:bg-[#0F2041] text-white shadow-sm h-8 px-3 text-xs font-semibold"
               onClick={() => setShowAdd(true)}
               data-testid="button-quick-add"
             >
-              <Plus className="w-4 h-4 mr-1" />
-              New Task
+              <Plus className="w-3.5 h-3.5 mr-1" />New Task
             </Button>
           </div>
         </header>
 
-        {/* Split workspace */}
+        {/* ── Three-panel workspace ── */}
         <div className="flex-1 flex overflow-hidden">
 
-          {/* Left 60%: Timeline */}
-          <div className="w-[60%] flex flex-col border-r border-slate-200 bg-white overflow-hidden">
+          {/* ══ LEFT: Planning Tools (38%) — always visible ══ */}
+          <div className="w-[38%] flex flex-col border-r border-slate-200 overflow-hidden bg-white">
 
-            {/* Timeline subheader */}
-            <div className="h-14 border-b border-slate-200 flex items-center justify-between px-5 shrink-0 bg-white">
-              <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                  <Calendar className="w-3.5 h-3.5 text-slate-600" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-[#0F2041] leading-tight">Timeline</h2>
-                  <div className="hidden md:flex items-center gap-2.5 text-[10px] font-medium text-slate-400">
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Personal</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Project</span>
-                  </div>
-                </div>
+            {/* Panel header — dark branded */}
+            <div className="shrink-0 bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs font-bold text-white/90 flex items-center gap-1.5 uppercase tracking-wider">
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  Planning Tools
+                </span>
+                {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-white/50" />}
               </div>
-              <div className="flex items-center gap-1.5">
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="text-xs font-semibold text-slate-600 min-w-[110px] text-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">{weekLabel}</span>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                {weekOffset !== 0 && (
-                  <Button variant="ghost" size="sm" className="text-xs h-7 text-blue-600 hover:bg-blue-50" onClick={() => setWeekOffset(0)}>Today</Button>
-                )}
+              {/* Tab switcher */}
+              <div className="flex gap-1 bg-white/10 rounded-lg p-0.5">
+                <button
+                  onClick={() => setActivePlanningTab('briefing')}
+                  data-testid="tab-planning-briefing"
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-semibold transition-all',
+                    activePlanningTab === 'briefing'
+                      ? 'bg-white text-[#1D3461] shadow-sm'
+                      : 'text-white/70 hover:text-white hover:bg-white/10',
+                  )}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Daily Briefing
+                </button>
+                <button
+                  onClick={() => setActivePlanningTab('matrix')}
+                  data-testid="tab-planning-matrix"
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-semibold transition-all',
+                    activePlanningTab === 'matrix'
+                      ? 'bg-white text-[#1D3461] shadow-sm'
+                      : 'text-white/70 hover:text-white hover:bg-white/10',
+                  )}
+                >
+                  <Target className="w-3 h-3" />
+                  Priority Matrix
+                </button>
               </div>
             </div>
 
-            {/* Timeline grid */}
-            <ScrollArea className="flex-1">
-              <div className="p-6 flex flex-col" style={{ minHeight: 'calc(100% - 4rem)' }}>
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-6 h-6 animate-spin text-[#1D3461]" />
-                  </div>
-                ) : (
-                  <Timeline tasks={tasks} weekOffset={weekOffset} onTaskClick={setEditingTask} />
-                )}
-              </div>
-            </ScrollArea>
-
-            {/* Planning Tools — collapsible panel triggered from header */}
-            {planningOpen && (
-              <div className="shrink-0 bg-white border-t-2 border-[#1D3461] flex flex-col" style={{ height: '420px' }}>
-                {/* Panel header */}
-                <div className="h-12 px-5 flex items-center justify-between border-b border-slate-100 shrink-0 bg-slate-50/60">
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold text-[#0F2041] flex items-center gap-2">
-                      <LayoutDashboard className="w-4 h-4 text-[#1D3461]" />
-                      Planning Tools
-                    </span>
-                    <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
-                      <button
-                        onClick={() => setActivePlanningTab('briefing')}
-                        className={cn(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
-                          activePlanningTab === 'briefing'
-                            ? 'bg-white text-[#1D3461] shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700',
-                        )}
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        Daily Briefing
-                      </button>
-                      <button
-                        onClick={() => setActivePlanningTab('matrix')}
-                        className={cn(
-                          'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
-                          activePlanningTab === 'matrix'
-                            ? 'bg-white text-[#1D3461] shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700',
-                        )}
-                      >
-                        <Target className="w-3 h-3" />
-                        Priority Matrix
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setPlanningOpen(false)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
-                    title="Close Planning Tools"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                {/* Panel content */}
-                <div className="flex-1 overflow-auto">
-                  {activePlanningTab === 'briefing' ? (
-                    <DailyBriefing
-                      personalTasks={tasks}
-                      allPersonalTasks={allTasks}
-                      projectTasks={projectTasks}
-                      currentUserFullName={currentUser?.fullName}
-                      isLoading={isLoading}
-                      onMarkPersonalDone={handleMarkPersonalDone}
-                      onMarkProjectDone={handleMarkProjectDone}
-                      onOpenNewTask={() => setShowAdd(true)}
-                    />
-                  ) : (
-                    <PriorityMatrix
-                      personalTasks={tasks}
-                      allPersonalTasks={allTasks}
-                      projectTasks={projectTasks}
-                      isLoading={isLoading}
-                      onMarkPersonalDone={handleMarkPersonalDone}
-                      onMarkProjectDone={handleMarkProjectDone}
-                      onOpenNewTask={() => setShowAdd(true)}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Scrollable planning content */}
+            <div className="flex-1 overflow-auto">
+              {activePlanningTab === 'briefing' ? (
+                <DailyBriefing
+                  personalTasks={tasks}
+                  allPersonalTasks={allTasks}
+                  projectTasks={projectTasks}
+                  currentUserFullName={currentUser?.fullName}
+                  isLoading={isLoading}
+                  onMarkPersonalDone={handleMarkPersonalDone}
+                  onMarkProjectDone={handleMarkProjectDone}
+                  onOpenNewTask={() => setShowAdd(true)}
+                />
+              ) : (
+                <PriorityMatrix
+                  personalTasks={tasks}
+                  allPersonalTasks={allTasks}
+                  projectTasks={projectTasks}
+                  isLoading={isLoading}
+                  onMarkPersonalDone={handleMarkPersonalDone}
+                  onMarkProjectDone={handleMarkProjectDone}
+                  onOpenNewTask={() => setShowAdd(true)}
+                />
+              )}
+            </div>
           </div>
 
-          {/* Right 40%: Action Items */}
-          <div className="w-[40%] bg-slate-50 flex flex-col h-full">
-            <div className="h-14 border-b border-slate-200 flex items-center justify-between px-5 shrink-0 bg-white">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#1D3461]/10 flex items-center justify-center shrink-0">
-                  <ListTodo className="w-3.5 h-3.5 text-[#1D3461]" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-[#0F2041] leading-tight">Action Items</h2>
-                  <p className="text-[10px] text-slate-400 leading-tight">{filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}</p>
-                </div>
-              </div>
-              <div className="flex gap-2 items-center">
-                {isLoading && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
-                <Button
-                  size="sm"
-                  className="bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs h-8 shadow-sm"
-                  onClick={() => setShowAdd(true)}
-                  data-testid="button-add-task-panel"
+          {/* ══ RIGHT: Timeline + My Tasks with tab switcher (62%) ══ */}
+          <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/80">
+
+            {/* Right panel tab bar */}
+            <div className="h-12 border-b border-slate-200 bg-white flex items-center px-4 gap-3 shrink-0">
+              {/* View tabs */}
+              <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 shrink-0">
+                <button
+                  onClick={() => setRightTab('tasks')}
+                  data-testid="tab-right-tasks"
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap',
+                    rightTab === 'tasks'
+                      ? 'bg-white text-[#1D3461] shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
                 >
-                  <Plus className="w-3.5 h-3.5 mr-1" />New Task
-                </Button>
+                  <ListTodo className="w-3.5 h-3.5" />
+                  My Tasks
+                  <span className={cn(
+                    'px-1.5 py-0.5 rounded-full text-[10px] font-bold',
+                    rightTab === 'tasks' ? 'bg-[#1D3461]/10 text-[#1D3461]' : 'bg-slate-200 text-slate-500',
+                  )}>
+                    {stats.all}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setRightTab('timeline')}
+                  data-testid="tab-right-timeline"
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap',
+                    rightTab === 'timeline'
+                      ? 'bg-white text-[#1D3461] shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Timeline
+                </button>
               </div>
-            </div>
 
-            <ScrollArea className="flex-1">
-              <div className="p-4 flex flex-col gap-3">
-
-                {/* Mobile filter row */}
-                <div className="lg:hidden flex gap-1.5 flex-wrap">
+              {/* Filter chips — visible on My Tasks tab */}
+              {rightTab === 'tasks' && (
+                <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-none">
                   {FILTER_CHIPS.map(chip => (
                     <button
                       key={chip.key}
                       onClick={() => setFilterKey(chip.key)}
+                      data-testid={`filter-chip-${chip.key}`}
                       className={cn(
-                        'px-2.5 py-1 rounded-full text-xs font-medium transition-all',
-                        filterKey === chip.key ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600',
+                        'px-2 py-1 rounded-full text-[11px] font-medium transition-all whitespace-nowrap border shrink-0',
+                        filterKey === chip.key
+                          ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                          : chip.alert && chip.count > 0
+                            ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
                       )}
                     >
-                      {chip.label} {chip.count}
+                      {chip.label}
+                      {chip.count > 0 && (
+                        <span className={cn(
+                          'ml-1 font-bold',
+                          filterKey === chip.key ? 'text-white/80' : chip.alert ? 'text-red-600' : 'text-slate-400',
+                        )}>
+                          {chip.count}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
+              )}
 
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+              {/* Week navigation — visible on Timeline tab */}
+              {rightTab === 'timeline' && (
+                <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                  <div className="hidden md:flex items-center gap-3 text-[11px] font-medium text-slate-400 mr-2">
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Personal</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Project</span>
                   </div>
-                ) : filteredTasks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-3" />
-                    <p className="text-sm font-medium text-slate-600">All clear!</p>
-                    <p className="text-xs text-slate-400 mt-1">No tasks match this filter.</p>
-                    <Button
-                      size="sm"
-                      className="mt-4 bg-[#1D3461] hover:bg-[#0F2041] text-white"
-                      onClick={() => setShowAdd(true)}
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1" />Add Task
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    {urgent.length > 0 && (
-                      <div>
-                        <PriorityGroupHeader label="Urgent" count={urgent.length} icon={AlertCircle} iconClass="bg-red-100 text-red-600" />
-                        <div className="flex flex-col gap-2">
-                          {urgent.map(task => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
-                              onToggleDone={() => handleToggleDone(task)}
-                              onEdit={() => setEditingTask(task)}
-                              isUpdating={isUpdating}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs font-semibold text-slate-600 min-w-[100px] text-center bg-slate-50 border border-slate-200 rounded-md px-2 py-1">{weekLabel}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  {weekOffset !== 0 && (
+                    <Button variant="ghost" size="sm" className="text-[11px] h-7 text-blue-600 hover:bg-blue-50 px-2" onClick={() => setWeekOffset(0)}>Today</Button>
+                  )}
+                </div>
+              )}
+            </div>
 
-                    {high.length > 0 && (
-                      <div className={urgent.length > 0 ? 'mt-3' : ''}>
-                        <PriorityGroupHeader label="High Priority" count={high.length} icon={AlertCircle} iconClass="bg-amber-100 text-amber-600" />
-                        <div className="flex flex-col gap-2">
-                          {high.map(task => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
-                              onToggleDone={() => handleToggleDone(task)}
-                              onEdit={() => setEditingTask(task)}
-                              isUpdating={isUpdating}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+            {/* ── Timeline tab content ── */}
+            {rightTab === 'timeline' && (
+              <ScrollArea className="flex-1">
+                <div className="p-5 flex flex-col" style={{ minHeight: 'calc(100% - 2rem)' }}>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#1D3461]" />
+                    </div>
+                  ) : (
+                    <Timeline tasks={tasks} weekOffset={weekOffset} onTaskClick={setEditingTask} />
+                  )}
+                </div>
+              </ScrollArea>
+            )}
 
-                    {normal.length > 0 && (
-                      <div className={(urgent.length > 0 || high.length > 0) ? 'mt-3' : ''}>
-                        <PriorityGroupHeader label="Normal" count={normal.length} icon={CheckCircle2} iconClass="bg-emerald-100 text-emerald-600" />
-                        <div className="flex flex-col gap-2">
-                          {normal.map(task => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
-                              onToggleDone={() => handleToggleDone(task)}
-                              onEdit={() => setEditingTask(task)}
-                              isUpdating={isUpdating}
-                            />
-                          ))}
-                        </div>
+            {/* ── My Tasks tab content ── */}
+            {rightTab === 'tasks' && (
+              <ScrollArea className="flex-1">
+                <div className="p-4 flex flex-col gap-3">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                    </div>
+                  ) : filteredTasks.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4">
+                        <CheckCircle2 className="w-7 h-7 text-emerald-500" />
                       </div>
-                    )}
-                    {/* Spacer so last card isn't clipped */}
-                    <div className="h-6" />
-                  </>
-                )}
-              </div>
-            </ScrollArea>
+                      <p className="text-sm font-semibold text-slate-700">All clear!</p>
+                      <p className="text-xs text-slate-400 mt-1 mb-4">No tasks match this filter.</p>
+                      <Button
+                        size="sm"
+                        className="bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs"
+                        onClick={() => setShowAdd(true)}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />Add a Task
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      {urgent.length > 0 && (
+                        <div>
+                          <PriorityGroupHeader label="Urgent" count={urgent.length} icon={AlertCircle} iconClass="bg-red-100 text-red-600" />
+                          <div className="flex flex-col gap-2">
+                            {urgent.map(task => (
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                onToggleDone={() => handleToggleDone(task)}
+                                onEdit={() => setEditingTask(task)}
+                                isUpdating={isUpdating}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {high.length > 0 && (
+                        <div className={urgent.length > 0 ? 'mt-3' : ''}>
+                          <PriorityGroupHeader label="High Priority" count={high.length} icon={AlertCircle} iconClass="bg-amber-100 text-amber-600" />
+                          <div className="flex flex-col gap-2">
+                            {high.map(task => (
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                onToggleDone={() => handleToggleDone(task)}
+                                onEdit={() => setEditingTask(task)}
+                                isUpdating={isUpdating}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {normal.length > 0 && (
+                        <div className={(urgent.length > 0 || high.length > 0) ? 'mt-3' : ''}>
+                          <PriorityGroupHeader label="Normal" count={normal.length} icon={CheckCircle2} iconClass="bg-emerald-100 text-emerald-600" />
+                          <div className="flex flex-col gap-2">
+                            {normal.map(task => (
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                onToggleDone={() => handleToggleDone(task)}
+                                onEdit={() => setEditingTask(task)}
+                                isUpdating={isUpdating}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="h-6" />
+                    </>
+                  )}
+                </div>
+              </ScrollArea>
+            )}
           </div>
         </div>
       </main>
