@@ -298,19 +298,31 @@ async function fetchAll() {
 // Small reusable widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-function KpiTile({ label, value, sub, icon: Icon, color, urgent }: {
+function KpiTile({ label, value, sub, icon: Icon, color, urgent, onClick, actionLabel }: {
   label: string; value: string | number; sub?: string;
   icon: React.ElementType; color: string; urgent?: boolean;
+  onClick?: () => void; actionLabel?: string;
 }) {
-  return (
-    <div className={cn('bg-white/10 rounded-xl p-3 border border-white/10', urgent && 'border-red-400/50 bg-red-900/20')}>
+  const inner = (
+    <div className={cn(
+      'bg-white/10 rounded-xl p-3 border border-white/10 flex flex-col h-full',
+      urgent && 'border-red-400/50 bg-red-900/20',
+      onClick && 'cursor-pointer hover:bg-white/20 transition-colors group',
+    )}>
       <div className={cn('text-2xl font-bold leading-none', color, urgent && 'text-red-300')}>{value}</div>
       <div className="text-white/80 text-[11px] font-medium mt-1 flex items-center gap-1">
         <Icon className="h-3 w-3 flex-shrink-0" />{label}
       </div>
       {sub && <div className="text-blue-300/60 text-[10px] mt-0.5">{sub}</div>}
+      {onClick && (
+        <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-1 text-[10px] font-semibold text-white/50 group-hover:text-white/80 transition-colors">
+          <ChevronRight className="h-2.5 w-2.5" />
+          {actionLabel ?? 'View details'}
+        </div>
+      )}
     </div>
   );
+  return onClick ? <button type="button" onClick={onClick} className="text-left w-full h-full">{inner}</button> : inner;
 }
 
 function SectionCard({ icon: Icon, title, action, actionLabel, children, noPad }: {
@@ -1598,16 +1610,26 @@ export default function PortfolioDashboard() {
 
         {/* 10-tile KPI strip */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10 gap-2.5">
-          <KpiTile icon={Briefcase} label="Active Projects" value={kpis.active} sub={`${kpis.totalProjects} total`} color="text-white" />
-          <KpiTile icon={Clock} label="Stalled" value={kpis.stalled} sub={`>${STALL_DAYS}d no advance`} color="text-white" urgent={kpis.stalled > 0} />
-          <KpiTile icon={TrendingUp} label="Portfolio Burn" value={`${kpis.portfolioBurn}%`} sub={fmtMoney(kpis.totalSpent)} color="text-white" urgent={kpis.portfolioBurn > 90} />
-          <KpiTile icon={ClipboardList} label="MMP Coverage" value={`${kpis.coveragePct}%`} sub={`${kpis.completedSites}/${kpis.totalSiteEntries} sites`} color="text-emerald-300" />
-          <KpiTile icon={Users} label="Active Staff" value={kpis.activeStaff} sub={`${peopleStats.deptCount} depts`} color="text-white" />
-          <KpiTile icon={Receipt} label="Pending Approvals" value={totalPendingApprovals} sub="cost / advance / ops" color="text-amber-300" urgent={totalPendingApprovals > 10} />
-          <KpiTile icon={Flag} label="Overdue Milestones" value={kpis.overdueMilestones} sub="across portfolio" color="text-white" urgent={kpis.overdueMilestones > 0} />
-          <KpiTile icon={Siren} label="Open Incidents" value={kpis.openIncidents} sub={`${kpis.criticalIncidents} critical`} color="text-white" urgent={kpis.criticalIncidents > 0} />
-          <KpiTile icon={Handshake} label="CRM Pipeline" value={fmtUSD(kpis.activePipeline)} sub={`${crmStats.activePipeline} opportunities`} color="text-blue-200" />
-          <KpiTile icon={UserCheck} label="Pending Leave" value={kpis.pendingLeave} sub="awaiting approval" color="text-white" urgent={kpis.pendingLeave > 5} />
+          <KpiTile icon={Briefcase} label="Active Projects" value={kpis.active} sub={`${kpis.totalProjects} total`} color="text-white"
+            onClick={() => setActiveTab('portfolio')} actionLabel="View projects" />
+          <KpiTile icon={Clock} label="Stalled" value={kpis.stalled} sub={`>${STALL_DAYS}d no advance`} color="text-white" urgent={kpis.stalled > 0}
+            onClick={() => setActiveTab('portfolio')} actionLabel="Investigate" />
+          <KpiTile icon={TrendingUp} label="Portfolio Burn" value={`${kpis.portfolioBurn}%`} sub={fmtMoney(kpis.totalSpent)} color="text-white" urgent={kpis.portfolioBurn > 90}
+            onClick={() => setActiveTab('financial')} actionLabel="Financial view" />
+          <KpiTile icon={ClipboardList} label="MMP Coverage" value={`${kpis.coveragePct}%`} sub={`${kpis.completedSites}/${kpis.totalSiteEntries} sites`} color="text-emerald-300"
+            onClick={() => setActiveTab('operations')} actionLabel="Operations" />
+          <KpiTile icon={Users} label="Active Staff" value={kpis.activeStaff} sub={`${peopleStats.deptCount} depts`} color="text-white"
+            onClick={() => setActiveTab('people')} actionLabel="People view" />
+          <KpiTile icon={Receipt} label="Pending Approvals" value={totalPendingApprovals} sub="cost / advance / ops" color="text-amber-300" urgent={totalPendingApprovals > 10}
+            onClick={() => setActiveTab('financial')} actionLabel="Review now" />
+          <KpiTile icon={Flag} label="Overdue Milestones" value={kpis.overdueMilestones} sub="across portfolio" color="text-white" urgent={kpis.overdueMilestones > 0}
+            onClick={() => setActiveTab('portfolio')} actionLabel="View milestones" />
+          <KpiTile icon={Siren} label="Open Incidents" value={kpis.openIncidents} sub={`${kpis.criticalIncidents} critical`} color="text-white" urgent={kpis.criticalIncidents > 0}
+            onClick={() => setActiveTab('risk')} actionLabel="Risk & Safety" />
+          <KpiTile icon={Handshake} label="CRM Pipeline" value={fmtUSD(kpis.activePipeline)} sub={`${crmStats.activePipeline} opportunities`} color="text-blue-200"
+            onClick={() => setActiveTab('partners')} actionLabel="CRM view" />
+          <KpiTile icon={UserCheck} label="Pending Leave" value={kpis.pendingLeave} sub="awaiting approval" color="text-white" urgent={kpis.pendingLeave > 5}
+            onClick={() => navigate('/leave-requests')} actionLabel="Review leave" />
         </div>
       </div>
 
