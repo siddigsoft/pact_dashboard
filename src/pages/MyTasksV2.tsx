@@ -11,10 +11,11 @@ import {
   RefreshCw, TrendingUp, Briefcase, User, Lightbulb,
   CheckSquare, Circle, Zap, ChevronDown, ChevronUp,
   Inbox, Archive, Star, AlertTriangle, Flag,
-  Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers,
+  Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -108,19 +109,54 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const [reward, setReward]         = useState('');
   const [depTab, setDepTab]         = useState<DepTab>('custom');
   const [depInput, setDepInput]     = useState('');
+  const [depDateInput, setDepDateInput] = useState('');
   const [deps, setDeps]             = useState<string[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch departments
+  const { data: departments = [] } = useQuery({
+    queryKey: ['dialog-departments'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return data ?? [];
+    },
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch users
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['dialog-users'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
+    },
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const filteredUsers = useMemo(() =>
+    allUsers.filter((u: { full_name: string | null }) =>
+      !userSearch || u.full_name?.toLowerCase().includes(userSearch.toLowerCase())
+    ).slice(0, 20),
+    [allUsers, userSearch]
+  );
 
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey('general');
     setPriority('medium'); setDueDate(''); setNotes('');
-    setReward(''); setDepInput(''); setDeps([]);
+    setReward(''); setDepInput(''); setDepDateInput(''); setDeps([]);
+    setUserSearch(''); setAttachments([]);
   };
 
-  const addDep = () => {
-    const v = depInput.trim();
-    if (!v) return;
+  const addDep = (label: string) => {
+    const v = label.trim();
+    if (!v || deps.includes(v)) return;
     setDeps(prev => [...prev, v]);
     setDepInput('');
+    setDepDateInput('');
   };
 
   const submit = () => {
@@ -302,7 +338,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                 ]).map(t => (
                   <button
                     key={t.key}
-                    onClick={() => setDepTab(t.key)}
+                    onClick={() => { setDepTab(t.key); setUserSearch(''); }}
                     data-testid={`dep-tab-${t.key}`}
                     className={cn(
                       'px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
@@ -315,39 +351,159 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                   </button>
                 ))}
               </div>
-              {/* Input row */}
-              <div className="flex gap-2">
-                <input
-                  placeholder={
-                    depTab === 'custom'     ? "e.g. 'Site survey complete', 'Approval received'" :
-                    depTab === 'date'       ? 'Add a date dependency…' :
-                    depTab === 'user'       ? 'Add a user dependency…' :
-                                             'Add a department dependency…'
-                  }
-                  value={depInput}
-                  onChange={e => setDepInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDep(); } }}
-                  data-testid="input-dependency"
-                  className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all"
-                />
-                <button
-                  onClick={addDep}
-                  data-testid="button-add-dep"
-                  className="flex items-center gap-1.5 h-10 px-4 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs font-semibold transition-colors shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add
-                </button>
-              </div>
-              {/* Dep list */}
+
+              {/* ── Custom: free text ── */}
+              {depTab === 'custom' && (
+                <div className="flex gap-2">
+                  <input
+                    placeholder="e.g. 'Site survey complete', 'Approval received'"
+                    value={depInput}
+                    onChange={e => setDepInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDep(depInput); } }}
+                    data-testid="input-dependency-custom"
+                    className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all"
+                  />
+                  <button onClick={() => addDep(depInput)} data-testid="button-add-dep-custom"
+                    className="flex items-center gap-1.5 h-10 px-4 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs font-semibold transition-colors shrink-0">
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
+              )}
+
+              {/* ── Date: date picker ── */}
+              {depTab === 'date' && (
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={depDateInput}
+                    onChange={e => setDepDateInput(e.target.value)}
+                    data-testid="input-dependency-date"
+                    className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
+                  />
+                  <button
+                    onClick={() => depDateInput && addDep(`Date: ${depDateInput}`)}
+                    data-testid="button-add-dep-date"
+                    disabled={!depDateInput}
+                    className="flex items-center gap-1.5 h-10 px-4 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs font-semibold transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
+              )}
+
+              {/* ── User: searchable list ── */}
+              {depTab === 'user' && (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      placeholder="Search users…"
+                      value={userSearch}
+                      onChange={e => setUserSearch(e.target.value)}
+                      data-testid="input-dependency-user-search"
+                      className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="max-h-36 overflow-y-auto">
+                    {filteredUsers.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">No users found</p>
+                    ) : filteredUsers.map((u: { id: string; full_name: string | null; role: string | null }) => (
+                      <button
+                        key={u.id}
+                        onClick={() => addDep(`User: ${u.full_name}`)}
+                        data-testid={`dep-user-${u.id}`}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-[#1D3461]/10 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-[#1D3461]">{(u.full_name ?? 'U')[0].toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{u.full_name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{u.role}</p>
+                        </div>
+                        <Plus className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Department: list ── */}
+              {depTab === 'department' && (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="max-h-36 overflow-y-auto">
+                    {departments.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">Loading…</p>
+                    ) : (departments as { id: string; name: string }[]).map(dept => (
+                      <button
+                        key={dept.id}
+                        onClick={() => addDep(`Dept: ${dept.name}`)}
+                        data-testid={`dep-dept-${dept.id}`}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0"
+                      >
+                        <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                          <Briefcase className="w-3 h-3 text-blue-600" />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700 flex-1">{dept.name}</span>
+                        <Plus className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dep tags list */}
               {deps.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {deps.map((d, i) => (
-                    <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 font-medium">
+                    <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1D3461]/10 text-xs text-[#1D3461] font-medium">
                       {d}
-                      <button onClick={() => setDeps(prev => prev.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500 transition-colors ml-0.5">
+                      <button onClick={() => setDeps(prev => prev.filter((_, idx) => idx !== i))} className="text-[#1D3461]/50 hover:text-red-500 transition-colors ml-0.5">
                         <X className="w-3 h-3" />
                       </button>
                     </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Attachments */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
+                <Paperclip className="w-3 h-3 text-slate-400" />
+                Attachments
+                <span className="text-slate-400 font-normal normal-case tracking-normal">(optional)</span>
+              </label>
+              <input
+                type="file"
+                multiple
+                ref={fileInputRef}
+                className="hidden"
+                onChange={e => {
+                  const files = Array.from(e.target.files ?? []);
+                  setAttachments(prev => [...prev, ...files]);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="button-attach-file"
+                className="w-full flex items-center justify-center gap-2 h-10 rounded-xl border border-dashed border-slate-300 hover:border-[#1D3461] text-slate-400 hover:text-[#1D3461] text-xs font-semibold transition-all"
+              >
+                <Paperclip className="w-3.5 h-3.5" /> Click to attach files
+              </button>
+              {attachments.length > 0 && (
+                <div className="flex flex-col gap-1 mt-2">
+                  {attachments.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <Paperclip className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span className="text-xs text-slate-600 font-medium flex-1 truncate">{f.name}</span>
+                      <span className="text-[10px] text-slate-400">{(f.size / 1024).toFixed(0)} KB</span>
+                      <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-red-500 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
