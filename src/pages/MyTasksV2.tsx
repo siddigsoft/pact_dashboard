@@ -6,9 +6,9 @@ import {
 import {
   Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock,
   Filter, LayoutDashboard, ListTodo, MoreHorizontal, Plus,
-  Search, Users, AlertCircle, Briefcase, User, ChevronUp,
+  Search, AlertCircle, Briefcase, User, ChevronUp,
   ChevronDown, Loader2, X, Trash2, Edit2, Check, Bell,
-  MessageSquare, Settings, Columns2, Layers, GanttChart, Grid2x2, Sun,
+  Columns2, Layers, GanttChart, Grid2x2, Sun,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Layout2MissionTabs } from '@/components/tasks/layouts/Layout2MissionTabs';
@@ -577,13 +577,6 @@ function LayoutSwitcher({ current, onChange }: LayoutSwitcherProps) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/workspace' },
-  { icon: ListTodo,        label: 'Tasks',     path: '/my-tasks', active: true },
-  { icon: Calendar,        label: 'Calendar',  path: '/my-tasks' },
-  { icon: Users,           label: 'Team',      path: '/my-tasks' },
-  { icon: MessageSquare,   label: 'Messages',  path: '/my-tasks' },
-];
 
 export default function MyTasksV2() {
   const { toast } = useToast();
@@ -783,69 +776,39 @@ export default function MyTasksV2() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-900">
+    <div className="flex h-full w-full bg-slate-50 overflow-hidden font-sans text-slate-900">
 
-      {/* Left nav sidebar */}
-      <aside className="w-16 h-full flex flex-col items-center py-4 bg-[#0F2041] border-r border-slate-800 z-20 shrink-0">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg mb-8 shadow-lg select-none">
-          P
-        </div>
-        <nav className="flex-1 flex flex-col gap-4 w-full px-2">
-          {NAV_ITEMS.map((item, i) => (
-            <button
-              key={i}
-              title={item.label}
-              className={cn(
-                'p-3 rounded-xl flex items-center justify-center transition-all duration-200 relative',
-                item.active
-                  ? 'bg-[#1D3461] text-white shadow-inner'
-                  : 'text-slate-400 hover:bg-[#1D3461]/50 hover:text-slate-200',
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              {item.active && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-400 rounded-r-full" />
-              )}
-            </button>
-          ))}
-        </nav>
-        <div className="mt-auto flex flex-col gap-4 w-full px-2 items-center">
-          <button className="p-3 rounded-xl text-slate-400 hover:bg-[#1D3461]/50 hover:text-slate-200 transition-colors" title="Settings">
-            <Settings className="w-5 h-5" />
-          </button>
-          <Avatar className="w-10 h-10 border-2 border-[#1D3461] cursor-pointer">
-            <AvatarFallback className="bg-slate-700 text-xs text-slate-300">{userInitials}</AvatarFallback>
-          </Avatar>
-        </div>
-      </aside>
-
-      {/* Main area */}
+      {/* Main area — no duplicate sidebar, AppSidebar handles nav */}
       <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
 
         {/* Top bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
-          <div className="flex items-center gap-5">
-            <h1 className="text-xl font-semibold tracking-tight text-[#0F2041] whitespace-nowrap">Command Center</h1>
-            <div className="h-6 w-px bg-slate-200 hidden md:block" />
-            <div className="hidden lg:flex items-center gap-1.5 flex-wrap">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-10 gap-3">
+          {/* Left: title + filter chips */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div>
+              <p className="text-xs text-slate-400 leading-none mb-0.5">My Workspace</p>
+              <h1 className="text-base font-bold tracking-tight text-[#0F2041] leading-none whitespace-nowrap">My Tasks</h1>
+            </div>
+            <div className="h-6 w-px bg-slate-200 hidden md:block shrink-0" />
+            <div className="hidden md:flex items-center gap-1 flex-wrap">
               {FILTER_CHIPS.map(chip => (
                 <button
                   key={chip.key}
                   onClick={() => setFilterKey(chip.key)}
                   data-testid={`filter-chip-${chip.key}`}
                   className={cn(
-                    'px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap',
+                    'px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap border',
                     filterKey === chip.key
-                      ? 'bg-slate-900 text-white'
+                      ? 'bg-[#1D3461] text-white border-[#1D3461]'
                       : chip.alert
-                        ? 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                        ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100',
                   )}
                 >
                   {chip.label}
                   <span className={cn(
-                    'px-1.5 py-0.5 rounded-full text-xs',
-                    filterKey === chip.key ? 'bg-white/20' : chip.alert ? 'bg-red-100' : 'bg-white',
+                    'px-1.5 py-0.5 rounded-full text-xs font-semibold',
+                    filterKey === chip.key ? 'bg-white/25 text-white' : chip.alert ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-600',
                   )}>
                     {chip.count}
                   </span>
@@ -854,13 +817,14 @@ export default function MyTasksV2() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Right: actions */}
+          <div className="flex items-center gap-2 shrink-0">
             {showSearch && (
-              <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-3 bg-white">
+              <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-3 bg-slate-50">
                 <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <input
                   ref={searchRef}
-                  className="h-8 text-sm bg-transparent outline-none w-40"
+                  className="h-8 text-sm bg-transparent outline-none w-36"
                   placeholder="Search tasks…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
@@ -871,31 +835,45 @@ export default function MyTasksV2() {
                 </button>
               </div>
             )}
-            <div className="hidden sm:flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+            <button
+              onClick={() => { setShowSearch(s => !s); setTimeout(() => searchRef.current?.focus(), 50); }}
+              data-testid="button-toggle-search"
+              className="p-2 rounded-lg text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
+              title="Search tasks"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+            <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
               <Switch
                 id="team-view"
                 checked={teamView}
                 onCheckedChange={setTeamView}
-                className="data-[state=checked]:bg-[#1D3461]"
+                className="data-[state=checked]:bg-[#1D3461] scale-90"
               />
-              <Label htmlFor="team-view" className="text-sm font-medium cursor-pointer text-slate-700 whitespace-nowrap">Team View</Label>
+              <Label htmlFor="team-view" className="text-xs font-medium cursor-pointer text-slate-600 whitespace-nowrap">Team View</Label>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="text-slate-500 border-slate-200"
-              onClick={() => { setShowSearch(s => !s); setTimeout(() => searchRef.current?.focus(), 50); }}
-              data-testid="button-toggle-search"
+            <button
+              onClick={() => setPlanningOpen(p => !p)}
+              data-testid="button-toggle-planning"
+              title="Planning Tools"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
+                planningOpen
+                  ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100',
+              )}
             >
-              <Search className="w-4 h-4" />
-            </Button>
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Planning</span>
+              {planningOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
             <Button
-              className="bg-[#1D3461] hover:bg-[#0F2041] text-white shadow-sm"
+              className="bg-[#1D3461] hover:bg-[#0F2041] text-white shadow-sm h-8 px-3 text-sm"
               onClick={() => setShowAdd(true)}
               data-testid="button-quick-add"
             >
-              <Plus className="w-4 h-4 mr-2" />
-              Quick Add
+              <Plus className="w-4 h-4 mr-1" />
+              New Task
             </Button>
           </div>
         </header>
@@ -942,51 +920,43 @@ export default function MyTasksV2() {
               </div>
             </ScrollArea>
 
-            {/* Planning Tools panel (slides up from bottom) */}
-            <div
-              className={cn(
-                'absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 transition-all duration-300 ease-in-out z-10 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.12)]',
-                planningOpen ? 'h-72' : 'h-12',
-              )}
-            >
-              <button
-                onClick={() => setPlanningOpen(p => !p)}
-                className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white border border-slate-200 rounded-full p-1 shadow-sm text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-                data-testid="button-toggle-planning"
-              >
-                {planningOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </button>
-              <div
-                className="h-12 px-6 flex items-center justify-between cursor-pointer"
-                onClick={() => !planningOpen && setPlanningOpen(true)}
-              >
-                <h3 className="font-semibold text-sm text-[#0F2041] flex items-center gap-2">
-                  <LayoutDashboard className="w-4 h-4 text-slate-400" />
-                  Planning Tools
-                </h3>
-                {!planningOpen && (
-                  <span className="text-xs text-slate-500 font-medium hidden sm:block">Daily Briefing & Priority Matrix</span>
-                )}
-                {planningOpen && (
-                  <div className="flex gap-1">
-                    {(['briefing', 'matrix'] as const).map(tab => (
-                      <button
-                        key={tab}
-                        onClick={e => { e.stopPropagation(); setActivePlanningTab(tab); }}
-                        className={cn(
-                          'px-3 py-1 rounded text-xs font-medium transition-colors',
-                          activePlanningTab === tab ? 'bg-[#1D3461] text-white' : 'text-slate-500 hover:bg-slate-100',
-                        )}
-                      >
-                        {tab === 'briefing' ? 'Briefing' : 'Matrix'}
-                      </button>
-                    ))}
+            {/* Planning Tools — collapsible panel triggered from header */}
+            {planningOpen && (
+              <div className="absolute bottom-0 left-0 right-0 bg-white border-t-2 border-[#1D3461] z-10 shadow-[0_-6px_24px_-8px_rgba(0,0,0,0.15)] flex flex-col" style={{ height: '300px' }}>
+                {/* Panel header */}
+                <div className="h-11 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-[#0F2041] flex items-center gap-2">
+                      <LayoutDashboard className="w-4 h-4 text-[#1D3461]" />
+                      Planning Tools
+                    </span>
+                    <div className="flex gap-1">
+                      {(['briefing', 'matrix'] as const).map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setActivePlanningTab(tab)}
+                          className={cn(
+                            'px-3 py-1 rounded-full text-xs font-medium transition-colors border',
+                            activePlanningTab === tab
+                              ? 'bg-[#1D3461] text-white border-[#1D3461]'
+                              : 'text-slate-500 border-slate-200 hover:bg-slate-50',
+                          )}
+                        >
+                          {tab === 'briefing' ? '📋 Daily Briefing' : '🎯 Priority Matrix'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                )}
-              </div>
-
-              {planningOpen && (
-                <div className="px-6 pb-6 h-[calc(100%-48px)] overflow-auto">
+                  <button
+                    onClick={() => setPlanningOpen(false)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    title="Close Planning Tools"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Panel content */}
+                <div className="flex-1 overflow-auto px-4 py-3">
                   {activePlanningTab === 'briefing' ? (
                     <DailyBriefing
                       personalTasks={tasks}
@@ -1010,8 +980,8 @@ export default function MyTasksV2() {
                     />
                   )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Right 40%: Action Items */}
