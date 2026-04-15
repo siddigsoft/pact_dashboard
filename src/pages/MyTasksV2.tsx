@@ -10,6 +10,7 @@ import {
   Columns2, Sun, Sparkles, Target,
   RefreshCw, TrendingUp, Briefcase, User, Lightbulb,
   CheckSquare, Circle, Zap, ChevronDown, ChevronUp,
+  Inbox, Archive, Star, AlertTriangle, Flag,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -1067,6 +1068,360 @@ function KanbanBoardView({ tasks, subtaskMap, isLoading, isUpdating, onEdit, onT
   );
 }
 
+// ── Inbox View ────────────────────────────────────────────────────────────────
+
+const INBOX_CAT_CFG: Record<string, { initials: string; bg: string; from: string }> = {
+  project:   { initials: 'PR', bg: 'bg-blue-700',   from: 'Project' },
+  personal:  { initials: 'ME', bg: 'bg-purple-600', from: 'Personal' },
+  recurring: { initials: 'RC', bg: 'bg-teal-600',   from: 'Recurring' },
+};
+
+const INBOX_PRIO_DOT: Record<string, string> = {
+  critical: 'bg-red-500', high: 'bg-orange-400', medium: 'bg-amber-400', low: 'bg-sky-400',
+};
+
+type InboxFolder = 'all' | 'overdue' | 'today' | 'high' | 'project' | 'personal' | 'recurring' | 'done';
+
+interface InboxViewProps {
+  tasks: PersonalTask[];
+  isLoading: boolean;
+  isUpdating: boolean;
+  onEdit: (task: PersonalTask) => void;
+  onToggleDone: (task: PersonalTask) => void;
+  onSave: (id: string, data: Partial<PersonalTask>) => Promise<void>;
+  onAddTask: () => void;
+}
+
+function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave, onAddTask }: InboxViewProps) {
+  const [activeFolder, setActiveFolder] = useState<InboxFolder>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [noteText, setNoteText]   = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  const nonCancelled = useMemo(() => tasks.filter(t => t.status !== 'cancelled'), [tasks]);
+
+  const folderTasks = useMemo(() => {
+    switch (activeFolder) {
+      case 'overdue':  return nonCancelled.filter(t => isOverdue(t.dueDate, t.status));
+      case 'today':    return nonCancelled.filter(t => {
+        if (!t.dueDate) return false;
+        try { const d = parseISO(t.dueDate); return isValid(d) && isToday(d); } catch { return false; }
+      });
+      case 'high':     return nonCancelled.filter(t => t.priority === 'critical' || t.priority === 'high');
+      case 'project':  return nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'project');
+      case 'personal': return nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'personal');
+      case 'recurring':return nonCancelled.filter(t => !!(t.recurrence && t.recurrence !== 'none'));
+      case 'done':     return tasks.filter(t => t.status === 'done');
+      default:         return nonCancelled;
+    }
+  }, [tasks, nonCancelled, activeFolder]);
+
+  const selected = useMemo(() => {
+    const found = selectedId ? folderTasks.find(t => t.id === selectedId) : null;
+    return found ?? folderTasks[0] ?? null;
+  }, [selectedId, folderTasks]);
+
+  useEffect(() => {
+    setNoteText(selected?.notes ?? '');
+  }, [selected?.id]);
+
+  const navItems: { key: InboxFolder; icon: typeof Inbox; label: string; count: number }[] = [
+    { key: 'all',       icon: Inbox,         label: 'All Tasks',     count: nonCancelled.length },
+    { key: 'overdue',   icon: AlertTriangle,  label: 'Overdue',       count: nonCancelled.filter(t => isOverdue(t.dueDate, t.status)).length },
+    { key: 'today',     icon: Clock,          label: 'Due Today',     count: nonCancelled.filter(t => { try { const d = parseISO(t.dueDate ?? ''); return isValid(d) && isToday(d); } catch { return false; } }).length },
+    { key: 'high',      icon: Flag,           label: 'High Priority', count: nonCancelled.filter(t => t.priority === 'critical' || t.priority === 'high').length },
+    { key: 'project',   icon: Briefcase,      label: 'Project',       count: nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'project').length },
+    { key: 'personal',  icon: User,           label: 'Personal',      count: nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'personal').length },
+    { key: 'recurring', icon: RefreshCw,      label: 'Recurring',     count: nonCancelled.filter(t => !!(t.recurrence && t.recurrence !== 'none')).length },
+    { key: 'done',      icon: Archive,        label: 'Done',          count: tasks.filter(t => t.status === 'done').length },
+  ];
+
+  const getAvatarCfg = (task: PersonalTask) => {
+    const key = (task.category ?? '').toLowerCase();
+    return INBOX_CAT_CFG[key] ?? {
+      initials: (task.category ?? task.title).substring(0, 2).toUpperCase(),
+      bg: 'bg-slate-500',
+      from: task.category ?? 'Task',
+    };
+  };
+
+  const getDueLabel = (task: PersonalTask): { label: string; overdue: boolean } => {
+    if (!task.dueDate) return { label: '', overdue: false };
+    try {
+      const d = parseISO(task.dueDate);
+      if (!isValid(d)) return { label: '', overdue: false };
+      if (isToday(d)) return { label: 'Today', overdue: false };
+      return { label: format(d, 'MMM dd'), overdue: isOverdue(task.dueDate, task.status) };
+    } catch { return { label: '', overdue: false }; }
+  };
+
+  const handleSaveNote = async () => {
+    if (!selected || savingNote) return;
+    setSavingNote(true);
+    try { await onSave(selected.id, { notes: noteText }); } finally { setSavingNote(false); }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-white">
+        <Loader2 className="w-6 h-6 animate-spin text-[#1D3461]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 overflow-hidden bg-white">
+
+      {/* ── Left folder nav ── */}
+      <aside className="w-[180px] bg-[#fafaf9] border-r border-slate-100 flex flex-col shrink-0">
+        <div className="p-2 flex-1 overflow-y-auto pt-3">
+          {navItems.map(item => {
+            const Icon = item.icon;
+            const isActive = activeFolder === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => { setActiveFolder(item.key); setSelectedId(null); }}
+                data-testid={`inbox-folder-${item.key}`}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg mb-0.5 text-left transition-colors',
+                  isActive ? 'bg-[#e8edf5] text-[#1D3461]' : 'text-slate-600 hover:bg-slate-100',
+                )}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="flex-1 text-[12px] font-medium">{item.label}</span>
+                {item.count > 0 && (
+                  <span className={cn(
+                    'text-[10px] font-bold px-1.5 rounded-full',
+                    isActive ? 'bg-[#1D3461] text-white' : 'text-slate-400',
+                  )}>{item.count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="p-3 border-t border-slate-100">
+          <button
+            onClick={onAddTask}
+            data-testid="inbox-new-task"
+            className="w-full flex items-center gap-1.5 justify-center py-2 bg-[#1D3461] text-white rounded-lg text-[12px] font-semibold hover:bg-[#0F2041] transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> New Task
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Task list ── */}
+      <div className="w-[320px] border-r border-slate-100 flex flex-col shrink-0">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2 shrink-0">
+          <span className="text-[13px] font-bold text-slate-700 flex-1">
+            {navItems.find(n => n.key === activeFolder)?.label ?? 'All Tasks'}
+            <span className="text-slate-400 font-normal text-[12px] ml-1">({folderTasks.length})</span>
+          </span>
+        </div>
+
+        {/* Overdue banner */}
+        {activeFolder === 'all' && nonCancelled.filter(t => isOverdue(t.dueDate, t.status)).length > 0 && (
+          <div className="bg-red-50 border-b border-red-100 px-4 py-1.5 text-[11px] text-red-700 font-medium flex items-center gap-1.5 shrink-0">
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            {nonCancelled.filter(t => isOverdue(t.dueDate, t.status)).length} overdue — action needed
+          </div>
+        )}
+
+        {folderTasks.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-8">
+            <CheckCircle2 className="w-10 h-10 text-emerald-200 mb-3" />
+            <p className="text-sm font-semibold text-slate-500">All clear here!</p>
+            <p className="text-xs text-slate-400 mt-1">No tasks in this folder.</p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+            {folderTasks.map(task => {
+              const av = getAvatarCfg(task);
+              const { label: dueLabel, overdue: overdueFlag } = getDueLabel(task);
+              const isSelected = selected?.id === task.id;
+              const isDone = task.status === 'done';
+              const taskOverdue = isOverdue(task.dueDate, task.status);
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => setSelectedId(task.id)}
+                  data-testid={`inbox-row-${task.id}`}
+                  className={cn(
+                    'px-4 py-3 cursor-pointer transition-colors group',
+                    isSelected ? 'bg-[#e8edf5]' : 'hover:bg-slate-50',
+                    isDone && 'opacity-60',
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0', av.bg)}>
+                      {av.initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        {taskOverdue && <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />}
+                        <span className={cn('text-[12px] truncate', taskOverdue ? 'font-bold text-red-700' : 'font-medium text-slate-600')}>
+                          {av.from}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={cn('text-[10px] shrink-0', overdueFlag ? 'text-red-600 font-bold' : 'text-slate-400')}>
+                      {dueLabel}
+                    </span>
+                  </div>
+                  <div className="pl-9">
+                    <p className={cn('text-[12px] truncate', isDone ? 'line-through text-slate-400' : 'font-semibold text-slate-800')}>{task.title}</p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{task.description ?? task.notes ?? 'No description added'}</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', INBOX_PRIO_DOT[task.priority] ?? 'bg-slate-300')} />
+                      {(task.tags ?? []).slice(0, 2).map(tag => (
+                        <span key={tag} className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Reading pane ── */}
+      {selected ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Actions toolbar */}
+          <div className="px-6 py-3 border-b border-slate-100 flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => onToggleDone(selected)}
+              disabled={isUpdating}
+              data-testid="inbox-mark-done"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors disabled:opacity-50',
+                selected.status === 'done'
+                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                  : 'bg-[#1D3461] text-white hover:bg-[#0F2041]',
+              )}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {selected.status === 'done' ? 'Mark Incomplete' : 'Mark Done'}
+            </button>
+            <button
+              onClick={() => onEdit(selected)}
+              data-testid="inbox-edit-task"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-[12px] hover:bg-slate-50 transition-colors"
+            >
+              <Edit2 className="w-4 h-4" /> Edit
+            </button>
+            <button
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 ml-auto"
+              onClick={() => onEdit(selected)}
+              data-testid="inbox-more-actions"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Task content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            {/* Overdue alert */}
+            {isOverdue(selected.dueDate, selected.status) && (
+              <div className="flex items-center gap-2 mb-4 text-red-600 bg-red-50 rounded-lg px-4 py-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span className="text-[12px] font-semibold">
+                  This task is overdue{selected.dueDate && ` since ${(() => { try { return format(parseISO(selected.dueDate), 'dd MMM yyyy'); } catch { return selected.dueDate; } })()}`}
+                </span>
+              </div>
+            )}
+
+            {/* Title */}
+            <h2 className="text-[20px] font-bold text-slate-900 leading-snug mb-4">{selected.title}</h2>
+
+            {/* Meta row */}
+            <div className="flex items-center gap-4 text-[12px] mb-5 pb-5 border-b border-slate-100 flex-wrap">
+              {(() => {
+                const av = getAvatarCfg(selected);
+                const { label: dueLabel, overdue: overdueFlag } = getDueLabel(selected);
+                return (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0', av.bg)}>
+                        {av.initials}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-700">{av.from}</p>
+                        <p className="text-slate-400 text-[10px] capitalize">{selected.category ?? 'General'} task</p>
+                      </div>
+                    </div>
+                    <div className="ml-auto flex items-center gap-4 text-slate-500">
+                      {dueLabel && (
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          <span>Due: <span className={cn('font-semibold', overdueFlag ? 'text-red-600' : '')}>{dueLabel}</span></span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <div className={cn('w-2 h-2 rounded-full', INBOX_PRIO_DOT[selected.priority] ?? 'bg-slate-300')} />
+                        <span className="capitalize">{PRIORITY_CFG[selected.priority as keyof typeof PRIORITY_CFG]?.label ?? selected.priority} priority</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Tags */}
+            {(selected.tags ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-5">
+                {(selected.tags ?? []).map(tag => (
+                  <span key={tag} className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-[11px] font-medium">{tag}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Description */}
+            {selected.description && (
+              <div className="bg-slate-50 rounded-xl p-5 mb-5">
+                <p className="text-[14px] text-slate-700 leading-relaxed">{selected.description}</p>
+              </div>
+            )}
+
+            {/* Notes area */}
+            <div className="border border-slate-200 rounded-xl p-4">
+              <p className="text-[11px] font-semibold text-slate-500 mb-2">Notes / Comments</p>
+              <textarea
+                className="w-full bg-transparent text-[13px] text-slate-700 outline-none resize-none placeholder:text-slate-300"
+                rows={4}
+                placeholder="Add a note about this task…"
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                data-testid="inbox-note-textarea"
+              />
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+                <span className="text-[10px] text-slate-400">Notes are saved to this task</span>
+                <button
+                  onClick={handleSaveNote}
+                  disabled={savingNote || noteText === (selected.notes ?? '')}
+                  data-testid="inbox-save-note"
+                  className="px-4 py-1.5 bg-[#1D3461] text-white rounded-lg text-[12px] font-semibold hover:bg-[#0F2041] transition-colors disabled:opacity-40"
+                >
+                  {savingNote ? 'Saving…' : 'Save Note'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-center px-8">
+          <div>
+            <Inbox className="w-12 h-12 text-slate-200 mb-4 mx-auto" />
+            <p className="text-sm font-semibold text-slate-400">Select a task to view details</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 
@@ -1108,7 +1463,7 @@ export default function MyTasksV2() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [activePlanningTab, setActivePlanningTab] = useState<'briefing' | 'matrix'>('briefing');
-  const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban'>('kanban');
+  const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban' | 'inbox'>('kanban');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring'>('all');
   const searchRef = useRef<HTMLInputElement>(null);
   // Stats
@@ -1339,7 +1694,7 @@ export default function MyTasksV2() {
         <div className="flex-1 flex overflow-hidden">
 
           {/* ══ LEFT SIDEBAR: Category Nav + Progress — hidden in Kanban mode ══ */}
-          {mainView !== 'kanban' && <aside className="w-[200px] shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
+          {mainView !== 'kanban' && mainView !== 'inbox' && <aside className="w-[200px] shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
 
             {/* Category navigation */}
             <div className="p-3 border-b border-slate-100">
@@ -1423,6 +1778,7 @@ export default function MyTasksV2() {
                   { key: 'kanban' as const,   label: 'Kanban',        Icon: Columns2 },
                   { key: 'timeline' as const, label: 'Timeline',      Icon: Calendar },
                   { key: 'planner' as const,  label: 'Daily Planner', Icon: Sun },
+                  { key: 'inbox' as const,    label: 'Inbox',         Icon: Inbox },
                 ] as const).map(v => (
                   <button
                     key={v.key}
@@ -1622,9 +1978,23 @@ export default function MyTasksV2() {
                 onAddTask={() => setShowAdd(true)}
               />
             )}
+
+            {/* ── INBOX VIEW ── */}
+            {mainView === 'inbox' && (
+              <InboxView
+                tasks={tasks}
+                isLoading={isLoading}
+                isUpdating={isUpdating}
+                onEdit={setEditingTask}
+                onToggleDone={handleToggleDone}
+                onSave={handleSave}
+                onAddTask={() => setShowAdd(true)}
+              />
+            )}
           </div>
 
-          {/* ══ RIGHT PANEL: Planning Tools + SmartHint ══ */}
+          {/* ══ RIGHT PANEL: Planning Tools + SmartHint — hidden in inbox mode ══ */}
+          {mainView !== 'inbox' && (
           <div className="w-[260px] shrink-0 flex flex-col border-l border-slate-200 overflow-hidden bg-white">
 
             {/* Panel header — dark branded */}
@@ -1695,6 +2065,7 @@ export default function MyTasksV2() {
             {/* SmartHint at bottom */}
             <SmartHint />
           </div>
+          )}
         </div>
       </main>
 
