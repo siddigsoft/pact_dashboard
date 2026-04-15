@@ -8,7 +8,7 @@ import {
   Filter, LayoutDashboard, ListTodo, MoreHorizontal, Plus,
   Search, AlertCircle, Briefcase, User, ChevronUp,
   ChevronDown, Loader2, X, Trash2, Edit2, Check, Bell,
-  Columns2, Layers, GanttChart, Grid2x2, Sun,
+  Columns2, Layers, GanttChart, Grid2x2, Sun, Sparkles, Target,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Layout2MissionTabs } from '@/components/tasks/layouts/Layout2MissionTabs';
@@ -885,24 +885,29 @@ export default function MyTasksV2() {
           <div className="w-[60%] flex flex-col border-r border-slate-200 bg-white overflow-hidden">
 
             {/* Timeline subheader */}
-            <div className="h-14 border-b border-slate-100 flex items-center justify-between px-6 shrink-0 bg-slate-50/50">
-              <div className="flex items-center gap-4">
-                <h2 className="font-semibold text-slate-800">Timeline</h2>
-                <div className="hidden md:flex items-center gap-3 text-xs font-medium text-slate-500">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Personal</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-teal-500 inline-block" />Project</span>
+            <div className="h-14 border-b border-slate-200 flex items-center justify-between px-5 shrink-0 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                  <Calendar className="w-3.5 h-3.5 text-slate-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-[#0F2041] leading-tight">Timeline</h2>
+                  <div className="hidden md:flex items-center gap-2.5 text-[10px] font-medium text-slate-400">
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Personal</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Project</span>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
+              <div className="flex items-center gap-1.5">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
-                <span className="text-sm font-medium text-slate-600 min-w-[110px] text-center">{weekLabel}</span>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
+                <span className="text-xs font-semibold text-slate-600 min-w-[110px] text-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">{weekLabel}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
                   <ChevronRight className="w-4 h-4" />
                 </Button>
                 {weekOffset !== 0 && (
-                  <Button variant="ghost" size="sm" className="text-xs h-7 text-blue-600" onClick={() => setWeekOffset(0)}>Today</Button>
+                  <Button variant="ghost" size="sm" className="text-xs h-7 text-blue-600 hover:bg-blue-50" onClick={() => setWeekOffset(0)}>Today</Button>
                 )}
               </div>
             </div>
@@ -922,41 +927,51 @@ export default function MyTasksV2() {
 
             {/* Planning Tools — collapsible panel triggered from header */}
             {planningOpen && (
-              <div className="shrink-0 bg-white border-t-2 border-[#1D3461] flex flex-col" style={{ height: '300px' }}>
+              <div className="shrink-0 bg-white border-t-2 border-[#1D3461] flex flex-col" style={{ height: '420px' }}>
                 {/* Panel header */}
-                <div className="h-11 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-[#0F2041] flex items-center gap-2">
+                <div className="h-12 px-5 flex items-center justify-between border-b border-slate-100 shrink-0 bg-slate-50/60">
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-bold text-[#0F2041] flex items-center gap-2">
                       <LayoutDashboard className="w-4 h-4 text-[#1D3461]" />
                       Planning Tools
                     </span>
-                    <div className="flex gap-1">
-                      {(['briefing', 'matrix'] as const).map(tab => (
-                        <button
-                          key={tab}
-                          onClick={() => setActivePlanningTab(tab)}
-                          className={cn(
-                            'px-3 py-1 rounded-full text-xs font-medium transition-colors border',
-                            activePlanningTab === tab
-                              ? 'bg-[#1D3461] text-white border-[#1D3461]'
-                              : 'text-slate-500 border-slate-200 hover:bg-slate-50',
-                          )}
-                        >
-                          {tab === 'briefing' ? '📋 Daily Briefing' : '🎯 Priority Matrix'}
-                        </button>
-                      ))}
+                    <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                      <button
+                        onClick={() => setActivePlanningTab('briefing')}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                          activePlanningTab === 'briefing'
+                            ? 'bg-white text-[#1D3461] shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700',
+                        )}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        Daily Briefing
+                      </button>
+                      <button
+                        onClick={() => setActivePlanningTab('matrix')}
+                        className={cn(
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                          activePlanningTab === 'matrix'
+                            ? 'bg-white text-[#1D3461] shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700',
+                        )}
+                      >
+                        <Target className="w-3 h-3" />
+                        Priority Matrix
+                      </button>
                     </div>
                   </div>
                   <button
                     onClick={() => setPlanningOpen(false)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
                     title="Close Planning Tools"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 {/* Panel content */}
-                <div className="flex-1 overflow-auto px-4 py-3">
+                <div className="flex-1 overflow-auto">
                   {activePlanningTab === 'briefing' ? (
                     <DailyBriefing
                       personalTasks={tasks}
@@ -986,18 +1001,25 @@ export default function MyTasksV2() {
 
           {/* Right 40%: Action Items */}
           <div className="w-[40%] bg-slate-50 flex flex-col h-full">
-            <div className="h-14 border-b border-slate-200 flex items-center justify-between px-6 shrink-0 bg-white">
-              <h2 className="font-semibold text-slate-800">Action Items</h2>
+            <div className="h-14 border-b border-slate-200 flex items-center justify-between px-5 shrink-0 bg-white">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#1D3461]/10 flex items-center justify-center shrink-0">
+                  <ListTodo className="w-3.5 h-3.5 text-[#1D3461]" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-[#0F2041] leading-tight">Action Items</h2>
+                  <p className="text-[10px] text-slate-400 leading-tight">{filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
               <div className="flex gap-2 items-center">
                 {isLoading && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="text-xs h-8"
+                  className="bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs h-8 shadow-sm"
                   onClick={() => setShowAdd(true)}
                   data-testid="button-add-task-panel"
                 >
-                  <Plus className="w-3.5 h-3.5 mr-1" />New
+                  <Plus className="w-3.5 h-3.5 mr-1" />New Task
                 </Button>
               </div>
             </div>
