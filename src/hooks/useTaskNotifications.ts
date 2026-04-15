@@ -6,7 +6,7 @@
 import { useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useNotifications } from '@/context/notifications/NotificationContext';
-import { useUser } from '@/hooks/useUser';
+import { useUser } from '@/context/user/UserContext';
 
 export type TaskEvent =
   | 'task_created'
