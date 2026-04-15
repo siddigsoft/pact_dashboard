@@ -11,6 +11,7 @@ import {
   RefreshCw, TrendingUp, Briefcase, User, Lightbulb,
   CheckSquare, Circle, Zap, ChevronDown, ChevronUp,
   Inbox, Archive, Star, AlertTriangle, Flag,
+  Brain, Coffee, Moon, ArrowRight, BarChart3, Users,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -38,8 +39,6 @@ import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, materialiseDailyTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus,
 } from '@/hooks/usePersonalTasks';
-import { DailyBriefing } from '@/components/tasks/DailyBriefing';
-import { PriorityMatrix } from '@/components/tasks/PriorityMatrix';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -1068,6 +1067,439 @@ function KanbanBoardView({ tasks, subtaskMap, isLoading, isUpdating, onEdit, onT
   );
 }
 
+// ── Planning Companion (full-page view) ───────────────────────────────────────
+
+const DAILY_TIPS: { icon: string; tip: string; category: string }[] = [
+  { icon: '🎯', tip: 'Start your day with the hardest task — your energy and focus peak in the morning.', category: 'Focus' },
+  { icon: '⏱️', tip: 'Use the 2-minute rule: if a task takes less than 2 minutes, do it right now.', category: 'Efficiency' },
+  { icon: '🔗', tip: 'Batch similar tasks together to reduce context-switching and keep your brain in one mode.', category: 'Productivity' },
+  { icon: '📅', tip: 'Block 30 minutes at the end of each day to plan tomorrow\'s top 3 priorities.', category: 'Planning' },
+  { icon: '🛑', tip: 'Say no to tasks that don\'t align with your key goals this week — your time is finite.', category: 'Focus' },
+  { icon: '👥', tip: 'Delegate tasks that others can do 80% as well as you — your time is better spent on high-impact work.', category: 'Delegation' },
+  { icon: '🏆', tip: 'Focus on outcomes, not activity — a task completed matters more than being busy all day.', category: 'Mindset' },
+  { icon: '🧘', tip: 'Take a 5-minute break every 50 minutes — short rests restore focus and prevent burnout.', category: 'Wellbeing' },
+  { icon: '📝', tip: 'Write your top 3 priorities before checking messages — protect your agenda from the start.', category: 'Planning' },
+  { icon: '🔴', tip: 'Review overdue tasks first each morning — clearing blockers creates momentum and reduces stress.', category: 'Efficiency' },
+  { icon: '🔇', tip: 'Protect deep work time by muting notifications for 2-hour blocks — focus compounds.', category: 'Focus' },
+  { icon: '🚀', tip: 'A task not started is 100% incomplete — even 10 minutes of progress is infinitely better than zero.', category: 'Action' },
+  { icon: '📢', tip: 'Communicate early when a deadline is at risk — surprises hurt more than delays.', category: 'Communication' },
+  { icon: '🎉', tip: 'Celebrate small wins — checking off tasks builds momentum and reinforces good habits.', category: 'Mindset' },
+  { icon: '⚡', tip: 'Do your most impactful task before lunch — afternoons are better suited for meetings and reviews.', category: 'Productivity' },
+  { icon: '🔋', tip: 'Match task difficulty to your energy level — save creative work for your peak hours.', category: 'Wellbeing' },
+  { icon: '📊', tip: 'Review your weekly completion rate every Friday — patterns show you where to improve.', category: 'Review' },
+  { icon: '🌱', tip: 'Break large goals into small steps — a 10-step plan is far more achievable than one giant leap.', category: 'Planning' },
+  { icon: '🧠', tip: 'Write tasks as actions (verb + noun): "Call Ahmed" is clearer than "Ahmed call" and easier to start.', category: 'Clarity' },
+  { icon: '🔑', tip: 'Find the one task that would make everything else easier — do that first.', category: 'Focus' },
+  { icon: '🗂️', tip: 'Keep your task list under 10 items per day — longer lists lead to decision fatigue.', category: 'Organization' },
+];
+
+const MOTIVATIONAL_QUOTES: { text: string; author: string }[] = [
+  { text: 'The secret of getting ahead is getting started.', author: 'Mark Twain' },
+  { text: 'You don\'t have to be great to start, but you have to start to be great.', author: 'Zig Ziglar' },
+  { text: 'Do what you can, with what you have, where you are.', author: 'Theodore Roosevelt' },
+  { text: 'Focus on being productive instead of busy.', author: 'Tim Ferriss' },
+  { text: 'Excellence is not a destination but a continuous journey that never ends.', author: 'Brian Tracy' },
+  { text: 'The most urgent thing is seldom the most important.', author: 'Dwight D. Eisenhower' },
+  { text: 'A goal without a plan is just a wish.', author: 'Antoine de Saint-Exupéry' },
+  { text: 'Don\'t watch the clock; do what it does. Keep going.', author: 'Sam Levenson' },
+  { text: 'Your work is going to fill a large part of your life — make it great.', author: 'Steve Jobs' },
+  { text: 'Effort only fully releases its reward after a person refuses to quit.', author: 'Napoleon Hill' },
+  { text: 'Productivity is never an accident. It is always the result of commitment to excellence.', author: 'Paul J. Meyer' },
+  { text: 'Don\'t count the days. Make the days count.', author: 'Muhammad Ali' },
+  { text: 'The key is not to prioritize your schedule, but to schedule your priorities.', author: 'Stephen Covey' },
+  { text: 'Small deeds done are better than great deeds planned.', author: 'Peter Marshall' },
+  { text: 'Success is the sum of small efforts repeated day in and day out.', author: 'Robert Collier' },
+  { text: 'Either you run the day, or the day runs you.', author: 'Jim Rohn' },
+  { text: 'The way to get started is to quit talking and begin doing.', author: 'Walt Disney' },
+  { text: 'It always seems impossible until it\'s done.', author: 'Nelson Mandela' },
+  { text: 'What you do today can improve all your tomorrows.', author: 'Ralph Marston' },
+  { text: 'Start where you are. Use what you have. Do what you can.', author: 'Arthur Ashe' },
+  { text: 'The future depends on what you do today.', author: 'Mahatma Gandhi' },
+];
+
+type QuadrantKey = 'do' | 'schedule' | 'delegate' | 'drop';
+
+const QUADRANT_CFG: Record<QuadrantKey, {
+  label: string; subtitle: string; emoji: string;
+  headerBg: string; headerText: string; bg: string;
+  border: string; chip: string; dot: string;
+}> = {
+  do: {
+    label: 'Do Now', subtitle: 'Urgent + Important',
+    emoji: '🔴',
+    headerBg: 'bg-red-500', headerText: 'text-white',
+    bg: 'bg-red-50 dark:bg-red-950/20',
+    border: 'border-red-200 dark:border-red-800',
+    chip: 'bg-red-100 text-red-700 border border-red-200',
+    dot: 'bg-red-500',
+  },
+  schedule: {
+    label: 'Schedule', subtitle: 'Important, Not Urgent',
+    emoji: '🔵',
+    headerBg: 'bg-blue-500', headerText: 'text-white',
+    bg: 'bg-blue-50 dark:bg-blue-950/20',
+    border: 'border-blue-200 dark:border-blue-800',
+    chip: 'bg-blue-100 text-blue-700 border border-blue-200',
+    dot: 'bg-blue-500',
+  },
+  delegate: {
+    label: 'Delegate', subtitle: 'Urgent, Not Important',
+    emoji: '🟡',
+    headerBg: 'bg-amber-400', headerText: 'text-amber-900',
+    bg: 'bg-amber-50 dark:bg-amber-950/20',
+    border: 'border-amber-200 dark:border-amber-800',
+    chip: 'bg-amber-100 text-amber-700 border border-amber-200',
+    dot: 'bg-amber-400',
+  },
+  drop: {
+    label: 'Consider Dropping', subtitle: 'Low Priority, Not Urgent',
+    emoji: '⚫',
+    headerBg: 'bg-slate-400', headerText: 'text-white',
+    bg: 'bg-slate-50 dark:bg-slate-800/30',
+    border: 'border-slate-200 dark:border-slate-700',
+    chip: 'bg-slate-100 text-slate-600 border border-slate-200',
+    dot: 'bg-slate-400',
+  },
+};
+
+interface PlanningCompanionProps {
+  tasks: PersonalTask[];
+  projectTasks: { id: string | number; title: string | null; priority: string | null; dueDate: string | null; status: string | null; projectName: string | null; category: string | null }[];
+  isLoading: boolean;
+  onMarkPersonalDone: (id: string, status: PersonalTaskStatus) => Promise<void>;
+  onMarkProjectDone: (id: string) => Promise<void>;
+  onOpenNewTask: () => void;
+  currentUserFullName?: string | null;
+  overallPct: number;
+  totalDone: number;
+  totalAll: number;
+  overdueCount: number;
+}
+
+function PlanningCompanion({
+  tasks, projectTasks, isLoading,
+  onMarkPersonalDone, onMarkProjectDone, onOpenNewTask,
+  currentUserFullName, overallPct, totalDone, totalAll, overdueCount,
+}: PlanningCompanionProps) {
+  const now = new Date();
+  const hour = now.getHours();
+  const dayIdx = Math.floor(Date.now() / 86400000);
+  const dailyTip = DAILY_TIPS[dayIdx % DAILY_TIPS.length];
+  const quote = MOTIVATIONAL_QUOTES[dayIdx % MOTIVATIONAL_QUOTES.length];
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const GreetIcon = hour < 12 ? Coffee : hour < 17 ? Sun : Moon;
+  const dateLabel = format(now, 'EEEE, d MMMM yyyy');
+
+  const [markingDone, setMarkingDone] = useState<Set<string>>(new Set());
+
+  type PlanItem = { id: string; title: string; project: string; priority: string; dueDate: string | null; type: 'personal' | 'project'; status: string; quadrant: QuadrantKey };
+
+  const allCategorized = useMemo((): PlanItem[] => {
+    function classify(dueDate: string | null | undefined, priority: string, status: string): QuadrantKey {
+      const isHigh = priority === 'critical' || priority === 'high';
+      const ov = dueDate && isValid(parseISO(dueDate)) && isBefore(parseISO(dueDate), startOfDay(now)) && status !== 'done' && status !== 'cancelled';
+      const td = dueDate && isValid(parseISO(dueDate)) && isToday(parseISO(dueDate));
+      if (isHigh && (ov || td)) return 'do';
+      if (isHigh) return 'schedule';
+      if (ov || td) return 'delegate';
+      return 'drop';
+    }
+    const personal = tasks
+      .filter(t => t.status !== 'done' && t.status !== 'cancelled')
+      .map(t => ({
+        id: t.id,
+        title: String(t.title),
+        project: t.category ?? 'Personal',
+        priority: t.priority,
+        dueDate: t.dueDate ?? null,
+        type: 'personal' as const,
+        status: t.status,
+        quadrant: classify(t.dueDate, t.priority, t.status),
+      }));
+    const project = projectTasks
+      .filter(t => t.status !== 'done' && t.status !== 'cancelled')
+      .map(t => ({
+        id: String(t.id),
+        title: String(t.title ?? 'Project task'),
+        project: t.projectName ?? 'Project',
+        priority: t.priority ?? 'medium',
+        dueDate: t.dueDate ?? null,
+        type: 'project' as const,
+        status: t.status ?? 'todo',
+        quadrant: classify(t.dueDate, t.priority ?? 'medium', t.status ?? 'todo'),
+      }));
+    return [...personal, ...project];
+  }, [tasks, projectTasks]);
+
+  const quadrants = useMemo(() => ({
+    do: allCategorized.filter(t => t.quadrant === 'do'),
+    schedule: allCategorized.filter(t => t.quadrant === 'schedule'),
+    delegate: allCategorized.filter(t => t.quadrant === 'delegate'),
+    drop: allCategorized.filter(t => t.quadrant === 'drop'),
+  }), [allCategorized]);
+
+  const focusTask = quadrants.do[0] ?? quadrants.schedule[0] ?? null;
+
+  async function handleMark(item: PlanItem) {
+    setMarkingDone(prev => new Set(prev).add(item.id));
+    try {
+      if (item.type === 'personal') await onMarkPersonalDone(item.id, item.status as PersonalTaskStatus);
+      else await onMarkProjectDone(item.id);
+    } finally {
+      setMarkingDone(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+    }
+  }
+
+  const firstName = currentUserFullName?.split(' ')[0] ?? 'there';
+
+  if (isLoading) return (
+    <div className="flex-1 flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-[#1D3461]/40" />
+    </div>
+  );
+
+  return (
+    <div className="flex-1 overflow-auto min-h-0 bg-slate-50 dark:bg-slate-900">
+      <div className="max-w-5xl mx-auto px-6 py-6 flex flex-col gap-6">
+
+        {/* ── Hero greeting ─────────────────────────────────────────────── */}
+        <div className="rounded-2xl bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-6 py-5 flex items-center gap-5 shadow-lg">
+          <div className="shrink-0 w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">
+            <GreetIcon className="w-6 h-6 text-amber-300" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white/70 text-sm font-medium">{dateLabel}</p>
+            <h2 className="text-white text-xl font-bold mt-0.5">{greeting}, {firstName}!</h2>
+            <p className="text-white/60 text-xs mt-1">
+              {totalAll === 0
+                ? 'Your task list is clear — great time to plan ahead.'
+                : `You have ${totalAll - totalDone} tasks remaining${overdueCount > 0 ? ` · ${overdueCount} overdue` : ''}.`}
+            </p>
+          </div>
+          {/* Progress ring area */}
+          <div className="shrink-0 text-right">
+            <div className="text-3xl font-black text-white">{overallPct}%</div>
+            <div className="text-white/60 text-xs">done today</div>
+            <div className="mt-1.5 w-32 h-1.5 bg-white/20 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-amber-300 to-emerald-400 rounded-full transition-all duration-700" style={{ width: `${overallPct}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Stat chips ────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-4 gap-3">
+          {((['do', 'schedule', 'delegate', 'drop'] as QuadrantKey[])).map(k => {
+            const cfg = QUADRANT_CFG[k];
+            const count = quadrants[k].length;
+            return (
+              <div key={k} className={cn('rounded-xl border p-3 flex items-center gap-3', cfg.bg, cfg.border)}>
+                <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0', cfg.headerBg, cfg.headerText)}>
+                  {cfg.emoji}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xl font-black text-slate-800 dark:text-slate-100">{count}</div>
+                  <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">{cfg.label}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Main layout: left + right ─────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-5">
+
+          {/* Left: Focus + Quadrant cards */}
+          <div className="col-span-2 flex flex-col gap-5">
+
+            {/* Focus Now */}
+            <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 overflow-hidden shadow-sm">
+              <div className="px-5 py-3 bg-gradient-to-r from-[#1D3461] to-[#0F2041] flex items-center gap-2">
+                <Target className="w-4 h-4 text-amber-300" />
+                <span className="text-xs font-bold text-white uppercase tracking-widest">Focus Right Now</span>
+              </div>
+              {focusTask ? (
+                <div className="p-5">
+                  <div className="flex items-start gap-3">
+                    <div className={cn('w-1.5 rounded-full self-stretch shrink-0', focusTask.quadrant === 'do' ? 'bg-red-500' : 'bg-blue-500')} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide', QUADRANT_CFG[focusTask.quadrant].chip)}>
+                          {focusTask.quadrant === 'do' ? '⚡ Urgent' : '📋 Important'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">{focusTask.project}</span>
+                      </div>
+                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 leading-snug">{focusTask.title}</h3>
+                      {focusTask.dueDate && isValid(parseISO(focusTask.dueDate)) && (
+                        <p className={cn('text-xs mt-1 font-medium flex items-center gap-1',
+                          isBefore(parseISO(focusTask.dueDate), startOfDay(now)) ? 'text-red-500' : 'text-slate-400'
+                        )}>
+                          <Clock className="w-3 h-3" />
+                          {isBefore(parseISO(focusTask.dueDate), startOfDay(now)) ? 'Overdue · ' : ''}
+                          {format(parseISO(focusTask.dueDate), 'd MMM yyyy')}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          onClick={() => handleMark(focusTask)}
+                          disabled={markingDone.has(focusTask.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                          data-testid="button-focus-done"
+                        >
+                          {markingDone.has(focusTask.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                          Mark Done
+                        </button>
+                        <button onClick={onOpenNewTask} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors" data-testid="button-add-from-focus">
+                          <Plus className="w-3 h-3" /> Add Task
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 flex flex-col items-center text-center gap-2">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">All caught up!</p>
+                  <p className="text-xs text-slate-400">No urgent tasks right now. Great work.</p>
+                  <button onClick={onOpenNewTask} className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors" data-testid="button-add-from-empty-focus">
+                    <Plus className="w-3 h-3" /> Add a Task
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 2×2 Quadrant grid */}
+            <div className="grid grid-cols-2 gap-4">
+              {(['do', 'schedule', 'delegate', 'drop'] as QuadrantKey[]).map(k => {
+                const cfg = QUADRANT_CFG[k];
+                const items = quadrants[k];
+                return (
+                  <div key={k} className={cn('rounded-2xl border overflow-hidden shadow-sm', cfg.bg, cfg.border)}>
+                    <div className={cn('px-4 py-2.5 flex items-center justify-between', cfg.headerBg, cfg.headerText)}>
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide">{cfg.emoji} {cfg.label}</p>
+                        <p className="text-[10px] opacity-80">{cfg.subtitle}</p>
+                      </div>
+                      <span className={cn('text-sm font-black opacity-90', cfg.headerText)}>{items.length}</span>
+                    </div>
+                    <div className="p-3 flex flex-col gap-1.5 min-h-[80px]">
+                      {items.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center py-3">No tasks here</p>
+                      ) : (
+                        <>
+                          {items.slice(0, 3).map(item => (
+                            <div key={item.id} className="flex items-center gap-2 group">
+                              <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', cfg.dot)} />
+                              <p className="text-xs text-slate-700 dark:text-slate-200 truncate flex-1">{item.title}</p>
+                              <button
+                                onClick={() => handleMark(item)}
+                                disabled={markingDone.has(item.id)}
+                                className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/60"
+                                title="Mark done"
+                                data-testid={`button-quadrant-done-${item.id}`}
+                              >
+                                {markingDone.has(item.id) ? <Loader2 className="w-3 h-3 animate-spin text-slate-400" /> : <CheckCircle2 className="w-3 h-3 text-slate-400 hover:text-emerald-500" />}
+                              </button>
+                            </div>
+                          ))}
+                          {items.length > 3 && (
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">+{items.length - 3} more tasks</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+
+          {/* Right column: Tip + Quote + Stats */}
+          <div className="flex flex-col gap-4">
+
+            {/* Today's Tip */}
+            <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 overflow-hidden shadow-sm">
+              <div className="px-4 py-3 bg-amber-400 flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-amber-900" />
+                <span className="text-xs font-black text-amber-900 uppercase tracking-widest">Today's Tip</span>
+                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-amber-300 text-amber-900 font-bold">{dailyTip.category}</span>
+              </div>
+              <div className="p-4">
+                <div className="text-2xl mb-2">{dailyTip.icon}</div>
+                <p className="text-sm text-amber-900 leading-relaxed font-medium">{dailyTip.tip}</p>
+              </div>
+            </div>
+
+            {/* Motivational Quote */}
+            <div className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 overflow-hidden shadow-sm">
+              <div className="px-4 py-3 bg-[#1D3461] flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-300" />
+                <span className="text-xs font-black text-white uppercase tracking-widest">Daily Motivation</span>
+              </div>
+              <div className="p-4">
+                <p className="text-sm text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium italic">"{quote.text}"</p>
+                <p className="text-[11px] text-indigo-500 font-bold mt-2">— {quote.author}</p>
+              </div>
+            </div>
+
+            {/* Progress card */}
+            <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 overflow-hidden shadow-sm">
+              <div className="px-4 py-3 bg-slate-700 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-slate-200" />
+                <span className="text-xs font-black text-white uppercase tracking-widest">Today's Progress</span>
+              </div>
+              <div className="p-4 flex flex-col gap-3">
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-xs font-semibold text-slate-500">Completion</span>
+                    <span className={cn('text-sm font-black', overallPct === 100 ? 'text-emerald-600' : 'text-[#1D3461]')}>{overallPct}%</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-700" style={{ width: `${overallPct}%` }} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-700 p-2">
+                    <div className="text-lg font-black text-slate-700 dark:text-slate-100">{totalAll - totalDone}</div>
+                    <div className="text-[9px] text-slate-400 uppercase font-semibold tracking-wide">Active</div>
+                  </div>
+                  <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/30 p-2">
+                    <div className="text-lg font-black text-emerald-600">{totalDone}</div>
+                    <div className="text-[9px] text-emerald-500 uppercase font-semibold tracking-wide">Done</div>
+                  </div>
+                  <div className={cn('rounded-xl p-2', overdueCount > 0 ? 'bg-red-50 dark:bg-red-900/30' : 'bg-slate-50 dark:bg-slate-700')}>
+                    <div className={cn('text-lg font-black', overdueCount > 0 ? 'text-red-600' : 'text-slate-400')}>{overdueCount}</div>
+                    <div className={cn('text-[9px] uppercase font-semibold tracking-wide', overdueCount > 0 ? 'text-red-400' : 'text-slate-400')}>Overdue</div>
+                  </div>
+                </div>
+                {overdueCount > 0 && (
+                  <div className="flex items-center gap-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 px-3 py-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    <p className="text-xs text-red-600 font-medium">{overdueCount} task{overdueCount > 1 ? 's' : ''} past due — address these first.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quick add */}
+            <button
+              onClick={onOpenNewTask}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-200 hover:border-[#1D3461] text-slate-400 hover:text-[#1D3461] font-semibold text-sm transition-all"
+              data-testid="button-planning-add"
+            >
+              <Plus className="w-4 h-4" /> Add New Task
+            </button>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ── Inbox View ────────────────────────────────────────────────────────────────
 
 const INBOX_CAT_CFG: Record<string, { initials: string; bg: string; from: string }> = {
@@ -1462,10 +1894,8 @@ export default function MyTasksV2() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [showAdd, setShowAdd] = useState(false);
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
-  const [activePlanningTab, setActivePlanningTab] = useState<'briefing' | 'matrix'>('briefing');
-  const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban' | 'inbox'>('kanban');
+  const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban' | 'inbox' | 'planning'>('kanban');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring'>('all');
-  const [showPlanningPanel, setShowPlanningPanel] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
   // Stats
   const stats = useMemo(() => {
@@ -1681,22 +2111,6 @@ export default function MyTasksV2() {
             >
               <Search className="w-4 h-4" />
             </button>
-            {mainView !== 'inbox' && (
-              <button
-                onClick={() => setShowPlanningPanel(p => !p)}
-                data-testid="button-toggle-planning"
-                title="Toggle Planning Tools"
-                className={cn(
-                  'flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-semibold transition-colors shrink-0',
-                  showPlanningPanel
-                    ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-                    : 'border-slate-200 text-slate-500 hover:bg-slate-50',
-                )}
-              >
-                <Lightbulb className="w-3.5 h-3.5" />
-                Plan
-              </button>
-            )}
             <Button
               className="bg-[#1D3461] hover:bg-[#0F2041] text-white shadow-sm h-8 px-3 text-xs font-semibold"
               onClick={() => setShowAdd(true)}
@@ -1723,6 +2137,7 @@ export default function MyTasksV2() {
                   { key: 'timeline' as const, label: 'Timeline',      Icon: Calendar },
                   { key: 'planner' as const,  label: 'Daily Planner', Icon: Sun },
                   { key: 'inbox' as const,    label: 'Inbox',         Icon: Inbox },
+                  { key: 'planning' as const, label: 'Planning',      Icon: Brain },
                 ] as const).map(v => (
                   <button
                     key={v.key}
@@ -1962,110 +2377,24 @@ export default function MyTasksV2() {
                 onAddTask={() => setShowAdd(true)}
               />
             )}
+
+            {/* ── PLANNING VIEW ── */}
+            {mainView === 'planning' && (
+              <PlanningCompanion
+                tasks={tasks}
+                projectTasks={projectTasks}
+                isLoading={isLoading}
+                onMarkPersonalDone={handleMarkPersonalDone}
+                onMarkProjectDone={handleMarkProjectDone}
+                onOpenNewTask={() => setShowAdd(true)}
+                currentUserFullName={currentUser?.fullName}
+                overallPct={overallPct}
+                totalDone={totalDone}
+                totalAll={totalAll}
+                overdueCount={stats.overdue}
+              />
+            )}
           </div>
-
-          {/* ══ RIGHT PANEL: Planning Tools — hidden in inbox mode or when toggled off ══ */}
-          {showPlanningPanel && mainView !== 'inbox' && (
-          <div className="w-[260px] shrink-0 flex flex-col border-l border-slate-200 overflow-hidden bg-white">
-
-            {/* Panel header — dark branded */}
-            <div className="shrink-0 bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3">
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-[10px] font-bold text-white/90 flex items-center gap-1.5 uppercase tracking-wider">
-                  <Lightbulb className="w-3 h-3" />
-                  Planning Tips
-                </span>
-                <button
-                  onClick={() => setShowPlanningPanel(false)}
-                  className="p-0.5 rounded text-white/50 hover:text-white transition-colors"
-                  title="Close"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="flex gap-1 bg-white/10 rounded-lg p-0.5">
-                <button
-                  onClick={() => setActivePlanningTab('briefing')}
-                  data-testid="tab-planning-briefing"
-                  className={cn(
-                    'flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-semibold transition-all',
-                    activePlanningTab === 'briefing'
-                      ? 'bg-white text-[#1D3461] shadow-sm'
-                      : 'text-white/70 hover:text-white hover:bg-white/10',
-                  )}
-                >
-                  <Sparkles className="w-3 h-3" />
-                  Briefing
-                </button>
-                <button
-                  onClick={() => setActivePlanningTab('matrix')}
-                  data-testid="tab-planning-matrix"
-                  className={cn(
-                    'flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-semibold transition-all',
-                    activePlanningTab === 'matrix'
-                      ? 'bg-white text-[#1D3461] shadow-sm'
-                      : 'text-white/70 hover:text-white hover:bg-white/10',
-                  )}
-                >
-                  <Target className="w-3 h-3" />
-                  Matrix
-                </button>
-              </div>
-            </div>
-
-            {/* Progress summary strip */}
-            <div className="shrink-0 px-4 py-2 bg-white border-b border-slate-100 flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-700"
-                    style={{ width: `${overallPct}%` }}
-                  />
-                </div>
-              </div>
-              <span className={cn(
-                'text-[11px] font-bold shrink-0',
-                overallPct === 100 ? 'text-emerald-600' : 'text-slate-500',
-              )}>
-                {totalDone}/{totalAll}
-              </span>
-              {stats.overdue > 0 && (
-                <span className="text-[10px] font-semibold text-red-600 shrink-0 flex items-center gap-0.5">
-                  <AlertCircle className="w-2.5 h-2.5" />{stats.overdue}
-                </span>
-              )}
-            </div>
-
-            {/* Scrollable planning content */}
-            <div className="flex-1 overflow-auto min-h-0">
-              {activePlanningTab === 'briefing' ? (
-                <DailyBriefing
-                  personalTasks={tasks}
-                  allPersonalTasks={allTasks}
-                  projectTasks={projectTasks}
-                  currentUserFullName={currentUser?.fullName}
-                  isLoading={isLoading}
-                  onMarkPersonalDone={handleMarkPersonalDone}
-                  onMarkProjectDone={handleMarkProjectDone}
-                  onOpenNewTask={() => setShowAdd(true)}
-                />
-              ) : (
-                <PriorityMatrix
-                  personalTasks={tasks}
-                  allPersonalTasks={allTasks}
-                  projectTasks={projectTasks}
-                  isLoading={isLoading}
-                  onMarkPersonalDone={handleMarkPersonalDone}
-                  onMarkProjectDone={handleMarkProjectDone}
-                  onOpenNewTask={() => setShowAdd(true)}
-                />
-              )}
-            </div>
-
-            {/* SmartHint at bottom */}
-            <SmartHint />
-          </div>
-          )}
         </div>
       </main>
 
