@@ -1451,8 +1451,8 @@ export default function MyTasksV2() {
         {/* ── Three-panel workspace ── */}
         <div className="flex-1 flex overflow-hidden">
 
-          {/* ══ LEFT SIDEBAR: Category Nav + Progress ══ */}
-          <aside className="w-[200px] shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
+          {/* ══ LEFT SIDEBAR: Category Nav + Progress — hidden in Kanban mode ══ */}
+          {mainView !== 'kanban' && <aside className="w-[200px] shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
 
             {/* Category navigation */}
             <div className="p-3 border-b border-slate-100">
@@ -1522,7 +1522,7 @@ export default function MyTasksV2() {
                 <p className="text-[11px] text-slate-600 leading-relaxed">{motivationalNudge}</p>
               </div>
             </div>
-          </aside>
+          </aside>}
 
           {/* ══ CENTER: Main task content area ══ */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
