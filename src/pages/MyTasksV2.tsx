@@ -824,6 +824,223 @@ function DailyPlannerView({ tasks, projectTasks, onEdit, onToggleDone, isUpdatin
   );
 }
 
+// ── Kanban Board View ────────────────────────────────────────────────────────
+
+interface KanbanBoardViewProps {
+  tasks: PersonalTask[];
+  isLoading: boolean;
+  isUpdating: boolean;
+  onEdit: (task: PersonalTask) => void;
+  onToggleDone: (task: PersonalTask) => void;
+  onAddTask: () => void;
+}
+
+const KANBAN_PRIORITY_CFG = {
+  critical: { bar: 'bg-red-500',    badge: 'bg-red-100 text-red-700',       label: 'Urgent' },
+  high:     { bar: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700', label: 'High' },
+  medium:   { bar: 'bg-amber-400',  badge: 'bg-amber-100 text-amber-700',   label: 'Med' },
+  low:      { bar: 'bg-sky-400',    badge: 'bg-sky-100 text-sky-700',       label: 'Low' },
+};
+
+const KANBAN_COLUMNS: { key: string; label: string; dot: string; filter: (t: PersonalTask) => boolean }[] = [
+  {
+    key: 'todo',
+    label: 'To Do',
+    dot: 'bg-slate-500',
+    filter: t => t.status === 'todo' && !isOverdue(t.dueDate, t.status),
+  },
+  {
+    key: 'inprogress',
+    label: 'In Progress',
+    dot: 'bg-blue-500',
+    filter: t => t.status === 'inprogress' && !isOverdue(t.dueDate, t.status),
+  },
+  {
+    key: 'overdue',
+    label: 'Overdue',
+    dot: 'bg-red-500',
+    filter: t => isOverdue(t.dueDate, t.status),
+  },
+  {
+    key: 'done',
+    label: 'Done',
+    dot: 'bg-emerald-500',
+    filter: t => t.status === 'done',
+  },
+];
+
+function KanbanTaskCard({
+  task, onEdit, onToggleDone, isUpdating,
+}: { task: PersonalTask; onEdit: (t: PersonalTask) => void; onToggleDone: (t: PersonalTask) => void; isUpdating: boolean }) {
+  const p = KANBAN_PRIORITY_CFG[task.priority] ?? KANBAN_PRIORITY_CFG.medium;
+  const done = task.status === 'done';
+  const overdueFlag = isOverdue(task.dueDate, task.status);
+  const dueLabel = task.dueDate && isValid(parseISO(task.dueDate))
+    ? isToday(parseISO(task.dueDate)) ? 'Today' : format(parseISO(task.dueDate), 'dd MMM')
+    : null;
+
+  return (
+    <div
+      className={cn(
+        'bg-white rounded-xl border shadow-sm hover:shadow-md transition-all group cursor-pointer',
+        done ? 'border-slate-100 opacity-60' : overdueFlag ? 'border-red-200' : 'border-slate-100 hover:border-slate-300',
+      )}
+      onClick={() => onEdit(task)}
+      data-testid={`kanban-card-${task.id}`}
+    >
+      <div className={cn('h-1 rounded-t-xl', p.bar)} />
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <button
+              className="shrink-0 mt-0.5"
+              onClick={e => { e.stopPropagation(); onToggleDone(task); }}
+              disabled={isUpdating}
+              data-testid={`kanban-toggle-${task.id}`}
+            >
+              {done
+                ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                : <Circle className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors" />
+              }
+            </button>
+            <p className={cn('text-[13px] font-semibold leading-snug text-slate-800 min-w-0', done && 'line-through text-slate-400')}>
+              {task.title}
+            </p>
+          </div>
+          <button
+            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onClick={e => { e.stopPropagation(); onEdit(task); }}
+            data-testid={`kanban-menu-${task.id}`}
+          >
+            <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+        </div>
+        <div className="flex items-center justify-between mt-1 gap-1">
+          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0', p.badge)}>{p.label}</span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            {task.category && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                {task.category}
+              </span>
+            )}
+            {dueLabel && (
+              <span className={cn(
+                'text-[10px] flex items-center gap-0.5',
+                overdueFlag ? 'text-red-500 font-semibold' : 'text-slate-400',
+              )}>
+                <Clock className="w-2.5 h-2.5" />
+                {dueLabel}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KanbanBoardView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onAddTask }: KanbanBoardViewProps) {
+  const todoCount      = tasks.filter(KANBAN_COLUMNS[0].filter).length;
+  const inProgressCount= tasks.filter(KANBAN_COLUMNS[1].filter).length;
+  const overdueCount   = tasks.filter(KANBAN_COLUMNS[2].filter).length;
+  const doneCount      = tasks.filter(KANBAN_COLUMNS[3].filter).length;
+  const totalCount     = tasks.filter(t => t.status !== 'cancelled').length;
+  const completionPct  = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-[#1D3461]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+      {/* Kanban columns */}
+      <div className="flex-1 flex gap-3 p-4 overflow-x-auto overflow-y-hidden">
+        {KANBAN_COLUMNS.map(col => {
+          const colTasks = tasks.filter(col.filter);
+          return (
+            <div key={col.key} className="flex flex-col w-[260px] shrink-0">
+              {/* Column header */}
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', col.dot)} />
+                <h3 className="text-[12px] font-bold text-slate-700 flex-1">{col.label}</h3>
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full">
+                  {colTasks.length}
+                </span>
+              </div>
+
+              {/* Cards */}
+              <div className="flex-1 flex flex-col gap-2 overflow-y-auto pb-4 min-h-0">
+                {colTasks.length === 0 ? (
+                  <div className={cn(
+                    'flex items-center justify-center py-6 rounded-xl border-2 border-dashed text-[11px] text-slate-400',
+                    col.key === 'overdue' ? 'border-red-100 bg-red-50/30' : 'border-slate-200',
+                  )}>
+                    {col.key === 'overdue' ? 'All caught up!' : 'Empty'}
+                  </div>
+                ) : (
+                  colTasks.map(task => (
+                    <KanbanTaskCard
+                      key={task.id}
+                      task={task}
+                      onEdit={onEdit}
+                      onToggleDone={onToggleDone}
+                      isUpdating={isUpdating}
+                    />
+                  ))
+                )}
+                {col.key !== 'done' && col.key !== 'overdue' && (
+                  <button
+                    onClick={onAddTask}
+                    data-testid={`kanban-add-${col.key}`}
+                    className="w-full flex items-center gap-2 py-2.5 px-3 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-[#1D3461]/40 hover:text-[#1D3461] transition-colors text-[11px] font-medium"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add task
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer stats bar */}
+      <div className="shrink-0 bg-white border-t border-slate-200 px-5 py-2.5 flex items-center gap-5">
+        {[
+          { label: 'Total',    val: totalCount,     color: 'text-slate-700' },
+          { label: 'To Do',    val: todoCount,      color: 'text-slate-600' },
+          { label: 'Active',   val: inProgressCount,color: 'text-blue-600'  },
+          { label: 'Overdue',  val: overdueCount,   color: 'text-red-600'   },
+          { label: 'Done',     val: doneCount,      color: 'text-emerald-600'},
+        ].map(s => (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-400">{s.label}:</span>
+            <span className={cn('text-[11px] font-bold', s.color)}>{s.val}</span>
+          </div>
+        ))}
+        <div className="ml-auto flex items-center gap-2">
+          <div className="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-500"
+              style={{ width: `${completionPct}%` }}
+            />
+          </div>
+          <span className="text-[11px] font-bold text-slate-600">{completionPct}%</span>
+          {overdueCount > 0 && (
+            <div className="flex items-center gap-1 ml-2 text-[10px] text-red-600 font-medium">
+              <AlertCircle className="w-3 h-3 shrink-0" />
+              {overdueCount} overdue
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Layout Switcher ───────────────────────────────────────────────────────────
 
 const LAYOUT_ICONS: Record<LayoutId, typeof Columns2> = {
@@ -935,7 +1152,7 @@ export default function MyTasksV2() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [activePlanningTab, setActivePlanningTab] = useState<'briefing' | 'matrix'>('briefing');
-  const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner'>('cards');
+  const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban'>('cards');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring'>('all');
   const searchRef = useRef<HTMLInputElement>(null);
   const [layout, setLayout] = useState<LayoutId>(() => {
@@ -1285,6 +1502,7 @@ export default function MyTasksV2() {
               <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 shrink-0">
                 {([
                   { key: 'cards' as const,    label: 'Task Cards',    Icon: ListTodo },
+                  { key: 'kanban' as const,   label: 'Kanban',        Icon: Columns2 },
                   { key: 'timeline' as const, label: 'Timeline',      Icon: Calendar },
                   { key: 'planner' as const,  label: 'Daily Planner', Icon: Sun },
                 ] as const).map(v => (
@@ -1472,6 +1690,18 @@ export default function MyTasksV2() {
                   />
                 )}
               </ScrollArea>
+            )}
+
+            {/* ── KANBAN BOARD VIEW ── */}
+            {mainView === 'kanban' && (
+              <KanbanBoardView
+                tasks={tasks}
+                isLoading={isLoading}
+                isUpdating={isUpdating}
+                onEdit={setEditingTask}
+                onToggleDone={handleToggleDone}
+                onAddTask={() => setShowAdd(true)}
+              />
             )}
           </div>
 
