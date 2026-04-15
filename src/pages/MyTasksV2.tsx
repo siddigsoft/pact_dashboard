@@ -882,7 +882,7 @@ export default function MyTasksV2() {
         <div className="flex-1 flex overflow-hidden">
 
           {/* Left 60%: Timeline */}
-          <div className="w-[60%] flex flex-col h-full border-r border-slate-200 bg-white relative">
+          <div className="w-[60%] flex flex-col border-r border-slate-200 bg-white overflow-hidden">
 
             {/* Timeline subheader */}
             <div className="h-14 border-b border-slate-100 flex items-center justify-between px-6 shrink-0 bg-slate-50/50">
@@ -922,7 +922,7 @@ export default function MyTasksV2() {
 
             {/* Planning Tools — collapsible panel triggered from header */}
             {planningOpen && (
-              <div className="absolute bottom-0 left-0 right-0 bg-white border-t-2 border-[#1D3461] z-10 shadow-[0_-6px_24px_-8px_rgba(0,0,0,0.15)] flex flex-col" style={{ height: '300px' }}>
+              <div className="shrink-0 bg-white border-t-2 border-[#1D3461] flex flex-col" style={{ height: '300px' }}>
                 {/* Panel header */}
                 <div className="h-11 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
                   <div className="flex items-center gap-3">
