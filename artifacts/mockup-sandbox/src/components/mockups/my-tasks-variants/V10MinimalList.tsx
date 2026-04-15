@@ -2,7 +2,6 @@
 // Ultra-clean, no card borders, just clean typography + color coding.
 // Inspired by Things 3, Notion. White space-forward, readable at a glance.
 
-import { useState } from "react";
 import {
   Circle, CheckCircle2, AlertTriangle, Clock, Plus,
   Star, MoreHorizontal, ChevronDown, ChevronRight,
@@ -60,13 +59,9 @@ const NAV_ITEMS = [
 ];
 
 export function V10MinimalList() {
-  const [completed, setCompleted] = useState<Set<number>>(new Set());
-  const [starred, setStarred] = useState<Set<number>>(new Set([1, 4, 5]));
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-
-  const toggle = (id: number) => setCompleted(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const star = (id: number) => setStarred(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const collapseSection = (key: string) => setCollapsed(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
+  const completed = new Set<number>();
+  const starred = new Set<number>([1, 4, 5]);
+  const collapsed = new Set<string>();
 
   return (
     <div className="flex h-screen bg-white font-['Inter',sans-serif] overflow-hidden">
@@ -122,7 +117,6 @@ export function V10MinimalList() {
               <div key={section.key} className="mb-6">
                 {/* Section header */}
                 <button
-                  onClick={() => collapseSection(section.key)}
                   className="flex items-center gap-2 mb-2 group w-full"
                 >
                   {isCollapsed
@@ -141,7 +135,6 @@ export function V10MinimalList() {
                         <div key={task.id} className="group relative py-2.5 flex items-center gap-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 -ml-4 pl-[calc(1rem+4px)] pr-2 rounded-lg transition-colors">
                           {/* Check button */}
                           <button
-                            onClick={() => toggle(task.id)}
                             className="shrink-0 transition-colors"
                           >
                             {done
@@ -171,7 +164,6 @@ export function V10MinimalList() {
                           {/* Right side */}
                           <div className="flex items-center gap-2 shrink-0">
                             <button
-                              onClick={() => star(task.id)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <Star className={`w-4 h-4 ${starred.has(task.id) ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />

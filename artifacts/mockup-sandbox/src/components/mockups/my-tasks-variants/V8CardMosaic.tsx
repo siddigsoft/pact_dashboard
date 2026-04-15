@@ -2,7 +2,6 @@
 // Pinterest/masonry style: colorful category cards with vivid priority accents,
 // rich card interiors with tags, progress, subtask previews. No sidebar.
 
-import { useState } from "react";
 import {
   Plus, Search, Clock, AlertTriangle, CheckCircle2, Circle,
   Layers, MoreHorizontal, Tag, ChevronDown, Filter, Star,
@@ -134,7 +133,7 @@ function TaskCard({ task }: { task: Task }) {
 }
 
 export function V8CardMosaic() {
-  const [activeFilter, setActiveFilter] = useState("All");
+  const activeFilter = "All";
 
   const visible = TASKS.filter(t => {
     if (activeFilter === "All") return true;
@@ -157,7 +156,6 @@ export function V8CardMosaic() {
           {FILTERS.map(f => (
             <button
               key={f}
-              onClick={() => setActiveFilter(f)}
               className={`px-3 py-1.5 rounded-full text-[12px] font-medium transition-all ${
                 activeFilter === f
                   ? "bg-[#1D3461] text-white shadow-md"

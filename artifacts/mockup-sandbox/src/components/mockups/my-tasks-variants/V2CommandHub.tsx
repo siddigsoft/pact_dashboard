@@ -2,7 +2,6 @@
 // Keyboard-first, dark UI, dense compact list, spotlight search,
 // command palette feel, shortcut badges, category pills
 
-import { useState } from "react";
 import {
   Search, Plus, Clock, AlertTriangle, CheckCircle2,
   Circle, ChevronRight, CornerDownLeft, Hash, Star,
@@ -30,9 +29,9 @@ const prio: Record<string, string> = { high: "text-red-400", medium: "text-amber
 const prioDot: Record<string, string> = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-sky-400" };
 
 export function V2CommandHub() {
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("All");
-  const [selected, setSelected] = useState<number | null>(1);
+  const search = "";
+  const filter = "All";
+  const selected = 1;
 
   const selectedTask = tasks.find(t => t.id === selected);
 
@@ -96,7 +95,6 @@ export function V2CommandHub() {
               className="flex-1 bg-transparent text-[13px] text-[#e6edf3] placeholder:text-[#8b949e] outline-none font-mono"
               placeholder="Search tasks, press / for commands…"
               value={search}
-              onChange={e => setSearch(e.target.value)}
             />
             <div className="flex items-center gap-1">
               <kbd className="px-1.5 py-0.5 bg-[#21262d] border border-[#30363d] rounded text-[10px] text-[#8b949e]">/</kbd>
@@ -110,7 +108,6 @@ export function V2CommandHub() {
           {FILTERS.map(f => (
             <button
               key={f.label}
-              onClick={() => setFilter(f.label)}
               className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium transition-colors ${
                 filter === f.label
                   ? "bg-blue-600 text-white"
@@ -133,7 +130,6 @@ export function V2CommandHub() {
           {tasks.map((task, idx) => (
             <div
               key={task.id}
-              onClick={() => setSelected(task.id)}
               className={`flex items-center gap-3 px-4 py-2.5 border-b border-[#21262d] cursor-pointer group transition-colors ${
                 selected === task.id ? "bg-[#1f2937]" : "hover:bg-[#161b22]"
               }`}

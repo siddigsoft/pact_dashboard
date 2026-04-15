@@ -2,7 +2,6 @@
 // Week calendar at top, tasks listed below grouped by due date.
 // Horizontal date strip you can scroll left/right, tasks anchor to dates.
 
-import { useState } from "react";
 import {
   ChevronLeft, ChevronRight, Clock, AlertTriangle,
   CheckCircle2, Circle, Plus, Calendar, Zap, Tag,
@@ -64,7 +63,7 @@ const prioBadge: Record<string, string> = { high: "bg-red-100 text-red-700", med
 const catColor: Record<string, string> = { project: "bg-blue-100 text-blue-700", personal: "bg-purple-100 text-purple-700", recurring: "bg-green-100 text-green-700" };
 
 export function V4TimelineView() {
-  const [activeDay, setActiveDay] = useState(15);
+  const activeDay = 15;
 
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] font-sans overflow-hidden">
@@ -117,7 +116,6 @@ export function V4TimelineView() {
             return (
               <button
                 key={d.date}
-                onClick={() => setActiveDay(d.date)}
                 className={`flex flex-col items-center py-2.5 px-2 rounded-xl transition-all border ${
                   isActive
                     ? "bg-[#1D3461] border-[#1D3461] text-white"

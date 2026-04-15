@@ -2,7 +2,6 @@
 // Heavy on stats: KPI cards, completion rings, priority charts,
 // progress graphs, with tasks list embedded below.
 
-import { useState } from "react";
 import {
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
   Clock, Circle, Target, Zap, BarChart3, Activity,
@@ -62,7 +61,7 @@ const STATUS_PIE = [
 const prioBar: Record<string, string> = { high: "border-l-red-500", medium: "border-l-amber-400", low: "border-l-sky-400" };
 
 export function V7AnalyticsHub() {
-  const [tab, setTab] = useState("Overview");
+  const tab = "Overview";
 
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] font-sans overflow-y-auto">
@@ -74,7 +73,7 @@ export function V7AnalyticsHub() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           {["Overview", "Task Cards", "Timeline"].map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`px-3 py-1.5 rounded-lg text-[12px] font-medium ${
+            <button key={t} className={`px-3 py-1.5 rounded-lg text-[12px] font-medium ${
               tab === t ? "bg-[#1D3461] text-white" : "text-slate-500 hover:bg-slate-100"
             }`}>{t}</button>
           ))}

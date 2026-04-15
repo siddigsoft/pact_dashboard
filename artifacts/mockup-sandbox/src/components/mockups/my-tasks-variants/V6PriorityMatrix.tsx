@@ -2,7 +2,6 @@
 // Full 2x2 quadrant view: Urgent+Important | Important | Urgent | Eliminate
 // Tasks are dropped into quadrants with drag-and-drop feel, labels, counts.
 
-import { useState } from "react";
 import {
   Plus, Zap, Clock, Star, Trash2, Flag, MoreHorizontal,
   AlertTriangle, CheckCircle2, Circle, Target, ArrowRight,
@@ -73,7 +72,7 @@ const catColor: Record<string, string> = {
 };
 
 export function V6PriorityMatrix() {
-  const [tasks, setTasks] = useState(TASKS);
+  const tasks = TASKS;
 
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] font-sans overflow-hidden">

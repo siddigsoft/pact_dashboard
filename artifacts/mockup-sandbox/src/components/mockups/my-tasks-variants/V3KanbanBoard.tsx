@@ -2,7 +2,6 @@
 // Horizontal swimlane columns by status: To Do | In Progress | Overdue | Done
 // Draggable cards with priority colors, assignee avatars, tags, subtask counts
 
-import { useState } from "react";
 import {
   Plus, MoreHorizontal, Clock, Flag, ChevronDown,
   Search, Calendar, Tag, AlertCircle, CheckCircle2, Zap,

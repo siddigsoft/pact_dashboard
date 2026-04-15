@@ -2,7 +2,6 @@
 // Tasks appear as email-thread rows with sender/assignee, unread dots, action buttons.
 // Left nav with folder-like sections. Right: reading pane.
 
-import { useState } from "react";
 import {
   Archive, Star, Clock, AlertTriangle, CheckCircle2,
   Circle, ChevronRight, MoreHorizontal, Reply, Flag,
@@ -41,14 +40,8 @@ const NAV = [
 const PRIO_DOT: Record<string, string> = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-sky-400" };
 
 export function V9InboxStyle() {
-  const [selected, setSelected] = useState<Task>(TASKS[0]);
-  const [starred, setStarred] = useState(new Set(TASKS.filter(t => t.starred).map(t => t.id)));
-
-  const toggleStar = (id: number) => setStarred(prev => {
-    const s = new Set(prev);
-    s.has(id) ? s.delete(id) : s.add(id);
-    return s;
-  });
+  const selected = TASKS[0];
+  const starred = new Set(TASKS.filter(t => t.starred).map(t => t.id));
 
   return (
     <div className="flex h-screen bg-white font-sans text-sm overflow-hidden">
@@ -97,7 +90,6 @@ export function V9InboxStyle() {
           {TASKS.map(task => (
             <div
               key={task.id}
-              onClick={() => setSelected(task)}
               className={`px-4 py-3 cursor-pointer transition-colors group ${
                 selected?.id === task.id ? "bg-[#e8edf5]" : "hover:bg-slate-50"
               }`}
@@ -115,7 +107,6 @@ export function V9InboxStyle() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={e => { e.stopPropagation(); toggleStar(task.id); }}
                     className="opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Star className={`w-3.5 h-3.5 ${starred.has(task.id) ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />

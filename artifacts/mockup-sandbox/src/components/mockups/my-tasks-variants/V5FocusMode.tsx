@@ -2,7 +2,6 @@
 // One task front-and-center with a deep-work timer, next up queue in slim sidebar.
 // Minimalist, distraction-free, pomodoro-style.
 
-import { useState } from "react";
 import {
   Timer, ChevronRight, CheckCircle2, Circle, AlertTriangle,
   Play, Pause, SkipForward, Plus, Coffee, Zap, Clock,
@@ -33,18 +32,15 @@ const prioColor: Record<string, string> = { high: "#ef4444", medium: "#f59e0b", 
 const prioLabel: Record<string, string> = { high: "High Priority", medium: "Medium Priority", low: "Low Priority" };
 
 export function V5FocusMode() {
-  const [running, setRunning] = useState(false);
-  const [seconds, setSeconds] = useState(25 * 60);
-  const [subtasks, setSubtasks] = useState(ACTIVE.subtasks);
+  const running = false;
+  const seconds = 25 * 60;
+  const subtasks = ACTIVE.subtasks;
 
   const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
   const secs = String(seconds % 60).padStart(2, "0");
   const circumference = 2 * Math.PI * 54;
   const progress = ((25 * 60 - seconds) / (25 * 60)) * circumference;
 
-  const toggle = (id: number) => setSubtasks(prev =>
-    prev.map(s => s.id === id ? { ...s, done: !s.done } : s)
-  );
 
   return (
     <div className="flex h-screen bg-[#fafaf9] font-sans overflow-hidden">
@@ -107,7 +103,6 @@ export function V5FocusMode() {
             {subtasks.map(s => (
               <button
                 key={s.id}
-                onClick={() => toggle(s.id)}
                 className="w-full flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-100 hover:border-blue-200 transition-all text-left"
               >
                 {s.done ? (
@@ -151,7 +146,6 @@ export function V5FocusMode() {
               <p className="text-[11px] text-slate-400 mb-4">25 min deep work · 5 min break</p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setRunning(!running)}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold transition-colors ${
                     running ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-[#1D3461] text-white hover:bg-[#0F2041]"
                   }`}

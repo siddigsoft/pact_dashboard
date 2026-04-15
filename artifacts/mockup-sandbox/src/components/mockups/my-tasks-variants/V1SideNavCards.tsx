@@ -4,7 +4,6 @@
 // CENTER (tab strip + filtered cards)
 // RIGHT 280px (planning tools + matrix)
 
-import { useState } from "react";
 import {
   CheckCircle2, Circle, Clock, AlertTriangle, Plus, Search,
   LayoutGrid, List, Calendar, Timer, Target, Star, Repeat,
@@ -39,8 +38,8 @@ const statusBadge: Record<string, { label: string; cls: string }> = {
 };
 
 export function V1SideNavCards() {
-  const [activeTab, setActiveTab] = useState("All");
-  const [activeCat, setActiveCat] = useState("all");
+  const activeTab = "All";
+  const activeCat = "all";
 
   const visible = tasks.filter(t => {
     if (activeCat !== "all" && t.category !== activeCat) return false;
@@ -71,7 +70,6 @@ export function V1SideNavCards() {
           {CATS.map(c => (
             <button
               key={c.key}
-              onClick={() => setActiveCat(c.key)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg mb-0.5 transition-all ${
                 activeCat === c.key
                   ? "bg-[#1D3461] text-white"
@@ -146,7 +144,6 @@ export function V1SideNavCards() {
             {TABS.map(tab => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
                   activeTab === tab ? "bg-[#1D3461] text-white" : "text-slate-500 hover:bg-slate-100"
                 }`}
