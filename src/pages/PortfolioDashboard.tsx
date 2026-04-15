@@ -690,14 +690,35 @@ export default function PortfolioDashboard() {
 
   // ── Delivery Health ──────────────────────────────────────────────────────
   const deliveryHealth = useMemo(() => {
+    const today = new Date();
     const active = execFiltered.filter(p => p.status === 'active' || p.status === 'onHold');
     const ragCounts = { red: 0, amber: 0, green: 0, grey: 0 };
     active.forEach(p => { ragCounts[p.rag.overall]++; });
     const stalledList = active.filter(p => p.rag.isStalled);
     const overdueList = active.filter(p => p.rag.timeline === 'red');
     const overBudgetList = active.filter(p => p.rag.budget === 'red');
-    return { active, ragCounts, stalledList, overdueList, overBudgetList };
-  }, [execFiltered]);
+
+    const enrichedActive = active.map(p => {
+      const lastAdv = latestAdvanced[p.id];
+      const lastActivityDate = lastAdv ? safeDate(lastAdv) : null;
+      const lastActivityDays = lastActivityDate ? differenceInDays(today, lastActivityDate) : null;
+      const endDate = safeDate(p.end_date);
+      const startDate = safeDate(p.start_date);
+      const daysLeft = endDate ? differenceInDays(endDate, today) : null;
+      let timelinePct = 0;
+      if (startDate && endDate) {
+        const totalDays = differenceInDays(endDate, startDate);
+        const elapsed = differenceInDays(today, startDate);
+        timelinePct = totalDays > 0 ? Math.min(110, Math.max(0, (elapsed / totalDays) * 100)) : 0;
+      }
+      const pmName = (p.team as any)?.projectManager
+        ? String((p.team as any).projectManager).slice(0, 20)
+        : null;
+      return { ...p, lastActivityDays, lastActivityDate, daysLeft, timelinePct, pmName };
+    });
+
+    return { active: enrichedActive, ragCounts, stalledList, overdueList, overBudgetList };
+  }, [execFiltered, latestAdvanced]);
 
   // ── Financial Overview ───────────────────────────────────────────────────
   const financialOverview = useMemo(() => {
@@ -1759,66 +1780,213 @@ export default function PortfolioDashboard() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold">2. Delivery Health</h2>
-                  <p className="text-[11px] text-muted-foreground">RAG status across active projects — timeline, budget, and stall indicators</p>
+                  <p className="text-[11px] text-muted-foreground">RAG status across active projects — timeline, budget, activity, and flow progress</p>
                 </div>
                 <button onClick={() => setActiveTab('portfolio')} className="ml-auto text-[11px] text-[#1D3461] hover:underline flex items-center gap-1">
                   All Projects <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
-              {/* RAG summary chips */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+              {/* RAG summary chips — 6 tiles */}
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {[
-                  { label: 'Red — Critical', count: deliveryHealth.ragCounts.red, bg: 'bg-red-50 dark:bg-red-900/20 border-red-200', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500' },
-                  { label: 'Amber — At Risk', count: deliveryHealth.ragCounts.amber, bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
-                  { label: 'Green — On Track', count: deliveryHealth.ragCounts.green, bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
-                  { label: 'Stalled Projects', count: deliveryHealth.stalledList.length, bg: deliveryHealth.stalledList.length > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200' : 'bg-muted/30 border-border', text: deliveryHealth.stalledList.length > 0 ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground', dot: 'bg-slate-400' },
+                  { label: 'Critical', sub: 'Red — needs action', count: deliveryHealth.ragCounts.red, bg: 'bg-red-50 dark:bg-red-900/20 border-red-200', text: 'text-red-700 dark:text-red-400', dot: 'bg-red-500' },
+                  { label: 'At Risk', sub: 'Amber — monitor', count: deliveryHealth.ragCounts.amber, bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+                  { label: 'On Track', sub: 'Green — healthy', count: deliveryHealth.ragCounts.green, bg: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200', text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
+                  { label: 'Stalled', sub: `${STALL_DAYS}+ days silent`, count: deliveryHealth.stalledList.length, bg: deliveryHealth.stalledList.length > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200' : 'bg-muted/30 border-border', text: deliveryHealth.stalledList.length > 0 ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground', dot: 'bg-slate-400' },
+                  { label: 'Past End Date', sub: 'Timeline overdue', count: deliveryHealth.overdueList.length, bg: deliveryHealth.overdueList.length > 0 ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200' : 'bg-muted/30 border-border', text: deliveryHealth.overdueList.length > 0 ? 'text-orange-700 dark:text-orange-400' : 'text-muted-foreground', dot: 'bg-orange-400' },
+                  { label: 'Over Budget', sub: '>20% variance', count: deliveryHealth.overBudgetList.length, bg: deliveryHealth.overBudgetList.length > 0 ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200' : 'bg-muted/30 border-border', text: deliveryHealth.overBudgetList.length > 0 ? 'text-purple-700 dark:text-purple-400' : 'text-muted-foreground', dot: 'bg-purple-400' },
                 ].map(r => (
-                  <div key={r.label} className={cn('rounded-xl border p-4', r.bg)}>
-                    <div className="flex items-center gap-2 mb-1">
+                  <div key={r.label} className={cn('rounded-xl border p-3', r.bg)}>
+                    <div className="flex items-center gap-1.5 mb-1">
                       <div className={cn('h-2 w-2 rounded-full flex-shrink-0', r.dot)} />
-                      <span className="text-[11px] text-muted-foreground font-medium">{r.label}</span>
+                      <span className="text-[10px] text-muted-foreground font-medium leading-tight">{r.label}</span>
                     </div>
-                    <div className={cn('text-2xl font-bold', r.text)}>{r.count}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">active projects</div>
+                    <div className={cn('text-xl font-bold', r.text)}>{r.count}</div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5 leading-tight">{r.sub}</div>
                   </div>
                 ))}
               </div>
-              {/* Active project RAG table */}
+
+              {/* Active project detail table */}
               {deliveryHealth.active.length > 0 && (
                 <div className="rounded-xl border overflow-hidden bg-card shadow-sm">
-                  <div className="grid grid-cols-[minmax(140px,2fr)_80px_90px_90px_90px_80px_36px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b px-4 py-2.5 gap-2">
-                    <span>Project</span><span>Type</span><span>RAG</span><span>Timeline</span><span>Budget</span><span>Stall</span><span />
+                  {/* Table header */}
+                  <div className="hidden lg:grid grid-cols-[2fr_60px_150px_150px_140px_130px_60px_36px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b px-4 py-2 gap-3 items-center">
+                    <span>Project</span>
+                    <span>RAG</span>
+                    <span>Timeline</span>
+                    <span>Budget</span>
+                    <span>Last Activity</span>
+                    <span>Flow Stage</span>
+                    <span className="text-center">Overdue</span>
+                    <span />
                   </div>
-                  <div className="divide-y max-h-[50vh] overflow-y-auto">
+                  <div className="divide-y max-h-[60vh] overflow-y-auto">
                     {deliveryHealth.active
-                      .sort((a,b) => {
+                      .sort((a, b) => {
                         const r = (s: RAGStatus) => s === 'red' ? 3 : s === 'amber' ? 2 : s === 'green' ? 1 : 0;
                         return r(b.rag.overall) - r(a.rag.overall);
                       })
                       .map(p => {
-                        const ragColor = (s: RAGStatus) =>
+                        const ragBg = (s: RAGStatus) =>
+                          s === 'red' ? 'bg-red-500' :
+                          s === 'amber' ? 'bg-amber-400' :
+                          s === 'green' ? 'bg-emerald-500' : 'bg-slate-300';
+                        const ragText = (s: RAGStatus) =>
+                          s === 'red' ? 'text-red-700 dark:text-red-400' :
+                          s === 'amber' ? 'text-amber-700 dark:text-amber-400' :
+                          s === 'green' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500';
+                        const ragPill = (s: RAGStatus) =>
                           s === 'red' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
                           s === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
                           s === 'green' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
                           'bg-slate-100 text-slate-500';
+
+                        const timelineLabel =
+                          p.rag.timeline === 'red' ? `${p.rag.daysOverdue}d overdue` :
+                          p.rag.timeline === 'amber' ? `Due in ${p.daysLeft}d` :
+                          p.daysLeft !== null ? `${p.daysLeft}d remaining` : 'No end date';
+
+                        const budgetLabel = p.budget.total > 0
+                          ? `${p.burnPct}% burned`
+                          : 'No budget set';
+                        const budgetSub = p.budget.total > 0
+                          ? `${fmtMoney(p.budget.spent)} / ${fmtMoney(p.budget.total)}`
+                          : '—';
+
+                        const activityLabel =
+                          p.lastActivityDays === null ? 'No activity logged' :
+                          p.lastActivityDays === 0 ? 'Today' :
+                          `${p.lastActivityDays}d ago`;
+
+                        const flowPct = p.flow.total > 0 ? Math.round((p.flow.current / p.flow.total) * 100) : 0;
+
                         return (
-                          <div key={p.id} className="grid grid-cols-[minmax(140px,2fr)_80px_90px_90px_90px_80px_36px] gap-2 px-4 py-2.5 items-center hover:bg-muted/30 transition-colors group">
+                          <div key={p.id} className="grid grid-cols-1 lg:grid-cols-[2fr_60px_150px_150px_140px_130px_60px_36px] gap-3 px-4 py-3 items-center hover:bg-muted/30 transition-colors group">
+
+                            {/* Project info */}
                             <div className="min-w-0">
-                              <p className="text-xs font-semibold truncate">{p.name}</p>
+                              <p className="text-xs font-semibold truncate leading-tight">{p.name}</p>
                               <p className="text-[10px] text-muted-foreground font-mono">{p.project_code}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-px rounded font-medium">
+                                  {TYPE_LABELS[normaliseProjectType(p.project_type)] ?? p.project_type}
+                                </span>
+                                {p.status === 'onHold' && (
+                                  <span className="text-[9px] bg-orange-100 text-orange-600 px-1.5 py-px rounded font-medium">On Hold</span>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-[10px] text-muted-foreground truncate">{TYPE_LABELS[normaliseProjectType(p.project_type)] ?? p.project_type}</span>
-                            <span className={cn('inline-flex items-center justify-center text-[10px] font-bold px-2 py-0.5 rounded-full', ragColor(p.rag.overall))}>{p.rag.overall.toUpperCase()}</span>
-                            <span className={cn('inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full', ragColor(p.rag.timeline))}>
-                              {p.rag.timeline === 'red' ? `${p.rag.daysOverdue}d overdue` : p.rag.timeline === 'amber' ? 'Due soon' : 'On Track'}
-                            </span>
-                            <span className={cn('inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full', ragColor(p.rag.budget))}>
-                              {p.rag.budgetVariancePct > 0 ? `+${p.rag.budgetVariancePct.toFixed(0)}%` : p.budget.total > 0 ? `${p.burnPct}%` : '—'}
-                            </span>
-                            <span className={cn('inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded-full', ragColor(p.rag.stall))}>
-                              {p.rag.isStalled ? 'Stalled' : 'Active'}
-                            </span>
-                            <button onClick={() => navigate(`/projects/${p.id}`)} className="p-1 rounded text-muted-foreground hover:text-[#1D3461] opacity-0 group-hover:opacity-100 transition-all">
+
+                            {/* RAG overall — colored dot + text */}
+                            <div className="flex items-center gap-1.5 lg:flex-col lg:items-center lg:gap-1">
+                              <div className={cn('h-3 w-3 rounded-full flex-shrink-0', ragBg(p.rag.overall))} />
+                              <span className={cn('text-[10px] font-bold', ragText(p.rag.overall))}>
+                                {p.rag.overall.toUpperCase()}
+                              </span>
+                            </div>
+
+                            {/* Timeline */}
+                            <div className="space-y-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={cn('text-[10px] font-semibold', ragText(p.rag.timeline))}>{timelineLabel}</span>
+                              </div>
+                              {p.end_date && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  End: {format(safeDate(p.end_date)!, 'dd MMM yyyy')}
+                                </p>
+                              )}
+                              {/* Timeline progress bar */}
+                              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={cn('h-full rounded-full transition-all', p.rag.timeline === 'red' ? 'bg-red-500' : p.rag.timeline === 'amber' ? 'bg-amber-400' : 'bg-emerald-500')}
+                                  style={{ width: `${Math.min(100, p.timelinePct)}%` }}
+                                />
+                              </div>
+                              <p className="text-[9px] text-muted-foreground">{Math.round(p.timelinePct)}% elapsed</p>
+                            </div>
+
+                            {/* Budget */}
+                            <div className="space-y-1 min-w-0">
+                              {p.budget.total > 0 ? (
+                                <>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={cn('text-[10px] font-semibold', ragText(p.rag.budget))}>{budgetLabel}</span>
+                                    {p.rag.budget !== 'green' && (
+                                      <span className={cn('text-[9px] px-1.5 py-px rounded-full', ragPill(p.rag.budget))}>
+                                        {p.rag.budgetVariancePct > 0 ? `+${p.rag.budgetVariancePct.toFixed(0)}% over` : 'Under budget'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground truncate">{budgetSub}</p>
+                                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className={cn('h-full rounded-full transition-all', p.rag.budget === 'red' ? 'bg-red-500' : p.rag.budget === 'amber' ? 'bg-amber-400' : 'bg-emerald-500')}
+                                      style={{ width: `${Math.min(100, p.burnPct)}%` }}
+                                    />
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground italic">No budget configured</span>
+                              )}
+                            </div>
+
+                            {/* Last Activity */}
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={cn(
+                                  'text-[10px] font-semibold',
+                                  p.rag.isStalled ? 'text-red-600 dark:text-red-400' :
+                                  (p.lastActivityDays ?? 0) > 7 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+                                )}>
+                                  {activityLabel}
+                                </span>
+                                {p.rag.isStalled && (
+                                  <span className="text-[9px] bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-px rounded-full font-bold">STALLED</span>
+                                )}
+                              </div>
+                              {p.lastActivityDate && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  {format(p.lastActivityDate, 'dd MMM yyyy')}
+                                </p>
+                              )}
+                              {!p.lastActivityDate && (
+                                <p className="text-[10px] text-muted-foreground">No flow advance recorded</p>
+                              )}
+                            </div>
+
+                            {/* Flow Stage */}
+                            <div className="space-y-1 min-w-0">
+                              <p className="text-[10px] font-medium truncate leading-tight">{p.flow.stageName}</p>
+                              <p className="text-[10px] text-muted-foreground">Stage {p.flow.current} of {p.flow.total}</p>
+                              {p.flow.total > 0 && (
+                                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-[#1D3461] transition-all"
+                                    style={{ width: `${flowPct}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Overdue milestones */}
+                            <div className="flex items-center justify-center lg:justify-start">
+                              {p.overdueMilestones > 0 ? (
+                                <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 text-[10px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full">
+                                  {p.overdueMilestones}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">—</span>
+                              )}
+                            </div>
+
+                            {/* Navigate */}
+                            <button
+                              onClick={() => navigate(`/projects/${p.id}`)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/10 opacity-0 group-hover:opacity-100 transition-all"
+                              title="Open project"
+                            >
                               <ExternalLink className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -1827,6 +1995,61 @@ export default function PortfolioDashboard() {
                   </div>
                 </div>
               )}
+
+              {/* Alert banners for critical issues */}
+              {(deliveryHealth.overdueList.length > 0 || deliveryHealth.stalledList.length > 0 || deliveryHealth.overBudgetList.length > 0) && (
+                <div className="space-y-2">
+                  {deliveryHealth.overdueList.length > 0 && (
+                    <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 px-4 py-3">
+                      <p className="text-[11px] font-bold text-red-700 dark:text-red-400 mb-1.5 flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {deliveryHealth.overdueList.length} project{deliveryHealth.overdueList.length > 1 ? 's' : ''} past end date
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {deliveryHealth.overdueList.slice(0, 6).map(p => (
+                          <button key={p.id} onClick={() => navigate(`/projects/${p.id}`)}
+                            className="text-[10px] bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 px-2 py-0.5 rounded-full hover:bg-red-200 transition-colors font-medium">
+                            {p.name} · {p.rag.daysOverdue}d
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {deliveryHealth.stalledList.length > 0 && (
+                    <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 px-4 py-3">
+                      <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 mb-1.5 flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {deliveryHealth.stalledList.length} project{deliveryHealth.stalledList.length > 1 ? 's' : ''} stalled — no flow activity in {STALL_DAYS}+ days
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {deliveryHealth.stalledList.slice(0, 6).map(p => (
+                          <button key={p.id} onClick={() => navigate(`/projects/${p.id}`)}
+                            className="text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full hover:bg-amber-200 transition-colors font-medium">
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {deliveryHealth.overBudgetList.length > 0 && (
+                    <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 px-4 py-3">
+                      <p className="text-[11px] font-bold text-purple-700 dark:text-purple-400 mb-1.5 flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {deliveryHealth.overBudgetList.length} project{deliveryHealth.overBudgetList.length > 1 ? 's' : ''} over budget by more than 20%
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {deliveryHealth.overBudgetList.slice(0, 6).map(p => (
+                          <button key={p.id} onClick={() => navigate(`/projects/${p.id}`)}
+                            className="text-[10px] bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded-full hover:bg-purple-200 transition-colors font-medium">
+                            {p.name} · +{p.rag.budgetVariancePct.toFixed(0)}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {deliveryHealth.active.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-muted-foreground gap-2 border-2 border-dashed rounded-2xl">
                   <CheckCircle2 className="h-8 w-8 opacity-30" />
