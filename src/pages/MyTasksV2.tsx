@@ -83,96 +83,197 @@ function initials(name?: string | null) {
 interface QuickAddDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (data: { title: string; priority: PersonalTaskPriority; status: PersonalTaskStatus; dueDate: string; description: string }) => void;
+  onCreate: (data: {
+    title: string;
+    priority: PersonalTaskPriority;
+    status: PersonalTaskStatus;
+    dueDate: string;
+    description: string;
+    taskType: 'project-task' | 'day-to-day' | null;
+    category: string | null;
+    notes: string;
+  }) => void;
   isCreating: boolean;
+  currentUserFullName?: string | null;
 }
-function QuickAddDialog({ open, onClose, onCreate, isCreating }: QuickAddDialogProps) {
-  const [title, setTitle] = useState('');
-  const [priority, setPriority] = useState<PersonalTaskPriority>('medium');
-  const [status, setStatus] = useState<PersonalTaskStatus>('todo');
-  const [dueDate, setDueDate] = useState('');
+function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullName }: QuickAddDialogProps) {
+  const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
+  const [taskTypeKey, setTaskTypeKey] = useState<'general' | 'project' | 'daytoday'>('general');
+  const [priority, setPriority]     = useState<PersonalTaskPriority>('medium');
+  const [dueDate, setDueDate]       = useState('');
+  const [notes, setNotes]           = useState('');
 
-  const reset = () => { setTitle(''); setPriority('medium'); setStatus('todo'); setDueDate(''); setDescription(''); };
+  const reset = () => {
+    setTitle(''); setDescription(''); setTaskTypeKey('general');
+    setPriority('medium'); setDueDate(''); setNotes('');
+  };
 
   const submit = () => {
     if (!title.trim()) return;
-    onCreate({ title: title.trim(), priority, status, dueDate, description });
+    const typeMap = {
+      general:  { taskType: null as null,                    category: 'personal' },
+      project:  { taskType: 'project-task' as const,        category: 'project'  },
+      daytoday: { taskType: 'day-to-day'   as const,        category: 'recurring'},
+    };
+    const { taskType, category } = typeMap[taskTypeKey];
+    onCreate({ title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes });
     reset();
   };
 
+  const initial = (currentUserFullName ?? 'U')[0].toUpperCase();
+  const TASK_TYPES = [
+    { key: 'general'  as const, label: 'General',      Icon: CheckSquare },
+    { key: 'project'  as const, label: 'Project Task', Icon: Briefcase   },
+    { key: 'daytoday' as const, label: 'Day-to-Day',   Icon: RefreshCw   },
+  ];
+  const PRIORITIES = [
+    { value: 'critical' as const, label: '🔴 Urgent' },
+    { value: 'high'     as const, label: '🟠 High'   },
+    { value: 'medium'   as const, label: '🔵 Medium'  },
+    { value: 'low'      as const, label: '⚫ Low'      },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New Task</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4 py-2">
-          <Input
-            autoFocus
-            placeholder="Task title…"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') submit(); }}
-            data-testid="input-task-title"
-          />
-          <Textarea
-            placeholder="Description (optional)"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            rows={3}
-            className="resize-none"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs mb-1 block">Priority</Label>
-              <Select value={priority} onValueChange={v => setPriority(v as PersonalTaskPriority)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(['critical', 'high', 'medium', 'low'] as PersonalTaskPriority[]).map(p => (
-                    <SelectItem key={p} value={p}>{PRIORITY_CFG[p].label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs mb-1 block">Status</Label>
-              <Select value={status} onValueChange={v => setStatus(v as PersonalTaskStatus)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
-                    <SelectItem key={s} value={s}>{STATUS_CFG[s].label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+        {/* ── Header ── */}
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-[#1D3461] flex items-center justify-center shrink-0">
+            <Plus className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <Label className="text-xs mb-1 block">Due Date</Label>
-            <Input
-              type="date"
-              value={dueDate}
-              onChange={e => setDueDate(e.target.value)}
-              className="h-9"
-            />
+          <DialogTitle className="text-base font-bold text-slate-800 m-0 p-0">New Task</DialogTitle>
+        </div>
+
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-5 py-4 flex flex-col gap-4">
+
+            {/* Title */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
+                Task title <span className="text-red-500 normal-case tracking-normal">*</span>
+              </label>
+              <input
+                autoFocus
+                placeholder="What needs to be done?"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) submit(); }}
+                data-testid="input-task-title"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all font-medium"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Description</label>
+              <textarea
+                placeholder="Add more details..."
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                rows={2}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all resize-none"
+              />
+            </div>
+
+            {/* Task Type */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
+                Task Type <span className="text-slate-400 font-normal normal-case tracking-normal">(optional)</span>
+              </label>
+              <div className="flex gap-2">
+                {TASK_TYPES.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setTaskTypeKey(t.key)}
+                    className={cn(
+                      'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border text-xs font-semibold transition-all',
+                      taskTypeKey === t.key
+                        ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50',
+                    )}
+                  >
+                    <t.Icon className="w-3.5 h-3.5" />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Priority + Due date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Priority</label>
+                <select
+                  value={priority}
+                  onChange={e => setPriority(e.target.value as PersonalTaskPriority)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
+                >
+                  {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Due date</label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={e => setDueDate(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Assign to */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Assign to</label>
+              <div className="flex gap-2 mb-2">
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1D3461] text-white text-xs font-semibold shadow-sm">
+                  <User className="w-3 h-3" /> Myself
+                </button>
+              </div>
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="w-7 h-7 rounded-full bg-[#1D3461] flex items-center justify-center shrink-0">
+                  <span className="text-white text-[11px] font-bold">{initial}</span>
+                </div>
+                <span className="text-sm font-semibold text-slate-700 flex-1">{currentUserFullName ?? 'You'}</span>
+                <span className="text-[11px] text-slate-400 font-medium">(you)</span>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Notes</label>
+              <textarea
+                placeholder="Any additional notes..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={2}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all resize-none"
+              />
+            </div>
+
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => { reset(); onClose(); }}>Cancel</Button>
-          <Button
-            className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
+
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-end gap-2.5 px-5 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0">
+          <button
+            onClick={() => { reset(); onClose(); }}
+            className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-white transition-all"
+          >
+            Cancel
+          </button>
+          <button
             onClick={submit}
             disabled={!title.trim() || isCreating}
             data-testid="button-create-task"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-sm font-semibold transition-all disabled:opacity-50 shadow-sm"
           >
-            {isCreating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+            {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Create Task
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -1993,9 +2094,19 @@ export default function MyTasksV2() {
   const weekLabel = `${format(startDay, 'MMM d')} – ${format(endDay, 'MMM d')}`;
 
   // Handlers
-  const handleCreate = async (data: { title: string; priority: PersonalTaskPriority; status: PersonalTaskStatus; dueDate: string; description: string }) => {
+  const handleCreate = async (data: {
+    title: string; priority: PersonalTaskPriority; status: PersonalTaskStatus;
+    dueDate: string; description: string;
+    taskType: 'project-task' | 'day-to-day' | null;
+    category: string | null; notes: string;
+  }) => {
     try {
-      await createTask({ title: data.title, priority: data.priority, status: data.status, dueDate: data.dueDate || null, description: data.description });
+      await createTask({
+        title: data.title, priority: data.priority, status: data.status,
+        dueDate: data.dueDate || null, description: data.description || null,
+        taskType: data.taskType, category: data.category,
+        notes: data.notes || null,
+      });
       setShowAdd(false);
       toast({ title: 'Task created' });
     } catch {
@@ -2127,38 +2238,62 @@ export default function MyTasksV2() {
           {/* ══ CENTER: Main task content area ══ */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-            {/* View switcher + filter bar */}
-            <div className="h-12 border-b border-slate-200 bg-white flex items-center px-4 gap-3 shrink-0">
-              {/* View switcher */}
-              <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 shrink-0">
-                {([
-                  { key: 'cards' as const,    label: 'Task Cards',    Icon: ListTodo },
-                  { key: 'kanban' as const,   label: 'Kanban',        Icon: Columns2 },
-                  { key: 'timeline' as const, label: 'Timeline',      Icon: Calendar },
-                  { key: 'planner' as const,  label: 'Daily Planner', Icon: Sun },
-                  { key: 'inbox' as const,    label: 'Inbox',         Icon: Inbox },
-                  { key: 'planning' as const, label: 'Planning',      Icon: Brain },
-                ] as const).map(v => (
-                  <button
-                    key={v.key}
-                    onClick={() => setMainView(v.key)}
-                    data-testid={`view-switch-${v.key}`}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap',
-                      mainView === v.key
-                        ? 'bg-white text-[#1D3461] shadow-sm'
-                        : 'text-slate-500 hover:text-slate-700',
+            {/* ── View switcher + filter bar ── */}
+            <div className="border-b border-slate-200 bg-white shrink-0">
+
+              {/* Row 1 — View tabs (always shown, scrollable) */}
+              <div className="h-12 flex items-center px-4 gap-2 overflow-x-auto scrollbar-none">
+                <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 shrink-0">
+                  {([
+                    { key: 'cards'    as const, label: 'Task Cards',    Icon: ListTodo },
+                    { key: 'kanban'   as const, label: 'Kanban',        Icon: Columns2 },
+                    { key: 'timeline' as const, label: 'Timeline',      Icon: Calendar },
+                    { key: 'planner'  as const, label: 'Daily Planner', Icon: Sun      },
+                    { key: 'inbox'    as const, label: 'Inbox',         Icon: Inbox    },
+                    { key: 'planning' as const, label: 'Planning',      Icon: Brain    },
+                  ] as const).map(v => (
+                    <button
+                      key={v.key}
+                      onClick={() => setMainView(v.key)}
+                      data-testid={`view-switch-${v.key}`}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap',
+                        mainView === v.key
+                          ? 'bg-white text-[#1D3461] shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700',
+                      )}
+                    >
+                      <v.Icon className="w-3.5 h-3.5" />
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Week navigation — timeline view, pushed to right */}
+                {mainView === 'timeline' && (
+                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                    <div className="hidden md:flex items-center gap-3 text-[11px] font-medium text-slate-400 mr-2">
+                      <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Personal</span>
+                      <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Project</span>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-xs font-semibold text-slate-600 min-w-[100px] text-center bg-slate-50 border border-slate-200 rounded-md px-2 py-1">{weekLabel}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    {weekOffset !== 0 && (
+                      <Button variant="ghost" size="sm" className="text-[11px] h-7 text-blue-600 hover:bg-blue-50 px-2" onClick={() => setWeekOffset(0)}>Today</Button>
                     )}
-                  >
-                    <v.Icon className="w-3.5 h-3.5" />
-                    {v.label}
-                  </button>
-                ))}
+                  </div>
+                )}
               </div>
 
-              {/* Category filter chips — all non-kanban, non-inbox views */}
-              {mainView !== 'kanban' && mainView !== 'inbox' && (
-                <div className="flex items-center gap-1 border-l border-slate-200 pl-3 shrink-0">
+              {/* Row 2 — Filter chips (only for views that need filtering) */}
+              {mainView !== 'kanban' && mainView !== 'inbox' && mainView !== 'planning' && mainView !== 'timeline' && (
+                <div className="h-9 flex items-center px-4 gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none">
+                  {/* Category chips */}
                   {CATEGORY_NAV.map(cat => {
                     const Icon = cat.icon;
                     const isActive = categoryFilter === cat.key;
@@ -2168,31 +2303,32 @@ export default function MyTasksV2() {
                         onClick={() => setCategoryFilter(cat.key)}
                         data-testid={`category-filter-${cat.key}`}
                         className={cn(
-                          'flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap',
+                          'flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap shrink-0',
                           isActive
                             ? 'bg-[#1D3461] text-white shadow-sm'
                             : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100',
                         )}
                       >
-                        <Icon className="w-3 h-3 shrink-0" />
+                        <Icon className="w-3 h-3" />
                         {cat.label}
                         <span className={cn('text-[10px] font-bold', isActive ? 'text-white/70' : 'text-slate-400')}>{cat.count}</span>
                       </button>
                     );
                   })}
-                </div>
-              )}
 
-              {/* Status filter chips — cards view only */}
-              {mainView === 'cards' && (
-                <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-none">
-                  {FILTER_CHIPS.map(chip => (
+                  {/* Divider */}
+                  {mainView === 'cards' && (
+                    <div className="w-px h-4 bg-slate-200 mx-1 shrink-0" />
+                  )}
+
+                  {/* Status chips — cards only */}
+                  {mainView === 'cards' && FILTER_CHIPS.map(chip => (
                     <button
                       key={chip.key}
                       onClick={() => setFilterKey(chip.key)}
                       data-testid={`filter-chip-${chip.key}`}
                       className={cn(
-                        'px-2 py-1 rounded-full text-[11px] font-medium transition-all whitespace-nowrap border shrink-0',
+                        'px-2.5 py-1 rounded-full text-[11px] font-medium transition-all whitespace-nowrap border shrink-0',
                         filterKey === chip.key
                           ? 'bg-[#1D3461] text-white border-[#1D3461]'
                           : chip.alert && chip.count > 0
@@ -2202,8 +2338,7 @@ export default function MyTasksV2() {
                     >
                       {chip.label}
                       {chip.count > 0 && (
-                        <span className={cn(
-                          'ml-1 font-bold',
+                        <span className={cn('ml-1 font-bold',
                           filterKey === chip.key ? 'text-white/80' : chip.alert ? 'text-red-600' : 'text-slate-400',
                         )}>
                           {chip.count}
@@ -2211,26 +2346,6 @@ export default function MyTasksV2() {
                       )}
                     </button>
                   ))}
-                </div>
-              )}
-
-              {/* Week navigation — timeline view only */}
-              {mainView === 'timeline' && (
-                <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                  <div className="hidden md:flex items-center gap-3 text-[11px] font-medium text-slate-400 mr-2">
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Personal</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Project</span>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <span className="text-xs font-semibold text-slate-600 min-w-[100px] text-center bg-slate-50 border border-slate-200 rounded-md px-2 py-1">{weekLabel}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                  {weekOffset !== 0 && (
-                    <Button variant="ghost" size="sm" className="text-[11px] h-7 text-blue-600 hover:bg-blue-50 px-2" onClick={() => setWeekOffset(0)}>Today</Button>
-                  )}
                 </div>
               )}
             </div>
@@ -2404,6 +2519,7 @@ export default function MyTasksV2() {
         onClose={() => setShowAdd(false)}
         onCreate={handleCreate}
         isCreating={isCreating}
+        currentUserFullName={currentUser?.fullName}
       />
       <EditDialog
         task={editingTask}
