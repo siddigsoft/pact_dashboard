@@ -1,7 +1,13 @@
 /**
  * useTaskNotifications
- * Fires in-app + email notifications on all personal_task lifecycle events.
- * Plug this into any mutation that creates or updates personal_tasks.
+ * Fires in-app + email + WhatsApp (WasenderAPI) notifications on all
+ * personal_task lifecycle events.
+ *
+ * Channels:
+ *  1. In-app  — via NotificationContext (instant)
+ *  2. Email   — dispatch-notification edge function (bilingual HTML)
+ *  3. WhatsApp — send-whatsapp edge function via WasenderAPI (bilingual)
+ *     WhatsApp fires for high-priority events when WASENDER_API_KEY is set.
  */
 import { useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -31,13 +37,13 @@ interface TaskNotificationPayload {
   dueDate?: string | null;
   priority?: string | null;
   notes?: string;
-  /** Extra data to include in email/WhatsApp template */
+  /** Extra metadata forwarded to email template */
   extra?: Record<string, string>;
 }
 
-const EVENT_LABELS: Record<TaskEvent, string> = {
+const EVENT_LABELS_EN: Record<TaskEvent, string> = {
   task_created: 'New Task Created',
-  task_started: 'Task Started',
+  task_started: 'Task In Progress',
   task_acknowledged: 'Task Acknowledged',
   task_completed: 'Task Completed ✓',
   task_delayed: 'Task Delayed ⚠',
@@ -48,6 +54,21 @@ const EVENT_LABELS: Record<TaskEvent, string> = {
   task_reminder_3day: 'Task Due in 3 Days',
   task_assigned: 'Task Assigned to You',
   task_status_changed: 'Task Status Updated',
+};
+
+const EVENT_LABELS_AR: Record<TaskEvent, string> = {
+  task_created: 'تم إنشاء مهمة جديدة',
+  task_started: 'المهمة قيد التنفيذ',
+  task_acknowledged: 'تم إقرار استلام المهمة',
+  task_completed: 'اكتملت المهمة ✓',
+  task_delayed: 'المهمة متأخرة ⚠',
+  task_rejected: 'تم رفض المهمة',
+  task_cancelled: 'تم إلغاء المهمة',
+  task_overdue: 'المهمة متأخرة 🔴',
+  task_reminder_1day: 'موعد المهمة غداً',
+  task_reminder_3day: 'موعد المهمة خلال 3 أيام',
+  task_assigned: 'تم تعيين مهمة لك',
+  task_status_changed: 'تم تحديث حالة المهمة',
 };
 
 const EVENT_TYPES: Record<TaskEvent, 'info' | 'success' | 'warning' | 'error'> = {
@@ -65,35 +86,68 @@ const EVENT_TYPES: Record<TaskEvent, 'info' | 'success' | 'warning' | 'error'> =
   task_status_changed: 'info',
 };
 
-function buildMessage(event: TaskEvent, taskTitle: string, actorName: string, dueDate?: string | null): string {
+/** English notification message */
+function buildMessageEn(event: TaskEvent, taskTitle: string, actorName: string, dueDate?: string | null): string {
   const due = dueDate ? ` (due ${dueDate})` : '';
   switch (event) {
-    case 'task_created': return `Task "${taskTitle}" was created by ${actorName}${due}`;
-    case 'task_assigned': return `${actorName} assigned you: "${taskTitle}"${due}`;
-    case 'task_started': return `"${taskTitle}" has been started`;
+    case 'task_created':      return `Task "${taskTitle}" was created by ${actorName}${due}`;
+    case 'task_assigned':     return `${actorName} assigned you: "${taskTitle}"${due}`;
+    case 'task_started':      return `"${taskTitle}" has been started`;
     case 'task_acknowledged': return `"${taskTitle}" was acknowledged by the assignee`;
-    case 'task_completed': return `"${taskTitle}" has been marked as completed 🎉`;
-    case 'task_delayed': return `"${taskTitle}" has been marked as delayed${due}`;
-    case 'task_rejected': return `"${taskTitle}" was rejected by ${actorName}`;
-    case 'task_cancelled': return `"${taskTitle}" was cancelled`;
-    case 'task_overdue': return `"${taskTitle}" is now overdue${due} — please take action`;
-    case 'task_reminder_1day': return `"${taskTitle}" is due tomorrow${due}`;
-    case 'task_reminder_3day': return `"${taskTitle}" is due in 3 days${due}`;
-    case 'task_status_changed': return `"${taskTitle}" status updated by ${actorName}`;
-    default: return `Task "${taskTitle}" updated`;
+    case 'task_completed':    return `"${taskTitle}" has been marked as completed 🎉`;
+    case 'task_delayed':      return `"${taskTitle}" has been marked as delayed${due}`;
+    case 'task_rejected':     return `"${taskTitle}" was rejected by ${actorName}`;
+    case 'task_cancelled':    return `"${taskTitle}" was cancelled`;
+    case 'task_overdue':      return `"${taskTitle}" is now overdue${due} — please take action immediately`;
+    case 'task_reminder_1day':return `"${taskTitle}" is due tomorrow${due}`;
+    case 'task_reminder_3day':return `"${taskTitle}" is due in 3 days${due}`;
+    case 'task_status_changed':return `"${taskTitle}" status updated by ${actorName}`;
+    default:                  return `Task "${taskTitle}" updated`;
   }
 }
+
+/** Arabic notification message */
+function buildMessageAr(event: TaskEvent, taskTitle: string, actorName: string, dueDate?: string | null): string {
+  const due = dueDate ? ` (الموعد: ${dueDate})` : '';
+  switch (event) {
+    case 'task_created':      return `أنشأ ${actorName} مهمة جديدة: "${taskTitle}"${due}`;
+    case 'task_assigned':     return `عيّن لك ${actorName} المهمة: "${taskTitle}"${due}`;
+    case 'task_started':      return `بدأ تنفيذ "${taskTitle}"`;
+    case 'task_acknowledged': return `تم إقرار استلام "${taskTitle}"`;
+    case 'task_completed':    return `اكتملت "${taskTitle}" 🎉`;
+    case 'task_delayed':      return `تم تأجيل "${taskTitle}"${due}`;
+    case 'task_rejected':     return `رُفضت "${taskTitle}" بواسطة ${actorName}`;
+    case 'task_cancelled':    return `تم إلغاء "${taskTitle}"`;
+    case 'task_overdue':      return `"${taskTitle}" متأخرة${due} — يرجى اتخاذ إجراء فوري`;
+    case 'task_reminder_1day':return `موعد "${taskTitle}" غداً${due}`;
+    case 'task_reminder_3day':return `موعد "${taskTitle}" خلال 3 أيام${due}`;
+    case 'task_status_changed':return `تم تحديث حالة "${taskTitle}" بواسطة ${actorName}`;
+    default:                  return `تم تحديث "${taskTitle}"`;
+  }
+}
+
+/** Events that should also trigger WhatsApp (high-urgency only) */
+const WHATSAPP_EVENTS = new Set<TaskEvent>([
+  'task_assigned',
+  'task_overdue',
+  'task_reminder_1day',
+  'task_rejected',
+  'task_delayed',
+]);
 
 /** Map a status value to the appropriate TaskEvent */
 export function statusToEvent(status: string): TaskEvent {
   switch (status.toLowerCase()) {
-    case 'in_progress': case 'in-progress': return 'task_started';
-    case 'acknowledged': return 'task_acknowledged';
-    case 'done': case 'completed': case 'complete': return 'task_completed';
-    case 'delayed': return 'task_delayed';
-    case 'rejected': return 'task_rejected';
-    case 'cancelled': return 'task_cancelled';
-    default: return 'task_status_changed';
+    case 'in_progress':
+    case 'in-progress':     return 'task_started';
+    case 'acknowledged':    return 'task_acknowledged';
+    case 'done':
+    case 'completed':
+    case 'complete':        return 'task_completed';
+    case 'delayed':         return 'task_delayed';
+    case 'rejected':        return 'task_rejected';
+    case 'cancelled':       return 'task_cancelled';
+    default:                return 'task_status_changed';
   }
 }
 
@@ -105,62 +159,90 @@ export function useTaskNotifications() {
     const {
       event,
       taskTitle,
+      taskId,
       recipientUserId,
       recipientName,
       dueDate,
+      priority,
       extra = {},
     } = payload;
 
-    const actorName = currentUser?.fullName ?? 'A manager';
-    const title = EVENT_LABELS[event];
-    const message = buildMessage(event, taskTitle, actorName, dueDate);
-    const type = EVENT_TYPES[event];
+    const actorName   = currentUser?.fullName ?? 'A manager';
+    const actorId     = currentUser?.id;
+    const titleEn     = EVENT_LABELS_EN[event];
+    const titleAr     = EVENT_LABELS_AR[event];
+    const messageEn   = buildMessageEn(event, taskTitle, actorName, dueDate);
+    const messageAr   = buildMessageAr(event, taskTitle, actorName, dueDate);
+    const type        = EVENT_TYPES[event];
 
-    // 1. In-app notification
+    // ── 1. In-app notification ────────────────────────────────────────────────
     addNotification({
       userId: recipientUserId,
-      title,
-      message,
+      title: titleEn,
+      message: messageEn,
       type,
       link: '/my-tasks',
     });
 
-    // 2. Email via dispatch-notification edge function (fire-and-forget)
+    // ── 2. Email via dispatch-notification (bilingual, fire-and-forget) ───────
     supabase.functions.invoke('dispatch-notification', {
       body: {
-        event,
-        recipient_user_id: recipientUserId,
-        data: {
-          task_title: taskTitle,
-          recipient_name: recipientName ?? '',
-          assigned_by: actorName,
-          due_date: dueDate ?? 'No due date set',
-          message,
+        event_type:        event,
+        entity_type:       'task',
+        entity_id:         taskId || undefined,
+        priority:          (event === 'task_overdue' || event === 'task_rejected') ? 'high' : 'normal',
+        recipient_ids:     [recipientUserId],
+        title_en:          titleEn,
+        title_ar:          titleAr,
+        message_en:        messageEn,
+        message_ar:        messageAr,
+        triggered_by:      actorId,
+        triggered_by_name: actorName,
+        action_url:        'https://app.pactorg.com/my-tasks',
+        metadata: {
+          task_name:   taskTitle,
+          due_date:    dueDate ?? '',
+          priority:    priority ?? 'normal',
+          assigned_to: recipientName ?? '',
           ...extra,
         },
       },
-    }).catch(() => { /* Non-blocking */ });
+    }).catch(() => { /* non-blocking */ });
 
-    // 3. WhatsApp — infrastructure ready; requires API key
-    // Once a Twilio/Meta WhatsApp Business API key is configured,
-    // the send-whatsapp edge function below will deliver the message
-    // to the employee's registered phone number automatically.
-    // supabase.functions.invoke('send-whatsapp', {
-    //   body: { recipient_user_id: recipientUserId, message },
-    // }).catch(() => {});
+    // ── 3. WhatsApp via WasenderAPI (fire-and-forget, high-urgency events) ───
+    if (WHATSAPP_EVENTS.has(event)) {
+      supabase.functions.invoke('send-whatsapp', {
+        body: {
+          user_ids:   [recipientUserId],
+          event_type: event,
+          data: {
+            task_title:       taskTitle,
+            actor:            actorName,
+            due_date:         dueDate ?? '',
+            priority:         priority ?? 'normal',
+            recipient_name:   recipientName ?? '',
+            url:              'https://app.pactorg.com/my-tasks',
+            message:          messageEn,
+            message_ar:       messageAr,
+            ...extra,
+          },
+        },
+      }).catch(() => { /* non-blocking — requires WASENDER_API_KEY */ });
+    }
 
   }, [addNotification, currentUser]);
 
   /** Convenience: notify the current user themselves */
-  const notifySelf = useCallback((event: TaskEvent, taskTitle: string, dueDate?: string | null) => {
+  const notifySelf = useCallback((event: TaskEvent, taskTitle: string, dueDate?: string | null, priority?: string | null) => {
     if (!currentUser?.id) return;
     notify({
       event,
       taskId: '',
       taskTitle,
       recipientUserId: currentUser.id,
-      recipientName: currentUser.fullName ?? undefined,
+      recipientName:   currentUser.fullName ?? undefined,
       dueDate,
+      priority,
     });
   }, [currentUser, notify]);
 

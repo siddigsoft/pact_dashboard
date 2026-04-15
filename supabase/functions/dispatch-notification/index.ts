@@ -36,11 +36,21 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'mmp_recall_initiated':       { title_en: 'MMP Recall Initiated',                 title_ar: 'تم بدء استرداد خطة المراقبة الشهرية',         category: 'assignments',  priority: 'high'   },
   'mmp_reclaim_approved':       { title_en: 'MMP Reclaim Approved',                 title_ar: 'تمت الموافقة على مطالبة خطة المراقبة',        category: 'approvals',    priority: 'normal' },
   'mmp_cycle_closed':           { title_en: 'MMP Cycle Closed',                     title_ar: 'تم إغلاق دورة خطة المراقبة الشهرية',         category: 'system',       priority: 'normal' },
-  // Tasks
-  'task_assigned':              { title_en: 'New Task Assigned',                    title_ar: 'تم تعيين مهمة جديدة',                         category: 'assignments',  priority: 'normal' },
+  // Tasks — full lifecycle
+  'task_created':               { title_en: 'New Task Created',                     title_ar: 'تم إنشاء مهمة جديدة',                         category: 'assignments',  priority: 'normal' },
+  'task_assigned':              { title_en: 'Task Assigned to You',                 title_ar: 'تم تعيين مهمة لك',                            category: 'assignments',  priority: 'normal' },
+  'task_started':               { title_en: 'Task In Progress',                     title_ar: 'المهمة قيد التنفيذ',                          category: 'system',       priority: 'normal' },
+  'task_acknowledged':          { title_en: 'Task Acknowledged',                    title_ar: 'تم إقرار استلام المهمة',                      category: 'system',       priority: 'normal' },
   'task_completed':             { title_en: 'Task Completed',                       title_ar: 'اكتملت المهمة',                               category: 'system',       priority: 'normal' },
+  'task_delayed':               { title_en: 'Task Delayed',                         title_ar: 'المهمة متأخرة',                               category: 'assignments',  priority: 'high'   },
+  'task_rejected':              { title_en: 'Task Rejected',                        title_ar: 'تم رفض المهمة',                               category: 'assignments',  priority: 'high'   },
+  'task_cancelled':             { title_en: 'Task Cancelled',                       title_ar: 'تم إلغاء المهمة',                             category: 'system',       priority: 'normal' },
+  'task_overdue':               { title_en: 'Task Overdue — Action Required',       title_ar: 'المهمة متأخرة — مطلوب إجراء',                 category: 'assignments',  priority: 'high'   },
   'task_updated':               { title_en: 'Task Updated',                         title_ar: 'تم تحديث المهمة',                             category: 'system',       priority: 'normal' },
-  'task_overdue':               { title_en: 'Task Overdue',                         title_ar: 'المهمة متأخرة',                               category: 'assignments',  priority: 'high'   },
+  'task_status_changed':        { title_en: 'Task Status Changed',                  title_ar: 'تغيرت حالة المهمة',                           category: 'system',       priority: 'normal' },
+  'task_reminder_1day':         { title_en: 'Task Due Tomorrow',                    title_ar: 'موعد المهمة غداً',                            category: 'system',       priority: 'high'   },
+  'task_reminder_3day':         { title_en: 'Task Due in 3 Days',                   title_ar: 'موعد المهمة خلال 3 أيام',                     category: 'system',       priority: 'normal' },
+  'task_comment_added':         { title_en: 'New Comment on Task',                  title_ar: 'تعليق جديد على المهمة',                       category: 'system',       priority: 'normal' },
   // Site Visits
   'site_visit_assigned':        { title_en: 'Site Visit Assigned',                  title_ar: 'تم تعيين زيارة ميدانية',                      category: 'assignments',  priority: 'normal' },
   'site_visit_started':         { title_en: 'Site Visit Started',                   title_ar: 'بدأت الزيارة الميدانية',                      category: 'assignments',  priority: 'normal' },
@@ -59,26 +69,47 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'budget_threshold_100':       { title_en: 'Budget Alert: Fully Utilized',         title_ar: 'تنبيه الميزانية: تم استخدام كامل الميزانية', category: 'financial',    priority: 'urgent' },
   // Approvals
   'approval_required':          { title_en: 'Approval Required',                    title_ar: 'مطلوب موافقة',                                category: 'approvals',    priority: 'high'   },
-  // Leave Requests
+  // Leave Requests — full lifecycle
   'leave_request_submitted':    { title_en: 'Leave Request Submitted',              title_ar: 'تم تقديم طلب إجازة',                         category: 'approvals',    priority: 'normal' },
   'leave_request_approved':     { title_en: 'Leave Request Approved',               title_ar: 'تمت الموافقة على طلب الإجازة',               category: 'system',       priority: 'normal' },
   'leave_request_rejected':     { title_en: 'Leave Request Not Approved',           title_ar: 'لم تتم الموافقة على طلب الإجازة',            category: 'system',       priority: 'normal' },
+  'leave_request_cancelled':    { title_en: 'Leave Request Cancelled',              title_ar: 'تم إلغاء طلب الإجازة',                       category: 'system',       priority: 'normal' },
+  'leave_balance_updated':      { title_en: 'Leave Balance Updated',                title_ar: 'تم تحديث رصيد الإجازات',                     category: 'system',       priority: 'normal' },
+  // Advance Requests
+  'advance_request_submitted':  { title_en: 'Advance Request Submitted',            title_ar: 'تم تقديم طلب سلفة',                          category: 'approvals',    priority: 'normal' },
+  'advance_request_approved':   { title_en: 'Advance Request Approved',             title_ar: 'تمت الموافقة على طلب السلفة',                category: 'financial',    priority: 'normal' },
+  'advance_request_rejected':   { title_en: 'Advance Request Not Approved',         title_ar: 'لم تتم الموافقة على طلب السلفة',             category: 'financial',    priority: 'normal' },
   // Payroll & Contracts
   'payroll_run_completed':      { title_en: 'Payroll Processed',                    title_ar: 'تمت معالجة كشف الرواتب',                     category: 'financial',    priority: 'normal' },
   'payroll_approval_needed':    { title_en: 'Payroll Approval Required',            title_ar: 'مطلوب موافقة على كشف الرواتب',               category: 'approvals',    priority: 'high'   },
+  'payroll_slip_ready':         { title_en: 'Your Payslip is Ready',                title_ar: 'قسيمة راتبك جاهزة',                          category: 'financial',    priority: 'normal' },
+  'retainer_payment_processed': { title_en: 'Retainer Payment Processed',           title_ar: 'تمت معالجة دفعة الاستبقاء',                  category: 'financial',    priority: 'normal' },
+  'retainer_overdue':           { title_en: 'Retainer Payment Overdue',             title_ar: 'دفعة الاستبقاء متأخرة',                      category: 'financial',    priority: 'high'   },
   'contract_expiring_30d':      { title_en: 'Contract Expiring in 30 Days',         title_ar: 'عقد ينتهي خلال 30 يوماً',                    category: 'system',       priority: 'normal' },
   'contract_expiring_7d':       { title_en: 'Contract Expiring This Week',          title_ar: 'عقد ينتهي هذا الأسبوع',                      category: 'system',       priority: 'high'   },
   'contract_expired':           { title_en: 'Contract Expired',                     title_ar: 'انتهى العقد',                                 category: 'system',       priority: 'urgent' },
   // Signatures
   'signature_requested':        { title_en: 'Your Signature is Required',           title_ar: 'توقيعك مطلوب',                                category: 'approvals',    priority: 'high'   },
   'signature_completed':        { title_en: 'Document Signed Successfully',         title_ar: 'تم توقيع المستند بنجاح',                      category: 'system',       priority: 'normal' },
-  // Projects
+  // Projects — full lifecycle
+  'project_created':            { title_en: 'New Project Created',                  title_ar: 'تم إنشاء مشروع جديد',                        category: 'assignments',  priority: 'normal' },
   'project_stage_advanced':     { title_en: 'Project Stage Advanced',               title_ar: 'تقدمت مرحلة المشروع',                        category: 'system',       priority: 'normal' },
   'project_milestone_overdue':  { title_en: 'Project Milestone Overdue',            title_ar: 'تأخر إنجاز المرحلة الرئيسية',                category: 'assignments',  priority: 'high'   },
   'project_stalled':            { title_en: 'Project Stalled – Action Needed',      title_ar: 'المشروع متوقف – مطلوب إجراء',                category: 'assignments',  priority: 'high'   },
-  // CRM
+  'project_completed':          { title_en: 'Project Completed',                    title_ar: 'اكتمل المشروع',                              category: 'system',       priority: 'normal' },
+  'project_archived':           { title_en: 'Project Archived',                     title_ar: 'تم أرشفة المشروع',                           category: 'system',       priority: 'normal' },
+  'project_member_added':       { title_en: 'Added to Project',                     title_ar: 'تمت إضافتك إلى مشروع',                      category: 'assignments',  priority: 'normal' },
+  'project_task_assigned':      { title_en: 'Project Task Assigned',                title_ar: 'تم تعيين مهمة مشروع',                        category: 'assignments',  priority: 'normal' },
+  'project_task_completed':     { title_en: 'Project Task Completed',               title_ar: 'اكتملت مهمة المشروع',                        category: 'system',       priority: 'normal' },
+  'project_task_overdue':       { title_en: 'Project Task Overdue',                 title_ar: 'مهمة المشروع متأخرة',                        category: 'assignments',  priority: 'high'   },
+  'project_health_changed':     { title_en: 'Project Health Status Changed',        title_ar: 'تغيرت حالة صحة المشروع',                     category: 'system',       priority: 'normal' },
+  'project_budget_exceeded':    { title_en: 'Project Budget Exceeded',              title_ar: 'تجاوزت ميزانية المشروع',                     category: 'financial',    priority: 'urgent' },
+  // CRM — full lifecycle
   'crm_opportunity_stage_changed': { title_en: 'Opportunity Stage Updated',        title_ar: 'تم تحديث مرحلة الفرصة',                      category: 'system',       priority: 'normal' },
   'crm_opportunity_won':        { title_en: 'Opportunity Won!',                     title_ar: 'تم الفوز بالفرصة!',                          category: 'system',       priority: 'normal' },
+  'crm_partner_created':        { title_en: 'New Partner Added',                    title_ar: 'تمت إضافة شريك جديد',                        category: 'system',       priority: 'normal' },
+  'crm_engagement_created':     { title_en: 'New Engagement Logged',               title_ar: 'تم تسجيل تعامل جديد',                         category: 'system',       priority: 'normal' },
+  'crm_contact_added':          { title_en: 'New Contact Added',                   title_ar: 'تمت إضافة جهة اتصال جديدة',                   category: 'system',       priority: 'normal' },
   // Account / User
   'user_approved':              { title_en: 'Account Approved',                     title_ar: 'تمت الموافقة على الحساب',                    category: 'account',      priority: 'normal' },
   'user_rejected':              { title_en: 'Account Status Updated',               title_ar: 'تم تحديث حالة الحساب',                       category: 'account',      priority: 'normal' },
@@ -129,8 +160,43 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'site_flagged_uncovered':      'email_notify_system',
   'crm_opportunity_stage_changed': 'email_notify_system',
   'crm_opportunity_won':         'email_notify_system',
+  'crm_partner_created':         'email_notify_system',
+  'crm_engagement_created':      'email_notify_system',
+  'crm_contact_added':           'email_notify_system',
   'daily_digest':                'email_notify_system',
   'reminder':                    'email_notify_system',
+  // New task events
+  'task_created':                'email_notify_task_assigned',
+  'task_started':                'email_notify_task_assigned',
+  'task_acknowledged':           'email_notify_task_assigned',
+  'task_delayed':                'email_notify_task_assigned',
+  'task_rejected':               'email_notify_task_assigned',
+  'task_cancelled':              'email_notify_task_assigned',
+  'task_status_changed':         'email_notify_task_assigned',
+  'task_reminder_1day':          'email_notify_task_assigned',
+  'task_reminder_3day':          'email_notify_task_assigned',
+  'task_comment_added':          'email_notify_task_assigned',
+  // New project events
+  'project_created':             'email_notify_project_milestones',
+  'project_completed':           'email_notify_project_milestones',
+  'project_archived':            'email_notify_project_milestones',
+  'project_member_added':        'email_notify_project_milestones',
+  'project_task_assigned':       'email_notify_task_assigned',
+  'project_task_completed':      'email_notify_project_milestones',
+  'project_task_overdue':        'email_notify_task_assigned',
+  'project_health_changed':      'email_notify_project_milestones',
+  'project_budget_exceeded':     'email_notify_payroll',
+  // New leave events
+  'leave_request_cancelled':     'email_notify_approval_needed',
+  'leave_balance_updated':       'email_notify_system',
+  // Advance requests
+  'advance_request_submitted':   'email_notify_approval_needed',
+  'advance_request_approved':    'email_notify_payroll',
+  'advance_request_rejected':    'email_notify_payroll',
+  // New payroll events
+  'payroll_slip_ready':          'email_notify_payroll',
+  'retainer_payment_processed':  'email_notify_payroll',
+  'retainer_overdue':            'email_notify_payroll',
 }
 
 // ── Per-event email accent colors ─────────────────────────────────────────────
@@ -167,13 +233,43 @@ function getEventAccentColor(eventType: string, priority?: string): string {
     'budget_threshold_80':  '#f59e0b',
     'site_flagged_uncovered':'#f59e0b',
     'project_stalled':      '#f59e0b',
-    'task_assigned':        '#2563eb',
-    'site_visit_assigned':  '#2563eb',
-    'mmp_assigned':         '#2563eb',
-    'mmp_recall_initiated': '#7c3aed',
-    'broadcast':            '#7c3aed',
-    'wallet_updated':       '#0891b2',
-    'payment_processed':    '#0891b2',
+    'task_assigned':            '#2563eb',
+    'task_created':             '#2563eb',
+    'task_started':             '#2563eb',
+    'task_acknowledged':        '#2563eb',
+    'task_reminder_1day':       '#d97706',
+    'task_reminder_3day':       '#f59e0b',
+    'task_delayed':             '#d97706',
+    'task_rejected':            '#dc2626',
+    'task_cancelled':           '#6b7280',
+    'task_status_changed':      '#6b7280',
+    'task_comment_added':       '#6b7280',
+    'project_created':          '#2563eb',
+    'project_completed':        '#059669',
+    'project_archived':         '#6b7280',
+    'project_member_added':     '#2563eb',
+    'project_task_assigned':    '#2563eb',
+    'project_task_completed':   '#059669',
+    'project_task_overdue':     '#dc2626',
+    'project_health_changed':   '#d97706',
+    'project_budget_exceeded':  '#dc2626',
+    'crm_partner_created':      '#059669',
+    'crm_engagement_created':   '#2563eb',
+    'crm_contact_added':        '#2563eb',
+    'advance_request_submitted':'#d97706',
+    'advance_request_approved': '#059669',
+    'advance_request_rejected': '#dc2626',
+    'leave_request_cancelled':  '#6b7280',
+    'leave_balance_updated':    '#0891b2',
+    'payroll_slip_ready':       '#059669',
+    'retainer_payment_processed':'#0891b2',
+    'retainer_overdue':         '#dc2626',
+    'site_visit_assigned':      '#2563eb',
+    'mmp_assigned':             '#2563eb',
+    'mmp_recall_initiated':     '#7c3aed',
+    'broadcast':                '#7c3aed',
+    'wallet_updated':           '#0891b2',
+    'payment_processed':        '#0891b2',
   }
   return colorMap[eventType] || '#1D3461'
 }
@@ -187,7 +283,17 @@ function getEventIconSvg(eventType: string): string {
     'cost_submitted': '📋', 'leave_request_submitted': '📋', 'payroll_approval_needed': '📋',
     'cost_rejected': '❌', 'withdrawal_rejected': '❌', 'leave_request_rejected': '❌',
     'user_rejected': '❌', 'contract_expired': '❌', 'budget_threshold_100': '🚨',
-    'task_assigned': '📌', 'mmp_assigned': '📌', 'site_visit_assigned': '📍',
+    'task_assigned': '📌', 'task_created': '📋', 'task_started': '▶️', 'task_acknowledged': '✅',
+    'task_delayed': '⚠️', 'task_rejected': '❌', 'task_cancelled': '🚫', 'task_status_changed': '🔄',
+    'task_reminder_1day': '⏰', 'task_reminder_3day': '🔔', 'task_comment_added': '💬',
+    'project_created': '🚀', 'project_completed': '🏁', 'project_archived': '📦',
+    'project_member_added': '👤', 'project_task_assigned': '📋', 'project_task_completed': '✅',
+    'project_task_overdue': '🔴', 'project_health_changed': '📊', 'project_budget_exceeded': '🚨',
+    'crm_partner_created': '🤝', 'crm_engagement_created': '📞', 'crm_contact_added': '👥',
+    'advance_request_submitted': '📋', 'advance_request_approved': '✅', 'advance_request_rejected': '❌',
+    'leave_request_cancelled': '🚫', 'leave_balance_updated': '📊',
+    'payroll_slip_ready': '💵', 'retainer_payment_processed': '💰', 'retainer_overdue': '⏰',
+    'mmp_assigned': '📌', 'site_visit_assigned': '📍',
     'approval_required': '⏳', 'mmp_forwarded': '⏳', 'signature_requested': '✍️',
     'contract_expiring_7d': '⚠️', 'contract_expiring_30d': '⏰', 'task_overdue': '⏰',
     'site_flagged_uncovered': '🚩', 'project_stalled': '⚠️', 'mmp_recall_initiated': '🔄',
@@ -223,15 +329,30 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.end_date)   items.push({ label_en: 'Contract End Date', label_ar: 'تاريخ انتهاء العقد', value: metadata.end_date })
     if (metadata.days_remaining) items.push({ label_en: 'Days Remaining', label_ar: 'الأيام المتبقية', value: `${metadata.days_remaining} days` })
   }
-  if (['task_assigned', 'task_overdue', 'task_updated', 'task_completed'].includes(eventType)) {
-    if (metadata.task_name)  items.push({ label_en: 'Task',            label_ar: 'المهمة',          value: metadata.task_name })
-    if (metadata.due_date)   items.push({ label_en: 'Due Date',        label_ar: 'تاريخ الاستحقاق', value: metadata.due_date })
-    if (metadata.priority)   items.push({ label_en: 'Priority',        label_ar: 'الأولوية',        value: metadata.priority })
+  if ([
+    'task_assigned', 'task_overdue', 'task_updated', 'task_completed', 'task_created',
+    'task_started', 'task_acknowledged', 'task_delayed', 'task_rejected', 'task_cancelled',
+    'task_reminder_1day', 'task_reminder_3day', 'task_status_changed', 'task_comment_added',
+    'project_task_assigned', 'project_task_completed', 'project_task_overdue',
+  ].includes(eventType)) {
+    if (metadata.task_name)    items.push({ label_en: 'Task',            label_ar: 'المهمة',          value: metadata.task_name })
+    if (metadata.project_name) items.push({ label_en: 'Project',         label_ar: 'المشروع',         value: metadata.project_name })
+    if (metadata.due_date)     items.push({ label_en: 'Due Date',        label_ar: 'تاريخ الاستحقاق', value: metadata.due_date })
+    if (metadata.priority)     items.push({ label_en: 'Priority',        label_ar: 'الأولوية',        value: metadata.priority })
+    if (metadata.assigned_to)  items.push({ label_en: 'Assigned To',     label_ar: 'المعيّن لـ',      value: metadata.assigned_to })
+    if (metadata.status)       items.push({ label_en: 'Status',          label_ar: 'الحالة',          value: metadata.status })
   }
-  if (['project_stage_advanced', 'project_stalled', 'project_milestone_overdue'].includes(eventType)) {
-    if (metadata.project_name) items.push({ label_en: 'Project',       label_ar: 'المشروع',         value: metadata.project_name })
-    if (metadata.stage)      items.push({ label_en: 'Stage',           label_ar: 'المرحلة',         value: metadata.stage })
-    if (metadata.milestone)  items.push({ label_en: 'Milestone',       label_ar: 'المرحلة الرئيسية', value: metadata.milestone })
+  if ([
+    'project_stage_advanced', 'project_stalled', 'project_milestone_overdue',
+    'project_created', 'project_completed', 'project_archived', 'project_member_added',
+    'project_health_changed', 'project_budget_exceeded',
+  ].includes(eventType)) {
+    if (metadata.project_name)  items.push({ label_en: 'Project',         label_ar: 'المشروع',          value: metadata.project_name })
+    if (metadata.project_type)  items.push({ label_en: 'Type',            label_ar: 'النوع',            value: metadata.project_type })
+    if (metadata.stage)         items.push({ label_en: 'Stage',           label_ar: 'المرحلة',          value: metadata.stage })
+    if (metadata.milestone)     items.push({ label_en: 'Milestone',       label_ar: 'المرحلة الرئيسية', value: metadata.milestone })
+    if (metadata.health_score)  items.push({ label_en: 'Health Score',    label_ar: 'درجة الصحة',       value: metadata.health_score })
+    if (metadata.days_stalled)  items.push({ label_en: 'Days Stalled',    label_ar: 'أيام التوقف',      value: `${metadata.days_stalled} days` })
   }
   if (['mmp_assigned', 'mmp_recall_initiated', 'mmp_cycle_closed', 'mmp_completed'].includes(eventType)) {
     if (metadata.mmp_code)   items.push({ label_en: 'MMP Code',        label_ar: 'رمز الخطة',       value: metadata.mmp_code })
@@ -242,6 +363,17 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.budget_line) items.push({ label_en: 'Budget Line',    label_ar: 'بند الميزانية',   value: metadata.budget_line })
     if (metadata.utilized)   items.push({ label_en: 'Utilized',        label_ar: 'المستخدم',        value: `${metadata.utilized}%` })
     if (metadata.remaining)  items.push({ label_en: 'Remaining',       label_ar: 'المتبقي',         value: `${metadata.remaining} ${metadata.currency || 'SDG'}` })
+  }
+  if (['advance_request_submitted', 'advance_request_approved', 'advance_request_rejected'].includes(eventType)) {
+    if (metadata.amount)       items.push({ label_en: 'Amount',          label_ar: 'المبلغ',           value: `${metadata.amount} ${metadata.currency || 'SDG'}` })
+    if (metadata.submitted_by) items.push({ label_en: 'Submitted By',    label_ar: 'قدّمه',            value: metadata.submitted_by })
+    if (metadata.purpose)      items.push({ label_en: 'Purpose',         label_ar: 'الغرض',            value: metadata.purpose })
+  }
+  if (['crm_opportunity_stage_changed', 'crm_opportunity_won'].includes(eventType)) {
+    if (metadata.opportunity)  items.push({ label_en: 'Opportunity',     label_ar: 'الفرصة',           value: metadata.opportunity })
+    if (metadata.stage)        items.push({ label_en: 'Stage',           label_ar: 'المرحلة',          value: metadata.stage })
+    if (metadata.partner_name) items.push({ label_en: 'Partner',         label_ar: 'الشريك',           value: metadata.partner_name })
+    if (metadata.value)        items.push({ label_en: 'Value',           label_ar: 'القيمة',           value: metadata.value })
   }
   if (metadata.payroll_month) items.push({ label_en: 'Payroll Month',  label_ar: 'شهر الراتب',      value: metadata.payroll_month })
 
@@ -684,6 +816,50 @@ serve(async (req) => {
         }).then(r => r.json())
           .then(result => console.log(`FCM push result: sent=${result.sent}, failed=${result.failed}`))
           .catch(err => console.warn('FCM push fire-and-forget error:', err))
+
+        // WhatsApp via WasenderAPI (fire-and-forget — only for high/urgent priority)
+        const whatsappPriorities = ['high', 'urgent']
+        if (whatsappPriorities.includes(effectivePriority)) {
+          const waData: Record<string, string> = {
+            actor: triggered_by_name || 'System',
+            url: action_url || 'app.pactorg.com',
+          }
+          // Map common metadata fields to template data keys
+          if (metadata.task_name)    waData.task_title  = metadata.task_name
+          if (metadata.project_name) waData.project_name = metadata.project_name
+          if (metadata.project_type) waData.project_type = metadata.project_type
+          if (metadata.site_name)    waData.site_name   = metadata.site_name
+          if (metadata.mmp_code)     waData.mmp_code    = metadata.mmp_code
+          if (metadata.cycle)        waData.cycle       = metadata.cycle
+          if (metadata.stage)        waData.stage       = metadata.stage
+          if (metadata.milestone)    waData.milestone   = metadata.milestone
+          if (metadata.due_date)     waData.due_date    = metadata.due_date
+          if (metadata.priority)     waData.priority    = metadata.priority
+          if (metadata.amount)       waData.amount      = metadata.amount
+          if (metadata.currency)     waData.currency    = metadata.currency
+          if (metadata.balance)      waData.balance     = metadata.balance
+          if (metadata.employee)     waData.employee    = metadata.employee
+          if (metadata.end_date)     waData.end_date    = metadata.end_date
+          if (metadata.budget_line)  waData.budget_line = metadata.budget_line
+          if (metadata.remaining)    waData.remaining   = metadata.remaining
+          if (metadata.leave_type)   waData.leave_type  = metadata.leave_type
+          if (metadata.from_date)    waData.from_date   = metadata.from_date
+          if (metadata.to_date)      waData.to_date     = metadata.to_date
+          if (metadata.payroll_month) waData.payroll_month = metadata.payroll_month
+          if (metadata.opportunity)  waData.opportunity = metadata.opportunity
+          if (metadata.health_score) waData.health_score = metadata.health_score
+          if (metadata.days_stalled) waData.days_stalled = String(metadata.days_stalled)
+          if (message_en)            waData.message     = message_en
+          if (message_ar)            waData.message_ar  = message_ar
+
+          fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceRoleKey}` },
+            body: JSON.stringify({ user_ids: recipientIds, event_type, data: waData }),
+          }).then(r => r.json())
+            .then(result => console.log(`WhatsApp result: sent=${result.sent}, failed=${result.failed}`))
+            .catch(err => console.warn('WhatsApp fire-and-forget error:', err))
+        }
       }
     }
 
