@@ -1465,6 +1465,7 @@ export default function MyTasksV2() {
   const [activePlanningTab, setActivePlanningTab] = useState<'briefing' | 'matrix'>('briefing');
   const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban' | 'inbox'>('kanban');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring'>('all');
+  const [showPlanningPanel, setShowPlanningPanel] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
   // Stats
   const stats = useMemo(() => {
@@ -1680,6 +1681,22 @@ export default function MyTasksV2() {
             >
               <Search className="w-4 h-4" />
             </button>
+            {mainView !== 'inbox' && (
+              <button
+                onClick={() => setShowPlanningPanel(p => !p)}
+                data-testid="button-toggle-planning"
+                title="Toggle Planning Tools"
+                className={cn(
+                  'flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-semibold transition-colors shrink-0',
+                  showPlanningPanel
+                    ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                    : 'border-slate-200 text-slate-500 hover:bg-slate-50',
+                )}
+              >
+                <Lightbulb className="w-3.5 h-3.5" />
+                Plan
+              </button>
+            )}
             <Button
               className="bg-[#1D3461] hover:bg-[#0F2041] text-white shadow-sm h-8 px-3 text-xs font-semibold"
               onClick={() => setShowAdd(true)}
@@ -1690,81 +1707,8 @@ export default function MyTasksV2() {
           </div>
         </header>
 
-        {/* ── Three-panel workspace ── */}
+        {/* ── Workspace ── */}
         <div className="flex-1 flex overflow-hidden">
-
-          {/* ══ LEFT SIDEBAR: Category Nav + Progress — hidden in Kanban mode ══ */}
-          {mainView !== 'kanban' && mainView !== 'inbox' && <aside className="w-[200px] shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-hidden">
-
-            {/* Category navigation */}
-            <div className="p-3 border-b border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Categories</p>
-              {CATEGORY_NAV.map(cat => {
-                const Icon = cat.icon;
-                const isActive = categoryFilter === cat.key;
-                return (
-                  <button
-                    key={cat.key}
-                    onClick={() => setCategoryFilter(cat.key)}
-                    data-testid={`category-filter-${cat.key}`}
-                    className={cn(
-                      'flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-xs font-semibold transition-all mb-0.5',
-                      isActive
-                        ? 'bg-[#1D3461] text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800',
-                    )}
-                  >
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
-                    <span className="flex-1 text-left">{cat.label}</span>
-                    <span className={cn(
-                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0',
-                      isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400',
-                    )}>
-                      {cat.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Progress summary */}
-            <div className="p-3 border-b border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Today's Progress</p>
-              <div className="bg-slate-50 rounded-xl p-2.5">
-                <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-2">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-700"
-                    style={{ width: `${overallPct}%` }}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-slate-500">{totalDone} of {totalAll} done</span>
-                  <span className={cn(
-                    'text-[11px] font-bold',
-                    overallPct === 100 ? 'text-emerald-600' : overallPct >= 50 ? 'text-blue-600' : 'text-slate-500',
-                  )}>
-                    {overallPct}%
-                  </span>
-                </div>
-                {stats.overdue > 0 && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-red-600 bg-red-50 rounded-lg px-2 py-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    {stats.overdue} overdue
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Motivational nudge */}
-            <div className="p-3 flex-1 flex flex-col justify-end">
-              <div className="bg-gradient-to-br from-[#0F2041]/5 to-blue-50 border border-blue-100 rounded-xl p-3">
-                <p className="text-[10px] font-bold text-[#1D3461] uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <Sparkles className="w-2.5 h-2.5" /> Daily Nudge
-                </p>
-                <p className="text-[11px] text-slate-600 leading-relaxed">{motivationalNudge}</p>
-              </div>
-            </div>
-          </aside>}
 
           {/* ══ CENTER: Main task content area ══ */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -1796,6 +1740,33 @@ export default function MyTasksV2() {
                   </button>
                 ))}
               </div>
+
+              {/* Category filter chips — all non-kanban, non-inbox views */}
+              {mainView !== 'kanban' && mainView !== 'inbox' && (
+                <div className="flex items-center gap-1 border-l border-slate-200 pl-3 shrink-0">
+                  {CATEGORY_NAV.map(cat => {
+                    const Icon = cat.icon;
+                    const isActive = categoryFilter === cat.key;
+                    return (
+                      <button
+                        key={cat.key}
+                        onClick={() => setCategoryFilter(cat.key)}
+                        data-testid={`category-filter-${cat.key}`}
+                        className={cn(
+                          'flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap',
+                          isActive
+                            ? 'bg-[#1D3461] text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100',
+                        )}
+                      >
+                        <Icon className="w-3 h-3 shrink-0" />
+                        {cat.label}
+                        <span className={cn('text-[10px] font-bold', isActive ? 'text-white/70' : 'text-slate-400')}>{cat.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Status filter chips — cards view only */}
               {mainView === 'cards' && (
@@ -1993,18 +1964,24 @@ export default function MyTasksV2() {
             )}
           </div>
 
-          {/* ══ RIGHT PANEL: Planning Tools + SmartHint — hidden in inbox mode ══ */}
-          {mainView !== 'inbox' && (
+          {/* ══ RIGHT PANEL: Planning Tools — hidden in inbox mode or when toggled off ══ */}
+          {showPlanningPanel && mainView !== 'inbox' && (
           <div className="w-[260px] shrink-0 flex flex-col border-l border-slate-200 overflow-hidden bg-white">
 
             {/* Panel header — dark branded */}
             <div className="shrink-0 bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3">
               <div className="flex items-center justify-between mb-2.5">
                 <span className="text-[10px] font-bold text-white/90 flex items-center gap-1.5 uppercase tracking-wider">
-                  <Target className="w-3 h-3" />
-                  Planning Tools
+                  <Lightbulb className="w-3 h-3" />
+                  Planning Tips
                 </span>
-                {isLoading && <Loader2 className="w-3 h-3 animate-spin text-white/50" />}
+                <button
+                  onClick={() => setShowPlanningPanel(false)}
+                  className="p-0.5 rounded text-white/50 hover:text-white transition-colors"
+                  title="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
               <div className="flex gap-1 bg-white/10 rounded-lg p-0.5">
                 <button
@@ -2034,6 +2011,29 @@ export default function MyTasksV2() {
                   Matrix
                 </button>
               </div>
+            </div>
+
+            {/* Progress summary strip */}
+            <div className="shrink-0 px-4 py-2 bg-white border-b border-slate-100 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-700"
+                    style={{ width: `${overallPct}%` }}
+                  />
+                </div>
+              </div>
+              <span className={cn(
+                'text-[11px] font-bold shrink-0',
+                overallPct === 100 ? 'text-emerald-600' : 'text-slate-500',
+              )}>
+                {totalDone}/{totalAll}
+              </span>
+              {stats.overdue > 0 && (
+                <span className="text-[10px] font-semibold text-red-600 shrink-0 flex items-center gap-0.5">
+                  <AlertCircle className="w-2.5 h-2.5" />{stats.overdue}
+                </span>
+              )}
             </div>
 
             {/* Scrollable planning content */}
