@@ -2381,31 +2381,22 @@ export default function MyTasksV2() {
           {/* ══ CENTER: Main task content area ══ */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-            {/* ── Navigation bar: Planning Hub context ── */}
+            {/* ── Navigation bar: only shown in sub-views ── */}
+            {mainView !== 'planning' && (
             <div className="border-b border-slate-200 bg-white shrink-0">
 
               {/* Row 1 */}
               <div className="h-12 flex items-center px-4 gap-2 overflow-x-auto scrollbar-none">
 
-                {mainView === 'planning' ? (
-                  /* ── Planning home indicator ── */
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-[#1D3461] flex items-center justify-center shrink-0">
-                      <Brain className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <span className="text-sm font-bold text-[#1D3461]">Planning Hub</span>
-                    <span className="text-[11px] text-slate-400 font-medium ml-1">· Open a view below to browse your tasks</span>
-                  </div>
-                ) : (
-                  /* ── Sub-view: back + sub-tabs ── */
-                  <>
-                    <button
-                      onClick={() => setMainView('planning')}
-                      data-testid="button-back-to-planning"
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-[#1D3461] transition-colors shrink-0 border border-slate-200 whitespace-nowrap"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />Planning
-                    </button>
+                {/* ── Sub-view: back + sub-tabs ── */}
+                <>
+                  <button
+                    onClick={() => setMainView('planning')}
+                    data-testid="button-back-to-planning"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-[#1D3461] transition-colors shrink-0 border border-slate-200 whitespace-nowrap"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />Planning
+                  </button>
                     <div className="w-px h-4 bg-slate-200 shrink-0" />
                     <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 shrink-0">
                       {([
@@ -2452,7 +2443,6 @@ export default function MyTasksV2() {
                       </div>
                     )}
                   </>
-                )}
               </div>
 
               {/* Row 2 — Filter chips (cards + planner sub-views only) */}
@@ -2503,6 +2493,7 @@ export default function MyTasksV2() {
                 </div>
               )}
             </div>
+            )}
 
             {/* ── CARDS VIEW ── */}
             {mainView === 'cards' && (
