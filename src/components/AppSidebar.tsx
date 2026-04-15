@@ -291,6 +291,9 @@
     if (!isHidden('/my-tasks')) {
       workspaceItems.push({ id: 'my-tasks', title: "My Tasks", url: "/my-tasks", icon: CheckSquare, priority: 2, isPinned: isPinned('/my-tasks') });
     }
+    if (!isHidden('/team-tasks') && (isSuperAdmin || isAdmin || isCountryDirector || ['ceo','coo','cto','hr_manager'].includes(defaultRole.toLowerCase()))) {
+      workspaceItems.push({ id: 'team-tasks', title: "Team Monitor", url: "/team-tasks", icon: Users, priority: 3, isPinned: isPinned('/team-tasks') });
+    }
     if (!isDataCollector && !isHidden('/calendar')) {
       workspaceItems.push({ id: 'calendar', title: "Calendar", url: "/calendar", icon: Calendar, priority: 3, isPinned: isPinned('/calendar') });
     }

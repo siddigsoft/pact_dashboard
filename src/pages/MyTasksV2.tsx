@@ -10,6 +10,7 @@ import {
   ChevronDown, Loader2, X, Trash2, Edit2, Check, Bell,
   MessageSquare, Settings, Columns2, Layers, GanttChart, Grid2x2, Sun,
 } from 'lucide-react';
+import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Layout2MissionTabs } from '@/components/tasks/layouts/Layout2MissionTabs';
 import { Layout3BoardGantt } from '@/components/tasks/layouts/Layout3BoardGantt';
 import { Layout4EisenhowerMatrix } from '@/components/tasks/layouts/Layout4EisenhowerMatrix';
@@ -589,6 +590,7 @@ export default function MyTasksV2() {
   const { currentUser } = useUser();
   const userId = currentUser?.id;
   const qc = useQueryClient();
+  const { notify, notifySelf } = useTaskNotifications();
 
   const {
     tasks: allTasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating,
@@ -696,6 +698,14 @@ export default function MyTasksV2() {
     const newStatus: PersonalTaskStatus = task.status === 'done' ? 'todo' : 'done';
     try {
       await updateTask(task.id, { status: newStatus });
+      // Notify the task owner / assignee on completion
+      if (newStatus === 'done' && userId) {
+        notifySelf('task_completed', task.title, task.dueDate ?? null);
+        // If assigned by someone else, notify them too
+        if (task.assignedTo && task.assignedTo !== userId) {
+          notify({ event: 'task_completed', taskId: task.id, taskTitle: task.title, recipientUserId: task.assignedTo, dueDate: task.dueDate ?? null });
+        }
+      }
     } catch {
       toast({ title: 'Failed to update task', variant: 'destructive' });
     }
@@ -705,6 +715,15 @@ export default function MyTasksV2() {
     try {
       await updateTask(id, data);
       toast({ title: 'Task saved' });
+      // Fire lifecycle notification if status changed
+      if (data.status && userId) {
+        const task = allTasks.find(t => t.id === id);
+        const event = statusToEvent(data.status);
+        notifySelf(event, task?.title ?? 'Task', task?.dueDate ?? null);
+        if (task?.assignedTo && task.assignedTo !== userId) {
+          notify({ event, taskId: id, taskTitle: task.title, recipientUserId: task.assignedTo, dueDate: task.dueDate ?? null });
+        }
+      }
     } catch {
       toast({ title: 'Failed to save task', variant: 'destructive' });
     }
