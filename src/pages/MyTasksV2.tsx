@@ -31,6 +31,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -72,6 +75,62 @@ const TYPE_CFG: Record<TypeKey, { color: string; bg: string; border: string; lab
 function isOverdue(due?: string | null, status?: string) {
   if (!due || status === 'done' || status === 'cancelled') return false;
   try { const d = parseISO(due); return isValid(d) && isBefore(startOfDay(d), startOfDay(new Date())); } catch { return false; }
+}
+
+function recurrenceLabel(task: { recurrence?: string; recurrenceEndDate?: string | null }): string {
+  const freq: Record<string, string> = {
+    'daily':        'Repeats daily',
+    'every-2-days': 'Repeats every 2 days',
+    'every-3-days': 'Repeats every 3 days',
+    'weekly':       'Repeats weekly',
+    'monthly':      'Repeats monthly',
+  };
+  const base = freq[task.recurrence ?? ''] ?? 'Repeats';
+  if (task.recurrenceEndDate) {
+    try {
+      const d = parseISO(task.recurrenceEndDate);
+      if (isValid(d)) return `${base} · ends ${format(d, 'd MMM yyyy')}`;
+    } catch {}
+  }
+  return base;
+}
+
+function RecurringBadge({ task, compact = false }: { task: { recurrence?: string; recurrenceEndDate?: string | null }; compact?: boolean }) {
+  if (!task.recurrence || task.recurrence === 'none') return null;
+  const label = recurrenceLabel(task);
+  if (compact) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            data-testid="badge-recurring"
+            className="inline-flex items-center text-teal-600 cursor-default"
+          >
+            <RefreshCw className="w-2.5 h-2.5" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          data-testid="badge-recurring"
+          className="inline-flex items-center gap-0.5 text-[10px] font-medium text-teal-700 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded-full cursor-default"
+        >
+          <RefreshCw className="w-2.5 h-2.5" />
+          Repeats
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function initials(name?: string | null) {
@@ -1597,6 +1656,7 @@ function TaskCard({ task, onToggleDone, onEdit, isUpdating }: TaskCardProps) {
             {task.category && (
               <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{task.category}</span>
             )}
+            <RecurringBadge task={task} />
           </div>
         </div>
       </div>
@@ -1715,6 +1775,7 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
               <div className="flex items-center gap-1 overflow-hidden">
                 <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', task.status === 'done' ? 'bg-slate-400' : priorityCfg.pill)} />
                 <span className="text-[10px] font-semibold truncate text-slate-800 leading-tight">{task.title}</span>
+                <RecurringBadge task={task} compact />
               </div>
               {task.category && (
                 <span className="text-[9px] text-slate-500 truncate pl-2.5">{task.category}</span>
@@ -1895,6 +1956,7 @@ function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, isUpdating }: 
                 {totalSubs} subtask{totalSubs !== 1 ? 's' : ''}
               </span>
             )}
+            <RecurringBadge task={task} />
           </div>
         </div>
       </div>
@@ -1978,8 +2040,11 @@ function DailyPlannerView({ tasks, projectTasks, onEdit, onToggleDone, isUpdatin
                     </span>
                   )}
                 </div>
-                <div className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0', cfg.bg, cfg.color)}>
-                  {cfg.label}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <RecurringBadge task={task} />
+                  <div className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', cfg.bg, cfg.color)}>
+                    {cfg.label}
+                  </div>
                 </div>
               </div>
             );
@@ -2184,6 +2249,7 @@ function KanbanTaskCard({
                 {doneSubtasks}/{subtasks.length} ✓
               </span>
             )}
+            <RecurringBadge task={task} />
           </div>
           <div className="flex items-center gap-1.5 ml-auto">
             {dueLabel && (
