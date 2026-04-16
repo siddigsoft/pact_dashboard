@@ -107,7 +107,7 @@ function buildNudgeMessage(metrics: { emp: { full_name: string | null }; allTask
     ...metrics.projectTasksForEmp.filter(isOverdue),
   ];
   if (overdueTasks.length === 0) return '';
-  const name = metrics.emp.full_name?.split(' ')[0] ?? 'there';
+  const firstName = metrics.emp.full_name?.split(' ')[0]?.trim() || 'there';
   const taskLines = overdueTasks
     .slice(0, 5)
     .map((t, i) => {
@@ -116,7 +116,8 @@ function buildNudgeMessage(metrics: { emp: { full_name: string | null }; allTask
     })
     .join('\n');
   const more = overdueTasks.length > 5 ? `\n...and ${overdueTasks.length - 5} more.` : '';
-  return `Hi ${name}, you have ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''} that need your attention:\n\n${taskLines}${more}\n\nPlease review and update these as soon as possible. Thank you!`;
+  const msg = `Hi ${firstName}, you have ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''} that need your attention:\n\n${taskLines}${more}\n\nPlease review and update these as soon as possible. Thank you!`;
+  return msg.slice(0, 500);
 }
 
 // ─── Data Fetching ────────────────────────────────────────────────────────────
