@@ -50,7 +50,7 @@ interface Conversation {
   unread: number;
 }
 
-const ADMIN_ROLES = ['admin', 'superadmin'];
+const ADMIN_ROLES = ['superadmin'];
 type Tab = 'inbox' | 'logs' | 'send' | 'settings';
 
 export default function AdminWhatsAppPage() {
@@ -274,7 +274,7 @@ export default function AdminWhatsAppPage() {
   });
 
   if (!isAdmin) {
-    return <div className="p-8 text-center text-muted-foreground">Access restricted to administrators.</div>;
+    return <div className="p-8 text-center text-muted-foreground">Access restricted to Super Admins only.</div>;
   }
 
   const tabs: { id: Tab; label: string; icon: typeof Inbox }[] = [

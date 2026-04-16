@@ -53,7 +53,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'broadcast',           label:'Broadcast Center',       path:'/admin/broadcast',        icon:Bell, group:'Communication',
     roles:['superAdmin','admin'] },
   { slug:'whatsapp-admin',      label:'WhatsApp Settings',      path:'/admin/whatsapp',         icon:MessageSquare, group:'Communication',
-    roles:['superAdmin','admin'] },
+    roles:['superAdmin'] },
 
   // ── Programme Management ──────────────────────────────────────────────────
   { slug:'projects',            label:'Projects',               path:'/projects',               icon:FolderKanban, group:'Programme Management',

@@ -168,6 +168,7 @@ export default function IntegrationsSettings() {
   const { toast } = useToast();
 
   const isAdmin = ADMIN_ROLES.includes((userRole ?? '').toLowerCase());
+  const isSuperAdmin = (userRole ?? '').toLowerCase() === 'superadmin';
 
   const [integration, setIntegration] = useState<UserIntegration | null>(null);
   const [loading, setLoading] = useState(true);
@@ -942,14 +943,14 @@ export default function IntegrationsSettings() {
           </div>
 
           {/* Admin link */}
-          {isAdmin && (
+          {isSuperAdmin && (
             <>
               <Separator />
               <div className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-muted/30">
                 <div className="flex items-center gap-2 min-w-0">
                   <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="text-sm font-medium">Admin panel</p>
+                    <p className="text-sm font-medium">Super Admin panel</p>
                     <p className="text-xs text-muted-foreground">Inbox, delivery logs, connection and webhook setup</p>
                   </div>
                 </div>
