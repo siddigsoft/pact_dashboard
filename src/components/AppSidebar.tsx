@@ -319,6 +319,9 @@
     if (!isHidden('/admin/broadcast') && (isSuperAdmin || isAdmin)) {
       communicationItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 4, isPinned: isPinned('/admin/broadcast') });
     }
+    if (!isHidden('/admin/whatsapp') && isSuperAdmin) {
+      communicationItems.push({ id: 'admin-whatsapp', title: "WhatsApp Admin", url: "/admin/whatsapp", icon: Smartphone, priority: 5, isPinned: isPinned('/admin/whatsapp') });
+    }
     if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 3, items: communicationItems });
 
     // ── 2. Programme Management ───────────────────────────────────────────────
