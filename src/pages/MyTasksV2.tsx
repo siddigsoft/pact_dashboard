@@ -11,7 +11,7 @@ import {
   RefreshCw, TrendingUp, Briefcase, User, Lightbulb,
   CheckSquare, Circle, Zap, ChevronDown, ChevronUp,
   Inbox, Archive, Star, AlertTriangle, Flag,
-  Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip,
+  Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -777,13 +777,91 @@ interface EditDialogProps {
   onSave: (id: string, data: Partial<PersonalTask>) => void;
   onDelete: (id: string) => void;
   isUpdating: boolean;
+  currentUserId?: string | null;
+  currentUserRole?: string | null;
 }
-function EditDialog({ task, onClose, onSave, onDelete, isUpdating }: EditDialogProps) {
-  const [title, setTitle] = useState('');
-  const [priority, setPriority] = useState<PersonalTaskPriority>('medium');
-  const [status, setStatus] = useState<PersonalTaskStatus>('todo');
-  const [dueDate, setDueDate] = useState('');
+function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId, currentUserRole }: EditDialogProps) {
+  const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
+  const [taskTypeKey, setTaskTypeKey] = useState<'general' | 'project' | 'daytoday'>('general');
+  const [priority, setPriority]     = useState<PersonalTaskPriority>('medium');
+  const [status, setStatus]         = useState<PersonalTaskStatus>('todo');
+  const [dueDate, setDueDate]       = useState('');
+  const [notes, setNotes]           = useState('');
+  const [reward, setReward]         = useState('');
+
+  // Assign To state (same pattern as QuickAddDialog)
+  const [assignTab, setAssignTab]       = useState<AssignTab>('myself');
+  const [assignedUser, setAssignedUser] = useState<{ id: string; full_name: string } | null>(null);
+  const [assignedDept, setAssignedDept] = useState<{ id: string; name: string } | null>(null);
+  const [assignSearch, setAssignSearch] = useState('');
+
+  const isOpen = !!task;
+
+  // Managed depts
+  const { data: managedDepts = [] } = useQuery({
+    queryKey: ['managed-depts-edit', currentUserId],
+    queryFn: async () => {
+      if (!currentUserId) return [];
+      const { data } = await supabase.from('departments').select('id, name').eq('manager_user_id', currentUserId);
+      return data ?? [];
+    },
+    enabled: isOpen && !!currentUserId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isExec = useMemo(() => {
+    const role = currentUserRole?.toLowerCase() ?? '';
+    if (role === 'superadmin' || role === 'admin') return true;
+    return (managedDepts as { id: string; name: string }[]).some(d => ['ceo','coo','cto'].includes(d.name.toLowerCase()));
+  }, [currentUserRole, managedDepts]);
+
+  const isDeptManager = (managedDepts as { id: string; name: string }[]).length > 0;
+  const canAssignOthers = isExec || isDeptManager;
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['edit-dialog-departments'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return data ?? [];
+    },
+    enabled: isOpen,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const assignableDepts = useMemo(() => {
+    if (isExec) return departments as { id: string; name: string }[];
+    if (isDeptManager) return managedDepts as { id: string; name: string }[];
+    return [];
+  }, [isExec, isDeptManager, departments, managedDepts]);
+
+  const managedDeptIds = (managedDepts as { id: string; name: string }[]).map(d => d.id);
+  const { data: deptMembers = [] } = useQuery({
+    queryKey: ['edit-dept-members', managedDeptIds.join(',')],
+    queryFn: async () => {
+      if (!managedDeptIds.length) return [];
+      const { data } = await supabase.from('profiles').select('id, full_name, role').in('department_id', managedDeptIds).order('full_name');
+      return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
+    },
+    enabled: isOpen && isDeptManager && !isExec,
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['edit-dialog-users'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
+    },
+    enabled: isOpen && isExec,
+    staleTime: 5 * 60 * 1000,
+  });
+  const assignableUsers = useMemo(() => {
+    const pool = isExec ? allUsers : deptMembers;
+    return (pool as { id: string; full_name: string | null; role: string | null }[])
+      .filter(u => u.id !== currentUserId)
+      .filter(u => !assignSearch || u.full_name?.toLowerCase().includes(assignSearch.toLowerCase()))
+      .slice(0, 25);
+  }, [isExec, allUsers, deptMembers, currentUserId, assignSearch]);
 
   useEffect(() => {
     if (task) {
@@ -792,78 +870,287 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating }: EditDialogP
       setStatus(task.status);
       setDueDate(task.dueDate ?? '');
       setDescription(task.description ?? '');
+      setNotes(task.notes ?? '');
+      setReward(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
+      // Task type
+      if (task.taskType === 'project-task') setTaskTypeKey('project');
+      else if (task.taskType === 'day-to-day') setTaskTypeKey('daytoday');
+      else setTaskTypeKey('general');
+      // Assign
+      if (task.assignedTo && task.assignedTo !== task.userId) {
+        setAssignTab('someone');
+        setAssignedUser({ id: task.assignedTo, full_name: task.assignedToName ?? task.assignedTo });
+      } else if (task.targetDepartmentId) {
+        setAssignTab('dept');
+        const dept = (departments as { id: string; name: string }[]).find(d => d.id === task.targetDepartmentId);
+        if (dept) setAssignedDept(dept);
+      } else {
+        setAssignTab('myself');
+      }
     }
-  }, [task]);
+  }, [task, departments]);
 
   if (!task) return null;
 
+  const TASK_TYPES = [
+    { key: 'general'  as const, label: 'General',      Icon: CheckSquare },
+    { key: 'project'  as const, label: 'Project Task', Icon: Briefcase   },
+    { key: 'daytoday' as const, label: 'Day-to-Day',   Icon: RefreshCw   },
+  ];
+  const PRIORITIES = [
+    { value: 'critical' as const, label: '🔴 Urgent' },
+    { value: 'high'     as const, label: '🟠 High'   },
+    { value: 'medium'   as const, label: '🔵 Medium'  },
+    { value: 'low'      as const, label: '⚫ Low'     },
+  ];
+  const STATUSES = [
+    { value: 'todo'       as const, label: '📋 To Do'      },
+    { value: 'inprogress' as const, label: '⚡ In Progress' },
+    { value: 'done'       as const, label: '✅ Done'        },
+    { value: 'cancelled'  as const, label: '🚫 Cancelled'   },
+  ];
+
+  const handleSave = () => {
+    if (!title.trim()) return;
+    const typeMap = { general: null as null, project: 'project-task' as const, daytoday: 'day-to-day' as const };
+    onSave(task.id, {
+      title: title.trim(), priority, status,
+      dueDate: dueDate || null, description: description || null,
+      notes: notes || null,
+      taskType: typeMap[taskTypeKey],
+      completionRewardAmount: reward ? parseFloat(reward) : null,
+      completionRewardCurrency: reward ? 'USD' : null,
+      assignedTo: assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
+      assignedToName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
+      targetDepartmentId: assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
+    });
+    onClose();
+  };
+
   return (
     <Dialog open={!!task} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Edit Task</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4 py-2">
-          <Input
-            autoFocus
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Task title…"
-          />
-          <Textarea
-            placeholder="Description"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            rows={3}
-            className="resize-none"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs mb-1 block">Priority</Label>
-              <Select value={priority} onValueChange={v => setPriority(v as PersonalTaskPriority)}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(['critical', 'high', 'medium', 'low'] as PersonalTaskPriority[]).map(p => (
-                    <SelectItem key={p} value={p}>{PRIORITY_CFG[p].label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs mb-1 block">Status</Label>
-              <Select value={status} onValueChange={v => setStatus(v as PersonalTaskStatus)}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(['todo', 'inprogress', 'done', 'cancelled'] as PersonalTaskStatus[]).map(s => (
-                    <SelectItem key={s} value={s}>{STATUS_CFG[s].label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+        {/* Header */}
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 shrink-0 bg-gradient-to-r from-[#0F2041] to-[#1D3461]">
+          <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+            <Pencil className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <Label className="text-xs mb-1 block">Due Date</Label>
-            <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="h-9" />
+          <DialogTitle className="text-base font-bold text-white m-0 p-0">Edit Task</DialogTitle>
+          <button onClick={onClose} className="ml-auto text-white/60 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-5 py-4 flex flex-col gap-4">
+
+            {/* Title */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
+                Task title <span className="text-red-500 normal-case tracking-normal">*</span>
+              </label>
+              <input
+                autoFocus
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSave(); }}
+                placeholder="What needs to be done?"
+                data-testid="edit-input-title"
+                className="w-full h-10 px-3.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all font-medium"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Description</label>
+              <textarea
+                placeholder="Add more details..."
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                rows={2}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all resize-none"
+              />
+            </div>
+
+            {/* Task Type */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Task Type</label>
+              <div className="flex gap-2">
+                {TASK_TYPES.map(t => (
+                  <button key={t.key} onClick={() => setTaskTypeKey(t.key)}
+                    className={cn('flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border text-xs font-semibold transition-all',
+                      taskTypeKey === t.key ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    )}>
+                    <t.Icon className="w-3.5 h-3.5" />{t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Priority + Status */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Priority</label>
+                <select value={priority} onChange={e => setPriority(e.target.value as PersonalTaskPriority)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white">
+                  {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Status</label>
+                <select value={status} onChange={e => setStatus(e.target.value as PersonalTaskStatus)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white">
+                  {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Due Date */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Due date</label>
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+            </div>
+
+            {/* Assign to */}
+            {canAssignOthers && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Assign to</label>
+                <div className="flex gap-2 mb-2">
+                  {(['myself', 'someone', 'dept'] as AssignTab[]).filter(t => t === 'myself' || canAssignOthers).map(tab => (
+                    <button key={tab} onClick={() => { setAssignTab(tab); if (tab !== 'someone') setAssignedUser(null); if (tab !== 'dept') setAssignedDept(null); }}
+                      className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                        assignTab === tab ? 'bg-[#1D3461] text-white shadow-sm' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'
+                      )}>
+                      {tab === 'myself' && <><User className="w-3 h-3" />Myself</>}
+                      {tab === 'someone' && <><Users className="w-3 h-3" />Someone else</>}
+                      {tab === 'dept' && assignableDepts.length > 0 && <><Briefcase className="w-3 h-3" />Dept</>}
+                    </button>
+                  ))}
+                </div>
+                {assignTab === 'someone' && (
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                      <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <input placeholder={isExec ? 'Search anyone…' : 'Search your department…'} value={assignSearch} onChange={e => setAssignSearch(e.target.value)}
+                        className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400" />
+                    </div>
+                    {assignedUser && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border-b border-emerald-100">
+                        <div className="w-6 h-6 rounded-full bg-emerald-200 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-emerald-700">{assignedUser.full_name[0].toUpperCase()}</span>
+                        </div>
+                        <span className="text-xs font-semibold text-emerald-800 flex-1">{assignedUser.full_name}</span>
+                        <button onClick={() => setAssignedUser(null)}><X className="w-3.5 h-3.5 text-emerald-400 hover:text-red-500" /></button>
+                      </div>
+                    )}
+                    <div className="max-h-32 overflow-y-auto">
+                      {assignableUsers.map(u => (
+                        <button key={u.id} onClick={() => { setAssignedUser({ id: u.id, full_name: u.full_name ?? '' }); setAssignSearch(''); }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0">
+                          <div className="w-6 h-6 rounded-full bg-[#1D3461]/10 flex items-center justify-center shrink-0">
+                            <span className="text-[10px] font-bold text-[#1D3461]">{(u.full_name ?? 'U')[0].toUpperCase()}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-slate-700 truncate">{u.full_name}</p>
+                            <p className="text-[10px] text-slate-400">{u.role}</p>
+                          </div>
+                          {assignedUser?.id === u.id && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {assignTab === 'dept' && assignableDepts.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    {assignedDept && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border-b border-blue-100">
+                        <Briefcase className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span className="text-xs font-semibold text-blue-800 flex-1">{assignedDept.name}</span>
+                        <button onClick={() => setAssignedDept(null)}><X className="w-3.5 h-3.5 text-blue-400 hover:text-red-500" /></button>
+                      </div>
+                    )}
+                    <div className="max-h-32 overflow-y-auto">
+                      {assignableDepts.map(dept => (
+                        <button key={dept.id} onClick={() => setAssignedDept({ id: dept.id, name: dept.name })}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0">
+                          <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                            <Briefcase className="w-3 h-3 text-blue-600" />
+                          </div>
+                          <span className="text-xs font-semibold text-slate-700 flex-1">{dept.name}</span>
+                          {assignedDept?.id === dept.id && <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Existing dependencies (read-only view) */}
+            {task.dependencies?.length > 0 && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
+                  <ArrowRight className="w-3 h-3 text-slate-400" /> Dependencies
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {task.dependencies.map((d, i) => (
+                    <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1D3461]/10 text-xs text-[#1D3461] font-medium">
+                      {typeof d === 'string' ? d : (d as { label?: string }).label ?? String(d)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Completion Reward */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
+                <Zap className="w-3 h-3 text-amber-500" />
+                Completion Reward
+                <span className="text-slate-400 font-normal normal-case tracking-normal">(optional)</span>
+              </label>
+              <div className="flex gap-2">
+                <input type="number" min="0" step="0.01" placeholder="0.00" value={reward} onChange={e => setReward(e.target.value)}
+                  className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+                <div className="h-10 px-4 rounded-xl border border-slate-200 bg-slate-50 flex items-center text-sm font-semibold text-slate-500">USD</div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Notes</label>
+              <textarea placeholder="Add internal notes…" value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all resize-none" />
+            </div>
+
           </div>
         </div>
-        <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            className="text-red-600 border-red-200 hover:bg-red-50 mr-auto"
+
+        {/* Footer */}
+        <div className="flex items-center gap-2 px-5 py-4 border-t border-slate-100 bg-white shrink-0">
+          <button
             onClick={() => { onDelete(task.id); onClose(); }}
+            data-testid="edit-button-delete"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
           >
-            <Trash2 className="w-3.5 h-3.5 mr-1" />Delete
-          </Button>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            className="bg-[#1D3461] hover:bg-[#0F2041] text-white"
-            onClick={() => { onSave(task.id, { title, priority, status, dueDate: dueDate || null, description }); onClose(); }}
+            <Trash2 className="w-3.5 h-3.5" /> Delete
+          </button>
+          <div className="flex-1" />
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
             disabled={!title.trim() || isUpdating}
+            data-testid="edit-button-save"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs font-semibold transition-colors disabled:opacity-50"
           >
-            {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-            Save
-          </Button>
-        </DialogFooter>
+            {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Save Changes
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -2812,73 +3099,62 @@ export default function MyTasksV2() {
           {/* ══ CENTER: Main task content area ══ */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-            {/* ── Navigation bar: only shown in sub-views ── */}
-            {mainView !== 'planning' && (
-            <div className="border-b border-slate-200 bg-white shrink-0">
+            {/* ── View Navigation — always visible ── */}
+            <div className="border-b border-slate-200 bg-white shrink-0 shadow-sm">
 
-              {/* Row 1 */}
-              <div className="h-12 flex items-center px-4 gap-2 overflow-x-auto scrollbar-none">
+              {/* Row 1 — Primary view tabs */}
+              <div className="h-11 flex items-center px-3 gap-0.5 overflow-x-auto scrollbar-none">
+                {([
+                  { key: 'planning'  as const, label: 'Planning',     Icon: Brain    },
+                  { key: 'cards'     as const, label: 'Task Cards',   Icon: ListTodo },
+                  { key: 'kanban'    as const, label: 'Kanban',       Icon: Columns2 },
+                  { key: 'timeline'  as const, label: 'Timeline',     Icon: Calendar },
+                  { key: 'planner'   as const, label: 'Daily Planner',Icon: Sun      },
+                  { key: 'inbox'     as const, label: 'Inbox',        Icon: Inbox    },
+                ] as const).map(v => {
+                  const isActive = mainView === v.key;
+                  return (
+                    <button
+                      key={v.key}
+                      onClick={() => setMainView(v.key)}
+                      data-testid={`view-switch-${v.key}`}
+                      className={cn(
+                        'relative flex items-center gap-1.5 px-3.5 h-full text-[12px] font-semibold transition-all whitespace-nowrap shrink-0 border-b-2',
+                        isActive
+                          ? 'border-[#1D3461] text-[#1D3461] bg-[#1D3461]/[0.04]'
+                          : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50',
+                      )}
+                    >
+                      <v.Icon className={cn('w-3.5 h-3.5 shrink-0', isActive ? 'text-[#1D3461]' : 'text-slate-400')} />
+                      {v.label}
+                    </button>
+                  );
+                })}
 
-                {/* ── Sub-view: back + sub-tabs ── */}
-                <>
-                  <button
-                    onClick={() => setMainView('planning')}
-                    data-testid="button-back-to-planning"
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-[#1D3461] transition-colors shrink-0 border border-slate-200 whitespace-nowrap"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />Planning
-                  </button>
-                    <div className="w-px h-4 bg-slate-200 shrink-0" />
-                    <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 shrink-0">
-                      {([
-                        { key: 'cards'    as const, label: 'Task Cards',    Icon: ListTodo },
-                        { key: 'kanban'   as const, label: 'Kanban',        Icon: Columns2 },
-                        { key: 'timeline' as const, label: 'Timeline',      Icon: Calendar },
-                        { key: 'planner'  as const, label: 'Daily Planner', Icon: Sun      },
-                        { key: 'inbox'    as const, label: 'Inbox',         Icon: Inbox    },
-                      ] as const).map(v => (
-                        <button
-                          key={v.key}
-                          onClick={() => setMainView(v.key)}
-                          data-testid={`view-switch-${v.key}`}
-                          className={cn(
-                            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap',
-                            mainView === v.key
-                              ? 'bg-white text-[#1D3461] shadow-sm'
-                              : 'text-slate-500 hover:text-slate-700',
-                          )}
-                        >
-                          <v.Icon className="w-3.5 h-3.5" />
-                          {v.label}
-                        </button>
-                      ))}
+                {/* Week navigation — timeline view only (pushed to right) */}
+                {mainView === 'timeline' && (
+                  <div className="flex items-center gap-1.5 ml-auto shrink-0 pl-2">
+                    <div className="hidden md:flex items-center gap-3 text-[11px] font-medium text-slate-400 mr-2">
+                      <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Personal</span>
+                      <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Project</span>
                     </div>
-
-                    {/* Week navigation — timeline view only */}
-                    {mainView === 'timeline' && (
-                      <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                        <div className="hidden md:flex items-center gap-3 text-[11px] font-medium text-slate-400 mr-2">
-                          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />Personal</span>
-                          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" />Project</span>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-xs font-semibold text-slate-600 min-w-[100px] text-center bg-slate-50 border border-slate-200 rounded-md px-2 py-1">{weekLabel}</span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                        {weekOffset !== 0 && (
-                          <Button variant="ghost" size="sm" className="text-[11px] h-7 text-blue-600 hover:bg-blue-50 px-2" onClick={() => setWeekOffset(0)}>Today</Button>
-                        )}
-                      </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week">
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-xs font-semibold text-slate-600 min-w-[100px] text-center bg-slate-50 border border-slate-200 rounded-md px-2 py-1">{weekLabel}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week">
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    {weekOffset !== 0 && (
+                      <Button variant="ghost" size="sm" className="text-[11px] h-7 text-blue-600 hover:bg-blue-50 px-2" onClick={() => setWeekOffset(0)}>Today</Button>
                     )}
-                  </>
+                  </div>
+                )}
               </div>
 
-              {/* Row 2 — Filter chips (cards + planner sub-views only) */}
+              {/* Row 2 — Filter chips (cards + planner views only) */}
               {(mainView === 'cards' || mainView === 'planner') && (
-                <div className="h-9 flex items-center px-4 gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none">
+                <div className="h-9 flex items-center px-4 gap-1 border-t border-slate-100 overflow-x-auto scrollbar-none bg-slate-50/60">
                   {CATEGORY_NAV.map(cat => {
                     const Icon = cat.icon;
                     const isActive = categoryFilter === cat.key;
@@ -2889,7 +3165,7 @@ export default function MyTasksV2() {
                         data-testid={`category-filter-${cat.key}`}
                         className={cn(
                           'flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap shrink-0',
-                          isActive ? 'bg-[#1D3461] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100',
+                          isActive ? 'bg-[#1D3461] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white',
                         )}
                       >
                         <Icon className="w-3 h-3" />
@@ -3106,6 +3382,8 @@ export default function MyTasksV2() {
         onSave={handleSave}
         onDelete={handleDelete}
         isUpdating={isUpdating}
+        currentUserId={currentUser?.id}
+        currentUserRole={currentUser?.role}
       />
     </div>
   );
