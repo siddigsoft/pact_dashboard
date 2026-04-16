@@ -3163,16 +3163,21 @@ export default function MyTasksV2() {
     return map;
   }, [allTasks]);
 
+  // Helper: a task is "recurring" if it was generated from a template (dailyTaskDate)
+  // OR if the user explicitly set a recurrence schedule on it
+  const isRecurringTask = (t: PersonalTask) =>
+    !!t.dailyTaskDate || (!!t.recurrence && t.recurrence !== 'none');
+
   // Category counts for sidebar
-  const recurringTasks = tasks.filter(t => !!t.dailyTaskDate);
-  const personalTasks  = tasks.filter(t => !t.dailyTaskDate && t.category !== 'project-task');
+  const recurringTasks = tasks.filter(isRecurringTask);
+  const personalTasks  = tasks.filter(t => !isRecurringTask(t) && t.category !== 'project-task');
 
   // Category-filtered tasks (on top of status/search filter)
   const categoryFiltered = useMemo(() => {
     if (categoryFilter === 'all') return filteredTasks;
-    if (categoryFilter === 'personal') return filteredTasks.filter(t => !t.dailyTaskDate && t.category !== 'project-task');
+    if (categoryFilter === 'personal') return filteredTasks.filter(t => !isRecurringTask(t) && t.category !== 'project-task');
     if (categoryFilter === 'project') return filteredTasks.filter(t => t.category === 'project-task');
-    if (categoryFilter === 'recurring') return filteredTasks.filter(t => !!t.dailyTaskDate);
+    if (categoryFilter === 'recurring') return filteredTasks.filter(isRecurringTask);
     return filteredTasks;
   }, [filteredTasks, categoryFilter]);
 
