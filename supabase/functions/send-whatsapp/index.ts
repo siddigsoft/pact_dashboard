@@ -350,6 +350,83 @@ function buildMessage(eventType: string, data: Record<string, string>): string {
   return `${en}\n\n━━━━━━━━━━━━━━━━\n${ar}\n\n🌐 app.pactorg.com`
 }
 
+// ── Event-type → whatsapp_notify_* column mapping ────────────────────────────
+type WhatsAppCategoryCol =
+  | 'whatsapp_notify_tasks'
+  | 'whatsapp_notify_approvals'
+  | 'whatsapp_notify_payroll'
+  | 'whatsapp_notify_projects'
+  | 'whatsapp_notify_mmp'
+
+const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
+  // Tasks
+  task_created: 'whatsapp_notify_tasks',
+  task_assigned: 'whatsapp_notify_tasks',
+  task_started: 'whatsapp_notify_tasks',
+  task_acknowledged: 'whatsapp_notify_tasks',
+  task_completed: 'whatsapp_notify_tasks',
+  task_delayed: 'whatsapp_notify_tasks',
+  task_rejected: 'whatsapp_notify_tasks',
+  task_cancelled: 'whatsapp_notify_tasks',
+  task_overdue: 'whatsapp_notify_tasks',
+  task_reminder_1day: 'whatsapp_notify_tasks',
+  task_reminder_3day: 'whatsapp_notify_tasks',
+  task_status_changed: 'whatsapp_notify_tasks',
+  task_updated: 'whatsapp_notify_tasks',
+  // MMP
+  mmp_created: 'whatsapp_notify_mmp',
+  mmp_assigned: 'whatsapp_notify_mmp',
+  mmp_forwarded: 'whatsapp_notify_mmp',
+  mmp_completed: 'whatsapp_notify_mmp',
+  mmp_recall_initiated: 'whatsapp_notify_mmp',
+  mmp_reclaim_approved: 'whatsapp_notify_mmp',
+  mmp_cycle_closed: 'whatsapp_notify_mmp',
+  // Site visits are part of Field Ops (MMP) per the Integrations Settings UI
+  site_visit_assigned: 'whatsapp_notify_mmp',
+  site_visit_started: 'whatsapp_notify_mmp',
+  site_visit_completed: 'whatsapp_notify_mmp',
+  site_visit_postponed: 'whatsapp_notify_mmp',
+  site_flagged_uncovered: 'whatsapp_notify_mmp',
+  // Approvals
+  approval_required: 'whatsapp_notify_approvals',
+  signature_requested: 'whatsapp_notify_approvals',
+  signature_completed: 'whatsapp_notify_approvals',
+  leave_request_submitted: 'whatsapp_notify_approvals',
+  leave_request_approved: 'whatsapp_notify_approvals',
+  leave_request_rejected: 'whatsapp_notify_approvals',
+  leave_request_cancelled: 'whatsapp_notify_approvals',
+  // Payroll / Financial
+  payroll_run_completed: 'whatsapp_notify_payroll',
+  payroll_approval_needed: 'whatsapp_notify_payroll',
+  payroll_slip_ready: 'whatsapp_notify_payroll',
+  contract_expiring_30d: 'whatsapp_notify_payroll',
+  contract_expiring_7d: 'whatsapp_notify_payroll',
+  contract_expired: 'whatsapp_notify_payroll',
+  cost_submitted: 'whatsapp_notify_payroll',
+  cost_approved: 'whatsapp_notify_payroll',
+  cost_rejected: 'whatsapp_notify_payroll',
+  payment_processed: 'whatsapp_notify_payroll',
+  wallet_updated: 'whatsapp_notify_payroll',
+  withdrawal_approved: 'whatsapp_notify_payroll',
+  withdrawal_rejected: 'whatsapp_notify_payroll',
+  budget_threshold_80: 'whatsapp_notify_payroll',
+  budget_threshold_100: 'whatsapp_notify_payroll',
+  advance_request_submitted: 'whatsapp_notify_payroll',
+  advance_request_approved: 'whatsapp_notify_payroll',
+  advance_request_rejected: 'whatsapp_notify_payroll',
+  // Projects
+  project_created: 'whatsapp_notify_projects',
+  project_stage_advanced: 'whatsapp_notify_projects',
+  project_milestone_overdue: 'whatsapp_notify_projects',
+  project_stalled: 'whatsapp_notify_projects',
+  project_completed: 'whatsapp_notify_projects',
+  project_archived: 'whatsapp_notify_projects',
+  project_member_added: 'whatsapp_notify_projects',
+  project_task_assigned: 'whatsapp_notify_projects',
+  project_task_overdue: 'whatsapp_notify_projects',
+  project_health_changed: 'whatsapp_notify_projects',
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -383,25 +460,91 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // Resolve phone numbers from user IDs
-    let phones: string[] = [...phone_numbers]
+    // Determine which category preference column applies for this event_type.
+    // When null (e.g. broadcast, reminder, crm_*, user_approved), the event is
+    // not category-gated — only the global whatsapp_enabled flag applies.
+    const categoryCol: WhatsAppCategoryCol | null = EVENT_CATEGORY_MAP[event_type] ?? null
+
+    interface PhoneEntry { phone: string; userId: string | null }
+
+    interface IntegrationRow {
+      user_id: string
+      whatsapp_enabled: boolean
+      whatsapp_phone: string | null
+      whatsapp_notify_tasks: boolean
+      whatsapp_notify_approvals: boolean
+      whatsapp_notify_payroll: boolean
+      whatsapp_notify_projects: boolean
+      whatsapp_notify_mmp: boolean
+    }
+
+    interface ProfileRow {
+      id: string
+      phone: string | null
+    }
+
+    // Resolve phone numbers, respecting WhatsApp opt-in preferences for user_ids
+    const phoneEntries: PhoneEntry[] = phone_numbers
+      .filter(Boolean)
+      .map(p => ({ phone: p, userId: null }))
+
     if (user_ids.length > 0) {
+      // Fetch WhatsApp preferences from user_integrations
+      const { data: integrations } = await supabase
+        .from('user_integrations')
+        .select('user_id, whatsapp_enabled, whatsapp_phone, whatsapp_notify_tasks, whatsapp_notify_approvals, whatsapp_notify_payroll, whatsapp_notify_projects, whatsapp_notify_mmp')
+        .in('user_id', user_ids)
+
+      const integrationMap = new Map<string, IntegrationRow>(
+        (integrations as IntegrationRow[] ?? []).map(row => [row.user_id, row])
+      )
+
+      // Fetch profiles.phone as fallback
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('phone, full_name')
+        .select('id, phone')
         .in('id', user_ids)
-      if (profiles) {
-        phones = [...phones, ...profiles.map((p: any) => p.phone).filter(Boolean)]
+
+      const profileMap = new Map<string, ProfileRow>(
+        (profiles as ProfileRow[] ?? []).map(p => [p.id, p])
+      )
+
+      for (const userId of user_ids) {
+        const integration = integrationMap.get(userId)
+        const profile = profileMap.get(userId)
+
+        // Skip if user has no integration row or WhatsApp is not enabled
+        if (!integration || !integration.whatsapp_enabled) {
+          console.log(`[WhatsApp] Skipping user ${userId}: WhatsApp not enabled`)
+          continue
+        }
+
+        // Skip if this event's category is disabled for the user
+        if (categoryCol && !integration[categoryCol]) {
+          console.log(`[WhatsApp] Skipping user ${userId}: ${categoryCol} is disabled`)
+          continue
+        }
+
+        // Prefer whatsapp_phone from user_integrations, fall back to profiles.phone
+        const phone = integration.whatsapp_phone || profile?.phone
+        if (phone) {
+          phoneEntries.push({ phone, userId })
+        } else {
+          console.log(`[WhatsApp] Skipping user ${userId}: no phone number available`)
+        }
       }
     }
 
-    // Normalize and deduplicate
-    const normalized = [...new Set(
-      phones
-        .filter(Boolean)
-        .map(normalizePhone)
-        .filter((p): p is string => p !== null),
-    )]
+    // Normalize phones, keeping userId association; deduplicate by normalized phone
+    const seenPhones = new Set<string>()
+    const normalized: PhoneEntry[] = []
+    for (const entry of phoneEntries) {
+      const norm = normalizePhone(entry.phone)
+      if (norm && !seenPhones.has(norm)) {
+        seenPhones.add(norm)
+        normalized.push({ phone: norm, userId: entry.userId })
+      }
+    }
 
     if (normalized.length === 0) {
       console.log('[WhatsApp] No valid phone numbers found — skipping')
@@ -416,7 +559,7 @@ serve(async (req) => {
 
     // Send to each number via WasenderAPI
     const results = await Promise.allSettled(
-      normalized.map(async (phone) => {
+      normalized.map(async ({ phone, userId }) => {
         let wasenderId: string | null = null
         let errorMsg: string | null = null
         let success = false
@@ -452,7 +595,7 @@ serve(async (req) => {
           try {
             await supabase.from('whatsapp_logs').insert({
               phone,
-              user_id: user_ids.length > 0 ? null : null,
+              user_id: userId,
               event_type,
               status: success ? 'sent' : 'failed',
               direction: 'outbound',
