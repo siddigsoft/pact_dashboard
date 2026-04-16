@@ -721,7 +721,7 @@ const UserDetail: FC = () => {
                       placeholder="user@example.com"
                     />
                   ) : (
-                    <span className="text-sm break-words" title={user.email}>{user.email}</span>
+                    <span className="text-sm block truncate" title={user.email}>{user.email}</span>
                   )}
                 </div>
               </div>
@@ -899,7 +899,7 @@ const UserDetail: FC = () => {
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
             <Tabs defaultValue="details" className="w-full">
-              <TabsList className="flex flex-row flex-wrap gap-1 h-auto p-1.5 mb-5 bg-muted/40 rounded-xl w-full justify-start">
+              <TabsList className="flex flex-row flex-nowrap gap-1 h-auto p-1.5 mb-5 bg-muted/40 rounded-xl w-full justify-start overflow-x-auto scrollbar-hide">
                 <TabsTrigger value="details" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md data-[state=active]:font-semibold transition-all">
                   <UserIcon className="h-4 w-4" />
                   <span>Details</span>
