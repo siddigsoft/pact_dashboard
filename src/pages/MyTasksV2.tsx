@@ -1171,7 +1171,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
 
   const handleSave = () => {
     if (!title.trim()) return;
-    if (editRecurrenceOn && editRecurrence === 'weekly' && editRecurrenceDays.length === 0) return;
+    if (editRecurrenceOn && (editRecurrence === 'weekly' || editRecurrence === 'specific_days') && editRecurrenceDays.length === 0) return;
     const typeMap = { general: null as null, project: 'project-task' as const, daytoday: 'day-to-day' as const };
     onSave(task.id, {
       title: title.trim(), priority, status,
