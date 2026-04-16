@@ -99,6 +99,10 @@ interface QuickAddDialogProps {
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
     planningQuadrant?: QuadrantKey | null;
+    recurrence?: string;
+    recurrenceDays?: number[];
+    recurrenceMonthlyDay?: number | null;
+    recurrenceEndDate?: string | null;
   }) => void;
   isCreating: boolean;
   currentUserFullName?: string | null;
@@ -226,6 +230,15 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const [structuredDeps, setStructuredDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean }>>([]);
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
+  // Recurrence state
+  const [recurrenceOn,           setRecurrenceOn]           = useState(false);
+  const [recurrence,             setRecurrence]             = useState('daily');
+  const [recurrenceDaysQA,       setRecurrenceDaysQA]       = useState<number[]>([]);
+  const [recurrenceMonthlyDayQA, setRecurrenceMonthlyDayQA] = useState(1);
+  const [recurrenceEndDate,      setRecurrenceEndDate]      = useState('');
+  const toggleDayQA = (d: number) =>
+    setRecurrenceDaysQA(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b));
+
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey('general');
     setPriority('medium'); setDueDate(''); setNotes('');
@@ -234,6 +247,8 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setAssignTab('myself'); setAssignedUser(null); setAssignedDept(null); setAssignSearch('');
     setStructuredDeps([]);
     setPlanningQuadrant(null);
+    setRecurrenceOn(false); setRecurrence('daily');
+    setRecurrenceDaysQA([]); setRecurrenceMonthlyDayQA(1); setRecurrenceEndDate('');
   };
 
   const addDep = (label: string, type: string = 'custom', requiresAck = false) => {
@@ -267,6 +282,10 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       rewardAmount,
       structuredDeps,
       planningQuadrant,
+      recurrence: recurrenceOn ? recurrence : 'none',
+      recurrenceDays: recurrence === 'weekly' && recurrenceOn ? recurrenceDaysQA : [],
+      recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
+      recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
     });
     reset();
   };
@@ -390,6 +409,79 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                 <button type="button" onClick={() => setPlanningQuadrant(null)} className="mt-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors">
                   ✕ Clear selection (auto-assign)
                 </button>
+              )}
+            </div>
+
+            {/* Repeat / Recurrence */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1.5">
+                  <RefreshCw className="w-3 h-3" /> Repeat
+                </label>
+                <button type="button" onClick={() => setRecurrenceOn(v => !v)} data-testid="toggle-recurrence"
+                  className={cn('w-9 h-5 rounded-full transition-colors relative shrink-0', recurrenceOn ? 'bg-[#1D3461]' : 'bg-slate-200')}>
+                  <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform', recurrenceOn ? 'translate-x-4' : 'translate-x-0.5')} />
+                </button>
+              </div>
+              {recurrenceOn && (
+                <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  {/* Frequency options — 5 buttons, 3+2 grid */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Frequency</p>
+                    <div className="grid grid-cols-3 gap-1">
+                      {([
+                        { key: 'daily',        label: 'Daily'       },
+                        { key: 'every_2_days', label: 'Every 2 Days'},
+                        { key: 'every_3_days', label: 'Every 3 Days'},
+                        { key: 'weekly',       label: 'Weekly'      },
+                        { key: 'monthly',      label: 'Monthly'     },
+                      ] as const).map(r => (
+                        <button key={r.key} type="button" onClick={() => setRecurrence(r.key)} data-testid={`recurrence-freq-${r.key}`}
+                          className={cn('px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all text-center',
+                            recurrence === r.key ? 'bg-[#1D3461] text-white border-[#1D3461]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300')}>
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Weekly: day-of-week pills */}
+                  {recurrence === 'weekly' && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">On days</p>
+                      <div className="flex gap-1">
+                        {['S','M','T','W','T','F','S'].map((d, i) => (
+                          <button key={i} type="button" onClick={() => toggleDayQA(i)} data-testid={`recurrence-day-${i}`}
+                            className={cn('w-7 h-7 rounded-full text-[10px] font-bold border transition-all',
+                              recurrenceDaysQA.includes(i) ? 'bg-[#1D3461] text-white border-[#1D3461]' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}>
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Monthly: day-of-month */}
+                  {recurrence === 'monthly' && (
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] text-slate-600 shrink-0">On day</p>
+                      <input type="number" min={1} max={31} value={recurrenceMonthlyDayQA}
+                        onChange={e => setRecurrenceMonthlyDayQA(Math.min(31, Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="w-16 h-8 rounded-lg border border-slate-200 text-sm px-2 bg-white text-center focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20" />
+                      <p className="text-[11px] text-slate-400">of each month</p>
+                    </div>
+                  )}
+                  {/* Ends on */}
+                  <div className="flex items-center gap-2">
+                    <p className="text-[11px] text-slate-600 shrink-0">Ends on</p>
+                    <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)}
+                      className="flex-1 h-8 rounded-lg border border-slate-200 text-sm px-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20" />
+                    {recurrenceEndDate && (
+                      <button type="button" onClick={() => setRecurrenceEndDate('')} className="text-slate-400 hover:text-slate-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {!recurrenceEndDate && <p className="text-[10px] text-slate-400">optional</p>}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -837,6 +929,15 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [reward, setReward]         = useState('');
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
+  // Recurrence state (EditDialog)
+  const [editRecurrenceOn,           setEditRecurrenceOn]           = useState(false);
+  const [editRecurrence,             setEditRecurrence]             = useState('daily');
+  const [editRecurrenceDays,         setEditRecurrenceDays]         = useState<number[]>([]);
+  const [editRecurrenceMonthlyDay,   setEditRecurrenceMonthlyDay]   = useState(1);
+  const [editRecurrenceEndDate,      setEditRecurrenceEndDate]      = useState('');
+  const toggleDayEdit = (d: number) =>
+    setEditRecurrenceDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b));
+
   // Assign To state (same pattern as QuickAddDialog)
   const [assignTab, setAssignTab]       = useState<AssignTab>('myself');
   const [assignedUser, setAssignedUser] = useState<{ id: string; full_name: string } | null>(null);
@@ -920,6 +1021,13 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       setNotes(task.notes ?? '');
       setReward(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
       setPlanningQuadrant(task.planningQuadrant ?? null);
+      // Recurrence
+      const hasRecurrence = !!(task.recurrence && task.recurrence !== 'none');
+      setEditRecurrenceOn(hasRecurrence);
+      setEditRecurrence(hasRecurrence ? task.recurrence : 'daily');
+      setEditRecurrenceDays(task.recurrenceDays ?? []);
+      setEditRecurrenceMonthlyDay(task.recurrenceMonthlyDay ?? 1);
+      setEditRecurrenceEndDate(task.recurrenceEndDate ?? '');
       // Task type
       if (task.taskType === 'project-task') setTaskTypeKey('project');
       else if (task.taskType === 'day-to-day') setTaskTypeKey('daytoday');
@@ -972,6 +1080,10 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       assignedToName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
       targetDepartmentId: assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
       planningQuadrant: planningQuadrant ?? null,
+      recurrence: editRecurrenceOn ? editRecurrence : 'none',
+      recurrenceDays: editRecurrence === 'weekly' && editRecurrenceOn ? editRecurrenceDays : [],
+      recurrenceMonthlyDay: editRecurrence === 'monthly' && editRecurrenceOn ? editRecurrenceMonthlyDay : null,
+      recurrenceEndDate: editRecurrenceOn && editRecurrenceEndDate ? editRecurrenceEndDate : null,
     });
     onClose();
   };
@@ -1069,6 +1181,75 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                 <button type="button" onClick={() => setPlanningQuadrant(null)} className="mt-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors">
                   ✕ Clear selection (auto-assign)
                 </button>
+              )}
+            </div>
+
+            {/* Repeat / Recurrence — EditDialog */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1.5">
+                  <RefreshCw className="w-3 h-3" /> Repeat
+                </label>
+                <button type="button" onClick={() => setEditRecurrenceOn(v => !v)} data-testid="edit-toggle-recurrence"
+                  className={cn('w-9 h-5 rounded-full transition-colors relative shrink-0', editRecurrenceOn ? 'bg-[#1D3461]' : 'bg-slate-200')}>
+                  <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform', editRecurrenceOn ? 'translate-x-4' : 'translate-x-0.5')} />
+                </button>
+              </div>
+              {editRecurrenceOn && (
+                <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Frequency</p>
+                    <div className="grid grid-cols-3 gap-1">
+                      {([
+                        { key: 'daily',        label: 'Daily'       },
+                        { key: 'every_2_days', label: 'Every 2 Days'},
+                        { key: 'every_3_days', label: 'Every 3 Days'},
+                        { key: 'weekly',       label: 'Weekly'      },
+                        { key: 'monthly',      label: 'Monthly'     },
+                      ] as const).map(r => (
+                        <button key={r.key} type="button" onClick={() => setEditRecurrence(r.key)} data-testid={`edit-recurrence-freq-${r.key}`}
+                          className={cn('px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all text-center',
+                            editRecurrence === r.key ? 'bg-[#1D3461] text-white border-[#1D3461]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300')}>
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {editRecurrence === 'weekly' && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">On days</p>
+                      <div className="flex gap-1">
+                        {['S','M','T','W','T','F','S'].map((d, i) => (
+                          <button key={i} type="button" onClick={() => toggleDayEdit(i)} data-testid={`edit-recurrence-day-${i}`}
+                            className={cn('w-7 h-7 rounded-full text-[10px] font-bold border transition-all',
+                              editRecurrenceDays.includes(i) ? 'bg-[#1D3461] text-white border-[#1D3461]' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300')}>
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {editRecurrence === 'monthly' && (
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] text-slate-600 shrink-0">On day</p>
+                      <input type="number" min={1} max={31} value={editRecurrenceMonthlyDay}
+                        onChange={e => setEditRecurrenceMonthlyDay(Math.min(31, Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="w-16 h-8 rounded-lg border border-slate-200 text-sm px-2 bg-white text-center focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20" />
+                      <p className="text-[11px] text-slate-400">of each month</p>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <p className="text-[11px] text-slate-600 shrink-0">Ends on</p>
+                    <input type="date" value={editRecurrenceEndDate} onChange={e => setEditRecurrenceEndDate(e.target.value)}
+                      className="flex-1 h-8 rounded-lg border border-slate-200 text-sm px-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20" />
+                    {editRecurrenceEndDate && (
+                      <button type="button" onClick={() => setEditRecurrenceEndDate('')} className="text-slate-400 hover:text-slate-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {!editRecurrenceEndDate && <p className="text-[10px] text-slate-400">optional</p>}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -3031,6 +3212,10 @@ export default function MyTasksV2() {
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
     planningQuadrant?: QuadrantKey | null;
+    recurrence?: string;
+    recurrenceDays?: number[];
+    recurrenceMonthlyDay?: number | null;
+    recurrenceEndDate?: string | null;
   }) => {
     try {
       await createTask({
@@ -3047,6 +3232,10 @@ export default function MyTasksV2() {
           ? data.structuredDeps.map(d => ({ label: d.label, type: d.type, requiresAck: d.requiresAck }))
           : undefined,
         planningQuadrant: data.planningQuadrant ?? null,
+        recurrence: data.recurrence ?? 'none',
+        recurrenceDays: data.recurrenceDays ?? [],
+        recurrenceMonthlyDay: data.recurrenceMonthlyDay ?? null,
+        recurrenceEndDate: data.recurrenceEndDate ?? null,
       });
       // Notify assigned user if task was delegated to someone else
       if (data.assignedToUserId && data.assignedToUserId !== userId) {

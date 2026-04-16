@@ -178,6 +178,7 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
   const [recurrence, setRecurrence] = useState(initial?.recurrence ?? 'daily');
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
   const [monthlyDay, setMonthlyDay] = useState(1);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(initial?.recurrenceEndDate ?? '');
   const [deptId, setDeptId] = useState(initial?.departmentId ?? '');
   const [rolesRaw, setRolesRaw] = useState((initial?.roleTargets ?? []).join(', '));
   const [rewardAmount, setRewardAmount] = useState(initial?.rewardAmount?.toString() ?? '');
@@ -200,6 +201,7 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
       recurrence,
       recurrenceDays: recurrence === 'specific_days' ? selectedWeekdays : [],
       recurrenceMonthlyDay: recurrence === 'monthly' ? monthlyDay : null,
+      recurrenceEndDate: recurrenceEndDate || null,
       departmentId: deptId || null,
       roleTargets: rolesRaw.split(',').map(r => r.trim()).filter(Boolean),
       rewardAmount: rewardAmount ? parseFloat(rewardAmount) : null,
@@ -255,6 +257,8 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="daily">Every day</SelectItem>
+              <SelectItem value="every_2_days">Every 2 days</SelectItem>
+              <SelectItem value="every_3_days">Every 3 days</SelectItem>
               <SelectItem value="weekly">Weekly (Mon)</SelectItem>
               <SelectItem value="biweekly">Bi-weekly (Every 2 weeks)</SelectItem>
               <SelectItem value="specific_days">Specific weekdays</SelectItem>
@@ -299,6 +303,17 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
           </div>
         </div>
       )}
+      {/* Recurrence end date */}
+      <div className="space-y-1">
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ends on (optional)</Label>
+        <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)}
+          className="w-full h-9 rounded-lg border text-sm px-3 bg-background" />
+        {recurrenceEndDate && (
+          <button type="button" onClick={() => setRecurrenceEndDate('')} className="text-[11px] text-muted-foreground hover:text-foreground">
+            ✕ Clear end date (repeat indefinitely)
+          </button>
+        )}
+      </div>
       <div className="space-y-1">
         <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Department (optional)</Label>
         <Select value={deptId || 'any'} onValueChange={v => setDeptId(v === 'any' ? '' : v)}>
@@ -380,6 +395,7 @@ function DailyTemplatesPanel() {
         active: rest.active,
         proof_required: rest.proofRequired ?? false,
         task_type: rest.taskType ?? null,
+        recurrence_end_date: rest.recurrenceEndDate ?? null,
         updated_at: new Date().toISOString(),
       };
 
@@ -475,6 +491,8 @@ function DailyTemplatesPanel() {
             <SelectContent>
               <SelectItem value="all" className="text-xs">All recurrence</SelectItem>
               <SelectItem value="daily" className="text-xs">Daily</SelectItem>
+              <SelectItem value="every_2_days" className="text-xs">Every 2 days</SelectItem>
+              <SelectItem value="every_3_days" className="text-xs">Every 3 days</SelectItem>
               <SelectItem value="weekly" className="text-xs">Weekly</SelectItem>
               <SelectItem value="biweekly" className="text-xs">Bi-weekly</SelectItem>
               <SelectItem value="weekdays" className="text-xs">Mon–Fri</SelectItem>
@@ -529,6 +547,8 @@ function DailyTemplatesPanel() {
                       </Badge>
                       <Badge variant="outline" className="text-[9px] px-1.5 py-0">
                         {def.recurrence === 'daily' ? 'Daily'
+                         : def.recurrence === 'every_2_days' ? 'Every 2 days'
+                         : def.recurrence === 'every_3_days' ? 'Every 3 days'
                          : def.recurrence === 'weekly' ? 'Weekly'
                          : def.recurrence === 'biweekly' ? 'Bi-weekly'
                          : def.recurrence === 'weekdays' ? 'Mon–Fri'
