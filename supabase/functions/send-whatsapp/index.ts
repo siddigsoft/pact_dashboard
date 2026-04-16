@@ -14,8 +14,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const WASENDER_BASE = 'https://api.wasenderapi.com'
-const WASENDER_ENDPOINT = `${WASENDER_BASE}/api/send-message`
+const WASENDER_ENDPOINT = 'https://www.wasenderapi.com/api/send-message'
 
 // ── Bilingual WhatsApp templates ──────────────────────────────────────────────
 // Short, emoji-led, action-oriented messages in EN + AR
@@ -327,13 +326,24 @@ const TEMPLATES: Record<string, BilingualTemplate> = {
 function normalizePhone(raw: string): string | null {
   const digits = raw.replace(/\D/g, '')
   if (digits.length < 7) return null
-  // Already has Sudan country code
-  if (digits.startsWith('249') && digits.length >= 12) return digits
-  // Local Sudan number (9 digits starting with 09 or 9)
-  if (digits.startsWith('09') && digits.length === 10) return `249${digits.slice(1)}`
-  if (digits.startsWith('9') && digits.length === 9) return `249${digits}`
-  // Generic: if >= 10 digits, assume international
-  if (digits.length >= 10) return digits
+
+  // Already has country code — return as-is with + prefix
+  if (digits.startsWith('249') && digits.length >= 12) return `+${digits}`   // Sudan
+  if (digits.startsWith('256') && digits.length >= 12) return `+${digits}`   // Uganda
+
+  // Sudan local numbers: 09XXXXXXXX or 01XXXXXXXX (10 digits)
+  if ((digits.startsWith('09') || digits.startsWith('01')) && digits.length === 10)
+    return `+249${digits.slice(1)}`
+
+  // Sudan bare 9-digit: 9XXXXXXXX
+  if (digits.startsWith('9') && digits.length === 9) return `+249${digits}`
+
+  // Uganda local numbers: 07XXXXXXXX (10 digits)
+  if (digits.startsWith('07') && digits.length === 10) return `+256${digits.slice(1)}`
+
+  // Already fully international (10+ digits, no matching prefix above)
+  if (digits.length >= 10) return `+${digits}`
+
   return null
 }
 
@@ -549,8 +559,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               to: phone,
-              type: 'text',
-              text: { body: message },
+              text: message,
             }),
           })
 
