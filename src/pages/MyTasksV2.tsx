@@ -93,13 +93,21 @@ interface QuickAddDialogProps {
     taskType: 'project-task' | 'day-to-day' | null;
     category: string | null;
     notes: string;
+    assignedToUserId?: string | null;
+    assignedToUserName?: string | null;
+    targetDeptId?: string | null;
+    rewardAmount?: number | null;
+    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
   }) => void;
   isCreating: boolean;
   currentUserFullName?: string | null;
+  currentUserId?: string | null;
+  currentUserRole?: string | null;
 }
 type DepTab = 'custom' | 'date' | 'user' | 'department';
+type AssignTab = 'myself' | 'someone' | 'dept';
 
-function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullName }: QuickAddDialogProps) {
+function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullName, currentUserId, currentUserRole }: QuickAddDialogProps) {
   const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
   const [taskTypeKey, setTaskTypeKey] = useState<'general' | 'project' | 'daytoday'>('general');
@@ -115,7 +123,36 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const [attachments, setAttachments] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch departments
+  // ── Assign To state ────────────────────────────────────────────────────────
+  const [assignTab, setAssignTab]           = useState<AssignTab>('myself');
+  const [assignedUser, setAssignedUser]     = useState<{ id: string; full_name: string } | null>(null);
+  const [assignedDept, setAssignedDept]     = useState<{ id: string; name: string } | null>(null);
+  const [assignSearch, setAssignSearch]     = useState('');
+
+  // Fetch departments this user manages
+  const { data: managedDepts = [] } = useQuery({
+    queryKey: ['managed-depts', currentUserId],
+    queryFn: async () => {
+      if (!currentUserId) return [];
+      const { data } = await supabase.from('departments').select('id, name').eq('manager_user_id', currentUserId);
+      return data ?? [];
+    },
+    enabled: open && !!currentUserId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // ── Role-based permissions ─────────────────────────────────────────────────
+  const isExec = useMemo(() => {
+    const role = currentUserRole?.toLowerCase() ?? '';
+    if (role === 'superadmin' || role === 'admin') return true;
+    const execDeptNames = ['ceo', 'coo', 'cto'];
+    return (managedDepts as { id: string; name: string }[]).some(d => execDeptNames.includes(d.name.toLowerCase()));
+  }, [currentUserRole, managedDepts]);
+
+  const isDeptManager = (managedDepts as { id: string; name: string }[]).length > 0;
+  const canAssignOthers = isExec || isDeptManager;
+
+  // Fetch all departments (for execs) or only managed (for dept mgrs)
   const { data: departments = [] } = useQuery({
     queryKey: ['dialog-departments'],
     queryFn: async () => {
@@ -126,9 +163,49 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch users
+  // Depts the current user can assign to
+  const assignableDepts = useMemo(() => {
+    if (isExec) return departments as { id: string; name: string }[];
+    if (isDeptManager) return managedDepts as { id: string; name: string }[];
+    return [];
+  }, [isExec, isDeptManager, departments, managedDepts]);
+
+  // Fetch members of managed dept(s) for dept manager "Someone else" list
+  const managedDeptIds = (managedDepts as { id: string; name: string }[]).map(d => d.id);
+  const { data: deptMembers = [] } = useQuery({
+    queryKey: ['dept-members', managedDeptIds.join(',')],
+    queryFn: async () => {
+      if (!managedDeptIds.length) return [];
+      const { data } = await supabase.from('profiles').select('id, full_name, role').in('department_id', managedDeptIds).order('full_name');
+      return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
+    },
+    enabled: open && isDeptManager && !isExec,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch all users
   const { data: allUsers = [] } = useQuery({
     queryKey: ['dialog-users'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
+    },
+    enabled: open && isExec,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // User list for "Someone else" tab
+  const assignableUsers = useMemo(() => {
+    const pool = isExec ? allUsers : deptMembers;
+    return (pool as { id: string; full_name: string | null; role: string | null }[])
+      .filter(u => u.id !== currentUserId)
+      .filter(u => !assignSearch || u.full_name?.toLowerCase().includes(assignSearch.toLowerCase()))
+      .slice(0, 25);
+  }, [isExec, allUsers, deptMembers, currentUserId, assignSearch]);
+
+  // Dep user search (still used in dependencies tab)
+  const { data: depUsers = [] } = useQuery({
+    queryKey: ['dialog-dep-users'],
     queryFn: async () => {
       const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
       return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
@@ -137,26 +214,37 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     staleTime: 5 * 60 * 1000,
   });
 
-  const filteredUsers = useMemo(() =>
-    allUsers.filter((u: { full_name: string | null }) =>
-      !userSearch || u.full_name?.toLowerCase().includes(userSearch.toLowerCase())
-    ).slice(0, 20),
-    [allUsers, userSearch]
+  const filteredDepUsers = useMemo(() =>
+    (depUsers as { id: string; full_name: string | null; role: string | null }[])
+      .filter(u => !userSearch || u.full_name?.toLowerCase().includes(userSearch.toLowerCase()))
+      .slice(0, 20),
+    [depUsers, userSearch]
   );
+
+  // Structured deps (with type + requiresAck)
+  const [structuredDeps, setStructuredDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean }>>([]);
 
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey('general');
     setPriority('medium'); setDueDate(''); setNotes('');
     setReward(''); setDepInput(''); setDepDateInput(''); setDeps([]);
     setUserSearch(''); setAttachments([]);
+    setAssignTab('myself'); setAssignedUser(null); setAssignedDept(null); setAssignSearch('');
+    setStructuredDeps([]);
   };
 
-  const addDep = (label: string) => {
+  const addDep = (label: string, type: string = 'custom', requiresAck = false) => {
     const v = label.trim();
-    if (!v || deps.includes(v)) return;
+    if (!v || structuredDeps.some(d => d.label === v)) return;
+    setStructuredDeps(prev => [...prev, { type, label: v, requiresAck }]);
     setDeps(prev => [...prev, v]);
     setDepInput('');
     setDepDateInput('');
+  };
+
+  const removeDep = (idx: number) => {
+    setStructuredDeps(prev => prev.filter((_, i) => i !== idx));
+    setDeps(prev => prev.filter((_, i) => i !== idx));
   };
 
   const submit = () => {
@@ -167,7 +255,15 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       daytoday: { taskType: 'day-to-day'   as const,        category: 'recurring'},
     };
     const { taskType, category } = typeMap[taskTypeKey];
-    onCreate({ title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes });
+    const rewardAmount = reward ? parseFloat(reward) : null;
+    onCreate({
+      title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes,
+      assignedToUserId:   assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
+      assignedToUserName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
+      targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
+      rewardAmount,
+      structuredDeps,
+    });
     reset();
   };
 
@@ -277,24 +373,137 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
             {/* Assign to */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Assign to</label>
+              {/* Tabs — only show others if authorized */}
               <div className="flex gap-2 mb-2">
-                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1D3461] text-white text-xs font-semibold shadow-sm">
+                <button
+                  onClick={() => { setAssignTab('myself'); setAssignedUser(null); setAssignedDept(null); }}
+                  data-testid="assign-tab-myself"
+                  className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                    assignTab === 'myself' ? 'bg-[#1D3461] text-white shadow-sm' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  )}>
                   <User className="w-3 h-3" /> Myself
                 </button>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-500 text-xs font-semibold hover:bg-slate-50 transition-colors">
-                  <Users className="w-3 h-3" /> Someone else
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-500 text-xs font-semibold hover:bg-slate-50 transition-colors">
-                  <Briefcase className="w-3 h-3" /> Dept
-                </button>
+                {canAssignOthers && (
+                  <button
+                    onClick={() => { setAssignTab('someone'); setAssignedDept(null); }}
+                    data-testid="assign-tab-someone"
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                      assignTab === 'someone' ? 'bg-[#1D3461] text-white shadow-sm' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'
+                    )}>
+                    <Users className="w-3 h-3" /> Someone else
+                  </button>
+                )}
+                {canAssignOthers && assignableDepts.length > 0 && (
+                  <button
+                    onClick={() => { setAssignTab('dept'); setAssignedUser(null); }}
+                    data-testid="assign-tab-dept"
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
+                      assignTab === 'dept' ? 'bg-[#1D3461] text-white shadow-sm' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'
+                    )}>
+                    <Briefcase className="w-3 h-3" /> Dept
+                  </button>
+                )}
               </div>
-              <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="w-7 h-7 rounded-full bg-[#1D3461] flex items-center justify-center shrink-0">
-                  <span className="text-white text-[11px] font-bold">{initial}</span>
+
+              {/* ── Myself ── */}
+              {assignTab === 'myself' && (
+                <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="w-7 h-7 rounded-full bg-[#1D3461] flex items-center justify-center shrink-0">
+                    <span className="text-white text-[11px] font-bold">{initial}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-slate-700 flex-1">{currentUserFullName ?? 'You'}</span>
+                  <span className="text-[11px] text-slate-400 font-medium">(you)</span>
                 </div>
-                <span className="text-sm font-semibold text-slate-700 flex-1">{currentUserFullName ?? 'You'}</span>
-                <span className="text-[11px] text-slate-400 font-medium">(you)</span>
-              </div>
+              )}
+
+              {/* ── Someone else ── */}
+              {assignTab === 'someone' && (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      placeholder={isExec ? 'Search anyone…' : 'Search your department…'}
+                      value={assignSearch}
+                      onChange={e => setAssignSearch(e.target.value)}
+                      data-testid="assign-user-search"
+                      className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                  {assignedUser && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border-b border-emerald-100">
+                      <div className="w-6 h-6 rounded-full bg-emerald-200 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-bold text-emerald-700">{assignedUser.full_name[0].toUpperCase()}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-emerald-800 flex-1">{assignedUser.full_name}</span>
+                      <button onClick={() => setAssignedUser(null)} className="text-emerald-400 hover:text-red-500 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  <div className="max-h-36 overflow-y-auto">
+                    {assignableUsers.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">No users found</p>
+                    ) : assignableUsers.map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => { setAssignedUser({ id: u.id, full_name: u.full_name ?? '' }); setAssignSearch(''); }}
+                        data-testid={`assign-user-${u.id}`}
+                        className={cn('w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0',
+                          assignedUser?.id === u.id ? 'bg-emerald-50' : ''
+                        )}>
+                        <div className="w-6 h-6 rounded-full bg-[#1D3461]/10 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-[#1D3461]">{(u.full_name ?? 'U')[0].toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{u.full_name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{u.role}</p>
+                        </div>
+                        {assignedUser?.id === u.id && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                  {!isExec && isDeptManager && (
+                    <p className="text-[10px] text-slate-400 px-3 py-1.5 border-t border-slate-100 bg-slate-50">
+                      Showing your department members only
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── Dept ── */}
+              {assignTab === 'dept' && (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  {assignedDept && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border-b border-blue-100">
+                      <Briefcase className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="text-xs font-semibold text-blue-800 flex-1">{assignedDept.name}</span>
+                      <button onClick={() => setAssignedDept(null)} className="text-blue-400 hover:text-red-500 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  <div className="max-h-36 overflow-y-auto">
+                    {assignableDepts.map(dept => (
+                      <button
+                        key={dept.id}
+                        onClick={() => setAssignedDept({ id: dept.id, name: dept.name })}
+                        data-testid={`assign-dept-${dept.id}`}
+                        className={cn('w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0',
+                          assignedDept?.id === dept.id ? 'bg-blue-50' : ''
+                        )}>
+                        <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                          <Briefcase className="w-3 h-3 text-blue-600" />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700 flex-1">{dept.name}</span>
+                        {assignedDept?.id === dept.id && <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-amber-600 px-3 py-1.5 border-t border-amber-100 bg-amber-50">
+                    The dept manager will be notified to assign a team member
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Completion Reward */}
@@ -404,13 +613,16 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                       className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400"
                     />
                   </div>
-                  <div className="max-h-36 overflow-y-auto">
-                    {filteredUsers.length === 0 ? (
+                  <p className="text-[10px] text-amber-700 bg-amber-50 px-3 py-1.5 border-b border-amber-100">
+                    ⏳ Added users must <strong>acknowledge &amp; confirm</strong> before this task can start
+                  </p>
+                  <div className="max-h-32 overflow-y-auto">
+                    {filteredDepUsers.length === 0 ? (
                       <p className="text-xs text-slate-400 text-center py-4">No users found</p>
-                    ) : filteredUsers.map((u: { id: string; full_name: string | null; role: string | null }) => (
+                    ) : filteredDepUsers.map(u => (
                       <button
                         key={u.id}
-                        onClick={() => addDep(`User: ${u.full_name}`)}
+                        onClick={() => addDep(`User: ${u.full_name}`, 'user', true)}
                         data-testid={`dep-user-${u.id}`}
                         className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0"
                       >
@@ -431,13 +643,16 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               {/* ── Department: list ── */}
               {depTab === 'department' && (
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
-                  <div className="max-h-36 overflow-y-auto">
+                  <p className="text-[10px] text-blue-700 bg-blue-50 px-3 py-1.5 border-b border-blue-100">
+                    🏢 The dept manager must <strong>approve &amp; assign</strong> a team member to this task
+                  </p>
+                  <div className="max-h-32 overflow-y-auto">
                     {departments.length === 0 ? (
                       <p className="text-xs text-slate-400 text-center py-4">Loading…</p>
                     ) : (departments as { id: string; name: string }[]).map(dept => (
                       <button
                         key={dept.id}
-                        onClick={() => addDep(`Dept: ${dept.name}`)}
+                        onClick={() => addDep(`Dept: ${dept.name}`, 'department', true)}
                         data-testid={`dep-dept-${dept.id}`}
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0"
                       >
@@ -452,13 +667,20 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                 </div>
               )}
 
-              {/* Dep tags list */}
-              {deps.length > 0 && (
+              {/* Dep tags list — with acknowledgment indicators */}
+              {structuredDeps.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {deps.map((d, i) => (
-                    <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1D3461]/10 text-xs text-[#1D3461] font-medium">
-                      {d}
-                      <button onClick={() => setDeps(prev => prev.filter((_, idx) => idx !== i))} className="text-[#1D3461]/50 hover:text-red-500 transition-colors ml-0.5">
+                  {structuredDeps.map((d, i) => (
+                    <span key={i} className={cn(
+                      'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium',
+                      d.type === 'user' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                      d.type === 'department' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                      'bg-[#1D3461]/10 text-[#1D3461]'
+                    )}>
+                      {d.type === 'user' && <span title="Awaiting user acknowledgment">⏳</span>}
+                      {d.type === 'department' && <span title="Awaiting dept manager approval">🏢</span>}
+                      {d.label}
+                      <button onClick={() => removeDep(i)} className="opacity-50 hover:opacity-100 hover:text-red-600 transition-all ml-0.5">
                         <X className="w-3 h-3" />
                       </button>
                     </span>
@@ -2431,6 +2653,11 @@ export default function MyTasksV2() {
     dueDate: string; description: string;
     taskType: 'project-task' | 'day-to-day' | null;
     category: string | null; notes: string;
+    assignedToUserId?: string | null;
+    assignedToUserName?: string | null;
+    targetDeptId?: string | null;
+    rewardAmount?: number | null;
+    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
   }) => {
     try {
       await createTask({
@@ -2438,9 +2665,21 @@ export default function MyTasksV2() {
         dueDate: data.dueDate || null, description: data.description || null,
         taskType: data.taskType, category: data.category,
         notes: data.notes || null,
+        assignedTo: data.assignedToUserId ?? null,
+        assignedToName: data.assignedToUserName ?? null,
+        targetDepartmentId: data.targetDeptId ?? null,
+        completionRewardAmount: data.rewardAmount ?? null,
+        completionRewardCurrency: data.rewardAmount ? 'USD' : null,
+        dependencies: data.structuredDeps?.length
+          ? data.structuredDeps.map(d => ({ label: d.label, type: d.type, requiresAck: d.requiresAck }))
+          : undefined,
       });
+      // Notify assigned user if task was delegated to someone else
+      if (data.assignedToUserId && data.assignedToUserId !== userId) {
+        notify({ event: 'task_assigned', taskId: '', taskTitle: data.title, recipientUserId: data.assignedToUserId, dueDate: data.dueDate || null });
+      }
       setShowAdd(false);
-      toast({ title: 'Task created' });
+      toast({ title: data.assignedToUserName ? `Task assigned to ${data.assignedToUserName}` : 'Task created' });
     } catch {
       toast({ title: 'Failed to create task', variant: 'destructive' });
     }
@@ -2858,6 +3097,8 @@ export default function MyTasksV2() {
         onCreate={handleCreate}
         isCreating={isCreating}
         currentUserFullName={currentUser?.fullName}
+        currentUserId={currentUser?.id}
+        currentUserRole={currentUser?.role}
       />
       <EditDialog
         task={editingTask}
