@@ -79,11 +79,16 @@ function isOverdue(due?: string | null, status?: string) {
 
 function recurrenceLabel(task: { recurrence?: string; recurrenceEndDate?: string | null }): string {
   const freq: Record<string, string> = {
-    'daily':        'Repeats daily',
-    'every-2-days': 'Repeats every 2 days',
-    'every-3-days': 'Repeats every 3 days',
-    'weekly':       'Repeats weekly',
-    'monthly':      'Repeats monthly',
+    'daily':         'Repeats daily',
+    'every_2_days':  'Repeats every 2 days',
+    'every-2-days':  'Repeats every 2 days',
+    'every_3_days':  'Repeats every 3 days',
+    'every-3-days':  'Repeats every 3 days',
+    'weekly':        'Repeats weekly',
+    'monthly':       'Repeats monthly',
+    'weekdays':      'Repeats Mon–Fri',
+    'biweekly':      'Repeats bi-weekly',
+    'specific_days': 'Repeats on specific days',
   };
   const base = freq[task.recurrence ?? ''] ?? 'Repeats';
   if (task.recurrenceEndDate) {
@@ -331,7 +336,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
 
   const submit = () => {
     if (!title.trim()) return;
-    if (recurrenceOn && recurrence === 'weekly' && recurrenceDaysQA.length === 0) return;
+    if (recurrenceOn && (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceDaysQA.length === 0) return;
     const typeMap = {
       general:  { taskType: null as null,                    category: 'personal' },
       project:  { taskType: 'project-task' as const,        category: 'project'  },
@@ -348,7 +353,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       structuredDeps,
       planningQuadrant,
       recurrence: recurrenceOn ? recurrence : 'none',
-      recurrenceDays: recurrence === 'weekly' && recurrenceOn ? recurrenceDaysQA : [],
+      recurrenceDays: (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceOn ? recurrenceDaysQA : [],
       recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
       recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
       estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
@@ -495,27 +500,30 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               </div>
               {recurrenceOn && (
                 <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                  {/* Frequency options — 5 buttons, 3+2 grid */}
+                  {/* Frequency options — 8 buttons, 4-column grid */}
                   <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Frequency</p>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-4 gap-1">
                       {([
-                        { key: 'daily',        label: 'Daily'       },
-                        { key: 'every_2_days', label: 'Every 2 Days'},
-                        { key: 'every_3_days', label: 'Every 3 Days'},
-                        { key: 'weekly',       label: 'Weekly'      },
-                        { key: 'monthly',      label: 'Monthly'     },
+                        { key: 'daily',         label: 'Daily'       },
+                        { key: 'every_2_days',  label: 'Every 2d'   },
+                        { key: 'every_3_days',  label: 'Every 3d'   },
+                        { key: 'weekdays',      label: 'Mon–Fri'    },
+                        { key: 'weekly',        label: 'Weekly'      },
+                        { key: 'biweekly',      label: 'Bi-weekly'  },
+                        { key: 'monthly',       label: 'Monthly'     },
+                        { key: 'specific_days', label: 'Specific'   },
                       ] as const).map(r => (
                         <button key={r.key} type="button" onClick={() => setRecurrence(r.key)} data-testid={`recurrence-freq-${r.key}`}
-                          className={cn('px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all text-center',
+                          className={cn('px-1.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all text-center',
                             recurrence === r.key ? 'bg-[#1D3461] text-white border-[#1D3461]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300')}>
                           {r.label}
                         </button>
                       ))}
                     </div>
                   </div>
-                  {/* Weekly: day-of-week pills */}
-                  {recurrence === 'weekly' && (
+                  {/* Weekly / Specific days: day-of-week pills */}
+                  {(recurrence === 'weekly' || recurrence === 'specific_days') && (
                     <div>
                       <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">On days</p>
                       <div className="flex gap-1">
@@ -1177,7 +1185,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       targetDepartmentId: assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
       planningQuadrant: planningQuadrant ?? null,
       recurrence: editRecurrenceOn ? editRecurrence : 'none',
-      recurrenceDays: editRecurrence === 'weekly' && editRecurrenceOn ? editRecurrenceDays : [],
+      recurrenceDays: (editRecurrence === 'weekly' || editRecurrence === 'specific_days') && editRecurrenceOn ? editRecurrenceDays : [],
       recurrenceMonthlyDay: editRecurrence === 'monthly' && editRecurrenceOn ? editRecurrenceMonthlyDay : null,
       recurrenceEndDate: editRecurrenceOn && editRecurrenceEndDate ? editRecurrenceEndDate : null,
       estimatedHours: editEstimatedHours ? parseFloat(editEstimatedHours) : null,
@@ -1301,23 +1309,26 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                 <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Frequency</p>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-4 gap-1">
                       {([
-                        { key: 'daily',        label: 'Daily'       },
-                        { key: 'every_2_days', label: 'Every 2 Days'},
-                        { key: 'every_3_days', label: 'Every 3 Days'},
-                        { key: 'weekly',       label: 'Weekly'      },
-                        { key: 'monthly',      label: 'Monthly'     },
+                        { key: 'daily',         label: 'Daily'     },
+                        { key: 'every_2_days',  label: 'Every 2d'  },
+                        { key: 'every_3_days',  label: 'Every 3d'  },
+                        { key: 'weekdays',      label: 'Mon–Fri'   },
+                        { key: 'weekly',        label: 'Weekly'    },
+                        { key: 'biweekly',      label: 'Bi-weekly' },
+                        { key: 'monthly',       label: 'Monthly'   },
+                        { key: 'specific_days', label: 'Specific'  },
                       ] as const).map(r => (
                         <button key={r.key} type="button" onClick={() => setEditRecurrence(r.key)} data-testid={`edit-recurrence-freq-${r.key}`}
-                          className={cn('px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all text-center',
+                          className={cn('px-1.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all text-center',
                             editRecurrence === r.key ? 'bg-[#1D3461] text-white border-[#1D3461]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300')}>
                           {r.label}
                         </button>
                       ))}
                     </div>
                   </div>
-                  {editRecurrence === 'weekly' && (
+                  {(editRecurrence === 'weekly' || editRecurrence === 'specific_days') && (
                     <div>
                       <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">On days</p>
                       <div className="flex gap-1">
