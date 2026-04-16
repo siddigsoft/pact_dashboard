@@ -267,6 +267,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
 
   const submit = () => {
     if (!title.trim()) return;
+    if (recurrenceOn && recurrence === 'weekly' && recurrenceDaysQA.length === 0) return;
     const typeMap = {
       general:  { taskType: null as null,                    category: 'personal' },
       project:  { taskType: 'project-task' as const,        category: 'project'  },
@@ -461,6 +462,9 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                           </button>
                         ))}
                       </div>
+                      {recurrenceDaysQA.length === 0 && (
+                        <p className="text-[10px] text-amber-600 mt-1">Select at least one day</p>
+                      )}
                     </div>
                   )}
                   {/* Monthly: day-of-month */}
@@ -1072,6 +1076,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
 
   const handleSave = () => {
     if (!title.trim()) return;
+    if (editRecurrenceOn && editRecurrence === 'weekly' && editRecurrenceDays.length === 0) return;
     const typeMap = { general: null as null, project: 'project-task' as const, daytoday: 'day-to-day' as const };
     onSave(task.id, {
       title: title.trim(), priority, status,
@@ -1234,6 +1239,9 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                           </button>
                         ))}
                       </div>
+                      {editRecurrenceDays.length === 0 && (
+                        <p className="text-[10px] text-amber-600 mt-1">Select at least one day</p>
+                      )}
                     </div>
                   )}
                   {editRecurrence === 'monthly' && (
