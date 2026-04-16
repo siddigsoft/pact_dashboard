@@ -355,7 +355,11 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                 {TASK_TYPES.map(t => (
                   <button
                     key={t.key}
-                    onClick={() => setTaskTypeKey(t.key)}
+                    onClick={() => {
+                      setTaskTypeKey(t.key);
+                      // Auto-enable recurrence when Day-to-Day is selected
+                      if (t.key === 'daytoday') setRecurrenceOn(true);
+                    }}
                     className={cn(
                       'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border text-xs font-semibold transition-all',
                       taskTypeKey === t.key
@@ -1139,7 +1143,10 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Task Type</label>
               <div className="flex gap-2">
                 {TASK_TYPES.map(t => (
-                  <button key={t.key} onClick={() => setTaskTypeKey(t.key)}
+                  <button key={t.key} onClick={() => {
+                    setTaskTypeKey(t.key);
+                    if (t.key === 'daytoday') setEditRecurrenceOn(true);
+                  }}
                     className={cn('flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border text-xs font-semibold transition-all',
                       taskTypeKey === t.key ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                     )}>

@@ -501,6 +501,8 @@ export function usePersonalTasks(userId: string | undefined) {
           completion_reward_amount: task.completionRewardAmount ?? null,
           completion_reward_currency: task.completionRewardCurrency ?? 'USD',
           recurrence: task.recurrence ?? 'none',
+          recurrence_days: task.recurrenceDays ?? [],
+          recurrence_monthly_day: task.recurrenceMonthlyDay ?? null,
           template_id: task.templateId ?? null,
           daily_task_date: task.dailyTaskDate ?? null,
           recurrence_end_date: task.recurrenceEndDate ?? null,
