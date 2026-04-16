@@ -55,10 +55,10 @@ type Tab = 'inbox' | 'logs' | 'send' | 'settings';
 
 export default function AdminWhatsAppPage() {
   const navigate = useNavigate();
-  const { userRole } = useUser();
+  const { currentUser } = useUser();
   const { toast } = useToast();
 
-  const role = (userRole ?? '').toLowerCase();
+  const role = (currentUser?.role ?? '').toLowerCase();
   const isAdmin = ADMIN_ROLES.includes(role);
 
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
