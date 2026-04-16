@@ -101,6 +101,24 @@ function safeDate(d: string | null | undefined): Date | null {
   return isNaN(dd.getTime()) ? null : dd;
 }
 
+function buildNudgeMessage(metrics: { emp: { full_name: string | null }; allTasks: PersonalTask[]; projectTasksForEmp: ProjectFieldTask[] }): string {
+  const overdueTasks = [
+    ...metrics.allTasks.filter(isOverdue),
+    ...metrics.projectTasksForEmp.filter(isOverdue),
+  ];
+  if (overdueTasks.length === 0) return '';
+  const name = metrics.emp.full_name?.split(' ')[0] ?? 'there';
+  const taskLines = overdueTasks
+    .slice(0, 5)
+    .map((t, i) => {
+      const due = t.due_date ? `(was due ${format(new Date(t.due_date), 'd MMM yyyy')})` : '(no due date set)';
+      return `${i + 1}. "${t.title}" ${due}`;
+    })
+    .join('\n');
+  const more = overdueTasks.length > 5 ? `\n...and ${overdueTasks.length - 5} more.` : '';
+  return `Hi ${name}, you have ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''} that need your attention:\n\n${taskLines}${more}\n\nPlease review and update these as soon as possible. Thank you!`;
+}
+
 // ─── Data Fetching ────────────────────────────────────────────────────────────
 async function fetchTeamTaskData() {
   const [
@@ -637,7 +655,7 @@ export default function TeamTaskMonitor() {
                           <Plus className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={e => { e.stopPropagation(); setWaTarget(m); setWaMsg(''); }}
+                          onClick={e => { e.stopPropagation(); setWaTarget(m); setWaMsg(buildNudgeMessage(m)); }}
                           className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 transition-all"
                           title="Send WhatsApp message"
                           data-testid={`btn-whatsapp-${m.emp.id}`}
@@ -750,12 +768,20 @@ export default function TeamTaskMonitor() {
                 }
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Message</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Message</label>
+                  {waTarget.overdue > 0 && (
+                    <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Pre-filled from {waTarget.overdue} overdue task{waTarget.overdue > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
                 <Textarea
                   value={waMsg}
                   onChange={e => setWaMsg(e.target.value)}
                   placeholder="Type your message to this employee…"
-                  rows={4}
+                  rows={waTarget.overdue > 0 ? 7 : 4}
                   maxLength={500}
                   data-testid={`input-wa-message-${waTarget.emp.id}`}
                 />
