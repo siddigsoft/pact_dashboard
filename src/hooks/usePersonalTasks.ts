@@ -72,6 +72,9 @@ export interface PersonalTask {
   planningQuadrant: 'do' | 'schedule' | 'delegate' | 'drop' | null;
   // Recurrence end date
   recurrenceEndDate: string | null;
+  // Time tracking
+  estimatedHours: number | null;
+  actualHours: number | null;
 }
 
 export interface CreatePersonalTask {
@@ -112,6 +115,9 @@ export interface CreatePersonalTask {
   planningQuadrant?: 'do' | 'schedule' | 'delegate' | 'drop' | null;
   // Recurrence end date
   recurrenceEndDate?: string | null;
+  // Time tracking
+  estimatedHours?: number | null;
+  actualHours?: number | null;
 }
 
 export interface DailyTaskDefinition {
@@ -222,6 +228,8 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     recurrenceMonthlyDay: (r.recurrence_monthly_day as number) ?? null,
     planningQuadrant: (r.planning_quadrant as 'do' | 'schedule' | 'delegate' | 'drop' | null) ?? null,
     recurrenceEndDate: (r.recurrence_end_date as string) ?? null,
+    estimatedHours: (r.estimated_hours as number) ?? null,
+    actualHours: (r.actual_hours as number) ?? null,
   };
 }
 
@@ -510,6 +518,8 @@ export function usePersonalTasks(userId: string | undefined) {
           dependencies: task.dependencies ?? [],
           tools: encodeToolsMeta(task.tools, task.taskType, task.attachments),
           planning_quadrant: task.planningQuadrant ?? null,
+          estimated_hours: task.estimatedHours ?? null,
+          actual_hours: task.actualHours ?? null,
         })
         .select('id')
         .single();
@@ -612,6 +622,8 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.planningQuadrant !== undefined) patch.planning_quadrant = updates.planningQuadrant ?? null;
       if (updates.recurrenceEndDate !== undefined) patch.recurrence_end_date = updates.recurrenceEndDate ?? null;
       if ('recurrence' in updates && updates.recurrence !== undefined) patch.recurrence = updates.recurrence;
+      if (updates.estimatedHours !== undefined) patch.estimated_hours = updates.estimatedHours ?? null;
+      if (updates.actualHours !== undefined) patch.actual_hours = updates.actualHours ?? null;
 
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;

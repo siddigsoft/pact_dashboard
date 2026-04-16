@@ -8,7 +8,7 @@ import {
   Clock, Plus, Edit2, Trash2, Loader2, CheckCircle2, ChevronLeft,
   ChevronRight, Briefcase, Search, Calendar,
   AlertCircle, Send, X, MessageSquare, ClipboardCheck, RotateCcw,
-  Coffee, FileText,
+  Coffee, FileText, ListTodo, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -134,7 +134,7 @@ export default function Timesheet() {
   const [form, setForm]                 = useState({ ...BLANK_FORM });
   const [saving, setSaving]             = useState(false);
   const [search, setSearch]             = useState('');
-  const [activeTab, setActiveTab]       = useState<'my-week' | 'my-history' | 'review'>('my-week');
+  const [activeTab, setActiveTab]       = useState<'my-week' | 'my-history' | 'review' | 'task-hours'>('my-week');
   const [rejectDialog, setRejectDialog] = useState<{ id: string; name: string } | null>(null);
   const [rejectComment, setRejectComment] = useState('');
   const [reviewAction, setReviewAction] = useState<'rejected' | 'revision' | null>(null);
@@ -252,6 +252,34 @@ export default function Timesheet() {
         ...ts,
         user_name: pm[ts.user_id] ?? 'Unknown',
       }));
+    },
+  });
+
+  /** Fetch tasks that have at least estimated or actual hours logged */
+  const [taskHoursUser, setTaskHoursUser] = useState<string>('');
+  const { data: taskHoursRows = [], isLoading: loadingTaskHours } = useQuery<{
+    id: string; title: string; status: string; due_date: string | null;
+    estimated_hours: number | null; actual_hours: number | null;
+    assigned_to_name: string | null; user_id: string;
+  }[]>({
+    queryKey: ['ts-task-hours', userId, taskHoursUser, activeTab],
+    enabled: !!userId && activeTab === 'task-hours',
+    ...CACHE,
+    queryFn: async () => {
+      const isAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'superAdmin', 'admin', 'Admin']);
+      let q = supabase
+        .from('personal_tasks')
+        .select('id, title, status, due_date, estimated_hours, actual_hours, assigned_to_name, user_id')
+        .or('estimated_hours.not.is.null,actual_hours.not.is.null')
+        .order('due_date', { ascending: false })
+        .limit(300);
+      if (isAdmin && taskHoursUser) {
+        q = q.eq('user_id', taskHoursUser);
+      } else if (!isAdmin) {
+        q = q.eq('user_id', userId);
+      }
+      const { data } = await q;
+      return (data ?? []) as typeof taskHoursRows;
     },
   });
 
@@ -525,6 +553,9 @@ export default function Timesheet() {
               )}
             </TabsTrigger>
           )}
+          <TabsTrigger value="task-hours" className="text-xs rounded-lg gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white">
+            <ListTodo className="h-3.5 w-3.5" />Task Hours
+          </TabsTrigger>
         </TabsList>
 
         {/* ── MY WEEK ──────────────────────────────────────────────────────── */}
@@ -603,6 +634,141 @@ export default function Timesheet() {
             }
           </TabsContent>
         )}
+
+        {/* ── TASK HOURS ───────────────────────────────────────────────────── */}
+        <TabsContent value="task-hours" className="mt-4">
+          {/* Admin user filter */}
+          {hasAnyRole(['super_admin', 'SuperAdmin', 'superAdmin', 'admin', 'Admin']) && (
+            <div className="flex items-center gap-3 mb-4">
+              <Select value={taskHoursUser || '__all__'} onValueChange={v => setTaskHoursUser(v === '__all__' ? '' : v)}>
+                <SelectTrigger className="w-56 h-9 text-sm" data-testid="select-task-hours-user">
+                  <SelectValue placeholder="All team members" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All team members</SelectItem>
+                  {profiles.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.id}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">{taskHoursRows.length} task{taskHoursRows.length !== 1 ? 's' : ''} with hours logged</span>
+            </div>
+          )}
+
+          {loadingTaskHours
+            ? <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            : taskHoursRows.length === 0
+              ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+                  <ListTodo className="h-10 w-10 opacity-30" />
+                  <p className="text-sm font-medium">No tasks with hours logged yet.</p>
+                  <p className="text-xs">Add estimated or actual hours when creating or editing a task.</p>
+                </div>
+              )
+              : (() => {
+                  const totalEst  = taskHoursRows.reduce((s, r) => s + (r.estimated_hours ?? 0), 0);
+                  const totalAct  = taskHoursRows.reduce((s, r) => s + (r.actual_hours ?? 0), 0);
+                  const variance  = totalAct - totalEst;
+                  return (
+                    <div className="space-y-4">
+                      {/* Summary strip */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'Total Estimated', value: totalEst, icon: <Clock className="h-4 w-4 text-blue-500" /> },
+                          { label: 'Total Actual',    value: totalAct, icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" /> },
+                          { label: 'Variance',        value: variance,
+                            icon: variance > 0 ? <TrendingUp className="h-4 w-4 text-amber-500" />
+                                : variance < 0 ? <TrendingDown className="h-4 w-4 text-green-500" />
+                                : <Minus className="h-4 w-4 text-slate-400" />,
+                            color: variance > 0 ? 'text-amber-600' : variance < 0 ? 'text-green-600' : 'text-slate-500',
+                          },
+                        ].map(card => (
+                          <div key={card.label} className="bg-white dark:bg-slate-900 border rounded-xl p-3 flex flex-col gap-1 shadow-sm">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">{card.icon}{card.label}</div>
+                            <p className={cn('text-xl font-bold', (card as { color?: string }).color)}>
+                              {(card.value >= 0 ? '' : '-')}{Math.abs(card.value).toFixed(1)}h
+                              {card.label === 'Variance' && card.value > 0 && <span className="text-xs font-normal ml-1">over</span>}
+                              {card.label === 'Variance' && card.value < 0 && <span className="text-xs font-normal ml-1">under</span>}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Table */}
+                      <div className="bg-white dark:bg-slate-900 border rounded-xl shadow-sm overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-slate-50 dark:bg-slate-800">
+                              <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Task</th>
+                              <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                              <th className="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Due</th>
+                              <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Est.</th>
+                              <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actual</th>
+                              <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">+/-</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {taskHoursRows.map(row => {
+                              const est  = row.estimated_hours ?? 0;
+                              const act  = row.actual_hours ?? 0;
+                              const diff = act - est;
+                              const hasEst = row.estimated_hours != null;
+                              const hasAct = row.actual_hours != null;
+                              return (
+                                <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" data-testid={`row-task-hours-${row.id}`}>
+                                  <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200 max-w-[240px]">
+                                    <p className="truncate">{row.title}</p>
+                                    {row.assigned_to_name && (
+                                      <p className="text-xs text-muted-foreground truncate">{row.assigned_to_name}</p>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide',
+                                      row.status === 'done'        ? 'bg-emerald-100 text-emerald-700' :
+                                      row.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                      row.status === 'todo'        ? 'bg-slate-100 text-slate-600' :
+                                      'bg-amber-100 text-amber-700'
+                                    )}>
+                                      {row.status.replace('_', ' ')}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-slate-500 text-xs whitespace-nowrap">
+                                    {row.due_date ? format(parseISO(row.due_date), 'dd MMM') : '—'}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right font-mono text-xs text-slate-600">
+                                    {hasEst ? `${est.toFixed(1)}h` : <span className="text-slate-300">—</span>}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right font-mono text-xs text-slate-600">
+                                    {hasAct ? `${act.toFixed(1)}h` : <span className="text-slate-300">—</span>}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right font-mono text-xs">
+                                    {(hasEst && hasAct) ? (
+                                      <span className={cn('font-semibold', diff > 0 ? 'text-amber-600' : diff < 0 ? 'text-green-600' : 'text-slate-400')}>
+                                        {diff > 0 ? '+' : ''}{diff.toFixed(1)}h
+                                      </span>
+                                    ) : <span className="text-slate-300">—</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t bg-slate-50 dark:bg-slate-800 font-semibold">
+                              <td className="px-4 py-2.5 text-xs text-slate-600" colSpan={3}>Totals ({taskHoursRows.length} tasks)</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-xs text-blue-700">{totalEst.toFixed(1)}h</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-xs text-emerald-700">{totalAct.toFixed(1)}h</td>
+                              <td className={cn('px-4 py-2.5 text-right font-mono text-xs font-bold', variance > 0 ? 'text-amber-600' : variance < 0 ? 'text-green-600' : 'text-slate-400')}>
+                                {variance > 0 ? '+' : ''}{variance.toFixed(1)}h
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()
+          }
+        </TabsContent>
       </Tabs>
 
       {/* ── Log / Edit Entry Dialog ──────────────────────────────────────────── */}

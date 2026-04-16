@@ -103,6 +103,8 @@ interface QuickAddDialogProps {
     recurrenceDays?: number[];
     recurrenceMonthlyDay?: number | null;
     recurrenceEndDate?: string | null;
+    estimatedHours?: number | null;
+    actualHours?: number | null;
   }) => void;
   isCreating: boolean;
   currentUserFullName?: string | null;
@@ -239,6 +241,10 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const toggleDayQA = (d: number) =>
     setRecurrenceDaysQA(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b));
 
+  // Time tracking state
+  const [estimatedHoursQA, setEstimatedHoursQA] = useState('');
+  const [actualHoursQA,    setActualHoursQA]    = useState('');
+
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey('general');
     setPriority('medium'); setDueDate(''); setNotes('');
@@ -249,6 +255,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setPlanningQuadrant(null);
     setRecurrenceOn(false); setRecurrence('daily');
     setRecurrenceDaysQA([]); setRecurrenceMonthlyDayQA(1); setRecurrenceEndDate('');
+    setEstimatedHoursQA(''); setActualHoursQA('');
   };
 
   const addDep = (label: string, type: string = 'custom', requiresAck = false) => {
@@ -287,6 +294,8 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       recurrenceDays: recurrence === 'weekly' && recurrenceOn ? recurrenceDaysQA : [],
       recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
       recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
+      estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
+      actualHours: actualHoursQA ? parseFloat(actualHoursQA) : null,
     });
     reset();
   };
@@ -513,6 +522,28 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                   onChange={e => setDueDate(e.target.value)}
                   className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
                 />
+              </div>
+            </div>
+
+            {/* Time tracking */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Estimated hrs
+                </label>
+                <input type="number" min="0" step="0.25" placeholder="0.0"
+                  value={estimatedHoursQA} onChange={e => setEstimatedHoursQA(e.target.value)}
+                  data-testid="input-estimated-hours"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Actual hrs
+                </label>
+                <input type="number" min="0" step="0.25" placeholder="0.0"
+                  value={actualHoursQA} onChange={e => setActualHoursQA(e.target.value)}
+                  data-testid="input-actual-hours"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
               </div>
             </div>
 
@@ -937,6 +968,10 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [reward, setReward]         = useState('');
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
+  // Time tracking state (EditDialog)
+  const [editEstimatedHours, setEditEstimatedHours] = useState('');
+  const [editActualHours,    setEditActualHours]    = useState('');
+
   // Recurrence state (EditDialog)
   const [editRecurrenceOn,           setEditRecurrenceOn]           = useState(false);
   const [editRecurrence,             setEditRecurrence]             = useState('daily');
@@ -1029,6 +1064,9 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       setNotes(task.notes ?? '');
       setReward(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
       setPlanningQuadrant(task.planningQuadrant ?? null);
+      // Time tracking
+      setEditEstimatedHours(task.estimatedHours != null ? String(task.estimatedHours) : '');
+      setEditActualHours(task.actualHours != null ? String(task.actualHours) : '');
       // Recurrence
       const hasRecurrence = !!(task.recurrence && task.recurrence !== 'none');
       setEditRecurrenceOn(hasRecurrence);
@@ -1093,6 +1131,8 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       recurrenceDays: editRecurrence === 'weekly' && editRecurrenceOn ? editRecurrenceDays : [],
       recurrenceMonthlyDay: editRecurrence === 'monthly' && editRecurrenceOn ? editRecurrenceMonthlyDay : null,
       recurrenceEndDate: editRecurrenceOn && editRecurrenceEndDate ? editRecurrenceEndDate : null,
+      estimatedHours: editEstimatedHours ? parseFloat(editEstimatedHours) : null,
+      actualHours: editActualHours ? parseFloat(editActualHours) : null,
     });
     onClose();
   };
@@ -1291,6 +1331,28 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Due date</label>
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
                 className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+            </div>
+
+            {/* Time tracking */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Estimated hrs
+                </label>
+                <input type="number" min="0" step="0.25" placeholder="0.0"
+                  value={editEstimatedHours} onChange={e => setEditEstimatedHours(e.target.value)}
+                  data-testid="edit-input-estimated-hours"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Actual hrs
+                </label>
+                <input type="number" min="0" step="0.25" placeholder="0.0"
+                  value={editActualHours} onChange={e => setEditActualHours(e.target.value)}
+                  data-testid="edit-input-actual-hours"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              </div>
             </div>
 
             {/* Assign to */}
@@ -3236,6 +3298,8 @@ export default function MyTasksV2() {
     recurrenceDays?: number[];
     recurrenceMonthlyDay?: number | null;
     recurrenceEndDate?: string | null;
+    estimatedHours?: number | null;
+    actualHours?: number | null;
   }) => {
     try {
       await createTask({
@@ -3256,6 +3320,8 @@ export default function MyTasksV2() {
         recurrenceDays: data.recurrenceDays ?? [],
         recurrenceMonthlyDay: data.recurrenceMonthlyDay ?? null,
         recurrenceEndDate: data.recurrenceEndDate ?? null,
+        estimatedHours: data.estimatedHours ?? null,
+        actualHours: data.actualHours ?? null,
       });
       // Notify assigned user if task was delegated to someone else
       if (data.assignedToUserId && data.assignedToUserId !== userId) {
