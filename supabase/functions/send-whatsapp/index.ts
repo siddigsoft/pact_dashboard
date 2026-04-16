@@ -545,11 +545,12 @@ serve(async (req) => {
     console.log(`[WhatsApp] Sending ${event_type} to ${normalized.length} numbers`)
 
     // Send to each number via WasenderAPI
-    const results = await Promise.allSettled(
+    const results = await Promise.all(
       normalized.map(async ({ phone, userId }) => {
         let wasenderId: string | null = null
         let errorMsg: string | null = null
         let success = false
+
         try {
           const resp = await fetch(WASENDER_ENDPOINT, {
             method: 'POST',
@@ -557,50 +558,63 @@ serve(async (req) => {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${apiKey}`,
             },
-            body: JSON.stringify({
-              to: phone,
-              text: message,
-            }),
+            body: JSON.stringify({ to: phone, text: message }),
           })
 
           const responseBody = await resp.text()
-          if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}: ${responseBody}`)
+          if (resp.ok) {
+            try {
+              const parsed = JSON.parse(responseBody)
+              wasenderId = parsed?.id || parsed?.messageId || null
+            } catch (_) {}
+            console.log(`[WhatsApp] Sent to ${phone}: ${resp.status}`)
+            success = true
+          } else {
+            errorMsg = `HTTP ${resp.status}: ${responseBody.slice(0, 300)}`
+            console.error(`[WhatsApp] Send failed for ${phone}: ${errorMsg}`)
           }
-          try {
-            const parsed = JSON.parse(responseBody)
-            wasenderId = parsed?.id || parsed?.messageId || null
-          } catch (_) {}
-          console.log(`[WhatsApp] Sent to ${phone}: ${resp.status}`)
-          success = true
         } catch (err) {
           errorMsg = err instanceof Error ? err.message : 'Unknown error'
-          throw err
-        } finally {
-          // Log every delivery attempt
-          try {
-            await supabase.from('whatsapp_logs').insert({
+          console.error(`[WhatsApp] Fetch threw for ${phone}: ${errorMsg}`)
+        }
+
+        // Always log the delivery attempt — direct REST with service-role key
+        try {
+          const logResp = await fetch(`${supabaseUrl}/rest/v1/whatsapp_logs`, {
+            method: 'POST',
+            headers: {
+              'apikey': serviceRoleKey,
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({
               phone,
               user_id: userId,
               event_type,
-              broadcast_id: broadcast_id || null,
+              ...(broadcast_id ? { broadcast_id } : {}),
               status: success ? 'sent' : 'failed',
               direction: 'outbound',
               message_body: message.slice(0, 1000),
-              error_message: errorMsg,
+              error_message: errorMsg ? errorMsg.slice(0, 500) : null,
               wasender_id: wasenderId,
-            })
-          } catch (_) { /* non-blocking */ }
+            }),
+          })
+          if (!logResp.ok) {
+            const t = await logResp.text()
+            console.error(`[WhatsApp] whatsapp_logs insert failed (${logResp.status}): ${t.slice(0, 300)}`)
+          }
+        } catch (logErr) {
+          console.error(`[WhatsApp] whatsapp_logs insert threw:`, logErr instanceof Error ? logErr.message : logErr)
         }
-        return { phone, success: true }
+
+        return { phone, success }
       }),
     )
 
-    const sent = results.filter(r => r.status === 'fulfilled').length
-    const failed = results.filter(r => r.status === 'rejected').length
-    const errors = results
-      .filter(r => r.status === 'rejected')
-      .map(r => (r as PromiseRejectedResult).reason?.message || 'Unknown')
+    const sent = results.filter(r => r.success).length
+    const failed = results.filter(r => !r.success).length
+    const errors: string[] = []
 
     if (failed > 0) {
       console.error(`[WhatsApp] ${failed} messages failed:`, errors)
