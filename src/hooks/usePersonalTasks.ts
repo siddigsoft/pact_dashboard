@@ -75,6 +75,8 @@ export interface PersonalTask {
   // Time tracking
   estimatedHours: number | null;
   actualHours: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
 }
 
 export interface CreatePersonalTask {
@@ -230,6 +232,8 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     recurrenceEndDate: (r.recurrence_end_date as string) ?? null,
     estimatedHours: (r.estimated_hours as number) ?? null,
     actualHours: (r.actual_hours as number) ?? null,
+    startedAt: (r.started_at as string) ?? null,
+    completedAt: (r.completed_at as string) ?? null,
   };
 }
 
@@ -624,6 +628,33 @@ export function usePersonalTasks(userId: string | undefined) {
       if ('recurrence' in updates && updates.recurrence !== undefined) patch.recurrence = updates.recurrence;
       if (updates.estimatedHours !== undefined) patch.estimated_hours = updates.estimatedHours ?? null;
       if (updates.actualHours !== undefined) patch.actual_hours = updates.actualHours ?? null;
+
+      // ── Auto-track started_at / completed_at & calculate actual_hours ──────
+      if (updates.status === 'inprogress' || updates.status === 'done') {
+        const { data: cur } = await supabase
+          .from('personal_tasks')
+          .select('started_at, completed_at, actual_hours')
+          .eq('id', id)
+          .maybeSingle();
+        const curStarted   = (cur as { started_at?: string | null } | null)?.started_at   ?? null;
+        const curCompleted = (cur as { completed_at?: string | null } | null)?.completed_at ?? null;
+        const now = new Date();
+
+        if (updates.status === 'inprogress' && !curStarted) {
+          patch.started_at = now.toISOString();
+        }
+        if (updates.status === 'done') {
+          if (!curCompleted) patch.completed_at = now.toISOString();
+          // Only auto-calculate if admin is NOT manually overriding
+          if (updates.actualHours === undefined) {
+            const startRef = curStarted ?? (patch.started_at as string | undefined) ?? null;
+            if (startRef) {
+              const elapsed = (now.getTime() - new Date(startRef).getTime()) / 3_600_000;
+              patch.actual_hours = Math.round(elapsed * 4) / 4; // nearest 0.25 h
+            }
+          }
+        }
+      }
 
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;

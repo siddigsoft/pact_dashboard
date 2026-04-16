@@ -4,7 +4,7 @@ import {
   addDays, differenceInCalendarDays,
 } from 'date-fns';
 import {
-  Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock,
+  Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Lock,
   LayoutDashboard, ListTodo, MoreHorizontal, Plus,
   Search, AlertCircle, Loader2, X, Trash2, Edit2, Check,
   Columns2, Sun, Sparkles, Target,
@@ -104,7 +104,6 @@ interface QuickAddDialogProps {
     recurrenceMonthlyDay?: number | null;
     recurrenceEndDate?: string | null;
     estimatedHours?: number | null;
-    actualHours?: number | null;
   }) => void;
   isCreating: boolean;
   currentUserFullName?: string | null;
@@ -241,9 +240,8 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const toggleDayQA = (d: number) =>
     setRecurrenceDaysQA(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b));
 
-  // Time tracking state
+  // Time tracking state (estimated only — actual is auto-calculated from start/end timestamps)
   const [estimatedHoursQA, setEstimatedHoursQA] = useState('');
-  const [actualHoursQA,    setActualHoursQA]    = useState('');
 
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey('general');
@@ -255,7 +253,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setPlanningQuadrant(null);
     setRecurrenceOn(false); setRecurrence('daily');
     setRecurrenceDaysQA([]); setRecurrenceMonthlyDayQA(1); setRecurrenceEndDate('');
-    setEstimatedHoursQA(''); setActualHoursQA('');
+    setEstimatedHoursQA('');
   };
 
   const addDep = (label: string, type: string = 'custom', requiresAck = false) => {
@@ -295,7 +293,6 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
       recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
       estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
-      actualHours: actualHoursQA ? parseFloat(actualHoursQA) : null,
     });
     reset();
   };
@@ -525,26 +522,16 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               </div>
             </div>
 
-            {/* Time tracking */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Estimated hrs
-                </label>
-                <input type="number" min="0" step="0.25" placeholder="0.0"
-                  value={estimatedHoursQA} onChange={e => setEstimatedHoursQA(e.target.value)}
-                  data-testid="input-estimated-hours"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Actual hrs
-                </label>
-                <input type="number" min="0" step="0.25" placeholder="0.0"
-                  value={actualHoursQA} onChange={e => setActualHoursQA(e.target.value)}
-                  data-testid="input-actual-hours"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
-              </div>
+            {/* Time tracking — Estimated only; Actual is auto-calculated when task is completed */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Estimated hrs
+              </label>
+              <input type="number" min="0" step="0.25" placeholder="0.0"
+                value={estimatedHoursQA} onChange={e => setEstimatedHoursQA(e.target.value)}
+                data-testid="input-estimated-hours"
+                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              <p className="text-[10px] text-slate-400 mt-1">Actual hours are tracked automatically when the task is started and completed.</p>
             </div>
 
             {/* Assign to */}
@@ -968,6 +955,9 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [reward, setReward]         = useState('');
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
+  // Permission: who can manually override actual_hours
+  const canEditActualHours = ['admin', 'superadmin', 'ceo', 'coo', 'cto'].includes((currentUserRole ?? '').toLowerCase());
+
   // Time tracking state (EditDialog)
   const [editEstimatedHours, setEditEstimatedHours] = useState('');
   const [editActualHours,    setEditActualHours]    = useState('');
@@ -1132,7 +1122,8 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       recurrenceMonthlyDay: editRecurrence === 'monthly' && editRecurrenceOn ? editRecurrenceMonthlyDay : null,
       recurrenceEndDate: editRecurrenceOn && editRecurrenceEndDate ? editRecurrenceEndDate : null,
       estimatedHours: editEstimatedHours ? parseFloat(editEstimatedHours) : null,
-      actualHours: editActualHours ? parseFloat(editActualHours) : null,
+      // Only privileged roles can manually override actual_hours
+      ...(canEditActualHours && { actualHours: editActualHours ? parseFloat(editActualHours) : null }),
     });
     onClose();
   };
@@ -1334,25 +1325,57 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
             </div>
 
             {/* Time tracking */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Estimated hrs
-                </label>
-                <input type="number" min="0" step="0.25" placeholder="0.0"
-                  value={editEstimatedHours} onChange={e => setEditEstimatedHours(e.target.value)}
-                  data-testid="edit-input-estimated-hours"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2.5">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Time Tracking
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Estimated hours — always editable */}
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Estimated hrs</label>
+                  <input type="number" min="0" step="0.25" placeholder="0.0"
+                    value={editEstimatedHours} onChange={e => setEditEstimatedHours(e.target.value)}
+                    data-testid="edit-input-estimated-hours"
+                    className="w-full h-9 px-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+                </div>
+                {/* Actual hours — read-only except admin/CEO/COO/CTO */}
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+                    Actual hrs
+                    {!canEditActualHours && <Lock className="w-2.5 h-2.5 text-slate-400" />}
+                  </label>
+                  {canEditActualHours ? (
+                    <input type="number" min="0" step="0.25" placeholder="0.0"
+                      value={editActualHours} onChange={e => setEditActualHours(e.target.value)}
+                      data-testid="edit-input-actual-hours"
+                      className="w-full h-9 px-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+                  ) : (
+                    <div className="h-9 px-2.5 rounded-lg border border-slate-200 bg-white flex items-center text-sm text-slate-600" data-testid="display-actual-hours">
+                      {task?.actualHours != null ? `${task.actualHours}h` : <span className="text-slate-300">Auto-tracked</span>}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Actual hrs
-                </label>
-                <input type="number" min="0" step="0.25" placeholder="0.0"
-                  value={editActualHours} onChange={e => setEditActualHours(e.target.value)}
-                  data-testid="edit-input-actual-hours"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
-              </div>
+              {/* Timestamps */}
+              {(task?.startedAt || task?.completedAt) && (
+                <div className="flex flex-col gap-0.5 pt-1 border-t border-slate-200">
+                  {task?.startedAt && (
+                    <p className="text-[10px] text-slate-400">
+                      <span className="font-semibold text-slate-500">Started:</span>{' '}
+                      {format(parseISO(task.startedAt), 'dd MMM yyyy, HH:mm')}
+                    </p>
+                  )}
+                  {task?.completedAt && (
+                    <p className="text-[10px] text-slate-400">
+                      <span className="font-semibold text-slate-500">Completed:</span>{' '}
+                      {format(parseISO(task.completedAt), 'dd MMM yyyy, HH:mm')}
+                    </p>
+                  )}
+                </div>
+              )}
+              {!canEditActualHours && (
+                <p className="text-[10px] text-slate-400">Actual hours are auto-calculated from start → completion time. Only Admin, CEO, COO, or CTO can override.</p>
+              )}
             </div>
 
             {/* Assign to */}
@@ -3299,7 +3322,6 @@ export default function MyTasksV2() {
     recurrenceMonthlyDay?: number | null;
     recurrenceEndDate?: string | null;
     estimatedHours?: number | null;
-    actualHours?: number | null;
   }) => {
     try {
       await createTask({
@@ -3321,7 +3343,6 @@ export default function MyTasksV2() {
         recurrenceMonthlyDay: data.recurrenceMonthlyDay ?? null,
         recurrenceEndDate: data.recurrenceEndDate ?? null,
         estimatedHours: data.estimatedHours ?? null,
-        actualHours: data.actualHours ?? null,
       });
       // Notify assigned user if task was delegated to someone else
       if (data.assignedToUserId && data.assignedToUserId !== userId) {

@@ -261,6 +261,7 @@ export default function Timesheet() {
     id: string; title: string; status: string; due_date: string | null;
     estimated_hours: number | null; actual_hours: number | null;
     assigned_to_name: string | null; user_id: string;
+    started_at: string | null; completed_at: string | null;
   }[]>({
     queryKey: ['ts-task-hours', userId, taskHoursUser, activeTab],
     enabled: !!userId && activeTab === 'task-hours',
@@ -269,7 +270,7 @@ export default function Timesheet() {
       const isAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'superAdmin', 'admin', 'Admin']);
       let q = supabase
         .from('personal_tasks')
-        .select('id, title, status, due_date, estimated_hours, actual_hours, assigned_to_name, user_id')
+        .select('id, title, status, due_date, estimated_hours, actual_hours, assigned_to_name, user_id, started_at, completed_at')
         .or('estimated_hours.not.is.null,actual_hours.not.is.null')
         .order('due_date', { ascending: false })
         .limit(300);
