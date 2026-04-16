@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -33,6 +33,10 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  MessageSquare,
+  Phone,
+  Save,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +52,13 @@ interface UserIntegration {
   email_notify_payroll: boolean;
   email_notify_project_milestones: boolean;
   email_notify_system: boolean;
+  whatsapp_enabled: boolean;
+  whatsapp_phone?: string | null;
+  whatsapp_notify_tasks: boolean;
+  whatsapp_notify_approvals: boolean;
+  whatsapp_notify_payroll: boolean;
+  whatsapp_notify_projects: boolean;
+  whatsapp_notify_mmp: boolean;
 }
 
 type EmailPrefKey = keyof Pick<
@@ -70,6 +81,13 @@ const DEFAULT_INTEGRATION: Omit<UserIntegration, "user_id"> = {
   email_notify_payroll: true,
   email_notify_project_milestones: true,
   email_notify_system: false,
+  whatsapp_enabled: false,
+  whatsapp_phone: null,
+  whatsapp_notify_tasks: true,
+  whatsapp_notify_approvals: true,
+  whatsapp_notify_payroll: true,
+  whatsapp_notify_projects: true,
+  whatsapp_notify_mmp: false,
 };
 
 const EMAIL_NOTIFICATION_TYPES: Array<{
@@ -116,12 +134,40 @@ const EMAIL_NOTIFICATION_TYPES: Array<{
   },
 ];
 
+type WhatsAppPrefKey = keyof Pick<
+  UserIntegration,
+  | "whatsapp_notify_tasks"
+  | "whatsapp_notify_approvals"
+  | "whatsapp_notify_payroll"
+  | "whatsapp_notify_projects"
+  | "whatsapp_notify_mmp"
+>;
+
+const WHATSAPP_NOTIFY_TYPES: Array<{
+  key: WhatsAppPrefKey;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+}> = [
+  { key: "whatsapp_notify_tasks",     label: "Tasks",           description: "Task assignments, completions, and reminders",    icon: ClipboardList, color: "text-blue-600" },
+  { key: "whatsapp_notify_approvals", label: "Approvals",       description: "When your approval is needed or a request updates", icon: CheckCircle2,  color: "text-orange-600" },
+  { key: "whatsapp_notify_payroll",   label: "Payroll",         description: "Salary processing and advance request updates",    icon: Banknote,      color: "text-green-600" },
+  { key: "whatsapp_notify_projects",  label: "Projects",        description: "Project stage advances and milestone alerts",      icon: Milestone,     color: "text-purple-600" },
+  { key: "whatsapp_notify_mmp",       label: "Field Ops (MMP)", description: "MMP assignments and site visit notifications",     icon: Settings,      color: "text-teal-600" },
+];
+
+const ADMIN_ROLES = ['admin', 'superadmin'];
+
 const getTipStorageKey = (userId: string) => `pact_integrations_tip_dismissed_${userId}`;
 
 export default function IntegrationsSettings() {
   const location = useLocation();
-  const { currentUser } = useUser();
+  const navigate = useNavigate();
+  const { currentUser, userRole } = useUser();
   const { toast } = useToast();
+
+  const isAdmin = ADMIN_ROLES.includes((userRole ?? '').toLowerCase());
 
   const [integration, setIntegration] = useState<UserIntegration | null>(null);
   const [loading, setLoading] = useState(true);
@@ -131,6 +177,8 @@ export default function IntegrationsSettings() {
   const [notificationEmail, setNotificationEmail] = useState("");
   const [tipBannerDismissed, setTipBannerDismissed] = useState(false);
   const [tipExpanded, setTipExpanded] = useState(true);
+  const [whatsappPhone, setWhatsappPhone] = useState("");
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -156,6 +204,7 @@ export default function IntegrationsSettings() {
       if (data) {
         setIntegration(data as UserIntegration);
         setNotificationEmail(data.notification_email || "");
+        setWhatsappPhone(data.whatsapp_phone || "");
       } else {
         const defaultIntegration: UserIntegration = {
           ...DEFAULT_INTEGRATION,
@@ -163,6 +212,7 @@ export default function IntegrationsSettings() {
         };
         setIntegration(defaultIntegration);
         setNotificationEmail(currentUser.email || "");
+        setWhatsappPhone((currentUser as { phone?: string }).phone || "");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load integrations";
@@ -246,6 +296,7 @@ export default function IntegrationsSettings() {
       ...updates,
       user_id: currentUser.id,
       notification_email: notificationEmail.trim() || null,
+      whatsapp_phone: 'whatsapp_phone' in updates ? updates.whatsapp_phone : (whatsappPhone.trim() || null),
     };
 
     const { error } = await supabase
@@ -280,6 +331,51 @@ export default function IntegrationsSettings() {
       toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleWhatsApp = async (enabled: boolean) => {
+    if (!integration) return;
+    const optimistic: UserIntegration = { ...integration, whatsapp_enabled: enabled };
+    setIntegration(optimistic);
+    try {
+      await upsertIntegration({ whatsapp_enabled: enabled });
+      toast({
+        title: enabled ? "WhatsApp notifications on" : "WhatsApp notifications off",
+        description: enabled
+          ? "You'll receive high-priority notifications on WhatsApp."
+          : "WhatsApp notifications have been disabled.",
+      });
+    } catch (err) {
+      setIntegration(integration);
+      const message = err instanceof Error ? err.message : "Failed to save";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleToggleWhatsAppPref = async (key: WhatsAppPrefKey, value: boolean) => {
+    if (!integration) return;
+    const optimistic: UserIntegration = { ...integration, [key]: value };
+    setIntegration(optimistic);
+    try {
+      await upsertIntegration({ [key]: value });
+    } catch (err) {
+      setIntegration(integration);
+      const message = err instanceof Error ? err.message : "Failed to save preference";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleSaveWhatsAppPhone = async () => {
+    setSavingWhatsapp(true);
+    try {
+      await upsertIntegration({ whatsapp_phone: whatsappPhone.trim() || null });
+      toast({ title: "Phone saved", description: "Your WhatsApp number has been updated." });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save phone";
+      toast({ title: "Error", description: message, variant: "destructive" });
+    } finally {
+      setSavingWhatsapp(false);
     }
   };
 
@@ -417,7 +513,7 @@ export default function IntegrationsSettings() {
           </CardHeader>
           {tipExpanded && (
             <CardContent className="pt-0 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-blue-900/30 rounded-lg">
                   <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                   <div>
@@ -439,6 +535,17 @@ export default function IntegrationsSettings() {
                     <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
                       Choose which events you want delivered to your inbox —
                       approvals, task assignments, payroll, and more.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 p-3 bg-white/60 dark:bg-blue-900/30 rounded-lg">
+                  <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                      WhatsApp
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                      Get urgent alerts (overdue tasks, approvals) sent directly to your WhatsApp number via WasenderAPI.
                     </p>
                   </div>
                 </div>
@@ -703,6 +810,162 @@ export default function IntegrationsSettings() {
               })}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── WhatsApp Section ── */}
+      <Card data-testid="card-whatsapp-integration">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center shrink-0">
+                <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">WhatsApp Notifications</CardTitle>
+                <CardDescription>
+                  Receive high-priority alerts directly on WhatsApp via WasenderAPI
+                </CardDescription>
+              </div>
+            </div>
+            <Badge
+              variant={integration?.whatsapp_enabled ? "default" : "secondary"}
+              className={cn(
+                "shrink-0",
+                integration?.whatsapp_enabled ? "bg-green-500 hover:bg-green-600" : ""
+              )}
+              data-testid="badge-whatsapp-status"
+            >
+              {integration?.whatsapp_enabled ? (
+                <><CheckCircle2 className="h-3 w-3 mr-1" />Active</>
+              ) : (
+                <><XCircle className="h-3 w-3 mr-1" />Inactive</>
+              )}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Master toggle */}
+          <div className="flex items-center justify-between gap-4 p-3 border rounded-lg">
+            <div className="flex items-center gap-3">
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <Label className="text-sm font-medium cursor-pointer" htmlFor="whatsapp-toggle">
+                  Enable WhatsApp notifications
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  High-urgency events (task assigned, overdue, approvals) will be sent to your WhatsApp
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="whatsapp-toggle"
+              checked={integration?.whatsapp_enabled ?? false}
+              onCheckedChange={handleToggleWhatsApp}
+              data-testid="switch-whatsapp-enabled"
+            />
+          </div>
+
+          {/* Phone number */}
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp-phone" className="text-sm font-medium flex items-center gap-1.5">
+              <Phone className="h-3.5 w-3.5" /> WhatsApp phone number
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Enter with country code. Sudan numbers (09XXXXXXXX) are auto-normalised to +249.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                id="whatsapp-phone"
+                type="tel"
+                placeholder="+249912345678"
+                value={whatsappPhone}
+                onChange={e => setWhatsappPhone(e.target.value)}
+                disabled={!integration?.whatsapp_enabled}
+                className="flex-1"
+                data-testid="input-whatsapp-phone"
+              />
+              <Button
+                variant="outline"
+                onClick={handleSaveWhatsAppPhone}
+                disabled={savingWhatsapp || !integration?.whatsapp_enabled}
+                data-testid="button-save-whatsapp-phone"
+              >
+                {savingWhatsapp ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Per-category toggles */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium">Notification types</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Choose which events trigger a WhatsApp message
+              </p>
+            </div>
+            <div className="space-y-2">
+              {WHATSAPP_NOTIFY_TYPES.map(type => {
+                const Icon = type.icon;
+                const value = (integration?.[type.key] as boolean) ?? true;
+                return (
+                  <div
+                    key={type.key}
+                    className={cn(
+                      "flex items-center justify-between gap-4 p-3 border rounded-lg transition-opacity",
+                      !integration?.whatsapp_enabled && "opacity-50"
+                    )}
+                    data-testid={`row-wa-notify-${type.key}`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={cn("h-4 w-4 shrink-0", type.color)} />
+                      <div className="min-w-0">
+                        <Label htmlFor={`wa-toggle-${type.key}`} className="text-sm font-medium cursor-pointer">
+                          {type.label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground truncate">{type.description}</p>
+                      </div>
+                    </div>
+                    <Switch
+                      id={`wa-toggle-${type.key}`}
+                      checked={value}
+                      onCheckedChange={checked => handleToggleWhatsAppPref(type.key, checked)}
+                      disabled={!integration?.whatsapp_enabled}
+                      data-testid={`switch-wa-${type.key}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Admin link */}
+          {isAdmin && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-muted/30">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Admin panel</p>
+                    <p className="text-xs text-muted-foreground">Test connection, view logs, configure webhook</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/admin/whatsapp')}
+                  className="gap-1.5 shrink-0"
+                  data-testid="button-go-admin-whatsapp"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

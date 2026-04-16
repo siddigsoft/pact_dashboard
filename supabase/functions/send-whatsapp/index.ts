@@ -417,24 +417,51 @@ serve(async (req) => {
     // Send to each number via WasenderAPI
     const results = await Promise.allSettled(
       normalized.map(async (phone) => {
-        const resp = await fetch(WASENDER_ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            to: phone,
-            type: 'text',
-            text: { body: message },
-          }),
-        })
+        let wasenderId: string | null = null
+        let errorMsg: string | null = null
+        let success = false
+        try {
+          const resp = await fetch(WASENDER_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              to: phone,
+              type: 'text',
+              text: { body: message },
+            }),
+          })
 
-        const responseBody = await resp.text()
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${responseBody}`)
+          const responseBody = await resp.text()
+          if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}: ${responseBody}`)
+          }
+          try {
+            const parsed = JSON.parse(responseBody)
+            wasenderId = parsed?.id || parsed?.messageId || null
+          } catch (_) {}
+          console.log(`[WhatsApp] Sent to ${phone}: ${resp.status}`)
+          success = true
+        } catch (err) {
+          errorMsg = err instanceof Error ? err.message : 'Unknown error'
+          throw err
+        } finally {
+          // Log every delivery attempt
+          try {
+            await supabase.from('whatsapp_logs').insert({
+              phone,
+              user_id: user_ids.length > 0 ? null : null,
+              event_type,
+              status: success ? 'sent' : 'failed',
+              direction: 'outbound',
+              message_body: message.slice(0, 1000),
+              error_message: errorMsg,
+              wasender_id: wasenderId,
+            })
+          } catch (_) { /* non-blocking */ }
         }
-        console.log(`[WhatsApp] Sent to ${phone}: ${resp.status}`)
         return { phone, success: true }
       }),
     )
