@@ -2484,15 +2484,18 @@ export default function MyTasksV2() {
         {/* ── Top header bar ── */}
         <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-5 shrink-0 z-10 gap-3 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
-            <div>
-              <p className="text-[10px] text-slate-400 leading-none mb-0.5 uppercase tracking-wider font-medium">My Workspace</p>
-              <h1 className="text-sm font-bold tracking-tight text-[#0F2041] leading-none">My Tasks</h1>
-            </div>
+            <h1 className="text-lg font-bold tracking-tight text-[#0F2041]">My Tasks</h1>
             <div className="h-5 w-px bg-slate-200 shrink-0" />
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-500">
-                {stats.all} active · {stats.done} done · {stats.overdue > 0 && <span className="text-red-500 font-semibold">{stats.overdue} overdue</span>}
-              </span>
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+              <span>{stats.all} active</span>
+              <span className="text-slate-300">·</span>
+              <span>{stats.done} done</span>
+              {stats.overdue > 0 && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span className="text-red-500 font-semibold">{stats.overdue} overdue</span>
+                </>
+              )}
             </div>
           </div>
 
