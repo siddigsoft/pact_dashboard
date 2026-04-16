@@ -119,6 +119,9 @@ REVOKE ALL ON FUNCTION public.materialise_daily_tasks_for_user() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.materialise_daily_tasks_for_user() TO authenticated;
 
 COMMENT ON FUNCTION public.materialise_daily_tasks_for_user() IS
-  'SECURITY DEFINER. Handles daily, weekly, every_2_days, every_3_days, monthly frequencies.
-   Respects recurrence_end_date on both template and task rows.
+  'SECURITY DEFINER. Respects recurrence_end_date on both template and task rows (skips past end date).
+   Explicit skip logic: weekly (skips if today-of-week not in recurrence_days),
+     every_2_days (skips if epoch_days % 2 != 0), every_3_days (skips if epoch_days % 3 != 0).
+   Other frequencies (daily, monthly, biweekly, weekdays, specific_days) fall through to default
+     materialise path — their skip logic was defined in earlier migrations or handled by schedule.
    Epoch-based day counter relative to 2000-01-01 for consistent every_N_days intervals.';

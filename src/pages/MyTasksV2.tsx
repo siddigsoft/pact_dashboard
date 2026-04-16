@@ -2765,7 +2765,7 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
       case 'high':     return nonCancelled.filter(t => t.priority === 'critical' || t.priority === 'high');
       case 'project':  return nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'project');
       case 'personal': return nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'personal');
-      case 'recurring':return nonCancelled.filter(t => !!(t.recurrence && t.recurrence !== 'none'));
+      case 'recurring':return nonCancelled.filter(t => !!t.dailyTaskDate || !!(t.recurrence && t.recurrence !== 'none'));
       case 'done':     return tasks.filter(t => t.status === 'done');
       default:         return nonCancelled;
     }
@@ -2787,7 +2787,7 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
     { key: 'high',      icon: Flag,           label: 'High Priority', count: nonCancelled.filter(t => t.priority === 'critical' || t.priority === 'high').length },
     { key: 'project',   icon: Briefcase,      label: 'Project',       count: nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'project').length },
     { key: 'personal',  icon: User,           label: 'Personal',      count: nonCancelled.filter(t => (t.category ?? '').toLowerCase() === 'personal').length },
-    { key: 'recurring', icon: RefreshCw,      label: 'Recurring',     count: nonCancelled.filter(t => !!(t.recurrence && t.recurrence !== 'none')).length },
+    { key: 'recurring', icon: RefreshCw,      label: 'Recurring',     count: nonCancelled.filter(t => !!t.dailyTaskDate || !!(t.recurrence && t.recurrence !== 'none')).length },
     { key: 'done',      icon: Archive,        label: 'Done',          count: tasks.filter(t => t.status === 'done').length },
   ];
 
