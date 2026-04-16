@@ -462,47 +462,22 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // Determine which category preference column applies for this event_type.
-    // When null (e.g. broadcast, reminder, crm_*, user_approved), the event is
-    // not category-gated — only the global whatsapp_enabled flag applies.
-    const categoryCol: WhatsAppCategoryCol | null = EVENT_CATEGORY_MAP[event_type] ?? null
-
     interface PhoneEntry { phone: string; userId: string | null }
     let skippedCount = 0
-
-    interface IntegrationRow {
-      user_id: string
-      whatsapp_enabled: boolean
-      whatsapp_phone: string | null
-      whatsapp_notify_tasks: boolean
-      whatsapp_notify_approvals: boolean
-      whatsapp_notify_payroll: boolean
-      whatsapp_notify_projects: boolean
-      whatsapp_notify_mmp: boolean
-    }
 
     interface ProfileRow {
       id: string
       phone: string | null
     }
 
-    // Resolve phone numbers, respecting WhatsApp opt-in preferences for user_ids
+    // Resolve phone numbers — no opt-in required.
+    // Staff receive notifications automatically if they have a phone number in profiles.phone.
     const phoneEntries: PhoneEntry[] = phone_numbers
       .filter(Boolean)
       .map(p => ({ phone: p, userId: null }))
 
     if (user_ids.length > 0) {
-      // Fetch WhatsApp preferences from user_integrations
-      const { data: integrations } = await supabase
-        .from('user_integrations')
-        .select('user_id, whatsapp_enabled, whatsapp_phone, whatsapp_notify_tasks, whatsapp_notify_approvals, whatsapp_notify_payroll, whatsapp_notify_projects, whatsapp_notify_mmp')
-        .in('user_id', user_ids)
-
-      const integrationMap = new Map<string, IntegrationRow>(
-        (integrations as IntegrationRow[] ?? []).map(row => [row.user_id, row])
-      )
-
-      // Fetch profiles.phone as fallback
+      // Fetch phone numbers directly from profiles — no integration opt-in check
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, phone')
@@ -513,75 +488,14 @@ serve(async (req) => {
       )
 
       for (const userId of user_ids) {
-        const integration = integrationMap.get(userId)
         const profile = profileMap.get(userId)
+        const phone = profile?.phone
 
-        // Skip if user has no integration row at all
-        if (!integration) {
-          skippedCount++
-          console.log(`[WhatsApp] Skipping user ${userId}: no integration row`)
-          try {
-            await supabase.from('whatsapp_logs').insert({
-              phone: profile?.phone || 'unknown',
-              user_id: userId,
-              event_type,
-              status: 'skipped',
-              direction: 'outbound',
-              message_body: null,
-              error_message: 'skip_reason:no_integration',
-              wasender_id: null,
-            })
-          } catch (_) { /* non-blocking */ }
-          continue
-        }
-
-        // Skip if WhatsApp is not enabled for this user
-        if (!integration.whatsapp_enabled) {
-          skippedCount++
-          console.log(`[WhatsApp] Skipping user ${userId}: WhatsApp not enabled`)
-          const phone = integration.whatsapp_phone || profile?.phone || 'unknown'
-          try {
-            await supabase.from('whatsapp_logs').insert({
-              phone,
-              user_id: userId,
-              event_type,
-              status: 'skipped',
-              direction: 'outbound',
-              message_body: null,
-              error_message: 'skip_reason:whatsapp_disabled',
-              wasender_id: null,
-            })
-          } catch (_) { /* non-blocking */ }
-          continue
-        }
-
-        // Skip if this event's category is disabled for the user
-        if (categoryCol && !integration[categoryCol]) {
-          skippedCount++
-          console.log(`[WhatsApp] Skipping user ${userId}: ${categoryCol} is disabled`)
-          const phone = integration.whatsapp_phone || profile?.phone || 'unknown'
-          try {
-            await supabase.from('whatsapp_logs').insert({
-              phone,
-              user_id: userId,
-              event_type,
-              status: 'skipped',
-              direction: 'outbound',
-              message_body: null,
-              error_message: `skip_reason:category_disabled:${categoryCol}`,
-              wasender_id: null,
-            })
-          } catch (_) { /* non-blocking */ }
-          continue
-        }
-
-        // Prefer whatsapp_phone from user_integrations, fall back to profiles.phone
-        const phone = integration.whatsapp_phone || profile?.phone
         if (phone) {
           phoneEntries.push({ phone, userId })
         } else {
           skippedCount++
-          console.log(`[WhatsApp] Skipping user ${userId}: no phone number available`)
+          console.log(`[WhatsApp] Skipping user ${userId}: no phone number in profile`)
           try {
             await supabase.from('whatsapp_logs').insert({
               phone: 'unknown',
