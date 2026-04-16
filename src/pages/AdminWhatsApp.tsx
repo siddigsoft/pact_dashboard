@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
+import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   MessageSquare, CheckCircle2, XCircle, RefreshCw, Send, Webhook,
@@ -50,16 +51,13 @@ interface Conversation {
   unread: number;
 }
 
-const ADMIN_ROLES = ['superadmin'];
 type Tab = 'inbox' | 'logs' | 'send' | 'settings';
 
 export default function AdminWhatsAppPage() {
   const navigate = useNavigate();
-  const { currentUser } = useUser();
+  const { authReady } = useUser();
+  const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
-
-  const role = (currentUser?.role ?? '').toLowerCase();
-  const isAdmin = ADMIN_ROLES.includes(role);
 
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
   const [stats, setStats] = useState<DeliveryStats & { skipped: number }>({ total: 0, sent: 0, failed: 0, received: 0, successRate: 0, skipped: 0 });
@@ -81,7 +79,7 @@ export default function AdminWhatsAppPage() {
   const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
   const loadLogs = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isSuperAdmin) return;
     setLoadingLogs(true);
     try {
       const { data, error } = await supabase
@@ -122,7 +120,7 @@ export default function AdminWhatsAppPage() {
     } finally {
       setLoadingLogs(false);
     }
-  }, [isAdmin]);
+  }, [isSuperAdmin]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
@@ -288,7 +286,11 @@ export default function AdminWhatsAppPage() {
     return errorMsg;
   };
 
-  if (!isAdmin) {
+  if (!authReady) {
+    return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
+  }
+
+  if (!isSuperAdmin) {
     return <div className="p-8 text-center text-muted-foreground">Access restricted to Super Admins only.</div>;
   }
 
