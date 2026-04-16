@@ -176,8 +176,8 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
   const [description, setDescription] = useState(initial?.description ?? '');
   const [priority, setPriority] = useState<PersonalTaskPriority>(initial?.priority ?? 'medium');
   const [recurrence, setRecurrence] = useState(initial?.recurrence ?? 'daily');
-  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
-  const [monthlyDay, setMonthlyDay] = useState(1);
+  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>(initial?.recurrenceDays ?? []);
+  const [monthlyDay, setMonthlyDay] = useState(initial?.recurrenceMonthlyDay ?? 1);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(initial?.recurrenceEndDate ?? '');
   const [deptId, setDeptId] = useState(initial?.departmentId ?? '');
   const [rolesRaw, setRolesRaw] = useState((initial?.roleTargets ?? []).join(', '));
