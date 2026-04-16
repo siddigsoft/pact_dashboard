@@ -216,6 +216,7 @@ type SendSummary = {
   titleAr: string;
   priority: string;
   fcm?: { sent: number; failed: number; tokens: number; error?: string };
+  whatsapp?: { sent: number; failed: number; total: number; skipped?: boolean; error?: string };
 };
 
 export default function AdminBroadcastPage() {
@@ -231,6 +232,7 @@ export default function AdminBroadcastPage() {
   const [actionLink, setActionLink] = useState('');
   const [requireAck, setRequireAck] = useState(false);
   const [sendEmail, setSendEmail] = useState(false);
+  const [sendWhatsApp, setSendWhatsApp] = useState(false);
   const [sending, setSending] = useState(false);
 
   const [sendSummary, setSendSummary] = useState<SendSummary | null>(null);
@@ -732,7 +734,29 @@ export default function AdminBroadcastPage() {
         titleEn, titleAr, messageEn, messageAr, audience, stateFilter, priority, actionLink, sendEmail,
         targetUserIds: confirmTargetUsers.map(u => u.id),
       });
-      setSendSummary({ sent: confirmTargetUsers.length, audience, titleEn: titleEn.trim(), titleAr: titleAr.trim() || titleEn.trim(), priority, fcm: fcmResult });
+
+      let waResult: SendSummary['whatsapp'] | undefined;
+      if (sendWhatsApp) {
+        try {
+          const { data: waData, error: waError } = await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              user_ids: confirmTargetUsers.map(u => u.id),
+              event_type: 'broadcast',
+              data: {
+                message: messageEn.trim(),
+                message_ar: messageAr.trim() || messageEn.trim(),
+              },
+            },
+          });
+          waResult = waError
+            ? { sent: 0, failed: 0, total: confirmTargetUsers.length, error: waError.message }
+            : { sent: waData?.sent ?? 0, failed: waData?.failed ?? 0, total: waData?.total ?? 0, skipped: waData?.skipped };
+        } catch (waEx: any) {
+          waResult = { sent: 0, failed: 0, total: confirmTargetUsers.length, error: waEx?.message };
+        }
+      }
+
+      setSendSummary({ sent: confirmTargetUsers.length, audience, titleEn: titleEn.trim(), titleAr: titleAr.trim() || titleEn.trim(), priority, fcm: fcmResult, whatsapp: waResult });
       setShowSuccessModal(true);
       localStorage.removeItem(DRAFT_KEY);
       setTitleEn(''); setTitleAr(''); setMessageEn(''); setMessageAr(''); setActionLink(''); setScheduleAt('');
@@ -861,6 +885,20 @@ export default function AdminBroadcastPage() {
                       : sendSummary.fcm.tokens === 0
                         ? 'No mobile devices registered — users will see the in-app notification.'
                         : `${sendSummary.fcm.tokens} devices targeted · ${sendSummary.fcm.sent} delivered${sendSummary.fcm.failed > 0 ? ` · ${sendSummary.fcm.failed} failed` : ''}`
+                    }
+                  </span>
+                </div>
+              )}
+
+              {sendSummary.whatsapp && (
+                <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${sendSummary.whatsapp.error ? 'bg-red-50 text-red-700 border border-red-200' : sendSummary.whatsapp.skipped ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                  <MessageSquare className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>
+                    {sendSummary.whatsapp.error
+                      ? `WhatsApp failed: ${sendSummary.whatsapp.error}`
+                      : sendSummary.whatsapp.skipped
+                        ? 'WhatsApp: no phone numbers on file for matched recipients.'
+                        : `WhatsApp: ${sendSummary.whatsapp.sent} delivered${sendSummary.whatsapp.failed > 0 ? ` · ${sendSummary.whatsapp.failed} failed` : ''} of ${sendSummary.whatsapp.total} targeted`
                     }
                   </span>
                 </div>
@@ -1275,7 +1313,17 @@ export default function AdminBroadcastPage() {
                       <p className="text-sm font-medium">Send by Email / إرسال بالبريد الإلكتروني</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Also deliver via IONOS SMTP to each recipient</p>
                     </div>
-                    <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
+                    <Switch checked={sendEmail} onCheckedChange={setSendEmail} data-testid="toggle-send-email" />
+                  </div>
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800">
+                    <div>
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <MessageSquare className="w-4 h-4 text-emerald-600" />
+                        Also send on WhatsApp / إرسال عبر واتساب
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Send a WhatsApp message to all matched recipients with phone numbers on file</p>
+                    </div>
+                    <Switch checked={sendWhatsApp} onCheckedChange={setSendWhatsApp} data-testid="toggle-send-whatsapp" />
                   </div>
                   <div className="flex items-center justify-between p-3.5 rounded-xl border bg-muted/30">
                     <div>

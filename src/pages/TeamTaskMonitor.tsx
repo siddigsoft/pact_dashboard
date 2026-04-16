@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, differenceInDays, isToday, isPast, isSameDay, addWeeks, subWeeks, addMonths, subMonths } from 'date-fns';
-import { Users, CheckSquare, AlertTriangle, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Plus, Clock, CheckCircle2, BarChart2, MessageSquare, Bell, Phone, Mail, Filter, Search, RefreshCw, Eye, User, Layers, ChevronDown, ChevronUp, Flag, Briefcase } from 'lucide-react';
+import { Users, CheckSquare, AlertTriangle, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Plus, Clock, CheckCircle2, BarChart2, MessageSquare, Bell, Phone, Mail, Filter, Search, RefreshCw, Eye, User, Layers, ChevronDown, ChevronUp, Flag, Briefcase, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/user/UserContext';
@@ -195,6 +195,10 @@ export default function TeamTaskMonitor() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [taskStatusFilter, setTaskStatusFilter] = useState('all');
 
+  const [waTarget, setWaTarget] = useState<ReturnType<typeof buildEmployeeMetrics>[number] | null>(null);
+  const [waMsg, setWaMsg] = useState('');
+  const [waSending, setWaSending] = useState(false);
+
   const role = currentUser?.role ?? '';
   const isExec = isExecRole(role);
 
@@ -319,6 +323,41 @@ export default function TeamTaskMonitor() {
       });
     },
   });
+
+  // ── WhatsApp nudge ──────────────────────────────────────────────────────────
+  const handleSendWhatsApp = async () => {
+    if (!waTarget || !waMsg.trim()) return;
+    setWaSending(true);
+    try {
+      const { data: waData, error: waError } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          user_ids: [waTarget.emp.id],
+          event_type: 'reminder',
+          data: {
+            message: waMsg.trim(),
+            message_ar: waMsg.trim(),
+          },
+        },
+      });
+      if (waError) throw new Error(waError.message);
+      if (waData?.skipped || waData?.sent === 0) {
+        if (waData?.skipped) {
+          toast({ title: 'No phone number', description: `${waTarget.emp.full_name ?? 'Employee'} has no phone number on file.`, variant: 'destructive' });
+        } else {
+          toast({ title: 'Delivery failed', description: `WhatsApp message could not be delivered to ${waTarget.emp.full_name ?? 'employee'}.`, variant: 'destructive' });
+        }
+      } else {
+        const partialNote = waData?.failed > 0 ? ` (${waData.failed} failed)` : '';
+        toast({ title: 'WhatsApp sent', description: `Message delivered to ${waTarget.emp.full_name ?? 'employee'}${partialNote}.`, variant: 'success' });
+        setWaTarget(null);
+        setWaMsg('');
+      }
+    } catch (err: any) {
+      toast({ title: 'Failed to send', description: err.message, variant: 'destructive' });
+    } finally {
+      setWaSending(false);
+    }
+  };
 
   // ── Calendar helpers ────────────────────────────────────────────────────────
   const calendarDays = useMemo(() => {
@@ -597,6 +636,14 @@ export default function TeamTaskMonitor() {
                         >
                           <Plus className="h-4 w-4" />
                         </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); setWaTarget(m); setWaMsg(''); }}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 transition-all"
+                          title="Send WhatsApp message"
+                          data-testid={`btn-whatsapp-${m.emp.id}`}
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </button>
                         {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                       </div>
                     </div>
@@ -683,6 +730,60 @@ export default function TeamTaskMonitor() {
           </div>
         )}
       </div>
+
+      {/* ── WhatsApp Nudge Dialog ── */}
+      <Dialog open={!!waTarget} onOpenChange={open => { if (!open) { setWaTarget(null); setWaMsg(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700">
+              <MessageSquare className="h-4 w-4" />
+              Send WhatsApp to {waTarget?.emp.full_name ?? ''}
+            </DialogTitle>
+          </DialogHeader>
+          {waTarget && (
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center gap-2 bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground">
+                <Phone className="h-3.5 w-3.5 shrink-0" />
+                {waTarget.emp.phone_number
+                  ? <span>{waTarget.emp.phone_number}</span>
+                  : <span className="text-amber-600">No phone number on file — message may not deliver</span>
+                }
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Message</label>
+                <Textarea
+                  value={waMsg}
+                  onChange={e => setWaMsg(e.target.value)}
+                  placeholder="Type your message to this employee…"
+                  rows={4}
+                  maxLength={500}
+                  data-testid={`input-wa-message-${waTarget.emp.id}`}
+                />
+                <p className="text-[10px] text-muted-foreground text-right">{waMsg.length}/500</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setWaTarget(null); setWaMsg(''); }}
+                  className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendWhatsApp}
+                  disabled={waSending || !waMsg.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid={`btn-wa-send-${waTarget.emp.id}`}
+                >
+                  {waSending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Send
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Employee Calendar Dialog ── */}
       <Dialog open={!!selectedEmp && !showCreateTask} onOpenChange={open => { if (!open) setSelectedEmp(null); }}>
