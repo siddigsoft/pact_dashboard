@@ -817,9 +817,9 @@ serve(async (req) => {
           .then(result => console.log(`FCM push result: sent=${result.sent}, failed=${result.failed}`))
           .catch(err => console.warn('FCM push fire-and-forget error:', err))
 
-        // WhatsApp via WasenderAPI (fire-and-forget — only for high/urgent priority)
-        const whatsappPriorities = ['high', 'urgent']
-        if (whatsappPriorities.includes(effectivePriority)) {
+        // WhatsApp via WasenderAPI (fire-and-forget — fires for ALL notifications)
+        // Per-user opt-out is honoured inside send-whatsapp via user_integrations.whatsapp_enabled
+        {
           const waData: Record<string, string> = {
             actor: triggered_by_name || 'System',
             url: action_url || 'app.pactorg.com',
