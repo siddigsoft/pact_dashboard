@@ -513,15 +513,59 @@ serve(async (req) => {
         const integration = integrationMap.get(userId)
         const profile = profileMap.get(userId)
 
-        // Skip if user has no integration row or WhatsApp is not enabled
-        if (!integration || !integration.whatsapp_enabled) {
+        // Skip if user has no integration row at all
+        if (!integration) {
+          console.log(`[WhatsApp] Skipping user ${userId}: no integration row`)
+          try {
+            await supabase.from('whatsapp_logs').insert({
+              phone: profile?.phone || 'unknown',
+              user_id: userId,
+              event_type,
+              status: 'skipped',
+              direction: 'outbound',
+              message_body: null,
+              error_message: 'skip_reason:no_integration',
+              wasender_id: null,
+            })
+          } catch (_) { /* non-blocking */ }
+          continue
+        }
+
+        // Skip if WhatsApp is not enabled for this user
+        if (!integration.whatsapp_enabled) {
           console.log(`[WhatsApp] Skipping user ${userId}: WhatsApp not enabled`)
+          const phone = integration.whatsapp_phone || profile?.phone || 'unknown'
+          try {
+            await supabase.from('whatsapp_logs').insert({
+              phone,
+              user_id: userId,
+              event_type,
+              status: 'skipped',
+              direction: 'outbound',
+              message_body: null,
+              error_message: 'skip_reason:whatsapp_disabled',
+              wasender_id: null,
+            })
+          } catch (_) { /* non-blocking */ }
           continue
         }
 
         // Skip if this event's category is disabled for the user
         if (categoryCol && !integration[categoryCol]) {
           console.log(`[WhatsApp] Skipping user ${userId}: ${categoryCol} is disabled`)
+          const phone = integration.whatsapp_phone || profile?.phone || 'unknown'
+          try {
+            await supabase.from('whatsapp_logs').insert({
+              phone,
+              user_id: userId,
+              event_type,
+              status: 'skipped',
+              direction: 'outbound',
+              message_body: null,
+              error_message: `skip_reason:category_disabled:${categoryCol}`,
+              wasender_id: null,
+            })
+          } catch (_) { /* non-blocking */ }
           continue
         }
 
@@ -531,6 +575,18 @@ serve(async (req) => {
           phoneEntries.push({ phone, userId })
         } else {
           console.log(`[WhatsApp] Skipping user ${userId}: no phone number available`)
+          try {
+            await supabase.from('whatsapp_logs').insert({
+              phone: 'unknown',
+              user_id: userId,
+              event_type,
+              status: 'skipped',
+              direction: 'outbound',
+              message_body: null,
+              error_message: 'skip_reason:no_phone',
+              wasender_id: null,
+            })
+          } catch (_) { /* non-blocking */ }
         }
       }
     }
@@ -634,8 +690,10 @@ serve(async (req) => {
       })
     } catch (_) { /* non-blocking */ }
 
+    const skippedCount = Math.max(0, user_ids.length - normalized.length)
+
     return new Response(
-      JSON.stringify({ success: true, sent, failed, total: normalized.length }),
+      JSON.stringify({ success: true, sent, failed, total: normalized.length, skipped: skippedCount }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
 

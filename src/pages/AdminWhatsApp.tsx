@@ -62,13 +62,13 @@ export default function AdminWhatsAppPage() {
   const isAdmin = ADMIN_ROLES.includes(role);
 
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
-  const [stats, setStats] = useState<DeliveryStats>({ total: 0, sent: 0, failed: 0, received: 0, successRate: 0 });
+  const [stats, setStats] = useState<DeliveryStats & { skipped: number }>({ total: 0, sent: 0, failed: 0, received: 0, successRate: 0, skipped: 0 });
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from PACT Command Center! This is a test message.\n\nأهلاً من مركز قيادة باكت! هذه رسالة اختبار.');
   const [sending, setSending] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
-  const [logFilter, setLogFilter] = useState<'all' | 'outbound' | 'inbound' | 'failed'>('all');
+  const [logFilter, setLogFilter] = useState<'all' | 'outbound' | 'inbound' | 'failed' | 'skipped'>('all');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('inbox');
@@ -98,8 +98,9 @@ export default function AdminWhatsAppPage() {
       const sent = rows.filter(l => l.status === 'sent').length;
       const failed = rows.filter(l => l.status === 'failed').length;
       const received = rows.filter(l => l.direction === 'inbound').length;
+      const skipped = rows.filter(l => l.status === 'skipped').length;
       setStats({
-        total, sent, failed, received,
+        total, sent, failed, received, skipped,
         successRate: total > 0 ? Math.round((sent / Math.max(sent + failed, 1)) * 100) : 0,
       });
 
@@ -267,11 +268,25 @@ export default function AdminWhatsAppPage() {
   };
 
   const filteredLogs = logs.filter(l => {
-    if (logFilter === 'outbound') return l.direction === 'outbound';
+    if (logFilter === 'outbound') return l.direction === 'outbound' && l.status !== 'skipped';
     if (logFilter === 'inbound') return l.direction === 'inbound';
     if (logFilter === 'failed') return l.status === 'failed';
+    if (logFilter === 'skipped') return l.status === 'skipped';
     return true;
   });
+
+  const parseSkipReason = (errorMsg: string | null): string => {
+    if (!errorMsg) return 'Unknown';
+    if (errorMsg.includes('no_integration')) return 'Never set up WhatsApp';
+    if (errorMsg.includes('whatsapp_disabled')) return 'WhatsApp turned off';
+    if (errorMsg.includes('category_disabled')) {
+      const col = errorMsg.split('category_disabled:')[1] ?? '';
+      const label = col.replace('whatsapp_notify_', '').replace(/_/g, ' ');
+      return `Category disabled: ${label}`;
+    }
+    if (errorMsg.includes('no_phone')) return 'No phone number on file';
+    return errorMsg;
+  };
 
   if (!isAdmin) {
     return <div className="p-8 text-center text-muted-foreground">Access restricted to Super Admins only.</div>;
@@ -315,11 +330,12 @@ export default function AdminWhatsAppPage() {
       </div>
 
       {/* Stats Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { label: 'Notifications Sent', value: stats.sent, icon: Send, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
           { label: 'Delivery Rate', value: `${stats.successRate}%`, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
           { label: 'Failed', value: stats.failed, icon: XCircle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/20' },
+          { label: 'Skipped', value: stats.skipped, icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
           { label: 'Replies Received', value: stats.received, icon: Inbox, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
         ].map(stat => {
           const Icon = stat.icon;
@@ -545,23 +561,26 @@ export default function AdminWhatsAppPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-2 flex-wrap">
-              {(['all', 'outbound', 'inbound', 'failed'] as const).map(f => (
+              {([
+                { key: 'all', label: 'All', count: logs.length },
+                { key: 'outbound', label: 'Sent', count: logs.filter(l => l.direction === 'outbound' && l.status !== 'skipped').length },
+                { key: 'inbound', label: 'Replies', count: logs.filter(l => l.direction === 'inbound').length },
+                { key: 'failed', label: 'Failed', count: logs.filter(l => l.status === 'failed').length },
+                { key: 'skipped', label: 'Skipped', count: logs.filter(l => l.status === 'skipped').length },
+              ] as const).map(f => (
                 <button
-                  key={f}
-                  onClick={() => setLogFilter(f)}
-                  data-testid={`filter-log-${f}`}
+                  key={f.key}
+                  onClick={() => setLogFilter(f.key)}
+                  data-testid={`filter-log-${f.key}`}
                   className={cn(
                     'px-3 py-1 rounded-full text-xs font-semibold border transition-all',
-                    logFilter === f
+                    logFilter === f.key
                       ? 'bg-[#1D3461] text-white border-[#1D3461]'
                       : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200 hover:border-slate-300',
+                    f.key === 'skipped' && logFilter !== f.key && f.count > 0 && 'border-amber-300 text-amber-700',
                   )}
                 >
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                  {f === 'all' && ` (${logs.length})`}
-                  {f === 'outbound' && ` (${logs.filter(l => l.direction === 'outbound').length})`}
-                  {f === 'inbound' && ` (${logs.filter(l => l.direction === 'inbound').length})`}
-                  {f === 'failed' && ` (${logs.filter(l => l.status === 'failed').length})`}
+                  {f.label} ({f.count})
                 </button>
               ))}
             </div>
@@ -586,18 +605,21 @@ export default function AdminWhatsAppPage() {
                           variant="secondary"
                           className={cn(
                             'shrink-0 text-[10px] px-1.5 py-0',
-                            log.direction === 'outbound' && 'bg-blue-100 text-blue-700',
+                            log.status === 'skipped' && 'bg-amber-100 text-amber-700',
+                            log.direction === 'outbound' && log.status !== 'skipped' && 'bg-blue-100 text-blue-700',
                             log.direction === 'inbound' && 'bg-purple-100 text-purple-700',
                           )}
                         >
-                          {log.direction === 'inbound' ? '← IN' : '→ OUT'}
+                          {log.status === 'skipped' ? '⊘ SKIP' : log.direction === 'inbound' ? '← IN' : '→ OUT'}
                         </Badge>
-                        <span className="text-xs font-mono text-muted-foreground shrink-0">{log.phone}</span>
+                        <span className="text-xs font-mono text-muted-foreground shrink-0">{log.phone === 'unknown' ? userNames[log.user_id ?? ''] ?? log.phone : log.phone}</span>
                         <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0 hidden sm:block">
                           {log.event_type}
                         </span>
                         <span className="text-xs text-muted-foreground truncate min-w-0">
-                          {log.message_body?.slice(0, 60)}
+                          {log.status === 'skipped'
+                            ? parseSkipReason(log.error_message)
+                            : log.message_body?.slice(0, 60)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -608,6 +630,7 @@ export default function AdminWhatsAppPage() {
                             log.status === 'sent' && 'bg-green-100 text-green-700',
                             log.status === 'failed' && 'bg-red-100 text-red-700',
                             log.status === 'received' && 'bg-purple-100 text-purple-700',
+                            log.status === 'skipped' && 'bg-amber-100 text-amber-700',
                           )}
                         >
                           {log.status}
@@ -627,10 +650,18 @@ export default function AdminWhatsAppPage() {
                           <div><span className="text-muted-foreground">Status:</span> {log.status}</div>
                           <div><span className="text-muted-foreground">Direction:</span> {log.direction}</div>
                           {log.wasender_id && <div className="col-span-2"><span className="text-muted-foreground">Wasender ID:</span> <span className="font-mono">{log.wasender_id}</span></div>}
-                          {log.error_message && <div className="col-span-2 text-red-600"><span className="font-semibold">Error:</span> {log.error_message}</div>}
+                          {log.status === 'skipped' && log.error_message && (
+                            <div className="col-span-2 text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                              <span><span className="font-semibold">Skip reason:</span> {parseSkipReason(log.error_message)}</span>
+                            </div>
+                          )}
+                          {log.status !== 'skipped' && log.error_message && (
+                            <div className="col-span-2 text-red-600"><span className="font-semibold">Error:</span> {log.error_message}</div>
+                          )}
                           <div className="col-span-2"><span className="text-muted-foreground">Time:</span> {format(new Date(log.created_at), 'd MMM yyyy, HH:mm:ss')}</div>
                         </div>
-                        {log.message_body && (
+                        {log.message_body && log.status !== 'skipped' && (
                           <div>
                             <p className="text-muted-foreground mb-1">Message:</p>
                             <pre className="whitespace-pre-wrap bg-background rounded p-2 border text-[11px] max-h-32 overflow-y-auto">{log.message_body}</pre>
