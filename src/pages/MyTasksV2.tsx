@@ -98,6 +98,7 @@ interface QuickAddDialogProps {
     targetDeptId?: string | null;
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
+    planningQuadrant?: QuadrantKey | null;
   }) => void;
   isCreating: boolean;
   currentUserFullName?: string | null;
@@ -223,6 +224,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
 
   // Structured deps (with type + requiresAck)
   const [structuredDeps, setStructuredDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean }>>([]);
+  const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey('general');
@@ -231,6 +233,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setUserSearch(''); setAttachments([]);
     setAssignTab('myself'); setAssignedUser(null); setAssignedDept(null); setAssignSearch('');
     setStructuredDeps([]);
+    setPlanningQuadrant(null);
   };
 
   const addDep = (label: string, type: string = 'custom', requiresAck = false) => {
@@ -263,6 +266,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
       rewardAmount,
       structuredDeps,
+      planningQuadrant,
     });
     reset();
   };
@@ -345,6 +349,48 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Planning Quadrant Picker */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1 block flex items-center gap-1.5">
+                Planning Quadrant
+                <span className="text-slate-400 font-normal normal-case tracking-normal">(optional — auto if skipped)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  { key: 'do'       as QuadrantKey, label: 'Do Now',           sub: 'Urgent + Important',   dot: 'bg-red-500',   active: 'bg-red-50 border-red-400 text-red-700'   },
+                  { key: 'schedule' as QuadrantKey, label: 'Schedule',         sub: 'Important, Not Urgent', dot: 'bg-blue-500',  active: 'bg-blue-50 border-blue-400 text-blue-700' },
+                  { key: 'delegate' as QuadrantKey, label: 'Delegate',         sub: 'Urgent, Not Important', dot: 'bg-amber-400', active: 'bg-amber-50 border-amber-400 text-amber-700' },
+                  { key: 'drop'     as QuadrantKey, label: 'Consider Dropping',sub: 'Low Priority, Not Urgent', dot: 'bg-slate-400', active: 'bg-slate-100 border-slate-400 text-slate-700' },
+                ]).map(q => {
+                  const isSelected = planningQuadrant === q.key;
+                  return (
+                    <button
+                      key={q.key}
+                      type="button"
+                      onClick={() => setPlanningQuadrant(isSelected ? null : q.key)}
+                      data-testid={`quadrant-picker-${q.key}`}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all',
+                        isSelected ? q.active + ' border-2' : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600',
+                      )}
+                    >
+                      <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', q.dot)} />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold leading-tight">{q.label}</p>
+                        <p className="text-[10px] text-slate-400 leading-tight truncate">{q.sub}</p>
+                      </div>
+                      {isSelected && <Check className="w-3.5 h-3.5 shrink-0 ml-auto" />}
+                    </button>
+                  );
+                })}
+              </div>
+              {planningQuadrant && (
+                <button type="button" onClick={() => setPlanningQuadrant(null)} className="mt-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors">
+                  ✕ Clear selection (auto-assign)
+                </button>
+              )}
             </div>
 
             {/* Priority + Due date */}
@@ -789,6 +835,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [dueDate, setDueDate]       = useState('');
   const [notes, setNotes]           = useState('');
   const [reward, setReward]         = useState('');
+  const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
   // Assign To state (same pattern as QuickAddDialog)
   const [assignTab, setAssignTab]       = useState<AssignTab>('myself');
@@ -872,6 +919,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       setDescription(task.description ?? '');
       setNotes(task.notes ?? '');
       setReward(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
+      setPlanningQuadrant(task.planningQuadrant ?? null);
       // Task type
       if (task.taskType === 'project-task') setTaskTypeKey('project');
       else if (task.taskType === 'day-to-day') setTaskTypeKey('daytoday');
@@ -923,6 +971,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       assignedTo: assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
       assignedToName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
       targetDepartmentId: assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
+      planningQuadrant: planningQuadrant ?? null,
     });
     onClose();
   };
@@ -986,6 +1035,41 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Planning Quadrant Picker */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1 block">
+                Planning Quadrant
+                <span className="text-slate-400 font-normal normal-case tracking-normal ml-1">(optional — auto if skipped)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  { key: 'do'       as QuadrantKey, label: 'Do Now',            sub: 'Urgent + Important',      dot: 'bg-red-500',   active: 'bg-red-50 border-red-400 text-red-700'      },
+                  { key: 'schedule' as QuadrantKey, label: 'Schedule',          sub: 'Important, Not Urgent',   dot: 'bg-blue-500',  active: 'bg-blue-50 border-blue-400 text-blue-700'   },
+                  { key: 'delegate' as QuadrantKey, label: 'Delegate',          sub: 'Urgent, Not Important',   dot: 'bg-amber-400', active: 'bg-amber-50 border-amber-400 text-amber-700'},
+                  { key: 'drop'     as QuadrantKey, label: 'Consider Dropping', sub: 'Low Priority, Not Urgent',dot: 'bg-slate-400', active: 'bg-slate-100 border-slate-400 text-slate-700'},
+                ]).map(q => {
+                  const isSel = planningQuadrant === q.key;
+                  return (
+                    <button key={q.key} type="button" onClick={() => setPlanningQuadrant(isSel ? null : q.key)} data-testid={`edit-quadrant-${q.key}`}
+                      className={cn('flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all',
+                        isSel ? q.active + ' border-2' : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600')}>
+                      <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', q.dot)} />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold leading-tight">{q.label}</p>
+                        <p className="text-[10px] text-slate-400 leading-tight truncate">{q.sub}</p>
+                      </div>
+                      {isSel && <Check className="w-3 h-3 shrink-0 ml-auto" />}
+                    </button>
+                  );
+                })}
+              </div>
+              {planningQuadrant && (
+                <button type="button" onClick={() => setPlanningQuadrant(null)} className="mt-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors">
+                  ✕ Clear selection (auto-assign)
+                </button>
+              )}
             </div>
 
             {/* Priority + Status */}
@@ -2076,7 +2160,8 @@ function PlanningCompanion({
   type PlanItem = { id: string; title: string; project: string; priority: string; dueDate: string | null; type: 'personal' | 'project'; status: string; quadrant: QuadrantKey };
 
   const allCategorized = useMemo((): PlanItem[] => {
-    function classify(dueDate: string | null | undefined, priority: string, status: string): QuadrantKey {
+    function classify(dueDate: string | null | undefined, priority: string, status: string, manual?: QuadrantKey | null): QuadrantKey {
+      if (manual === 'do' || manual === 'schedule' || manual === 'delegate' || manual === 'drop') return manual;
       const isHigh = priority === 'critical' || priority === 'high';
       const ov = dueDate && isValid(parseISO(dueDate)) && isBefore(parseISO(dueDate), startOfDay(now)) && status !== 'done' && status !== 'cancelled';
       const td = dueDate && isValid(parseISO(dueDate)) && isToday(parseISO(dueDate));
@@ -2095,7 +2180,7 @@ function PlanningCompanion({
         dueDate: t.dueDate ?? null,
         type: 'personal' as const,
         status: t.status,
-        quadrant: classify(t.dueDate, t.priority, t.status),
+        quadrant: classify(t.dueDate, t.priority, t.status, t.planningQuadrant),
       }));
     const project = projectTasks
       .filter(t => t.status !== 'done' && t.status !== 'cancelled')
@@ -2945,6 +3030,7 @@ export default function MyTasksV2() {
     targetDeptId?: string | null;
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
+    planningQuadrant?: QuadrantKey | null;
   }) => {
     try {
       await createTask({
@@ -2960,6 +3046,7 @@ export default function MyTasksV2() {
         dependencies: data.structuredDeps?.length
           ? data.structuredDeps.map(d => ({ label: d.label, type: d.type, requiresAck: d.requiresAck }))
           : undefined,
+        planningQuadrant: data.planningQuadrant ?? null,
       });
       // Notify assigned user if task was delegated to someone else
       if (data.assignedToUserId && data.assignedToUserId !== userId) {

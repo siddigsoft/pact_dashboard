@@ -68,6 +68,8 @@ export interface PersonalTask {
   // Task #30 additions
   taskType: TaskType | null;
   attachments: TaskAttachment[];
+  // Planning quadrant (manual override)
+  planningQuadrant: 'do' | 'schedule' | 'delegate' | 'drop' | null;
 }
 
 export interface CreatePersonalTask {
@@ -104,6 +106,8 @@ export interface CreatePersonalTask {
   // Task #30 additions
   taskType?: TaskType | null;
   attachments?: TaskAttachment[] | null;
+  // Planning quadrant override
+  planningQuadrant?: 'do' | 'schedule' | 'delegate' | 'drop' | null;
 }
 
 export interface DailyTaskDefinition {
@@ -210,6 +214,7 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     taskType: parseTaskType(r.tools as string | null),
     attachments: parseAttachments(r.tools as string | null),
     recurrenceMonthlyDay: (r.recurrence_monthly_day as number) ?? null,
+    planningQuadrant: (r.planning_quadrant as 'do' | 'schedule' | 'delegate' | 'drop' | null) ?? null,
   };
 }
 
@@ -493,6 +498,7 @@ export function usePersonalTasks(userId: string | undefined) {
           co_assignees: task.coAssignees ?? [],
           dependencies: task.dependencies ?? [],
           tools: encodeToolsMeta(task.tools, task.taskType, task.attachments),
+          planning_quadrant: task.planningQuadrant ?? null,
         })
         .select('id')
         .single();
@@ -592,6 +598,7 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.proofSubmittedAt !== undefined) patch.proof_submitted_at = updates.proofSubmittedAt;
       if (updates.recurrenceDays !== undefined)  patch.recurrence_days = updates.recurrenceDays;
       if (updates.recurrenceMonthlyDay !== undefined) patch.recurrence_monthly_day = updates.recurrenceMonthlyDay;
+      if (updates.planningQuadrant !== undefined) patch.planning_quadrant = updates.planningQuadrant ?? null;
 
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
       if (error) throw error;
