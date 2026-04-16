@@ -855,7 +855,7 @@ serve(async (req) => {
           fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceRoleKey}` },
-            body: JSON.stringify({ user_ids: recipientIds, event_type, data: waData }),
+            body: JSON.stringify({ user_ids: recipientIds, event_type, priority: effectivePriority, data: waData }),
           }).then(r => r.json())
             .then(result => console.log(`WhatsApp result: sent=${result.sent}, failed=${result.failed}`))
             .catch(err => console.warn('WhatsApp fire-and-forget error:', err))

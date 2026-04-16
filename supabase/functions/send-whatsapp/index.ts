@@ -457,13 +457,31 @@ serve(async (req) => {
       phone_numbers = [],
       event_type = 'reminder',
       broadcast_id = null,
+      priority = 'medium',
       data: templateData = {},
     } = body as {
       user_ids?: string[]
       phone_numbers?: string[]
       event_type?: string
       broadcast_id?: string | null
+      priority?: string
       data?: Record<string, string>
+    }
+
+    // ── Look up user-preference column for this event type ──────────────────
+    // Uses the authoritative EVENT_CATEGORY_MAP defined at the top of this file.
+    const categoryCol: WhatsAppCategoryCol | null = EVENT_CATEGORY_MAP[event_type] ?? null
+    const isUrgent = priority === 'urgent'
+
+    // ── Quiet hours: Sudan is UTC+2, block 22:00–07:00 unless urgent ─────────
+    const sudanHour = (new Date().getUTCHours() + 2) % 24
+    const inQuietHours = sudanHour >= 22 || sudanHour < 7
+    if (inQuietHours && !isUrgent) {
+      console.log(`[WhatsApp] Quiet hours (Sudan ${sudanHour}:00) — deferring non-urgent ${event_type}`)
+      return new Response(
+        JSON.stringify({ success: true, sent: 0, failed: 0, skipped: true, reason: 'quiet_hours' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -479,45 +497,93 @@ serve(async (req) => {
       id: string
       phone: string | null
     }
+    interface IntegrationRow {
+      user_id: string
+      whatsapp_enabled: boolean | null
+      whatsapp_phone: string | null
+      whatsapp_notify_tasks: boolean | null
+      whatsapp_notify_approvals: boolean | null
+      whatsapp_notify_payroll: boolean | null
+      whatsapp_notify_projects: boolean | null
+      whatsapp_notify_mmp: boolean | null
+    }
 
-    // Resolve phone numbers — no opt-in required.
-    // Staff receive notifications automatically if they have a phone number in profiles.phone.
+    const logSkip = async (userId: string | null, phone: string, reason: string) => {
+      try {
+        await fetch(`${supabaseUrl}/rest/v1/whatsapp_logs`, {
+          method: 'POST',
+          headers: {
+            'apikey': serviceRoleKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({
+            phone: phone || 'unknown',
+            user_id: userId,
+            event_type,
+            status: 'skipped',
+            direction: 'outbound',
+            error_message: `skip_reason:${reason}`,
+          }),
+        })
+      } catch (_) { /* non-blocking */ }
+    }
+
     const phoneEntries: PhoneEntry[] = phone_numbers
       .filter(Boolean)
       .map(p => ({ phone: p, userId: null }))
 
     if (user_ids.length > 0) {
-      // Fetch phone numbers directly from profiles — no integration opt-in check
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, phone')
-        .in('id', user_ids)
+      // Fetch profiles AND integrations in parallel
+      const [profilesResp, integrationsResp] = await Promise.all([
+        supabase.from('profiles').select('id, phone').in('id', user_ids),
+        supabase
+          .from('user_integrations')
+          .select('user_id, whatsapp_enabled, whatsapp_phone, whatsapp_notify_tasks, whatsapp_notify_approvals, whatsapp_notify_payroll, whatsapp_notify_projects, whatsapp_notify_mmp')
+          .in('user_id', user_ids),
+      ])
 
       const profileMap = new Map<string, ProfileRow>(
-        (profiles as ProfileRow[] ?? []).map(p => [p.id, p])
+        (profilesResp.data as ProfileRow[] ?? []).map(p => [p.id, p])
+      )
+      const integMap = new Map<string, IntegrationRow>(
+        (integrationsResp.data as IntegrationRow[] ?? []).map(r => [r.user_id, r])
       )
 
       for (const userId of user_ids) {
         const profile = profileMap.get(userId)
-        const phone = profile?.phone
+        const integ = integMap.get(userId)
+
+        // 1) Master opt-out — default = enabled (null/undefined counts as on)
+        if (integ && integ.whatsapp_enabled === false) {
+          skippedCount++
+          console.log(`[WhatsApp] Skipping ${userId}: whatsapp_enabled=false`)
+          await logSkip(userId, '', 'user_opted_out')
+          continue
+        }
+
+        // 2) Per-category opt-out (urgent always bypasses; unmapped events fall through)
+        if (!isUrgent && integ && categoryCol) {
+          if (integ[categoryCol] === false) {
+            skippedCount++
+            console.log(`[WhatsApp] Skipping ${userId}: column '${categoryCol}' is false`)
+            await logSkip(userId, '', `category_disabled:${categoryCol}`)
+            continue
+          }
+        }
+
+        // 3) Phone — prefer whatsapp_phone override, fall back to profile phone
+        const phone = (integ?.whatsapp_phone && integ.whatsapp_phone.trim())
+          ? integ.whatsapp_phone.trim()
+          : profile?.phone
 
         if (phone) {
           phoneEntries.push({ phone, userId })
         } else {
           skippedCount++
-          console.log(`[WhatsApp] Skipping user ${userId}: no phone number in profile`)
-          try {
-            await supabase.from('whatsapp_logs').insert({
-              phone: 'unknown',
-              user_id: userId,
-              event_type,
-              status: 'skipped',
-              direction: 'outbound',
-              message_body: null,
-              error_message: 'skip_reason:no_phone',
-              wasender_id: null,
-            })
-          } catch (_) { /* non-blocking */ }
+          console.log(`[WhatsApp] Skipping user ${userId}: no phone number`)
+          await logSkip(userId, 'unknown', 'no_phone')
         }
       }
     }
@@ -542,41 +608,82 @@ serve(async (req) => {
     }
 
     const message = buildMessage(event_type, templateData)
-    console.log(`[WhatsApp] Sending ${event_type} to ${normalized.length} numbers`)
+    console.log(`[WhatsApp] Sending ${event_type} (priority=${priority}, category=${category}) to ${normalized.length} numbers`)
 
-    // Send to each number via WasenderAPI
-    const results = await Promise.all(
-      normalized.map(async ({ phone, userId }) => {
-        let wasenderId: string | null = null
-        let errorMsg: string | null = null
-        let success = false
+    // ── Rate limit / bundling check — if phone got ≥3 messages in last 2 min, skip ─
+    // Urgent messages bypass the rate limit. Sent status only (skipped/failed don't count).
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+    const rateLimitedPhones = new Set<string>()
+    if (!isUrgent && normalized.length > 0) {
+      const { data: recentLogs } = await supabase
+        .from('whatsapp_logs')
+        .select('phone')
+        .in('phone', normalized.map(n => n.phone))
+        .eq('status', 'sent')
+        .eq('direction', 'outbound')
+        .gte('created_at', twoMinutesAgo)
+      const counts = new Map<string, number>()
+      for (const row of (recentLogs ?? []) as { phone: string }[]) {
+        counts.set(row.phone, (counts.get(row.phone) ?? 0) + 1)
+      }
+      for (const [phone, count] of counts) {
+        if (count >= 3) rateLimitedPhones.add(phone)
+      }
+      if (rateLimitedPhones.size > 0) {
+        console.log(`[WhatsApp] Rate-limited ${rateLimitedPhones.size} phones (≥3 msgs in 2min)`)
+      }
+    }
 
+    // Retry helper: one retry on network error or 5xx
+    const sendWithRetry = async (phone: string): Promise<{ ok: boolean; wasenderId: string | null; errorMsg: string | null }> => {
+      for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           const resp = await fetch(WASENDER_ENDPOINT, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
             body: JSON.stringify({ to: phone, text: message }),
           })
-
           const responseBody = await resp.text()
           if (resp.ok) {
+            let wasenderId: string | null = null
             try {
               const parsed = JSON.parse(responseBody)
               wasenderId = parsed?.id || parsed?.messageId || null
             } catch (_) {}
-            console.log(`[WhatsApp] Sent to ${phone}: ${resp.status}`)
-            success = true
-          } else {
-            errorMsg = `HTTP ${resp.status}: ${responseBody.slice(0, 300)}`
-            console.error(`[WhatsApp] Send failed for ${phone}: ${errorMsg}`)
+            console.log(`[WhatsApp] Sent to ${phone}: ${resp.status} (attempt ${attempt})`)
+            return { ok: true, wasenderId, errorMsg: null }
           }
+          const errorMsg = `HTTP ${resp.status}: ${responseBody.slice(0, 300)}`
+          // Retry only on 5xx / 429; 4xx client errors are terminal
+          if (attempt === 1 && (resp.status >= 500 || resp.status === 429)) {
+            console.warn(`[WhatsApp] ${phone} attempt 1 failed (${resp.status}), retrying in 1s`)
+            await new Promise(r => setTimeout(r, 1000))
+            continue
+          }
+          return { ok: false, wasenderId: null, errorMsg }
         } catch (err) {
-          errorMsg = err instanceof Error ? err.message : 'Unknown error'
-          console.error(`[WhatsApp] Fetch threw for ${phone}: ${errorMsg}`)
+          const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+          if (attempt === 1) {
+            console.warn(`[WhatsApp] ${phone} network error, retrying: ${errorMsg}`)
+            await new Promise(r => setTimeout(r, 1000))
+            continue
+          }
+          return { ok: false, wasenderId: null, errorMsg }
         }
+      }
+      return { ok: false, wasenderId: null, errorMsg: 'exhausted' }
+    }
+
+    // Send to each number via WasenderAPI
+    const results = await Promise.all(
+      normalized.map(async ({ phone, userId }) => {
+        // Rate-limit skip
+        if (rateLimitedPhones.has(phone)) {
+          await logSkip(userId, phone, 'rate_limited')
+          return { phone, success: false, skipped: true as const }
+        }
+
+        const { ok: success, wasenderId, errorMsg } = await sendWithRetry(phone)
 
         // Always log the delivery attempt — direct REST with service-role key
         try {
@@ -608,16 +715,21 @@ serve(async (req) => {
           console.error(`[WhatsApp] whatsapp_logs insert threw:`, logErr instanceof Error ? logErr.message : logErr)
         }
 
-        return { phone, success }
+        return { phone, success, skipped: false as const }
       }),
     )
 
     const sent = results.filter(r => r.success).length
-    const failed = results.filter(r => !r.success).length
+    const rateLimitedSkipped = results.filter(r => r.skipped).length
+    skippedCount += rateLimitedSkipped
+    const failed = results.filter(r => !r.success && !r.skipped).length
     const errors: string[] = []
 
     if (failed > 0) {
       console.error(`[WhatsApp] ${failed} messages failed:`, errors)
+    }
+    if (rateLimitedSkipped > 0) {
+      console.log(`[WhatsApp] ${rateLimitedSkipped} messages skipped (rate-limited)`)
     }
 
     // Audit log
