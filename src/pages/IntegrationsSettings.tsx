@@ -545,7 +545,7 @@ export default function IntegrationsSettings() {
                       WhatsApp
                     </p>
                     <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-                      Get urgent alerts (overdue tasks, approvals) sent directly to your WhatsApp number via WasenderAPI.
+                      PACT's system sends you notifications from our WhatsApp number. Enable below and add your phone.
                     </p>
                   </div>
                 </div>
@@ -824,7 +824,7 @@ export default function IntegrationsSettings() {
               <div>
                 <CardTitle className="text-lg">WhatsApp Notifications</CardTitle>
                 <CardDescription>
-                  Receive high-priority alerts directly on WhatsApp via WasenderAPI
+                  PACT's WhatsApp number will send you system notifications directly on your phone
                 </CardDescription>
               </div>
             </div>
@@ -851,10 +851,10 @@ export default function IntegrationsSettings() {
               <Bell className="h-5 w-5 text-muted-foreground" />
               <div>
                 <Label className="text-sm font-medium cursor-pointer" htmlFor="whatsapp-toggle">
-                  Enable WhatsApp notifications
+                  Receive notifications on WhatsApp
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  High-urgency events (task assigned, overdue, approvals) will be sent to your WhatsApp
+                  PACT's system number will message your phone for important events
                 </p>
               </div>
             </div>
@@ -869,10 +869,10 @@ export default function IntegrationsSettings() {
           {/* Phone number */}
           <div className="space-y-2">
             <Label htmlFor="whatsapp-phone" className="text-sm font-medium flex items-center gap-1.5">
-              <Phone className="h-3.5 w-3.5" /> WhatsApp phone number
+              <Phone className="h-3.5 w-3.5" /> Your WhatsApp phone number
             </Label>
             <p className="text-xs text-muted-foreground">
-              Enter with country code. Sudan numbers (09XXXXXXXX) are auto-normalised to +249.
+              PACT will send notifications to this number. Sudan numbers (09XXXXXXXX) are auto-converted to +249.
             </p>
             <div className="flex gap-2">
               <Input
@@ -903,7 +903,7 @@ export default function IntegrationsSettings() {
             <div>
               <p className="text-sm font-medium">Notification types</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Choose which events trigger a WhatsApp message
+                Choose which types of system notifications are sent to your WhatsApp
               </p>
             </div>
             <div className="space-y-2">
@@ -950,7 +950,7 @@ export default function IntegrationsSettings() {
                   <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div>
                     <p className="text-sm font-medium">Admin panel</p>
-                    <p className="text-xs text-muted-foreground">Test connection, view logs, configure webhook</p>
+                    <p className="text-xs text-muted-foreground">Inbox, delivery logs, connection and webhook setup</p>
                   </div>
                 </div>
                 <Button
