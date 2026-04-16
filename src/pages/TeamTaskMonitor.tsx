@@ -771,10 +771,20 @@ export default function TeamTaskMonitor() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Message</label>
-                  {waTarget.overdue > 0 && (
-                    <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      Pre-filled from {waTarget.overdue} overdue task{waTarget.overdue > 1 ? 's' : ''}
+                  {waTarget.overdue > 0 && waMsg && (
+                    <span className="flex items-center gap-2">
+                      <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Pre-filled from {waTarget.overdue} overdue task{waTarget.overdue > 1 ? 's' : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setWaMsg('')}
+                        className="text-[10px] text-muted-foreground underline hover:text-foreground transition-colors"
+                        data-testid="btn-wa-clear-message"
+                      >
+                        Clear
+                      </button>
                     </span>
                   )}
                 </div>
