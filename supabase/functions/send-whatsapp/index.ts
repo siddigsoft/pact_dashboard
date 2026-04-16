@@ -466,6 +466,7 @@ serve(async (req) => {
     const categoryCol: WhatsAppCategoryCol | null = EVENT_CATEGORY_MAP[event_type] ?? null
 
     interface PhoneEntry { phone: string; userId: string | null }
+    let skippedCount = 0
 
     interface IntegrationRow {
       user_id: string
@@ -515,6 +516,7 @@ serve(async (req) => {
 
         // Skip if user has no integration row at all
         if (!integration) {
+          skippedCount++
           console.log(`[WhatsApp] Skipping user ${userId}: no integration row`)
           try {
             await supabase.from('whatsapp_logs').insert({
@@ -533,6 +535,7 @@ serve(async (req) => {
 
         // Skip if WhatsApp is not enabled for this user
         if (!integration.whatsapp_enabled) {
+          skippedCount++
           console.log(`[WhatsApp] Skipping user ${userId}: WhatsApp not enabled`)
           const phone = integration.whatsapp_phone || profile?.phone || 'unknown'
           try {
@@ -552,6 +555,7 @@ serve(async (req) => {
 
         // Skip if this event's category is disabled for the user
         if (categoryCol && !integration[categoryCol]) {
+          skippedCount++
           console.log(`[WhatsApp] Skipping user ${userId}: ${categoryCol} is disabled`)
           const phone = integration.whatsapp_phone || profile?.phone || 'unknown'
           try {
@@ -574,6 +578,7 @@ serve(async (req) => {
         if (phone) {
           phoneEntries.push({ phone, userId })
         } else {
+          skippedCount++
           console.log(`[WhatsApp] Skipping user ${userId}: no phone number available`)
           try {
             await supabase.from('whatsapp_logs').insert({
@@ -689,8 +694,6 @@ serve(async (req) => {
         metadata: { event_type, sent, failed, total: normalized.length },
       })
     } catch (_) { /* non-blocking */ }
-
-    const skippedCount = Math.max(0, user_ids.length - normalized.length)
 
     return new Response(
       JSON.stringify({ success: true, sent, failed, total: normalized.length, skipped: skippedCount }),
