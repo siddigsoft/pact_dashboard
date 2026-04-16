@@ -199,6 +199,8 @@ type BroadcastHistory = {
   recipient_count?: number;
   read_count?: number;
   action_url?: string | null;
+  whatsapp_sent?: number;
+  whatsapp_failed?: number;
 };
 
 type ReceiptUser = {
@@ -436,6 +438,39 @@ export default function AdminBroadcastPage() {
       const sorted = Object.values(grouped)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 30);
+
+      // Fetch WhatsApp delivery logs joined by broadcast_id (deterministic key).
+      // Only broadcasts that had WhatsApp enabled will have matching log rows.
+      try {
+        const broadcastIds = sorted.map(b => b.broadcast_id).filter(Boolean) as string[];
+        if (broadcastIds.length > 0) {
+          const { data: waLogs } = await (supabase as any)
+            .from('whatsapp_logs')
+            .select('broadcast_id, status')
+            .in('broadcast_id', broadcastIds);
+
+          if (waLogs && waLogs.length > 0) {
+            const waSent: Record<string, number> = {};
+            const waFailed: Record<string, number> = {};
+            for (const log of waLogs as { broadcast_id: string; status: string }[]) {
+              if (!log.broadcast_id) continue;
+              if (log.status === 'sent') waSent[log.broadcast_id] = (waSent[log.broadcast_id] || 0) + 1;
+              else if (log.status === 'failed') waFailed[log.broadcast_id] = (waFailed[log.broadcast_id] || 0) + 1;
+            }
+            sorted.forEach(broadcast => {
+              if (!broadcast.broadcast_id) return;
+              const s = waSent[broadcast.broadcast_id];
+              const f = waFailed[broadcast.broadcast_id];
+              if (s !== undefined || f !== undefined) {
+                broadcast.whatsapp_sent = s ?? 0;
+                broadcast.whatsapp_failed = f ?? 0;
+              }
+            });
+          }
+        }
+      } catch {
+        // whatsapp_logs query failure is non-fatal
+      }
 
       setHistory(sorted);
 
@@ -730,7 +765,7 @@ export default function AdminBroadcastPage() {
     setSending(true);
     setShowConfirmModal(false);
     try {
-      const { fcmResult } = await executeSend({
+      const { broadcastId, fcmResult } = await executeSend({
         titleEn, titleAr, messageEn, messageAr, audience, stateFilter, priority, actionLink, sendEmail,
         targetUserIds: confirmTargetUsers.map(u => u.id),
       });
@@ -742,6 +777,7 @@ export default function AdminBroadcastPage() {
             body: {
               user_ids: confirmTargetUsers.map(u => u.id),
               event_type: 'broadcast',
+              broadcast_id: broadcastId,
               data: {
                 message: messageEn.trim(),
                 message_ar: messageAr.trim() || messageEn.trim(),
@@ -1571,6 +1607,24 @@ export default function AdminBroadcastPage() {
                               ) : bid && (
                                 <span className="flex items-center gap-1 text-violet-400">
                                   <Eye className="w-3 h-3" /> Click receipts to load
+                                </span>
+                              )}
+                              {(item.whatsapp_sent !== undefined || item.whatsapp_failed !== undefined) && (
+                                <span
+                                  data-testid={`badge-whatsapp-${item.id}`}
+                                  className={`flex items-center gap-1 font-medium rounded-full px-2 py-0.5 ${
+                                    (item.whatsapp_failed ?? 0) > 0 && (item.whatsapp_sent ?? 0) === 0
+                                      ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                                      : (item.whatsapp_failed ?? 0) > 0
+                                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                        : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                                  }`}
+                                >
+                                  <MessageSquare className="w-3 h-3" />
+                                  WhatsApp: {item.whatsapp_sent ?? 0} sent
+                                  {(item.whatsapp_failed ?? 0) > 0 && (
+                                    <span className="text-red-500 dark:text-red-400">· {item.whatsapp_failed} failed</span>
+                                  )}
                                 </span>
                               )}
                             </div>

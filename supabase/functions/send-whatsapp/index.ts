@@ -446,11 +446,13 @@ serve(async (req) => {
       user_ids = [],
       phone_numbers = [],
       event_type = 'reminder',
+      broadcast_id = null,
       data: templateData = {},
     } = body as {
       user_ids?: string[]
       phone_numbers?: string[]
       event_type?: string
+      broadcast_id?: string | null
       data?: Record<string, string>
     }
 
@@ -658,6 +660,7 @@ serve(async (req) => {
               phone,
               user_id: userId,
               event_type,
+              broadcast_id: broadcast_id || null,
               status: success ? 'sent' : 'failed',
               direction: 'outbound',
               message_body: message.slice(0, 1000),
