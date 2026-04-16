@@ -30,6 +30,8 @@ export const GlobalBroadcastAlert = () => {
   const isUrgent = current?.priority === 'urgent';
   const hasLink  = !!(current?.link);
   const remaining = broadcastQueue.length - 1; // others waiting behind this one
+  const totalCount = broadcastQueue.length;
+  const currentIndex = totalCount > 0 ? totalCount - remaining : 1;
 
   const priorityBg    = isUrgent ? 'bg-red-600'    : 'bg-amber-500';
   const priorityText  = isUrgent ? 'URGENT'         : 'HIGH';
@@ -135,10 +137,18 @@ export const GlobalBroadcastAlert = () => {
           </div>
 
           {/* Queue indicator — shown when more than one broadcast is waiting */}
-          {remaining > 0 && (
-            <p className="mt-2 text-white/50 text-xs text-right">
-              +{remaining} more broadcast{remaining > 1 ? 's' : ''} waiting
-            </p>
+          {totalCount > 1 && (
+            <div
+              className="mt-3 flex items-center justify-between rounded-lg bg-white/10 px-3 py-1.5"
+              data-testid="broadcast-queue-indicator"
+            >
+              <span className="text-white text-xs font-semibold">
+                {currentIndex} of {totalCount}
+              </span>
+              <span className="text-white/70 text-xs">
+                {remaining} more after this
+              </span>
+            </div>
           )}
         </div>
 

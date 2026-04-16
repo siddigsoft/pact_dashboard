@@ -578,8 +578,18 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
       isBlockingBroadcast(n) &&
       new Date(n.createdAt).getTime() > oneHourAgo
     );
-    if (pending.length > 0) {
-      setBroadcastQueue(pending);
+    // Dedupe near-duplicates (same title+message sent within 60s)
+    const deduped: typeof pending = [];
+    for (const n of pending) {
+      const dup = deduped.find(d =>
+        d.title === n.title &&
+        d.message === n.message &&
+        Math.abs(new Date(d.createdAt).getTime() - new Date(n.createdAt).getTime()) < 60_000
+      );
+      if (!dup) deduped.push(n);
+    }
+    if (deduped.length > 0) {
+      setBroadcastQueue(deduped);
     }
     setBroadcastQueueSeeded(true);
   }, [appNotifications, broadcastQueueSeeded, isBlockingBroadcast]);
