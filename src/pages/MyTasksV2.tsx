@@ -3287,7 +3287,6 @@ export default function MyTasksV2() {
                 </div>
               )}
             </div>
-            )}
 
             {/* ── CARDS VIEW ── */}
             {mainView === 'cards' && (
