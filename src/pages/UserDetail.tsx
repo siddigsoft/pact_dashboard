@@ -657,15 +657,15 @@ const UserDetail: FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Profile Card */}
         <Card className="lg:col-span-1 shadow-lg border overflow-hidden rounded-xl">
-          <div className="h-28 bg-gradient-to-br from-primary/30 via-primary/15 to-primary/5 relative">
+          <div className="h-20 bg-gradient-to-br from-primary/30 via-primary/15 to-primary/5 relative">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)]" />
           </div>
-          <CardContent className="pb-4 sm:pb-6 px-4 sm:px-6 flex flex-col items-center -mt-14">
-            <Avatar className="h-24 w-24 sm:h-28 sm:w-28 shadow-xl border-4 border-background ring-4 ring-primary/10 mb-4">
+          <CardContent className="pb-4 sm:pb-6 px-4 sm:px-6 flex flex-col items-center -mt-10">
+            <Avatar className="h-20 w-20 sm:h-24 sm:w-24 shadow-xl border-4 border-background ring-4 ring-primary/10 mb-3">
               {user.avatar ? (
                 <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />
               ) : (
-                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-2xl sm:text-3xl font-bold">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-xl sm:text-2xl font-bold">
                   {getInitials(user.name)}
                 </AvatarFallback>
               )}
@@ -673,14 +673,14 @@ const UserDetail: FC = () => {
             <div className="text-center w-full">
               {editMode ? (
                 <Input
-                  className="font-bold text-lg sm:text-xl text-center mb-3 h-12 min-h-[44px] rounded-lg"
+                  className="font-bold text-base sm:text-lg text-center mb-2 h-11 min-h-[44px] rounded-lg"
                   value={editForm.name || ""}
                   onChange={e => handleEditChange("name", e.target.value)}
                 />
               ) : (
-                <h2 className="text-lg sm:text-xl font-bold leading-tight mb-1">{user.name}</h2>
+                <h2 className="text-base sm:text-lg font-bold leading-tight mb-1 break-words" title={user.name}>{user.name}</h2>
               )}
-              <div className="flex flex-wrap justify-center items-center gap-2 mt-3">
+              <div className="flex flex-wrap justify-center items-center gap-1.5 mt-2">
                 {editMode ? (
                   <select
                     className="border rounded-lg px-3 py-2 text-center min-h-[44px] text-sm w-full max-w-xs bg-background disabled:opacity-60 disabled:cursor-not-allowed"
@@ -721,7 +721,7 @@ const UserDetail: FC = () => {
                       placeholder="user@example.com"
                     />
                   ) : (
-                    <span className="text-sm sm:text-base break-all">{user.email}</span>
+                    <span className="text-sm break-words" title={user.email}>{user.email}</span>
                   )}
                 </div>
               </div>
