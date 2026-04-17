@@ -1,13 +1,14 @@
 /**
- * whatsapp-webhook — Receives inbound WhatsApp messages from WasenderAPI
+ * whatsapp-webhook — Receives inbound WhatsApp from Meta Cloud API (or WasenderAPI fallback)
  *
- * WasenderAPI sends a POST with a JSON body when a message arrives.
- * This function:
- *   1. Validates the webhook secret (WASENDER_WEBHOOK_SECRET)
- *   2. Logs the inbound message to whatsapp_logs
- *   3. Auto-replies with a helpful message (optional)
+ * Meta Cloud API:
+ *   GET  → handshake: returns hub.challenge if hub.verify_token matches META_WA_VERIFY_TOKEN
+ *   POST → inbound message: parses entry[].changes[].value.messages[]
  *
- * Configure the webhook URL in your WasenderAPI dashboard:
+ * WasenderAPI (legacy):
+ *   POST with x-wasender-signature header → parses body.data.messages[]
+ *
+ * Webhook URL to configure in Meta Developer Console:
  *   https://<project>.supabase.co/functions/v1/whatsapp-webhook
  */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -15,7 +16,55 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-wasender-signature',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-wasender-signature, x-hub-signature-256',
+}
+
+interface InboundMessage {
+  phone: string
+  text: string
+  providerId: string
+}
+
+function parseMetaPayload(body: unknown): InboundMessage[] {
+  const messages: InboundMessage[] = []
+  // Meta payload: { object, entry: [{ changes: [{ value: { messages: [...] }}] }] }
+  const entries = (body as { entry?: unknown[] })?.entry ?? []
+  for (const entry of entries as { changes?: unknown[] }[]) {
+    for (const change of (entry.changes ?? []) as { value?: { messages?: unknown[] } }[]) {
+      for (const msg of (change.value?.messages ?? []) as Record<string, unknown>[]) {
+        const phone = String(msg.from ?? '')
+        const id = String(msg.id ?? '')
+        let text = ''
+        const textObj = msg.text as { body?: string } | undefined
+        const buttonObj = msg.button as { text?: string } | undefined
+        const interactiveObj = msg.interactive as { button_reply?: { title?: string }; list_reply?: { title?: string } } | undefined
+        if (textObj?.body) text = textObj.body
+        else if (buttonObj?.text) text = buttonObj.text
+        else if (interactiveObj?.button_reply?.title) text = interactiveObj.button_reply.title
+        else if (interactiveObj?.list_reply?.title) text = interactiveObj.list_reply.title
+        else text = `[${msg.type ?? 'unknown'}]`
+        if (phone) messages.push({ phone, text, providerId: id })
+      }
+    }
+  }
+  return messages
+}
+
+function parseWasenderPayload(body: unknown): InboundMessage[] {
+  const messages: InboundMessage[] = []
+  const data = (body as { data?: { messages?: unknown[] }; messages?: unknown[] })
+  const list = data?.data?.messages ?? (data?.messages ? [body] : [])
+  for (const msg of list as Record<string, unknown>[]) {
+    const key = msg.key as { remoteJid?: string; id?: string } | undefined
+    const message = msg.message as { conversation?: string; extendedTextMessage?: { text?: string } } | undefined
+    const text = msg.text as { body?: string } | undefined
+    const from = key?.remoteJid || (msg.from as string) || ''
+    const body = message?.conversation || message?.extendedTextMessage?.text || text?.body || ''
+    const id = key?.id || (msg.id as string) || ''
+    const phone = from.replace('@s.whatsapp.net', '').replace('@c.us', '')
+    if (phone) messages.push({ phone, text: body, providerId: id })
+  }
+  return messages
 }
 
 serve(async (req) => {
@@ -23,14 +72,40 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const webhookSecret = Deno.env.get('WASENDER_WEBHOOK_SECRET')
+  const metaVerifyToken = Deno.env.get('META_WA_VERIFY_TOKEN')
+  const wasenderSecret = Deno.env.get('WASENDER_WEBHOOK_SECRET')
+
+  // ── Meta handshake (GET) ────────────────────────────────────────────────────
+  if (req.method === 'GET') {
+    const url = new URL(req.url)
+    const mode = url.searchParams.get('hub.mode')
+    const token = url.searchParams.get('hub.verify_token')
+    const challenge = url.searchParams.get('hub.challenge')
+    if (mode === 'subscribe' && metaVerifyToken && token === metaVerifyToken) {
+      console.log('[WhatsApp Webhook] Meta handshake successful')
+      return new Response(challenge ?? '', { status: 200, headers: corsHeaders })
+    }
+    console.warn('[WhatsApp Webhook] Meta handshake failed: token mismatch')
+    return new Response('Forbidden', { status: 403, headers: corsHeaders })
+  }
+
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders })
+  }
 
   try {
-    // Validate webhook secret if configured
-    if (webhookSecret) {
-      const signature = req.headers.get('x-wasender-signature') || req.headers.get('x-hub-signature-256')
-      if (!signature || signature !== webhookSecret) {
-        console.warn('[WhatsApp Webhook] Invalid webhook signature')
+    const rawBody = await req.text()
+    let body: unknown
+    try { body = JSON.parse(rawBody) } catch { body = {} }
+
+    // Detect provider: Meta payloads have `object: "whatsapp_business_account"`
+    const isMeta = (body as { object?: string })?.object === 'whatsapp_business_account'
+
+    // ── Validate Wasender signature (only when not Meta) ─────────────────────
+    if (!isMeta && wasenderSecret) {
+      const signature = req.headers.get('x-wasender-signature')
+      if (!signature || signature !== wasenderSecret) {
+        console.warn('[WhatsApp Webhook] Invalid Wasender signature')
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -38,50 +113,42 @@ serve(async (req) => {
       }
     }
 
-    const body = await req.json()
-    console.log('[WhatsApp Webhook] Received:', JSON.stringify(body).slice(0, 500))
+    const messages = isMeta ? parseMetaPayload(body) : parseWasenderPayload(body)
+    console.log(`[WhatsApp Webhook] Provider=${isMeta ? 'meta' : 'wasender'}, messages=${messages.length}`)
+
+    if (messages.length === 0) {
+      return new Response(JSON.stringify({ success: true, processed: 0 }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // WasenderAPI webhook payload structure
-    // body.event: 'messages.upsert' | 'messages.update' | etc.
-    // body.data.messages[]: array of messages
-    const messages = body?.data?.messages ?? (body?.messages ? [body] : [])
-
-    for (const msg of messages) {
-      const from: string = msg?.key?.remoteJid || msg?.from || ''
-      const text: string = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || msg?.text?.body || ''
-      const wasenderId: string = msg?.key?.id || msg?.id || ''
-
-      if (!from) continue
-
-      // Normalize phone (strip @s.whatsapp.net suffix)
-      const phone = from.replace('@s.whatsapp.net', '').replace('@c.us', '')
-
-      // Look up the user by phone number
+    for (const m of messages) {
+      // Look up user by phone (try multiple normalizations)
+      const variants = [m.phone, `+${m.phone}`, `0${m.phone.slice(3)}`]
       const { data: profile } = await supabase
         .from('profiles')
         .select('id, full_name, phone')
-        .or(`phone.eq.${phone},phone.eq.+${phone},phone.eq.0${phone.slice(3)}`)
+        .or(variants.map(p => `phone.eq.${p}`).join(','))
         .maybeSingle()
 
-      // Log inbound message
       await supabase.from('whatsapp_logs').insert({
-        phone,
+        phone: m.phone,
         user_id: profile?.id ?? null,
         event_type: 'inbound_message',
         status: 'received',
         direction: 'inbound',
-        message_body: text,
-        wasender_id: wasenderId,
+        message_body: m.text,
+        wasender_id: m.providerId,
       })
 
-      console.log(`[WhatsApp Webhook] Logged inbound from ${phone}: "${text?.slice(0, 100)}"`)
+      console.log(`[WhatsApp Webhook] Inbound from ${m.phone}: "${m.text.slice(0, 100)}"`)
     }
 
-    return new Response(JSON.stringify({ success: true, processed: messages.length }), {
+    return new Response(JSON.stringify({ success: true, processed: messages.length, provider: isMeta ? 'meta' : 'wasender' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
