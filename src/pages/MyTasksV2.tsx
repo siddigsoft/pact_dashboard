@@ -378,7 +378,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
-      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+      <DialogContent className="sm:max-w-[760px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
         {/* ── Header ── */}
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 shrink-0">
           <div className="w-7 h-7 rounded-lg bg-[#1D3461] flex items-center justify-center shrink-0">
@@ -1200,7 +1200,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
 
   return (
     <Dialog open={!!task} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+      <DialogContent className="sm:max-w-[760px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 shrink-0 bg-gradient-to-r from-[#0F2041] to-[#1D3461]">
           <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
