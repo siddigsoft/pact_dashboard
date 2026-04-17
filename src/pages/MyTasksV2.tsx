@@ -11,7 +11,7 @@ import {
   RefreshCw, TrendingUp, Briefcase, User, Lightbulb,
   CheckSquare, Circle, Zap, ChevronDown, ChevronUp,
   Inbox, Archive, Star, AlertTriangle, Flag,
-  Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil,
+  Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil, BookOpen,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -2483,6 +2483,100 @@ const QUADRANT_CFG: Record<QuadrantKey, {
 };
 
 type SubViewKey = 'cards' | 'kanban' | 'timeline' | 'planner' | 'inbox';
+
+function GuidelinesCard() {
+  const [quadrantOpen, setQuadrantOpen] = useState(true);
+  const [workflowOpen, setWorkflowOpen] = useState(true);
+
+  const quadrants = [
+    { dot: 'bg-red-500',    name: 'Do Now',             desc: 'Tackle immediately; high urgency + high importance' },
+    { dot: 'bg-blue-500',   name: 'Schedule',           desc: 'Block time; important but not urgent' },
+    { dot: 'bg-amber-400',  name: 'Delegate',           desc: 'Hand off; urgent but lower importance' },
+    { dot: 'bg-slate-500',  name: 'Consider Dropping',  desc: 'Low urgency + low importance; challenge its value' },
+  ];
+
+  const workflow = [
+    'Review Do Now tasks first',
+    'Block time for Scheduled tasks',
+    'Delegate or batch Delegate items',
+    'Clear your Inbox',
+    'Log progress before end of day',
+  ];
+
+  return (
+    <div
+      data-testid="card-work-guidelines"
+      className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden shadow-sm"
+    >
+      <div className="px-4 py-3 bg-emerald-600 flex items-center gap-2">
+        <BookOpen className="w-4 h-4 text-white" />
+        <span className="text-xs font-black text-white uppercase tracking-widest">Work Guidelines</span>
+      </div>
+
+      <div className="p-3 flex flex-col gap-2">
+        {/* Quadrant Guide */}
+        <div className="rounded-xl bg-white/70 border border-emerald-100 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setQuadrantOpen(v => !v)}
+            data-testid="button-toggle-quadrant-guide"
+            className="w-full flex items-center justify-between px-3 py-2 hover:bg-white transition-colors"
+          >
+            <span className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Quadrant Guide</span>
+            {quadrantOpen
+              ? <ChevronUp className="w-3.5 h-3.5 text-emerald-700" />
+              : <ChevronDown className="w-3.5 h-3.5 text-emerald-700" />}
+          </button>
+          {quadrantOpen && (
+            <div className="px-3 pb-3 pt-1 flex flex-col gap-2">
+              {quadrants.map(q => (
+                <div key={q.name} className="flex items-start gap-2" data-testid={`text-quadrant-${q.name.toLowerCase().replace(/\s+/g, '-')}`}>
+                  <span className={cn('mt-1 w-2.5 h-2.5 rounded-full shrink-0', q.dot)} />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 leading-tight">{q.name}</p>
+                    <p className="text-[11px] text-slate-600 leading-snug">{q.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Daily Workflow */}
+        <div className="rounded-xl bg-white/70 border border-emerald-100 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setWorkflowOpen(v => !v)}
+            data-testid="button-toggle-daily-workflow"
+            className="w-full flex items-center justify-between px-3 py-2 hover:bg-white transition-colors"
+          >
+            <span className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Daily Workflow</span>
+            {workflowOpen
+              ? <ChevronUp className="w-3.5 h-3.5 text-emerald-700" />
+              : <ChevronDown className="w-3.5 h-3.5 text-emerald-700" />}
+          </button>
+          {workflowOpen && (
+            <ol className="px-3 pb-3 pt-1 flex flex-col gap-1.5 list-none">
+              {workflow.map((step, idx) => (
+                <li
+                  key={step}
+                  data-testid={`text-workflow-step-${idx + 1}`}
+                  className="flex items-start gap-2"
+                >
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center mt-0.5">
+                    {idx + 1}
+                  </span>
+                  <span className="text-xs text-slate-700 leading-snug font-medium">{step}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface PlanningCompanionProps {
   tasks: PersonalTask[];
   projectTasks: { id: string | number; title: string | null; priority: string | null; dueDate: string | null; status: string | null; projectName: string | null; category: string | null }[];
@@ -2788,6 +2882,9 @@ function PlanningCompanion({
                 <p className="text-sm text-amber-900 leading-relaxed font-medium">{dailyTip.tip}</p>
               </div>
             </div>
+
+            {/* Work Guidelines */}
+            <GuidelinesCard />
 
             {/* Motivational Quote */}
             <div className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 overflow-hidden shadow-sm">
