@@ -2621,18 +2621,6 @@ function PlanningCompanion({
   const dateLabel = format(now, 'EEEE, d MMMM yyyy');
 
   const [markingDone, setMarkingDone] = useState<Set<string>>(new Set());
-  const [rightOpen, setRightOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const saved = window.localStorage.getItem('mytasks-right-open');
-    return saved === null ? true : saved === '1';
-  });
-  const toggleRight = () => {
-    setRightOpen(prev => {
-      const next = !prev;
-      try { window.localStorage.setItem('mytasks-right-open', next ? '1' : '0'); } catch { /* ignore */ }
-      return next;
-    });
-  };
 
   type PlanItem = { id: string; title: string; project: string; priority: string; dueDate: string | null; type: 'personal' | 'project'; status: string; quadrant: QuadrantKey };
 
@@ -2748,22 +2736,11 @@ function PlanningCompanion({
           })}
         </div>
 
-        {/* ── Main layout: left + collapsible right ─────────────────────── */}
-        <div className="flex gap-5 items-start relative">
+        {/* ── Main layout: full-width focus + quadrants, then horizontal extras ── */}
+        <div className="flex flex-col gap-5">
 
-          {/* Sidebar toggle button (always visible) */}
-          <button
-            onClick={toggleRight}
-            className="absolute -top-2 right-0 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 text-[11px] font-semibold text-slate-500 hover:text-[#1D3461] hover:border-[#1D3461] shadow-sm transition-colors"
-            data-testid="button-toggle-right-sidebar"
-            title={rightOpen ? 'Hide tips & guidelines' : 'Show tips & guidelines'}
-          >
-            {rightOpen ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
-            {rightOpen ? 'Hide tips' : 'Show tips'}
-          </button>
-
-          {/* Left: Focus + Quadrant cards */}
-          <div className={cn('flex flex-col gap-5 min-w-0', rightOpen ? 'flex-1' : 'w-full')}>
+          {/* Focus + Quadrant cards */}
+          <div className="flex flex-col gap-5 min-w-0 w-full">
 
             {/* Focus Now */}
             <div className="rounded-2xl border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 overflow-hidden shadow-sm">
@@ -2903,8 +2880,8 @@ function PlanningCompanion({
 
           </div>
 
-          {/* Right column: Tip + Quote + Stats (collapsible) */}
-          <div className={cn('flex-col gap-4 w-[320px] shrink-0', rightOpen ? 'flex' : 'hidden')}>
+          {/* Horizontal extras row: Tip + Guidelines + Motivation + Progress + Task Views */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
             {/* Today's Tip */}
             <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 overflow-hidden shadow-sm">
