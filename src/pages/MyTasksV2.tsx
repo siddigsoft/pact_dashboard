@@ -44,6 +44,7 @@ import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, materialiseDailyTasks,
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus,
 } from '@/hooks/usePersonalTasks';
+import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -406,15 +407,14 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               />
             </div>
 
-            {/* Description */}
+            {/* Description (rich HTML — Odoo-style) */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Description</label>
-              <textarea
-                placeholder="Add more details..."
+              <TaskRichEditor
                 value={description}
-                onChange={e => setDescription(e.target.value)}
-                rows={2}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all resize-none"
+                onChange={setDescription}
+                placeholder="Add more details… type / for commands"
+                minHeight={140}
               />
             </div>
 
@@ -1232,15 +1232,14 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
               />
             </div>
 
-            {/* Description */}
+            {/* Description (rich HTML — Odoo-style) */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Description</label>
-              <textarea
-                placeholder="Add more details..."
+              <TaskRichEditor
                 value={description}
-                onChange={e => setDescription(e.target.value)}
-                rows={2}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all resize-none"
+                onChange={setDescription}
+                placeholder="Add more details… type / for commands"
+                minHeight={140}
               />
             </div>
 
@@ -1559,8 +1558,12 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
             {/* Notes */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Notes</label>
-              <textarea placeholder="Add internal notes…" value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all resize-none" />
+              <TaskRichEditor
+                value={notes}
+                onChange={setNotes}
+                placeholder="Add internal notes… type / for commands"
+                minHeight={120}
+              />
             </div>
 
           </div>
