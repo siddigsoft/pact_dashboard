@@ -139,6 +139,7 @@ const CRMEngagements = lazy(() => import('./pages/CRMEngagements'));
 const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasksV2'));
+const TaskDetail = lazy(() => import('./pages/TaskDetail'));
 const TeamTaskMonitor = lazy(() => import('./pages/TeamTaskMonitor'));
 const LeaveRequests = lazy(() => import('./pages/LeaveRequests'));
 const WorkspaceHub = lazy(() => import('./pages/WorkspaceHub'));
@@ -328,6 +329,7 @@ const AppRoutes = () => {
         <Route path="/data-visibility" element={<DataVisibility />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/my-tasks" element={<PageWrapper><MyTasksPage /></PageWrapper>} />
+        <Route path="/tasks/:id" element={<PageWrapper><TaskDetail /></PageWrapper>} />
         <Route path="/team-tasks" element={<PageWrapper><TeamTaskMonitor /></PageWrapper>} />
         <Route path="/projects" element={<PageWrapper><Projects /></PageWrapper>} />
         <Route path="/projects/analytics" element={<PageWrapper><ProjectAnalytics /></PageWrapper>} />

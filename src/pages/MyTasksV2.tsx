@@ -14,6 +14,7 @@ import {
   Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil, BookOpen,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -46,7 +47,7 @@ import {
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-type FilterKey = 'all' | 'todo' | 'inprogress' | 'overdue' | 'done';
+type FilterKey = 'all' | 'todo' | 'inprogress' | 'on_hold' | 'rescheduled' | 'overdue' | 'done';
 
 const PRIORITY_ORDER: Record<PersonalTaskPriority, number> = {
   critical: 0, high: 1, medium: 2, low: 3,
@@ -1163,10 +1164,12 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
     { value: 'low'      as const, label: '⚫ Low'     },
   ];
   const STATUSES = [
-    { value: 'todo'       as const, label: '📋 To Do'      },
-    { value: 'inprogress' as const, label: '⚡ In Progress' },
-    { value: 'done'       as const, label: '✅ Done'        },
-    { value: 'cancelled'  as const, label: '🚫 Cancelled'   },
+    { value: 'todo'        as const, label: '📋 To Do'        },
+    { value: 'inprogress'  as const, label: '⚡ In Progress'   },
+    { value: 'on_hold'     as const, label: '⏸ On Hold'        },
+    { value: 'rescheduled' as const, label: '📅 Rescheduled'   },
+    { value: 'done'        as const, label: '✅ Finished'       },
+    { value: 'cancelled'   as const, label: '🚫 Cancelled'     },
   ];
 
   const handleSave = () => {
@@ -1641,6 +1644,11 @@ function TaskCard({ task, onToggleDone, onEdit, isUpdating }: TaskCardProps) {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem asChild>
+                  <Link to={`/tasks/${task.id}`} onClick={e => e.stopPropagation()} data-testid={`menu-open-${task.id}`}>
+                    <ArrowRight className="w-3.5 h-3.5 mr-2" />Open detail
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={e => { e.stopPropagation(); onEdit(); }}>
                   <Edit2 className="w-3.5 h-3.5 mr-2" />Edit
                 </DropdownMenuItem>
@@ -1916,6 +1924,11 @@ function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, isUpdating }: 
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem asChild>
+                    <Link to={`/tasks/${task.id}`} onClick={e => e.stopPropagation()} data-testid={`menu-open-card-${task.id}`}>
+                      <ArrowRight className="w-3.5 h-3.5 mr-2" />Open detail
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); onEdit(); }}>
                     <Edit2 className="w-3.5 h-3.5 mr-2" />Edit
                   </DropdownMenuItem>

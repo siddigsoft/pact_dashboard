@@ -3,7 +3,25 @@ import { supabase } from '@/integrations/supabase/client';
 import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-fns';
 
 export type PersonalTaskPriority = 'low' | 'medium' | 'high' | 'critical';
-export type PersonalTaskStatus = 'todo' | 'inprogress' | 'done' | 'cancelled';
+export type PersonalTaskStatus = 'todo' | 'inprogress' | 'on_hold' | 'rescheduled' | 'done' | 'cancelled';
+
+export const STATUS_LABELS: Record<PersonalTaskStatus, string> = {
+  todo: 'To Do',
+  inprogress: 'In Progress',
+  on_hold: 'On Hold',
+  rescheduled: 'Rescheduled',
+  done: 'Finished',
+  cancelled: 'Cancelled',
+};
+
+export const STATUS_COLORS: Record<PersonalTaskStatus, string> = {
+  todo: 'bg-slate-100 text-slate-700 border-slate-200',
+  inprogress: 'bg-blue-50 text-blue-700 border-blue-200',
+  on_hold: 'bg-amber-50 text-amber-700 border-amber-200',
+  rescheduled: 'bg-purple-50 text-purple-700 border-purple-200',
+  done: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  cancelled: 'bg-rose-50 text-rose-700 border-rose-200',
+};
 export type DependencyType = 'custom' | 'date' | 'user' | 'department';
 
 export interface Dependency {
@@ -629,11 +647,11 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.estimatedHours !== undefined) patch.estimated_hours = updates.estimatedHours ?? null;
       if (updates.actualHours !== undefined) patch.actual_hours = updates.actualHours ?? null;
 
-      // ── Auto-track started_at / completed_at & calculate actual_hours ──────
-      if (updates.status === 'inprogress' || updates.status === 'done') {
+      // ── Auto-track timestamps for status transitions ──────
+      if (updates.status !== undefined) {
         const { data: cur } = await supabase
           .from('personal_tasks')
-          .select('started_at, completed_at, actual_hours')
+          .select('started_at, completed_at, actual_hours, on_hold_at, cancelled_at, rescheduled_at')
           .eq('id', id)
           .maybeSingle();
         const curStarted   = (cur as { started_at?: string | null } | null)?.started_at   ?? null;
@@ -643,14 +661,22 @@ export function usePersonalTasks(userId: string | undefined) {
         if (updates.status === 'inprogress' && !curStarted) {
           patch.started_at = now.toISOString();
         }
+        if (updates.status === 'on_hold') {
+          patch.on_hold_at = now.toISOString();
+        }
+        if (updates.status === 'rescheduled') {
+          patch.rescheduled_at = now.toISOString();
+        }
+        if (updates.status === 'cancelled') {
+          patch.cancelled_at = now.toISOString();
+        }
         if (updates.status === 'done') {
           if (!curCompleted) patch.completed_at = now.toISOString();
-          // Only auto-calculate if admin is NOT manually overriding
           if (updates.actualHours === undefined) {
             const startRef = curStarted ?? (patch.started_at as string | undefined) ?? null;
             if (startRef) {
               const elapsed = (now.getTime() - new Date(startRef).getTime()) / 3_600_000;
-              patch.actual_hours = Math.round(elapsed * 4) / 4; // nearest 0.25 h
+              patch.actual_hours = Math.round(elapsed * 4) / 4;
             }
           }
         }
