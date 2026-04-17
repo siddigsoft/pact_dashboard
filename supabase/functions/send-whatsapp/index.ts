@@ -98,6 +98,12 @@ const EVENT_TO_TEMPLATE: Record<string, TemplateMapping> = {
   crm_opportunity_won:       { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'team'), `opportunity "${v(d.opportunity)}"`, 'WON 🏆', 'congratulations to the team!'] },
   crm_partner_created:       { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'team'), `partner "${v(d.partner_name)}"`, 'added to CRM', `by ${v(d.actor, 'team')}`] },
   crm_engagement_created:    { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'team'), `${v(d.engagement_type, 'engagement')} with ${v(d.partner_name, 'partner')}`, 'logged', `by ${v(d.actor, 'team')}`] },
+  crm_contact_added:         { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'team'), `contact "${v(d.contact_name)}" at ${v(d.partner_name, 'partner')}`, 'added to CRM', `by ${v(d.actor, 'team')}`] },
+  leave_balance_updated:     { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'there'), 'leave balance', 'updated', `new balance: ${v(d.balance_days, '0')} days`] },
+  mmp_updated:               { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'team'), `MMP ${v(d.mmp_code)}`, 'updated', `by ${v(d.actor, 'team')}`] },
+  project_task_completed:    { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'team'), `${v(d.task_title)} (${v(d.project_name, 'project')})`, 'completed', `by ${v(d.actor, 'team')}`] },
+  retainer_payment_processed: { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'team'), `retainer payment ${v(d.amount)} ${v(d.currency, 'SDG')}`, 'processed', `for ${v(d.partner_name, 'partner')}`] },
+  task_comment_added:        { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'there'), `task "${v(d.task_title)}"`, 'has a new comment', `from ${v(d.actor, 'team')}`] },
 
   // ── Alerts → pact_alert(title, item, details, action_needed) ────────────────
   task_overdue:              { template: 'pact_alert', vars: d => ['Overdue Task', v(d.task_title), `due ${v(d.due_date, 'unknown')}`, 'take action immediately'] },
