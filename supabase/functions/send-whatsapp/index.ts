@@ -41,27 +41,27 @@ const v = (s: string | undefined | null, fallback = '—') =>
   (s && String(s).trim()) ? String(s).trim() : fallback
 
 const EVENT_TO_TEMPLATE: Record<string, TemplateMapping> = {
-  // ── Tasks → pact_task_event(name, task_title, action, due_date, url) ────────
-  task_created:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `created by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), v(d.url, `${APP_URL}/my-tasks`)] },
-  task_assigned:       { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `assigned to you by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), v(d.url, `${APP_URL}/my-tasks`)] },
-  task_started:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `started by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), v(d.url, `${APP_URL}/my-tasks`)] },
-  task_acknowledged:   { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'acknowledged by the assignee', v(d.due_date, 'not set'), v(d.url, `${APP_URL}/my-tasks`)] },
-  task_completed:      { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `completed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), v(d.url, `${APP_URL}/my-tasks`)] },
-  task_status_changed: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `status changed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), v(d.url, `${APP_URL}/my-tasks`)] },
-  task_updated:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `updated by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), v(d.url, `${APP_URL}/my-tasks`)] },
-  task_reminder_3day:  { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'due in 3 days', v(d.due_date, 'soon'), v(d.url, `${APP_URL}/my-tasks`)] },
-  project_task_assigned: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), `${v(d.task_title)} (project: ${v(d.project_name, 'N/A')})`, `assigned by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), v(d.url, `${APP_URL}/projects`)] },
+  // ── Tasks → pact_task_event(name, task_title, action, due_date) — static URL button ─
+  task_created:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `created by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
+  task_assigned:       { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `assigned to you by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
+  task_started:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `started by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
+  task_acknowledged:   { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'acknowledged by the assignee', v(d.due_date, 'not set')] },
+  task_completed:      { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `completed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
+  task_status_changed: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `status changed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
+  task_updated:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `updated by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
+  task_reminder_3day:  { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'due in 3 days', v(d.due_date, 'soon')] },
+  project_task_assigned: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), `${v(d.task_title)} (project: ${v(d.project_name, 'N/A')})`, `assigned by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
 
-  // ── Approvals → pact_approval_request(name, item, submitted_by, url) ────────
-  approval_required:         { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'there'), v(d.item, v(d.message, 'an item')), v(d.actor, 'system'), v(d.url, `${APP_URL}/notifications`)] },
-  signature_requested:       { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'there'), `signature on ${v(d.document, 'document')}`, v(d.actor, 'system'), v(d.url, `${APP_URL}/notifications`)] },
-  leave_request_submitted:   { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `leave request (${v(d.leave_type, 'leave')}, ${v(d.from_date)} → ${v(d.to_date)})`, v(d.actor, 'employee'), v(d.url, `${APP_URL}/leave`)] },
-  cost_submitted:            { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `cost ${v(d.amount)} ${v(d.currency, 'SDG')}`, v(d.actor, 'employee'), v(d.url, `${APP_URL}/finance`)] },
-  advance_request_submitted: { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `advance ${v(d.amount)} ${v(d.currency, 'SDG')}`, v(d.actor, 'employee'), v(d.url, `${APP_URL}/finance`)] },
-  payroll_approval_needed:   { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `payroll for ${v(d.payroll_month, 'this month')}`, v(d.actor, 'HR'), v(d.url, `${APP_URL}/admin/hr-finance`)] },
-  mmp_forwarded:             { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `MMP ${v(d.mmp_code)}`, v(d.actor, 'coordinator'), v(d.url, `${APP_URL}/mmp`)] },
-  mmp_recall_initiated:      { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'coordinator'), `MMP recall ${v(d.mmp_code)}`, v(d.actor, 'system'), v(d.url, `${APP_URL}/mmp`)] },
-  mmp_assigned:              { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'there'), `MMP ${v(d.mmp_code)} at ${v(d.site_name, 'site')}`, v(d.actor, 'manager'), v(d.url, `${APP_URL}/mmp`)] },
+  // ── Approvals → pact_approval_request(name, item, submitted_by) — static URL button ─
+  approval_required:         { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'there'), v(d.item, v(d.message, 'an item')), v(d.actor, 'system')] },
+  signature_requested:       { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'there'), `signature on ${v(d.document, 'document')}`, v(d.actor, 'system')] },
+  leave_request_submitted:   { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `leave request (${v(d.leave_type, 'leave')}, ${v(d.from_date)} → ${v(d.to_date)})`, v(d.actor, 'employee')] },
+  cost_submitted:            { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `cost ${v(d.amount)} ${v(d.currency, 'SDG')}`, v(d.actor, 'employee')] },
+  advance_request_submitted: { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `advance ${v(d.amount)} ${v(d.currency, 'SDG')}`, v(d.actor, 'employee')] },
+  payroll_approval_needed:   { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `payroll for ${v(d.payroll_month, 'this month')}`, v(d.actor, 'HR')] },
+  mmp_forwarded:             { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'manager'), `MMP ${v(d.mmp_code)}`, v(d.actor, 'coordinator')] },
+  mmp_recall_initiated:      { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'coordinator'), `MMP recall ${v(d.mmp_code)}`, v(d.actor, 'system')] },
+  mmp_assigned:              { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'there'), `MMP ${v(d.mmp_code)} at ${v(d.site_name, 'site')}`, v(d.actor, 'manager')] },
 
   // ── Status updates → pact_status_update(name, item, action, notes) ──────────
   leave_request_approved:    { template: 'pact_status_update', vars: d => [v(d.recipient_name, 'there'), `leave request (${v(d.leave_type, 'leave')})`, 'approved', `${v(d.from_date)} → ${v(d.to_date)} by ${v(d.actor, 'manager')}`] },
@@ -114,11 +114,11 @@ const EVENT_TO_TEMPLATE: Record<string, TemplateMapping> = {
   budget_threshold_80:       { template: 'pact_alert', vars: d => ['Budget 80% Used', v(d.budget_line), `remaining: ${v(d.remaining)} ${v(d.currency, 'SDG')}`, 'monitor spending closely'] },
   budget_threshold_100:      { template: 'pact_alert', vars: d => ['Budget Fully Used', v(d.budget_line), '100% utilized', 'no more spending allowed'] },
 
-  // ── Reminders → pact_reminder(name, count, url) ─────────────────────────────
-  reminder:           { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), v(d.message, '1 pending item'), v(d.url, APP_URL)] },
-  daily_digest:       { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `${v(d.active, '0')} active, ${v(d.done, '0')} done, ${v(d.overdue, '0')} overdue`, `${APP_URL}/my-tasks`] },
-  broadcast:          { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'team'), v(d.message, 'an important announcement'), APP_URL] },
-  task_reminder_1day: { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `1 task due tomorrow: "${v(d.task_title)}"`, v(d.url, `${APP_URL}/my-tasks`)] },
+  // ── Reminders → pact_reminder(name, message) — static URL button ───────────
+  reminder:           { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), v(d.message, '1 pending item')] },
+  daily_digest:       { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `${v(d.active, '0')} active, ${v(d.done, '0')} done, ${v(d.overdue, '0')} overdue`] },
+  broadcast:          { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'team'), v(d.message, 'an important announcement')] },
+  task_reminder_1day: { template: 'pact_reminder', vars: d => [v(d.recipient_name, 'there'), `1 task due tomorrow: "${v(d.task_title)}"`] },
 }
 
 // ── Phone normalizer ──────────────────────────────────────────────────────────
