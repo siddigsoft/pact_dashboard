@@ -432,7 +432,10 @@ serve(async (req) => {
 
     const attemptMeta = async (phone: string, lang: string): Promise<AttemptResult> => {
       const payload = buildMetaPayload(phone, event_type, templateData, lang)
-      const bodySent = `[META→${metaPhoneId}] ` + JSON.stringify(payload).slice(0, 950)
+      // Log the human-readable text (same content as Wasender), not the raw JSON.
+      // The JSON is what the Meta API needs; the log should be what a human reads.
+      const readable = buildWasenderText(event_type, templateData, lang)
+      const bodySent = `[META→${metaPhoneId}] ` + readable.slice(0, 950)
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           const resp = await fetch(`https://graph.facebook.com/${META_GRAPH_VERSION}/${metaPhoneId}/messages`, {

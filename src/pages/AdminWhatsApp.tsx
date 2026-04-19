@@ -318,6 +318,45 @@ export default function AdminWhatsAppPage() {
     return errorMsg;
   };
 
+  // Detect provider from message_body prefix.
+  const getProvider = (body: string | null): 'meta' | 'wasender' | null => {
+    if (!body) return null;
+    if (body.startsWith('[META')) return 'meta';
+    if (body.startsWith('[WASENDER]')) return 'wasender';
+    return null;
+  };
+
+  // Extract a human-readable preview from any log body.
+  // Handles legacy Meta logs that stored raw JSON template payloads.
+  const readableBody = (body: string | null): string => {
+    if (!body) return '(no message)';
+    // Strip provider prefix
+    let text = body.replace(/^\[META→[^\]]+\]\s*/, '').replace(/^\[WASENDER\]\s*/, '');
+
+    // If it looks like a Meta template JSON, extract template name + parameters
+    if (text.trim().startsWith('{') && text.includes('"template"')) {
+      try {
+        const parsed = JSON.parse(text);
+        const tpl = parsed?.template;
+        if (tpl) {
+          const name = tpl.name || 'template';
+          const lang = tpl.language?.code || '';
+          const params: string[] = [];
+          for (const c of tpl.components || []) {
+            for (const p of c.parameters || []) {
+              if (typeof p?.text === 'string') params.push(p.text);
+            }
+          }
+          const paramSummary = params.length ? `\n  • ${params.join('\n  • ')}` : '';
+          return `📨 Template: ${name}${lang ? ` (${lang})` : ''}${paramSummary}`;
+        }
+      } catch (_) { /* fall through */ }
+      // Truncated JSON that won't parse — show a hint instead of the raw blob
+      return '📨 Meta template message (raw payload — re-send to see readable text)';
+    }
+    return text;
+  };
+
   if (!authReady) {
     return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
   }
@@ -529,7 +568,7 @@ export default function AdminWhatsAppPage() {
                     </div>
                     <p className="text-xs text-muted-foreground truncate pl-9">
                       {conv.lastMessage.direction === 'inbound' ? '← ' : '→ '}
-                      {conv.lastMessage.message_body?.slice(0, 55) ?? '(no message)'}
+                      {readableBody(conv.lastMessage.message_body).slice(0, 55)}
                     </p>
                   </button>
                 ))}
@@ -583,7 +622,7 @@ export default function AdminWhatsAppPage() {
                             : 'bg-muted rounded-tl-sm',
                         )}
                       >
-                        <p className="whitespace-pre-wrap break-words">{msg.message_body ?? '(no body)'}</p>
+                        <p className="whitespace-pre-wrap break-words">{readableBody(msg.message_body)}</p>
                         <div className={cn('flex items-center gap-1 mt-1', msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}>
                           <span className={cn('text-[10px]', msg.direction === 'outbound' ? 'text-blue-200' : 'text-muted-foreground')}>
                             {format(new Date(msg.created_at), 'HH:mm · d MMM')}
@@ -711,10 +750,21 @@ export default function AdminWhatsAppPage() {
                         <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0 hidden sm:block">
                           {log.event_type}
                         </span>
+                        {(() => {
+                          const prov = getProvider(log.message_body);
+                          return prov && (
+                            <Badge variant="secondary" className={cn(
+                              'shrink-0 text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider',
+                              prov === 'meta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30'
+                            )}>
+                              {prov}
+                            </Badge>
+                          );
+                        })()}
                         <span className="text-xs text-muted-foreground truncate min-w-0">
                           {log.status === 'skipped'
                             ? parseSkipReason(log.error_message)
-                            : log.message_body?.slice(0, 60)}
+                            : readableBody(log.message_body).replace(/\n/g, ' ').slice(0, 60)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -756,12 +806,25 @@ export default function AdminWhatsAppPage() {
                           )}
                           <div className="col-span-2"><span className="text-muted-foreground">Time:</span> {format(new Date(log.created_at), 'd MMM yyyy, HH:mm:ss')}</div>
                         </div>
-                        {log.message_body && log.status !== 'skipped' && (
-                          <div>
-                            <p className="text-muted-foreground mb-1">Message:</p>
-                            <pre className="whitespace-pre-wrap bg-background rounded p-2 border text-[11px] max-h-32 overflow-y-auto">{log.message_body}</pre>
-                          </div>
-                        )}
+                        {log.message_body && log.status !== 'skipped' && (() => {
+                          const prov = getProvider(log.message_body);
+                          return (
+                            <div>
+                              <p className="text-muted-foreground mb-1 flex items-center gap-2">
+                                Message:
+                                {prov && (
+                                  <Badge variant="secondary" className={cn(
+                                    'text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider',
+                                    prov === 'meta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30'
+                                  )}>
+                                    sent via {prov}
+                                  </Badge>
+                                )}
+                              </p>
+                              <pre className="whitespace-pre-wrap bg-background rounded p-2 border text-[11px] max-h-48 overflow-y-auto">{readableBody(log.message_body)}</pre>
+                            </div>
+                          );
+                        })()}
                         {log.direction === 'inbound' && (
                           <Button
                             size="sm"
