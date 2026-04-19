@@ -134,8 +134,9 @@ function normalizePhone(raw: string): string | null {
   if (digits.startsWith('249') && digits.length >= 12) return `+${digits}`
   if (digits.startsWith('256') && digits.length >= 12) return `+${digits}`
   if ((digits.startsWith('09') || digits.startsWith('01')) && digits.length === 10) return `+249${digits.slice(1)}`
-  if (digits.startsWith('9') && digits.length === 9) return `+249${digits}`
+  if ((digits.startsWith('9') || digits.startsWith('1')) && digits.length === 9) return `+249${digits}`
   if (digits.startsWith('07') && digits.length === 10) return `+256${digits.slice(1)}`
+  if (digits.startsWith('7') && digits.length === 9) return `+256${digits}`
   if (digits.length >= 10) return `+${digits}`
   return null
 }
