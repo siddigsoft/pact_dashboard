@@ -51,7 +51,69 @@ interface Conversation {
   unread: number;
 }
 
-type Tab = 'inbox' | 'logs' | 'send' | 'settings';
+type Tab = 'inbox' | 'logs' | 'send' | 'templates' | 'settings';
+
+// Sample renderings of the 5 message shapes used by both providers.
+// (Wasender sends as free text; Meta sends as pre-approved template by the same name.)
+const TEMPLATE_PREVIEWS = [
+  {
+    id: 'pact_task_event',
+    icon: '✅',
+    title: 'Task Update',
+    color: 'blue',
+    description: 'Task lifecycle events (created, assigned, started, completed, etc.)',
+    eventCount: 9,
+    sampleEvents: ['task_assigned', 'task_completed', 'task_started', 'task_acknowledged', 'project_task_assigned'],
+    en: `*Task Update*\n\nHello ELSIDDIG,\n\nTask: *Site monitoring report Q2*\nStatus: assigned to you by Manager\nDue date: 2026-04-25\n\nOpen task: https://app.pactorg.com/my-tasks`,
+    ar: `*تحديث مهمة*\n\nمرحباً ELSIDDIG،\n\nالمهمة: *Site monitoring report Q2*\nالحالة: assigned to you by Manager\nتاريخ الاستحقاق: 2026-04-25\n\nفتح المهمة: https://app.pactorg.com/my-tasks`,
+  },
+  {
+    id: 'pact_approval_request',
+    icon: '📋',
+    title: 'Approval Required',
+    color: 'amber',
+    description: 'Items needing manager approval (leave, costs, signatures, MMP, payroll)',
+    eventCount: 9,
+    sampleEvents: ['approval_required', 'leave_request_submitted', 'cost_submitted', 'signature_requested', 'mmp_forwarded', 'payroll_approval_needed'],
+    en: `*Approval Required*\n\nHello Manager,\n\nleave request (Annual, 2026-05-01 → 2026-05-07) requires your approval.\nSubmitted by: ELSIDDIG IBRAHIM\n\nReview: https://app.pactorg.com/approvals`,
+    ar: `*مطلوب موافقة*\n\nمرحباً Manager،\n\nleave request (Annual, 2026-05-01 → 2026-05-07) يتطلب موافقتك.\nمقدم من: ELSIDDIG IBRAHIM\n\nللمراجعة: https://app.pactorg.com/approvals`,
+  },
+  {
+    id: 'pact_status_update',
+    icon: '🔄',
+    title: 'Status Update',
+    color: 'emerald',
+    description: 'Outcome of a request or workflow stage (approved, rejected, completed, advanced)',
+    eventCount: 32,
+    sampleEvents: ['leave_request_approved', 'cost_approved', 'project_completed', 'mmp_completed', 'payroll_slip_ready', 'site_visit_completed', 'crm_opportunity_won', 'user_approved'],
+    en: `*Status Update*\n\nHello ELSIDDIG,\n\nYour leave request (Annual) has been *approved*.\nNotes: 2026-05-01 → 2026-05-07 by Manager`,
+    ar: `*تحديث حالة*\n\nمرحباً ELSIDDIG،\n\nتم *approved* leave request (Annual) الخاص بك.\nملاحظات: 2026-05-01 → 2026-05-07 by Manager`,
+  },
+  {
+    id: 'pact_alert',
+    icon: '⚠️',
+    title: 'Alert',
+    color: 'red',
+    description: 'Urgent issues needing immediate attention (overdue, expired, stalled, over-budget)',
+    eventCount: 12,
+    sampleEvents: ['task_overdue', 'task_delayed', 'contract_expiring_7d', 'budget_threshold_100', 'project_stalled', 'site_flagged_uncovered'],
+    en: `⚠️ *Overdue Task*\n\nSite monitoring report Q2\n\nDetails: due 2026-04-19\nAction needed: take action immediately`,
+    ar: `⚠️ *Overdue Task*\n\nSite monitoring report Q2\n\nالتفاصيل: due 2026-04-19\nالإجراء المطلوب: take action immediately`,
+  },
+  {
+    id: 'pact_reminder',
+    icon: '🔔',
+    title: 'Reminder',
+    color: 'purple',
+    description: 'Soft nudges, daily digests, and broadcast announcements',
+    eventCount: 4,
+    sampleEvents: ['reminder', 'daily_digest', 'broadcast', 'task_reminder_1day'],
+    en: `*Reminder*\n\nHello ELSIDDIG,\n\nYou have 1 task due tomorrow: "Site monitoring report Q2".\n\nView: https://app.pactorg.com/my-tasks`,
+    ar: `*تذكير*\n\nمرحباً ELSIDDIG،\n\nلديك 1 task due tomorrow: "Site monitoring report Q2".\n\nللعرض: https://app.pactorg.com/my-tasks`,
+  },
+] as const;
+
+const FOOTER = '\n\n— PACT Command Center\nhttps://app.pactorg.com';
 
 export default function AdminWhatsAppPage() {
   const navigate = useNavigate();
@@ -369,6 +431,7 @@ export default function AdminWhatsAppPage() {
     { id: 'inbox', label: 'Inbox', icon: Inbox },
     { id: 'logs', label: 'Delivery Logs', icon: BarChart3 },
     { id: 'send', label: 'Send Message', icon: Send },
+    { id: 'templates', label: 'Templates', icon: MessageSquare },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -940,6 +1003,105 @@ export default function AdminWhatsAppPage() {
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── TEMPLATES TAB ── */}
+      {activeTab === 'templates' && (
+        <div className="space-y-4" data-testid="templates-tab">
+          {/* Explainer */}
+          <div className="rounded-xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+            <div className="flex items-start gap-3">
+              <Info className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-sm text-amber-900 dark:text-amber-100 space-y-2">
+                <p>
+                  <strong>WasenderAPI doesn't use registered templates.</strong> Every message is composed in our code and sent as a normal WhatsApp message — no Meta-style approval is needed. The Wasender dashboard's "Templates" feature is for their own canned-replies tool and isn't used by PACT.
+                </p>
+                <p>
+                  <strong>Meta Cloud API does require approval.</strong> The 5 templates below are registered in your Meta Business Manager and reused for 60+ event types. The same content shape is used for both providers, so the messages your staff receive look consistent.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Template cards */}
+          <div className="space-y-4">
+            {TEMPLATE_PREVIEWS.map(tpl => {
+              const colorClasses = {
+                blue: 'border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-900/10',
+                amber: 'border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-900/10',
+                emerald: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/10',
+                red: 'border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-900/10',
+                purple: 'border-purple-200 dark:border-purple-800 bg-purple-50/30 dark:bg-purple-900/10',
+              }[tpl.color] || '';
+              const badgeClasses = {
+                blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40',
+                amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40',
+                emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40',
+                red: 'bg-red-100 text-red-700 dark:bg-red-900/40',
+                purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40',
+              }[tpl.color] || '';
+              return (
+                <Card key={tpl.id} className={cn('border-2', colorClasses)} data-testid={`template-card-${tpl.id}`}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <span className="text-3xl shrink-0">{tpl.icon}</span>
+                        <div className="min-w-0">
+                          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+                            {tpl.title}
+                            <code className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded">{tpl.id}</code>
+                          </CardTitle>
+                          <CardDescription className="mt-1">{tpl.description}</CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className={cn('shrink-0', badgeClasses)} data-testid={`template-event-count-${tpl.id}`}>
+                        {tpl.eventCount} events
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {/* Sample event types */}
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Used by events</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {tpl.sampleEvents.map(ev => (
+                          <code key={ev} className="text-[11px] font-mono bg-muted px-2 py-0.5 rounded border">{ev}</code>
+                        ))}
+                        {tpl.eventCount > tpl.sampleEvents.length && (
+                          <span className="text-[11px] text-muted-foreground italic px-1">+ {tpl.eventCount - tpl.sampleEvents.length} more</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live previews EN + AR */}
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">What recipients see</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* English bubble */}
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">English</p>
+                          <div className="rounded-lg bg-[#005c4b] text-white p-3 text-xs whitespace-pre-wrap break-words font-sans leading-relaxed shadow" dir="ltr" data-testid={`template-preview-en-${tpl.id}`}>
+                            {tpl.en}{FOOTER}
+                          </div>
+                        </div>
+                        {/* Arabic bubble */}
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">العربية</p>
+                          <div className="rounded-lg bg-[#005c4b] text-white p-3 text-xs whitespace-pre-wrap break-words font-sans leading-relaxed shadow" dir="rtl" data-testid={`template-preview-ar-${tpl.id}`}>
+                            {tpl.ar}{FOOTER}
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-2 italic">
+                        Note: When sent via Wasender, both EN and AR appear in one message separated by a divider. When sent via Meta, the recipient gets only their preferred language (cleaner native experience).
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* ── SETTINGS TAB ── */}
