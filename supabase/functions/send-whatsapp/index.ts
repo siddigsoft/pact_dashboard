@@ -204,19 +204,52 @@ function buildMetaPayload(to: string, eventType: string, data: Record<string, st
   }
 }
 
-// ── Build legacy Wasender free-text fallback ──────────────────────────────────
-function buildWasenderText(eventType: string, data: Record<string, string>): string {
+// ── Build Wasender bilingual (EN + AR) free-text message ─────────────────────
+function buildWasenderText(eventType: string, data: Record<string, string>, lang: string = 'en'): string {
   const mapping = EVENT_TO_TEMPLATE[eventType]
-  if (!mapping) return data.message || `PACT: ${eventType}`
-  const params = mapping.vars(data)
-  // Approximate the template body in plain text
-  switch (mapping.template) {
-    case 'pact_task_event':       return `Hi ${params[0]}, task "${params[1]}" — ${params[2]}.\nDue: ${params[3]}\nOpen: ${params[4]}`
-    case 'pact_approval_request': return `Hi ${params[0]}, ${params[1]} requires your approval.\nSubmitted by: ${params[2]}\nReview: ${params[3]}`
-    case 'pact_status_update':    return `Hi ${params[0]}, your ${params[1]} has been ${params[2]}.\nNotes: ${params[3]}`
-    case 'pact_alert':            return `⚠️ ${params[0]}: ${params[1]}\nDetails: ${params[2]}\nAction needed: ${params[3]}`
-    case 'pact_reminder':         return `Hi ${params[0]}.\nYou have ${params[1]}.\nView: ${params[2]}`
+  const sep = '\n────────────────\n'
+  const footer = `\n\n— PACT Command Center\n${APP_URL}`
+
+  if (!mapping) {
+    const en = data.message || `PACT update: ${eventType}`
+    const ar = data.message_ar || data.message || `تحديث من باكت: ${eventType}`
+    return lang === 'ar' ? ar + sep + en + footer : en + sep + ar + footer
   }
+  const p = mapping.vars(data)
+
+  type Pair = { en: string; ar: string }
+  const pair: Pair = (() => {
+    switch (mapping.template) {
+      case 'pact_task_event':
+        return {
+          en: `*Task Update*\n\nHello ${p[0]},\n\nTask: *${p[1]}*\nStatus: ${p[2]}\nDue date: ${p[3]}\n\nOpen task: ${p[4]}`,
+          ar: `*تحديث مهمة*\n\nمرحباً ${p[0]}،\n\nالمهمة: *${p[1]}*\nالحالة: ${p[2]}\nتاريخ الاستحقاق: ${p[3]}\n\nفتح المهمة: ${p[4]}`,
+        }
+      case 'pact_approval_request':
+        return {
+          en: `*Approval Required*\n\nHello ${p[0]},\n\n${p[1]} requires your approval.\nSubmitted by: ${p[2]}\n\nReview: ${p[3]}`,
+          ar: `*مطلوب موافقة*\n\nمرحباً ${p[0]}،\n\n${p[1]} يتطلب موافقتك.\nمقدم من: ${p[2]}\n\nللمراجعة: ${p[3]}`,
+        }
+      case 'pact_status_update':
+        return {
+          en: `*Status Update*\n\nHello ${p[0]},\n\nYour ${p[1]} has been *${p[2]}*.\nNotes: ${p[3]}`,
+          ar: `*تحديث حالة*\n\nمرحباً ${p[0]}،\n\nتم *${p[2]}* ${p[1]} الخاص بك.\nملاحظات: ${p[3]}`,
+        }
+      case 'pact_alert':
+        return {
+          en: `⚠️ *${p[0]}*\n\n${p[1]}\n\nDetails: ${p[2]}\nAction needed: ${p[3]}`,
+          ar: `⚠️ *${p[0]}*\n\n${p[1]}\n\nالتفاصيل: ${p[2]}\nالإجراء المطلوب: ${p[3]}`,
+        }
+      case 'pact_reminder':
+      default:
+        return {
+          en: `*Reminder*\n\nHello ${p[0]},\n\nYou have ${p[1]}.\n\nView: ${p[2]}`,
+          ar: `*تذكير*\n\nمرحباً ${p[0]}،\n\nلديك ${p[1]}.\n\nللعرض: ${p[2]}`,
+        }
+    }
+  })()
+
+  return (lang === 'ar' ? pair.ar + sep + pair.en : pair.en + sep + pair.ar) + footer
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -228,15 +261,15 @@ serve(async (req) => {
     const metaPhoneId = Deno.env.get('META_WA_PHONE_NUMBER_ID')
     const wasenderKey = Deno.env.get('WASENDER_API_KEY')
 
-    const useMeta = !!(metaToken && metaPhoneId)
-    if (!useMeta && !wasenderKey) {
+    const hasMeta = !!(metaToken && metaPhoneId)
+    const hasWasender = !!wasenderKey
+    if (!hasMeta && !hasWasender) {
       console.warn('[WhatsApp] No provider configured (Meta or Wasender)')
       return new Response(
         JSON.stringify({ success: false, error: 'No WhatsApp provider configured', skipped: true }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
-
     const body = await req.json()
     const {
       user_ids = [], phone_numbers = [],
@@ -245,11 +278,29 @@ serve(async (req) => {
       priority = 'medium',
       lang_override = null,
       data: templateData = {},
+      provider: requestedProvider = 'meta_first',
     } = body as {
       user_ids?: string[]; phone_numbers?: string[];
       event_type?: string; broadcast_id?: string | null;
       priority?: string; lang_override?: string | null;
       data?: Record<string, string>;
+      provider?: 'meta' | 'wasender' | 'meta_first' | 'wasender_first';
+    }
+    // Build provider order based on what's available + the request preference
+    const providerOrder: Array<'meta' | 'wasender'> = (() => {
+      if (requestedProvider === 'meta')     return hasMeta ? ['meta'] : []
+      if (requestedProvider === 'wasender') return hasWasender ? ['wasender'] : []
+      if (requestedProvider === 'wasender_first') {
+        return [hasWasender && 'wasender', hasMeta && 'meta'].filter(Boolean) as any
+      }
+      // 'meta_first' (default)
+      return [hasMeta && 'meta', hasWasender && 'wasender'].filter(Boolean) as any
+    })()
+    if (providerOrder.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: `Requested provider '${requestedProvider}' not configured`, skipped: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     const categoryCol: WhatsAppCategoryCol | null = EVENT_CATEGORY_MAP[event_type] ?? null
@@ -358,7 +409,7 @@ serve(async (req) => {
       )
     }
 
-    console.log(`[WhatsApp] Sending ${event_type} via ${useMeta ? 'Meta' : 'Wasender'} to ${normalized.length} number(s)`)
+    console.log(`[WhatsApp] Sending ${event_type} via [${providerOrder.join(' → ')}] to ${normalized.length} number(s)`)
 
     // Rate limit (≥3 sent in last 2min unless urgent)
     const rateLimitedPhones = new Set<string>()
@@ -376,39 +427,42 @@ serve(async (req) => {
       for (const [phone, count] of counts) if (count >= 3) rateLimitedPhones.add(phone)
     }
 
-    // ── Sender (Meta or Wasender) ─────────────────────────────────────────────
-    const sendOne = async (phone: string, lang: string): Promise<{ ok: boolean; providerId: string | null; errorMsg: string | null; bodySent: string }> => {
-      if (useMeta) {
-        const payload = buildMetaPayload(phone, event_type, templateData, lang)
-        const bodySent = JSON.stringify(payload).slice(0, 1000)
-        for (let attempt = 1; attempt <= 2; attempt++) {
-          try {
-            const resp = await fetch(`https://graph.facebook.com/${META_GRAPH_VERSION}/${metaPhoneId}/messages`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${metaToken}` },
-              body: JSON.stringify(payload),
-            })
-            const respBody = await resp.text()
-            if (resp.ok) {
-              let providerId: string | null = null
-              try { providerId = JSON.parse(respBody)?.messages?.[0]?.id ?? null } catch (_) {}
-              return { ok: true, providerId, errorMsg: null, bodySent }
-            }
-            const errorMsg = `Meta HTTP ${resp.status}: ${respBody.slice(0, 400)}`
-            if (attempt === 1 && (resp.status >= 500 || resp.status === 429)) {
-              await new Promise(r => setTimeout(r, 1000)); continue
-            }
-            return { ok: false, providerId: null, errorMsg, bodySent }
-          } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : 'Unknown error'
-            if (attempt === 1) { await new Promise(r => setTimeout(r, 1000)); continue }
-            return { ok: false, providerId: null, errorMsg, bodySent }
+    // ── Single-provider attempt (used inside failover loop) ──────────────────
+    type AttemptResult = { ok: boolean; providerId: string | null; errorMsg: string | null; bodySent: string; provider: 'meta' | 'wasender' }
+
+    const attemptMeta = async (phone: string, lang: string): Promise<AttemptResult> => {
+      const payload = buildMetaPayload(phone, event_type, templateData, lang)
+      const bodySent = `[META→${metaPhoneId}] ` + JSON.stringify(payload).slice(0, 950)
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const resp = await fetch(`https://graph.facebook.com/${META_GRAPH_VERSION}/${metaPhoneId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${metaToken}` },
+            body: JSON.stringify(payload),
+          })
+          const respBody = await resp.text()
+          if (resp.ok) {
+            let providerId: string | null = null
+            try { providerId = JSON.parse(respBody)?.messages?.[0]?.id ?? null } catch (_) {}
+            return { ok: true, providerId, errorMsg: null, bodySent, provider: 'meta' }
           }
+          const errorMsg = `Meta HTTP ${resp.status}: ${respBody.slice(0, 400)}`
+          if (attempt === 1 && (resp.status >= 500 || resp.status === 429)) {
+            await new Promise(r => setTimeout(r, 1000)); continue
+          }
+          return { ok: false, providerId: null, errorMsg, bodySent, provider: 'meta' }
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+          if (attempt === 1) { await new Promise(r => setTimeout(r, 1000)); continue }
+          return { ok: false, providerId: null, errorMsg, bodySent, provider: 'meta' }
         }
-        return { ok: false, providerId: null, errorMsg: 'exhausted', bodySent }
       }
-      // ── Wasender legacy fallback ────────────────────────────────────────────
-      const text = buildWasenderText(event_type, templateData)
+      return { ok: false, providerId: null, errorMsg: 'exhausted', bodySent, provider: 'meta' }
+    }
+
+    const attemptWasender = async (phone: string, lang: string): Promise<AttemptResult> => {
+      const text = buildWasenderText(event_type, templateData, lang)
+      const bodySent = `[WASENDER] ` + text.slice(0, 950)
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           const resp = await fetch(WASENDER_ENDPOINT, {
@@ -420,20 +474,40 @@ serve(async (req) => {
           if (resp.ok) {
             let providerId: string | null = null
             try { const p = JSON.parse(respBody); providerId = p?.id || p?.messageId || null } catch (_) {}
-            return { ok: true, providerId, errorMsg: null, bodySent: text }
+            return { ok: true, providerId, errorMsg: null, bodySent, provider: 'wasender' }
           }
           const errorMsg = `Wasender HTTP ${resp.status}: ${respBody.slice(0, 300)}`
           if (attempt === 1 && (resp.status >= 500 || resp.status === 429)) {
             await new Promise(r => setTimeout(r, 1000)); continue
           }
-          return { ok: false, providerId: null, errorMsg, bodySent: text }
+          return { ok: false, providerId: null, errorMsg, bodySent, provider: 'wasender' }
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : 'Unknown error'
           if (attempt === 1) { await new Promise(r => setTimeout(r, 1000)); continue }
-          return { ok: false, providerId: null, errorMsg, bodySent: text }
+          return { ok: false, providerId: null, errorMsg, bodySent, provider: 'wasender' }
         }
       }
-      return { ok: false, providerId: null, errorMsg: 'exhausted', bodySent: text }
+      return { ok: false, providerId: null, errorMsg: 'exhausted', bodySent, provider: 'wasender' }
+    }
+
+    // Failover: try each provider in order; first one that succeeds wins.
+    // If all fail, return the LAST attempt (with combined error trail in errorMsg).
+    const sendOne = async (phone: string, lang: string): Promise<AttemptResult> => {
+      const attempts: AttemptResult[] = []
+      for (const prov of providerOrder) {
+        const r = prov === 'meta' ? await attemptMeta(phone, lang) : await attemptWasender(phone, lang)
+        attempts.push(r)
+        if (r.ok) {
+          if (attempts.length > 1) {
+            console.log(`[WhatsApp] ${phone}: succeeded via ${prov} after ${attempts.length - 1} provider failure(s)`)
+          }
+          return r
+        }
+        console.warn(`[WhatsApp] ${phone}: ${prov} failed → ${r.errorMsg?.slice(0, 200)}`)
+      }
+      // All providers failed — surface the combined trail
+      const combined = attempts.map(a => `${a.provider}: ${a.errorMsg}`).join(' | ')
+      return { ...attempts[attempts.length - 1], errorMsg: combined }
     }
 
     const results = await Promise.all(
@@ -442,7 +516,7 @@ serve(async (req) => {
           await logSkip(userId, phone, 'rate_limited')
           return { phone, success: false, skipped: true as const }
         }
-        const { ok: success, providerId, errorMsg, bodySent } = await sendOne(phone, lang)
+        const { ok: success, providerId, errorMsg, bodySent, provider } = await sendOne(phone, lang)
 
         try {
           await fetch(`${supabaseUrl}/rest/v1/whatsapp_logs`, {
@@ -457,7 +531,7 @@ serve(async (req) => {
               status: success ? 'sent' : 'failed',
               direction: 'outbound',
               message_body: bodySent.slice(0, 1000),
-              error_message: errorMsg ? errorMsg.slice(0, 500) : null,
+              error_message: errorMsg ? `[${provider}] ${errorMsg}`.slice(0, 500) : null,
               wasender_id: providerId,
             }),
           })
@@ -465,7 +539,7 @@ serve(async (req) => {
           console.error(`[WhatsApp] log insert failed:`, logErr instanceof Error ? logErr.message : logErr)
         }
 
-        return { phone, success, skipped: false as const }
+        return { phone, success, provider, skipped: false as const }
       }),
     )
 
@@ -473,19 +547,27 @@ serve(async (req) => {
     const rateLimitedSkipped = results.filter(r => r.skipped).length
     skippedCount += rateLimitedSkipped
     const failed = results.filter(r => !r.success && !r.skipped).length
+    const sentMeta = results.filter(r => r.success && r.provider === 'meta').length
+    const sentWasender = results.filter(r => r.success && r.provider === 'wasender').length
 
     try {
       await supabase.from('audit_logs').insert({
         module: 'notification', action: 'whatsapp_send',
         entity_type: 'whatsapp', entity_id: `wa-${Date.now()}`, entity_name: event_type,
-        description: `WhatsApp via ${useMeta ? 'Meta' : 'Wasender'}: sent=${sent}, failed=${failed} for event=${event_type}`,
+        description: `WhatsApp [${providerOrder.join('→')}]: meta=${sentMeta}, wasender=${sentWasender}, failed=${failed} for event=${event_type}`,
         success: sent > 0, actor_name: 'System',
-        metadata: { event_type, sent, failed, total: normalized.length, provider: useMeta ? 'meta' : 'wasender' },
+        metadata: { event_type, sent, failed, total: normalized.length, sent_meta: sentMeta, sent_wasender: sentWasender, provider_order: providerOrder },
       })
     } catch (_) { /* non-blocking */ }
 
     return new Response(
-      JSON.stringify({ success: true, sent, failed, total: normalized.length, skipped: skippedCount, provider: useMeta ? 'meta' : 'wasender' }),
+      JSON.stringify({
+        success: true,
+        sent, failed, total: normalized.length, skipped: skippedCount,
+        provider_order: providerOrder,
+        sent_via_meta: sentMeta,
+        sent_via_wasender: sentWasender,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (err) {
