@@ -1497,11 +1497,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Update user error:", error);
+      const detail =
+        error?.message ||
+        error?.error_description ||
+        error?.details ||
+        (typeof error === 'string' ? error : JSON.stringify(error));
       toast({
         title: "Update user error",
-        description: "An unexpected error occurred. Please try again.",
+        description: detail || "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
       return false;
