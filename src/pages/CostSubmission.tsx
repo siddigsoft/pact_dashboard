@@ -4736,7 +4736,7 @@ const CostSubmission = () => {
                     <div className="rounded-lg border divide-y text-sm">
                       <div className="px-3 py-2">
                         <p className="text-xs text-muted-foreground mb-0.5">Submitted By / مقدم الطلب</p>
-                        <p className="font-medium">{submitter?.name || submitter?.email || oc.submitted_by.slice(0, 8)}</p>
+                        <p className="font-medium">{(submitter as any)?.fullName || (submitter as any)?.full_name || submitter?.name || submitter?.email || oc.submitted_by.slice(0, 8)}</p>
                         {oc.submitter_role && <p className="text-xs text-muted-foreground capitalize">{oc.submitter_role.replace(/_/g, ' ')}</p>}
                       </div>
                       {oc.submitted_at && (
