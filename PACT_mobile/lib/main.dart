@@ -48,6 +48,7 @@ import 'services/permission_handler_service.dart';
 import 'services/map_tile_cache_service.dart'
     if (dart.library.html) 'services/map_tile_cache_service_web.dart';
 import 'services/offline/hive_adapters.dart';
+import 'services/offline_sync_service.dart';
 import 'services/offline/offline_db.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/compliance_check_screen.dart';
@@ -214,6 +215,21 @@ void main() async {
   await appPreferencesProvider.load();
   final connectivityService = ConnectivityService(Connectivity());
   await connectivityService.initialize();
+
+  // Initialize offline sync service for mobile-first operations
+  if (!kIsWeb) {
+    final offlineSyncService = OfflineSyncService();
+    await offlineSyncService.initialize();
+    debugPrint('✅ Offline sync service initialized');
+
+    // Listen to connectivity changes and trigger sync when online
+    connectivityService.connectionStatusStream.listen((isOnline) {
+      if (isOnline) {
+        debugPrint('🔄 Device online - triggering sync...');
+        offlineSyncService.syncPendingOperations();
+      }
+    });
+  }
 
   // Initialize map tile cache service (mobile only, not supported on web)
   if (!kIsWeb) {

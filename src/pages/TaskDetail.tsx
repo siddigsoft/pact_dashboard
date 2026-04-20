@@ -17,6 +17,9 @@ import {
 } from '@/hooks/useTaskActivity';
 import { STATUS_LABELS, STATUS_COLORS, type PersonalTaskStatus } from '@/hooks/usePersonalTasks';
 import { useToast } from '@/hooks/use-toast';
+import { ApprovalPendingCard } from '@/components/ApprovalPendingCard';
+import { ApprovalHistoryPanel } from '@/components/ApprovalHistoryPanel';
+import { TaskDependenciesView } from '@/components/TaskDependenciesView';
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -392,6 +395,20 @@ export default function TaskDetail() {
               </ol>
             )}
           </div>
+
+          {/* Approvals Section */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+            <ApprovalPendingCard onApprovalComplete={() => {
+              qc.invalidateQueries({ queryKey: ['task-detail', id] });
+              toast({ title: 'Approval processed', description: 'Task approval status updated.' });
+            }} />
+          </div>
+
+          {/* Task Dependencies Section */}
+          <TaskDependenciesView taskId={id!} />
+
+          {/* Approval History Section */}
+          <ApprovalHistoryPanel taskId={id!} />
         </div>
       </div>
     </div>
