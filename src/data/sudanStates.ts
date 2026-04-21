@@ -584,6 +584,10 @@ const hubAliases: Record<string, string> = {
   'gezira': 'kassala-hub',
   'al-gezira': 'kassala-hub',
   'al jazira': 'kassala-hub',
+  'al gezira': 'kassala-hub',
+  'algezira': 'kassala-hub',
+  'al-gazira': 'kassala-hub',
+  'gazira': 'kassala-hub',
   'sennar': 'kassala-hub',
   'blue nile': 'kassala-hub',
   
