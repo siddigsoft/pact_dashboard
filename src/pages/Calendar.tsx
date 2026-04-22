@@ -204,21 +204,73 @@ const CalendarPage = () => {
     [myOneTimeTasks, date, dateRange, viewMode]
   );
 
+  // Anchor for interval-based recurrences (every_2_days / every_3_days / biweekly).
+  // Prefer startDate, fall back to dueDate, then today.
+  const recurrenceAnchor = (t: PersonalTask): Date | null => {
+    const src = t.startDate ?? t.dueDate ?? null;
+    if (!src) return startOfDay(new Date());
+    try { const d = parseISO(src); return isValid(d) ? startOfDay(d) : null; } catch { return null; }
+  };
+
+  // Whether a recurring task (no dailyTaskDate) fires on a specific day.
+  const recurrenceFiresOn = (t: PersonalTask, day: Date): boolean => {
+    if (!t.recurrence || t.recurrence === 'none') return false;
+    // Respect end date
+    if (t.recurrenceEndDate) {
+      try { const end = parseISO(t.recurrenceEndDate); if (isValid(end) && day > endOfDay(end)) return false; } catch {}
+    }
+    // Don't fire before start date / due date anchor
+    const anchor = recurrenceAnchor(t);
+    if (anchor && day < anchor) return false;
+
+    const dow = getDay(day); // 0=Sun..6=Sat
+
+    switch (t.recurrence) {
+      case 'daily':
+        return true;
+      case 'weekdays':
+        return dow >= 1 && dow <= 5;
+      case 'weekly':
+      case 'specific_days':
+        return Array.isArray(t.recurrenceDays) && t.recurrenceDays.length > 0
+          ? t.recurrenceDays.includes(dow)
+          : false;
+      case 'every_2_days':
+      case 'every-2-days': {
+        if (!anchor) return false;
+        return differenceInCalendarDays(startOfDay(day), anchor) % 2 === 0;
+      }
+      case 'every_3_days':
+      case 'every-3-days': {
+        if (!anchor) return false;
+        return differenceInCalendarDays(startOfDay(day), anchor) % 3 === 0;
+      }
+      case 'biweekly': {
+        if (!anchor) return false;
+        const diff = differenceInCalendarDays(startOfDay(day), anchor);
+        return diff % 14 === 0;
+      }
+      case 'monthly': {
+        const targetDay = t.recurrenceMonthlyDay ?? (anchor ? anchor.getDate() : 1);
+        return day.getDate() === targetDay;
+      }
+      default:
+        return false;
+    }
+  };
+
   const filteredDailyWorks = useMemo(() => {
     return myDailyWorks.filter(t => {
       // dailyTaskDate => exact date match
       if (t.dailyTaskDate) {
         try { const d = parseISO(t.dailyTaskDate); return isValid(d) && inSelectedRange(d); } catch { return false; }
       }
-      // recurrence: daily always shows; weekly/specific_days check day-of-week
-      if (t.recurrence === 'daily') return true;
-      if ((t.recurrence === 'weekly' || t.recurrence === 'specific_days') && Array.isArray(t.recurrenceDays) && t.recurrenceDays.length > 0) {
-        if (viewMode === 'daily') return t.recurrenceDays.includes(getDay(date));
-        if (dateRange?.from) {
-          const days: number[] = [];
-          const end = dateRange.to ?? dateRange.from;
-          for (let d = new Date(dateRange.from); d <= end; d.setDate(d.getDate() + 1)) days.push(d.getDay());
-          return days.some(d => t.recurrenceDays!.includes(d));
+      if (!t.recurrence || t.recurrence === 'none') return false;
+      if (viewMode === 'daily') return recurrenceFiresOn(t, date);
+      if (dateRange?.from) {
+        const end = dateRange.to ?? dateRange.from;
+        for (let d = new Date(dateRange.from); d <= end; d.setDate(d.getDate() + 1)) {
+          if (recurrenceFiresOn(t, new Date(d))) return true;
         }
       }
       return false;
@@ -633,17 +685,55 @@ function TimelineView({
       recurringDays: Set<number>;
     }> = [];
     for (const t of all) {
-      const isRecurring = t.recurrence && t.recurrence !== 'none';
+      const isRecurring = !!(t.recurrence && t.recurrence !== 'none');
       if (isRecurring) {
-        // Recurring: show as a strip across all days, mark which weekdays apply
-        const recDays = new Set<number>();
-        if (t.recurrence === 'daily') {
-          for (let i = 0; i < 7; i++) recDays.add(i);
-        } else if (Array.isArray(t.recurrenceDays) && t.recurrenceDays.length > 0) {
-          t.recurrenceDays.forEach(d => recDays.add(d));
+        // Compute the exact set of dates within the visible window where this
+        // recurrence fires. Supports daily, weekdays, weekly, specific_days,
+        // monthly, every_2_days, every_3_days, biweekly.
+        const fires = new Set<number>(); // day-offset indices into `days[]`
+        const anchorSrc = t.startDate ?? t.dueDate ?? null;
+        let anchor: Date | null = null;
+        if (anchorSrc) {
+          try { const d = parseISO(anchorSrc); if (isValid(d)) anchor = startOfDay(d); } catch {}
         }
-        if (recDays.size > 0) {
-          out.push({ task: t, offset: 0, span: DAYS, hoursPerDay: t.hoursPerDay, isRecurring: true, recurringDays: recDays });
+        let endLimit: Date | null = null;
+        if (t.recurrenceEndDate) {
+          try { const e = parseISO(t.recurrenceEndDate); if (isValid(e)) endLimit = endOfDay(e); } catch {}
+        }
+        for (let i = 0; i < DAYS; i++) {
+          const day = days[i];
+          if (anchor && day < anchor) continue;
+          if (endLimit && day > endLimit) continue;
+          const dow = getDay(day);
+          let hit = false;
+          switch (t.recurrence) {
+            case 'daily': hit = true; break;
+            case 'weekdays': hit = dow >= 1 && dow <= 5; break;
+            case 'weekly':
+            case 'specific_days':
+              hit = Array.isArray(t.recurrenceDays) && t.recurrenceDays.includes(dow);
+              break;
+            case 'every_2_days':
+            case 'every-2-days':
+              hit = !!anchor && differenceInCalendarDays(day, anchor) % 2 === 0;
+              break;
+            case 'every_3_days':
+            case 'every-3-days':
+              hit = !!anchor && differenceInCalendarDays(day, anchor) % 3 === 0;
+              break;
+            case 'biweekly':
+              hit = !!anchor && differenceInCalendarDays(day, anchor) % 14 === 0;
+              break;
+            case 'monthly': {
+              const target = t.recurrenceMonthlyDay ?? (anchor ? anchor.getDate() : 1);
+              hit = day.getDate() === target;
+              break;
+            }
+          }
+          if (hit) fires.add(i);
+        }
+        if (fires.size > 0) {
+          out.push({ task: t, offset: 0, span: DAYS, hoursPerDay: t.hoursPerDay, isRecurring: true, recurringDays: fires });
         }
         continue;
       }
@@ -732,8 +822,8 @@ function TimelineView({
 
                   {/* For recurring: dot per matching weekday; for one-time: single bar */}
                   {r.isRecurring ? (
-                    days.map((d) => {
-                      const matches = r.recurringDays.has(getDay(d));
+                    days.map((d, i) => {
+                      const matches = r.recurringDays.has(i);
                       return (
                         <div key={d.toISOString()} className="border-l border-slate-50 flex items-center justify-center py-2">
                           {matches && (
