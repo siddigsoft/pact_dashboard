@@ -20,6 +20,7 @@ import { useCall } from '@/context/communications/CallContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
 import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
+import { EscalationAlerts } from '@/components/EscalationAlerts';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -247,6 +248,11 @@ export const TeamZone: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="overview" className="mt-4 space-y-3">
+          {/* SLA Escalation Alerts - visible to managers/supervisors */}
+          {(roles?.some(r => r.toLowerCase().includes('manager') || r.toLowerCase().includes('supervisor'))) && (
+            <EscalationAlerts />
+          )}
+          
           {assignableTeamMembers && assignableTeamMembers.length > 0 ? (
             <>
               {/* View Toggle */}
