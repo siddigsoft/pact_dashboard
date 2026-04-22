@@ -2,6 +2,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-fns';
 
+/** Detect Postgres "undefined_column" / PostgREST schema-cache misses so we can
+ *  retry inserts/updates without optional columns when migrations are pending. */
+const isMissingCol = (e: any) =>
+  !!e && (
+    e.code === '42703' ||
+    e.code === 'PGRST204' ||
+    /column .* does not exist/i.test(e.message ?? '') ||
+    /Could not find the .* column/i.test(e.message ?? '') ||
+    /schema cache/i.test(e.message ?? '')
+  );
+
 export type PersonalTaskPriority = 'low' | 'medium' | 'high' | 'critical';
 export type PersonalTaskStatus = 'todo' | 'inprogress' | 'on_hold' | 'rescheduled' | 'done' | 'cancelled';
 
@@ -640,7 +651,19 @@ export function usePersonalTasks(userId: string | undefined) {
       // Fallback: if the new columns aren't present in this Supabase yet
       // (migration 20260424_personal_tasks_date_range.sql not applied),
       // strip them and retry so creating a task still succeeds.
-      if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
+      // Detect either Postgres "undefined_column" (42703) OR PostgREST schema-cache
+      // misses (PGRST204 / "Could not find the 'X' column ... in the schema cache")
+      // which is what Supabase REST returns when a migration hasn't been applied yet.
+      const isMissingCol = (e: any) =>
+        !!e && (
+          e.code === '42703' ||
+          e.code === 'PGRST204' ||
+          /column .* does not exist/i.test(e.message ?? '') ||
+          /Could not find the .* column/i.test(e.message ?? '') ||
+          /schema cache/i.test(e.message ?? '')
+        );
+
+      if (isMissingCol(error)) {
         const fallback = { ...insertPayload };
         for (const k of ['start_date', 'hours_per_day']) delete fallback[k];
         const retry = await supabase.from('personal_tasks').insert(fallback).select('id').single();
@@ -889,7 +912,7 @@ export function usePersonalTasks(userId: string | undefined) {
       // cancelled_at columns from migration 20260422. Detect undefined_column (42703)
       // and retry once without those optional timestamp columns so the status update
       // still succeeds. The status itself + status_history trigger remain unaffected.
-      if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
+      if (isMissingCol(error)) {
         const fallback = { ...patch };
         // Strip every column that comes from a deferred migration so the core
         // status/title/description update still goes through.

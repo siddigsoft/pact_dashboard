@@ -264,7 +264,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     queryKey: ['dept-members', managedDeptIds.join(',')],
     queryFn: async () => {
       if (!managedDeptIds.length) return [];
-      const { data } = await supabase.from('profiles').select('id, full_name, role').in('department_id', managedDeptIds).order('full_name');
+      const { data } = await supabase.from('profiles').select('id, full_name, role, email, phone').in('department_id', managedDeptIds).order('full_name');
       return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
     },
     enabled: open && isDeptManager && !isExec,
@@ -299,7 +299,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const { data: allUsers = [] } = useQuery({
     queryKey: ['dialog-users'],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      const { data } = await supabase.from('profiles').select('id, full_name, role, email, phone').order('full_name');
       return (data ?? []).filter((u: { full_name: string | null }) => u.full_name?.trim());
     },
     enabled: open && isExec,
@@ -386,15 +386,35 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   const submit = async () => {
-    if (!title.trim()) return;
-    if (taskTypeKey === 'project' && !projectId) return;
-    if (recurrenceOn && (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceDaysQA.length === 0) return;
+    // ── Mandatory field validation ──────────────────────────────────────────
+    if (!title.trim()) {
+      toast({ title: 'Task name is required', description: 'Give the task a clear short title.', variant: 'destructive' });
+      return;
+    }
+    if (!description.trim()) {
+      toast({ title: 'Description is required', description: 'Describe what needs to be done so the assignee has context.', variant: 'destructive' });
+      return;
+    }
+    if (taskTypeKey === 'project' && !projectId) {
+      toast({ title: 'Project is required', description: 'Pick which project this task belongs to.', variant: 'destructive' });
+      return;
+    }
     if (!startDateQA || !dueDate) {
       toast({ title: 'Start and end dates are required', description: 'Pick when work begins and when it should be done.', variant: 'destructive' });
       return;
     }
     if (startDateQA > dueDate) {
       toast({ title: 'Invalid date range', description: 'Start date must be on or before the end date.', variant: 'destructive' });
+      return;
+    }
+    const estH = estimatedHoursQA ? parseFloat(estimatedHoursQA) : NaN;
+    const hpd  = hoursPerDayQA ? parseFloat(hoursPerDayQA) : NaN;
+    if ((!Number.isFinite(estH) || estH <= 0) && (!Number.isFinite(hpd) || hpd <= 0)) {
+      toast({ title: 'Hours are required', description: 'Enter Estimated total hours and/or Hours per day so we can plan the timeline.', variant: 'destructive' });
+      return;
+    }
+    if (recurrenceOn && (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceDaysQA.length === 0) {
+      toast({ title: 'Pick at least one weekday', description: 'Recurring tasks need at least one day selected.', variant: 'destructive' });
       return;
     }
     const typeMap = {
@@ -854,7 +874,10 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                   <div className="max-h-36 overflow-y-auto">
                     {assignableUsers.length === 0 ? (
                       <p className="text-xs text-slate-400 text-center py-4">No users found</p>
-                    ) : assignableUsers.map(u => (
+                    ) : assignableUsers.map(u => {
+                      const hasEmail = !!(u as any).email && /\S+@\S+\.\S+/.test((u as any).email);
+                      const hasPhone = !!(u as any).phone && String((u as any).phone).replace(/\D/g, '').length >= 8;
+                      return (
                       <button
                         key={u.id}
                         onClick={() => { setAssignedUser({ id: u.id, full_name: u.full_name ?? '' }); setAssignSearch(''); }}
@@ -869,9 +892,30 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                           <p className="text-xs font-semibold text-slate-700 truncate">{u.full_name}</p>
                           <p className="text-[10px] text-slate-400 truncate">{u.role}</p>
                         </div>
-                        {assignedUser?.id === u.id && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                        <div className="flex items-center gap-1 shrink-0" title={`Email: ${hasEmail ? 'ready' : 'missing'} • WhatsApp: ${hasPhone ? 'ready' : 'missing'}`}>
+                          <span
+                            className={cn('inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full',
+                              hasEmail ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'
+                            )}
+                            data-testid={`badge-email-${u.id}`}
+                          >
+                            <span className={cn('w-1.5 h-1.5 rounded-full', hasEmail ? 'bg-emerald-500' : 'bg-slate-300')} />
+                            ✉
+                          </span>
+                          <span
+                            className={cn('inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full',
+                              hasPhone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'
+                            )}
+                            data-testid={`badge-whatsapp-${u.id}`}
+                          >
+                            <span className={cn('w-1.5 h-1.5 rounded-full', hasPhone ? 'bg-emerald-500' : 'bg-slate-300')} />
+                            WA
+                          </span>
+                        </div>
+                        {assignedUser?.id === u.id && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0 ml-1" />}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                   {!isExec && isDeptManager && (
                     <p className="text-[10px] text-slate-400 px-3 py-1.5 border-t border-slate-100 bg-slate-50">
@@ -1693,7 +1737,10 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                       </div>
                     )}
                     <div className="max-h-32 overflow-y-auto">
-                      {assignableUsers.map(u => (
+                      {assignableUsers.map(u => {
+                        const hasEmail = !!(u as any).email && /\S+@\S+\.\S+/.test((u as any).email);
+                        const hasPhone = !!(u as any).phone && String((u as any).phone).replace(/\D/g, '').length >= 8;
+                        return (
                         <button key={u.id} onClick={() => { setAssignedUser({ id: u.id, full_name: u.full_name ?? '' }); setAssignSearch(''); }}
                           className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0">
                           <div className="w-6 h-6 rounded-full bg-[#1D3461]/10 flex items-center justify-center shrink-0">
@@ -1703,9 +1750,18 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                             <p className="text-xs font-semibold text-slate-700 truncate">{u.full_name}</p>
                             <p className="text-[10px] text-slate-400">{u.role}</p>
                           </div>
-                          {assignedUser?.id === u.id && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                          <div className="flex items-center gap-1 shrink-0" title={`Email: ${hasEmail ? 'ready' : 'missing'} • WhatsApp: ${hasPhone ? 'ready' : 'missing'}`}>
+                            <span className={cn('inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full', hasEmail ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400')}>
+                              <span className={cn('w-1.5 h-1.5 rounded-full', hasEmail ? 'bg-emerald-500' : 'bg-slate-300')} />✉
+                            </span>
+                            <span className={cn('inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full', hasPhone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400')}>
+                              <span className={cn('w-1.5 h-1.5 rounded-full', hasPhone ? 'bg-emerald-500' : 'bg-slate-300')} />WA
+                            </span>
+                          </div>
+                          {assignedUser?.id === u.id && <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0 ml-1" />}
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
