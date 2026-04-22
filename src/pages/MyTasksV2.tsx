@@ -166,6 +166,7 @@ interface QuickAddDialogProps {
     assignedToUserId?: string | null;
     assignedToUserName?: string | null;
     targetDeptId?: string | null;
+    coAssignees?: Array<{ id: string; name: string }>;
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
     planningQuadrant?: QuadrantKey | null;
@@ -216,6 +217,9 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const [assignedUser, setAssignedUser]     = useState<{ id: string; full_name: string } | null>(null);
   const [assignedDept, setAssignedDept]     = useState<{ id: string; name: string } | null>(null);
   const [assignSearch, setAssignSearch]     = useState('');
+  // Co-assignees (collaborators) — additional people notified alongside the primary assignee
+  const [coAssignees, setCoAssignees]       = useState<Array<{ id: string; full_name: string }>>([]);
+  const [coSearch, setCoSearch]             = useState('');
 
   // Fetch departments this user manages
   const { data: managedDepts = [] } = useQuery({
@@ -360,6 +364,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setReward(''); setDepInput(''); setDepDateInput(''); setDeps([]);
     setUserSearch(''); setAttachments([]);
     setAssignTab('myself'); setAssignedUser(null); setAssignedDept(null); setAssignSearch('');
+    setCoAssignees([]); setCoSearch('');
     setStructuredDeps([]);
     setPlanningQuadrant(null);
     setRecurrenceOn(false); setRecurrence('daily');
@@ -460,6 +465,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
         assignedToUserId:   assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
         assignedToUserName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
         targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
+        coAssignees:        coAssignees.map(c => ({ id: c.id, name: c.full_name })),
         rewardAmount,
         structuredDeps,
         planningQuadrant,
@@ -961,6 +967,66 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               )}
             </div>
 
+            {/* Co-assignees (collaborators) */}
+            {canAssignOthers && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
+                  <Users className="w-3 h-3" /> Co-assignees
+                  <span className="text-slate-400 font-normal normal-case tracking-normal">(optional collaborators — also notified)</span>
+                </label>
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  {coAssignees.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
+                      {coAssignees.map(c => (
+                        <span key={c.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-indigo-200 text-[11px] font-semibold text-indigo-700">
+                          {c.full_name}
+                          <button type="button" onClick={() => setCoAssignees(prev => prev.filter(x => x.id !== c.id))} data-testid={`coassignee-remove-${c.id}`} className="text-indigo-400 hover:text-red-500">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      placeholder="Search to add a collaborator…"
+                      value={coSearch}
+                      onChange={e => setCoSearch(e.target.value)}
+                      data-testid="coassignee-search"
+                      className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="max-h-32 overflow-y-auto">
+                    {(((isExec ? allUsers : deptMembers) as Array<{ id: string; full_name: string | null; role: string | null }>)
+                      .filter(u => u.id !== currentUserId)
+                      .filter(u => u.id !== assignedUser?.id)
+                      .filter(u => !coAssignees.some(c => c.id === u.id))
+                      .filter(u => !coSearch || u.full_name?.toLowerCase().includes(coSearch.toLowerCase()))
+                      .slice(0, 25)
+                    ).map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => { setCoAssignees(prev => [...prev, { id: u.id, full_name: u.full_name ?? '' }]); setCoSearch(''); }}
+                        data-testid={`coassignee-add-${u.id}`}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-indigo-600">{(u.full_name ?? 'U')[0].toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{u.full_name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{u.role}</p>
+                        </div>
+                        <Plus className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Completion Reward */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
@@ -1269,6 +1335,9 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [assignedUser, setAssignedUser] = useState<{ id: string; full_name: string } | null>(null);
   const [assignedDept, setAssignedDept] = useState<{ id: string; name: string } | null>(null);
   const [assignSearch, setAssignSearch] = useState('');
+  // Co-assignees (collaborators)
+  const [coAssignees, setCoAssignees]   = useState<Array<{ id: string; full_name: string }>>([]);
+  const [coSearch, setCoSearch]         = useState('');
 
   const isOpen = !!task;
 
@@ -1374,6 +1443,9 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       } else {
         setAssignTab('myself');
       }
+      // Co-assignees
+      setCoAssignees((task.coAssignees ?? []).map(c => ({ id: c.id, full_name: c.name })));
+      setCoSearch('');
     }
   }, [task, departments]);
 
@@ -1415,6 +1487,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       assignedTo: assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
       assignedToName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
       targetDepartmentId: assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
+      coAssignees: coAssignees.map(c => ({ id: c.id, name: c.full_name })),
       planningQuadrant: planningQuadrant ?? null,
       recurrence: editRecurrenceOn ? editRecurrence : 'none',
       recurrenceDays: (editRecurrence === 'weekly' || editRecurrence === 'specific_days') && editRecurrenceOn ? editRecurrenceDays : [],
@@ -1788,6 +1861,66 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Co-assignees (collaborators) */}
+            {canAssignOthers && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
+                  <Users className="w-3 h-3" /> Co-assignees
+                  <span className="text-slate-400 font-normal normal-case tracking-normal">(optional collaborators — also notified)</span>
+                </label>
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  {coAssignees.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
+                      {coAssignees.map(c => (
+                        <span key={c.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-indigo-200 text-[11px] font-semibold text-indigo-700">
+                          {c.full_name}
+                          <button type="button" onClick={() => setCoAssignees(prev => prev.filter(x => x.id !== c.id))} data-testid={`edit-coassignee-remove-${c.id}`} className="text-indigo-400 hover:text-red-500">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <input
+                      placeholder="Search to add a collaborator…"
+                      value={coSearch}
+                      onChange={e => setCoSearch(e.target.value)}
+                      data-testid="edit-coassignee-search"
+                      className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="max-h-32 overflow-y-auto">
+                    {(((isExec ? allUsers : deptMembers) as Array<{ id: string; full_name: string | null; role: string | null }>)
+                      .filter(u => u.id !== currentUserId)
+                      .filter(u => u.id !== assignedUser?.id)
+                      .filter(u => !coAssignees.some(c => c.id === u.id))
+                      .filter(u => !coSearch || u.full_name?.toLowerCase().includes(coSearch.toLowerCase()))
+                      .slice(0, 25)
+                    ).map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => { setCoAssignees(prev => [...prev, { id: u.id, full_name: u.full_name ?? '' }]); setCoSearch(''); }}
+                        data-testid={`edit-coassignee-add-${u.id}`}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-indigo-600">{(u.full_name ?? 'U')[0].toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{u.full_name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{u.role}</p>
+                        </div>
+                        <Plus className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -4308,6 +4441,7 @@ export default function MyTasksV2() {
     assignedToUserId?: string | null;
     assignedToUserName?: string | null;
     targetDeptId?: string | null;
+    coAssignees?: Array<{ id: string; name: string }>;
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
     planningQuadrant?: QuadrantKey | null;
@@ -4331,6 +4465,7 @@ export default function MyTasksV2() {
         assignedTo: data.assignedToUserId ?? null,
         assignedToName: data.assignedToUserName ?? null,
         targetDepartmentId: data.targetDeptId ?? null,
+        coAssignees: data.coAssignees ?? [],
         completionRewardAmount: data.rewardAmount ?? null,
         completionRewardCurrency: data.rewardAmount ? 'USD' : null,
         dependencies: data.structuredDeps?.length
@@ -4346,10 +4481,9 @@ export default function MyTasksV2() {
         startDate: data.startDate ?? null,
         hoursPerDay: data.hoursPerDay ?? null,
       });
-      // Notify assigned user if task was delegated to someone else
-      if (data.assignedToUserId && data.assignedToUserId !== userId) {
-        notify({ event: 'task_assigned', taskId: '', taskTitle: data.title, recipientUserId: data.assignedToUserId, dueDate: data.dueDate || null });
-      }
+      // Note: createTask in usePersonalTasks already fires assignment + co-assignee
+      // notifications (in-app + email + WhatsApp) with the real task id, so we
+      // don't double-fire here.
       setShowAdd(false);
       toast({ title: data.assignedToUserName ? `Task assigned to ${data.assignedToUserName}` : 'Task created' });
     } catch (err: any) {
@@ -4415,48 +4549,79 @@ export default function MyTasksV2() {
 
   const handleSave = async (id: string, data: Partial<PersonalTask>, reason?: string) => {
     // Lifecycle gate for status transitions originating from MyTasks (Kanban drag, status menu).
+    // If the requested status change is blocked, we strip just the `status` field and still save
+    // the rest of the user's edits — never silently discard their work.
+    let payload = data;
+    let statusBlocked = false;
     if (data.status && !isAdmin) {
       const t = allTasks.find(x => x.id === id);
       const restrictedAfterStart: PersonalTaskStatus[] = ['todo', 'cancelled', 'rescheduled'];
       if (t && data.status !== t.status) {
+        let blockMsg: { title: string; description: string } | null = null;
         if (data.status === 'inprogress' && !t.acknowledgedAt) {
-          toast({
-            title: 'Acknowledge first',
-            description: 'Open the task and acknowledge it before starting.',
-            variant: 'destructive',
-          });
-          return;
+          blockMsg = { title: 'Status not changed — acknowledge first', description: 'Open the task and acknowledge it before starting. Other edits were saved.' };
+        } else if (data.status === 'inprogress' && t.acknowledgedAt && !t.startedAt) {
+          blockMsg = { title: 'Status not changed — use "Start the task"', description: 'Open the task and click "Start the task" to capture hours and dependencies. Other edits were saved.' };
+        } else if (t.startedAt && restrictedAfterStart.includes(data.status)) {
+          blockMsg = { title: 'Status locked', description: 'Only an admin can revert, cancel, or reschedule a started task. Other edits were saved.' };
+        } else if (data.status === 'done' && !t.startedAt) {
+          blockMsg = { title: 'Status not changed — start the task first', description: 'A task must be started before it can be marked done. Other edits were saved.' };
         }
-        if (data.status === 'inprogress' && t.acknowledgedAt && !t.startedAt) {
-          toast({
-            title: 'Use "Start the task"',
-            description: 'Open the task and click "Start the task" so we can capture hours, days, and dependencies.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        if (t.startedAt && restrictedAfterStart.includes(data.status)) {
-          toast({
-            title: 'Locked',
-            description: 'Only an admin can revert, cancel, or reschedule a started task.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        if (data.status === 'done' && !t.startedAt) {
-          toast({
-            title: 'Start the task first',
-            description: 'A task must be started before it can be marked done.',
-            variant: 'destructive',
-          });
-          return;
+        if (blockMsg) {
+          toast({ ...blockMsg, variant: 'destructive' });
+          const { status, ...rest } = data;
+          payload = rest;
+          statusBlocked = true;
+          // If only status was being edited and we just stripped it, stop here.
+          if (Object.keys(payload).length === 0) return;
         }
       }
     }
 
+    // Snapshot prev co-assignees so we can notify newly added ones after save.
+    const prevTask = allTasks.find(x => x.id === id);
+    const prevCoIds = new Set((prevTask?.coAssignees ?? []).map(c => c.id));
+    const nextCo = (payload as { coAssignees?: Array<{ id: string; name: string }> }).coAssignees;
+    const newlyAddedCo: Array<{ id: string; name: string }> = Array.isArray(nextCo)
+      ? nextCo.filter(c => c?.id && !prevCoIds.has(c.id))
+      : [];
+    const prevAssignedTo = prevTask?.assignedTo ?? null;
+    const nextAssignedTo = (payload as { assignedTo?: string | null }).assignedTo;
+    const assigneeChanged = nextAssignedTo !== undefined && nextAssignedTo !== prevAssignedTo;
+
     try {
-      await updateTask(id, data);
-      toast({ title: 'Task saved' });
+      await updateTask(id, payload);
+      if (!statusBlocked) toast({ title: 'Task saved' });
+      const taskAfter = allTasks.find(t => t.id === id) ?? prevTask;
+      const taskTitle = (payload as { title?: string }).title ?? taskAfter?.title ?? '';
+      const dueDate = (payload as { dueDate?: string | null }).dueDate ?? taskAfter?.dueDate ?? null;
+      const priority = (payload as { priority?: PersonalTaskPriority }).priority ?? taskAfter?.priority;
+
+      // Notify any NEWLY added co-assignees (in-app + email + WhatsApp).
+      for (const co of newlyAddedCo) {
+        if (co.id === userId) continue;
+        notify({
+          event: 'task_assigned',
+          taskId: id,
+          taskTitle,
+          recipientUserId: co.id,
+          recipientName: co.name,
+          dueDate,
+          priority,
+        });
+      }
+      // Notify a newly chosen primary assignee (if changed via Edit dialog).
+      if (assigneeChanged && nextAssignedTo && nextAssignedTo !== userId) {
+        notify({
+          event: 'task_assigned',
+          taskId: id,
+          taskTitle,
+          recipientUserId: nextAssignedTo,
+          dueDate,
+          priority,
+        });
+      }
+
       // Fire lifecycle notification if status changed — notify ALL participants
       // (owner + assignee + co-assignees) across in-app, email, and WhatsApp.
       if (data.status && userId) {
