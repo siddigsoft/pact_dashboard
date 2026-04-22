@@ -69,6 +69,57 @@ export default function TaskDetail() {
     },
   });
 
+  // ---------- Acknowledge ("I've seen it") ----------
+  const acknowledgeTask = useMutation({
+    mutationFn: async () => {
+      const now = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        acknowledged_at: now,
+        acknowledged_by: currentUser?.id ?? null,
+        updated_at: now,
+      };
+      // Auto-advance from todo → inprogress on first acknowledge
+      if (task?.status === 'todo') {
+        patch.status = 'inprogress';
+        if (!task?.started_at) patch.started_at = now;
+      }
+      const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: ['task-detail', id] });
+      qc.invalidateQueries({ queryKey: ['personal_tasks'] });
+      qc.invalidateQueries({ queryKey: ['task-status-history', id] });
+      try {
+        await addActivity.mutateAsync({
+          taskId: id!, kind: 'system',
+          body: `Task acknowledged by ${currentUser?.fullName ?? 'assignee'} — they have seen and accepted it.`,
+        });
+        // Notify the creator/owner that the assignee has seen the task
+        if (task?.user_id && task.user_id !== currentUser?.id) {
+          await supabase.functions.invoke('dispatch-notification', {
+            body: {
+              event_type: 'task_acknowledged',
+              entity_type: 'task',
+              entity_id: id,
+              priority: 'normal',
+              recipient_ids: [task.user_id],
+              title_en: 'Task Acknowledged',
+              title_ar: 'تم الإقرار بالمهمة',
+              message_en: `${currentUser?.fullName ?? 'The assignee'} has acknowledged the task: "${task.title}".`,
+              message_ar: `${currentUser?.fullName ?? 'المُكلَّف'} أقرّ بالمهمة: "${task.title}".`,
+              triggered_by: currentUser?.id,
+              action_url: `https://app.pactorg.com/tasks/${id}`,
+              metadata: { task_name: task.title },
+            },
+          });
+        }
+      } catch { /* non-critical */ }
+      toast({ title: 'Acknowledged', description: 'Marked as seen. Status moved to In Progress.' });
+    },
+    onError: (e: Error) => toast({ title: 'Could not acknowledge', description: e.message, variant: 'destructive' }),
+  });
+
   // ---------- Description save ----------
   const saveDescription = async (html: string) => {
     setSavingDesc(true);
@@ -230,6 +281,52 @@ export default function TaskDetail() {
           size="md"
         />
       </div>
+
+      {/* ── Acknowledge banner: shown to assignee until they confirm they've seen it ── */}
+      {(() => {
+        const isMine =
+          currentUser?.id &&
+          (task.assigned_to === currentUser.id ||
+            ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === currentUser.id));
+        const ackAt = task.acknowledged_at as string | null | undefined;
+        if (!isMine) return null;
+        if (ackAt) {
+          return (
+            <div
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs"
+              data-testid="banner-acknowledged"
+            >
+              <Check className="w-4 h-4" />
+              <span>
+                You acknowledged this task on {format(parseISO(ackAt), 'dd MMM yyyy, HH:mm')}.
+              </span>
+            </div>
+          );
+        }
+        return (
+          <div
+            className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200"
+            data-testid="banner-acknowledge"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-900">This task is waiting for your acknowledgment</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Please confirm you've seen and accepted it. The creator will be notified, and the status will move to <b>In Progress</b>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => acknowledgeTask.mutate()}
+              disabled={acknowledgeTask.isPending}
+              className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors"
+              data-testid="btn-acknowledge"
+            >
+              {acknowledgeTask.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              I acknowledge & accept
+            </button>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* ── Left column: Description + Activity feed ── */}

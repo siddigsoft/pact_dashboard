@@ -14,7 +14,7 @@ import {
   Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil, BookOpen,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -2002,6 +2002,7 @@ interface DailyPlannerProps {
 }
 
 function DailyPlannerView({ tasks, projectTasks, onEdit, onToggleDone, isUpdating }: DailyPlannerProps) {
+  const navigate = useNavigate();
   const activeTasks = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
 
   const morning   = activeTasks.filter(t => t.priority === 'critical' || t.priority === 'high');
@@ -2043,7 +2044,7 @@ function DailyPlannerView({ tasks, projectTasks, onEdit, onToggleDone, isUpdatin
                   'flex items-center gap-3 px-3.5 py-2.5 rounded-xl border cursor-pointer transition-all hover:shadow-sm group',
                   isDone ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200 hover:border-slate-300',
                 )}
-                onClick={() => onEdit(task)}
+                onClick={() => navigate(`/tasks/${task.id}`)}
                 data-testid={`planner-task-${task.id}`}
               >
                 <button
@@ -2215,6 +2216,7 @@ function KanbanTaskCard({
   onToggleDone: (t: PersonalTask) => void;
   isUpdating: boolean;
 }) {
+  const navigate = useNavigate();
   const p = KANBAN_PRIORITY_CFG[task.priority] ?? KANBAN_PRIORITY_CFG.medium;
   const done = task.status === 'done';
   const overdueFlag = isOverdue(task.dueDate, task.status);
@@ -2232,7 +2234,7 @@ function KanbanTaskCard({
         'bg-white rounded-xl border shadow-sm hover:shadow-md transition-all group cursor-pointer',
         done ? 'border-slate-100 opacity-60' : overdueFlag ? 'border-red-200' : 'border-slate-100 hover:border-slate-300',
       )}
-      onClick={() => onEdit(task)}
+      onClick={() => navigate(`/tasks/${task.id}`)}
       data-testid={`kanban-card-${task.id}`}
     >
       <div className={cn('h-1 rounded-t-xl', p.bar)} />
