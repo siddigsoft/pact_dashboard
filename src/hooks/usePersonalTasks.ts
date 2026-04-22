@@ -780,6 +780,16 @@ export function usePersonalTasks(userId: string | undefined) {
       if ('recurrence' in updates && updates.recurrence !== undefined) patch.recurrence = updates.recurrence;
       if (updates.estimatedHours !== undefined) patch.estimated_hours = updates.estimatedHours ?? null;
       if (updates.actualHours !== undefined) patch.actual_hours = updates.actualHours ?? null;
+      // Assignment / department fields (so Edit dialog reassignments actually persist)
+      if ((updates as { assignedTo?: string | null }).assignedTo !== undefined) {
+        patch.assigned_to = (updates as { assignedTo?: string | null }).assignedTo;
+      }
+      if ((updates as { assignedToName?: string | null }).assignedToName !== undefined) {
+        patch.assigned_to_name = (updates as { assignedToName?: string | null }).assignedToName;
+      }
+      if ((updates as { targetDepartmentId?: string | null }).targetDepartmentId !== undefined) {
+        patch.target_department_id = (updates as { targetDepartmentId?: string | null }).targetDepartmentId;
+      }
 
       // ── Auto-track timestamps for status transitions ──────
       if (updates.status !== undefined) {

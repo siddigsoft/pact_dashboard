@@ -3619,8 +3619,9 @@ export default function MyTasksV2() {
           notify({ event: 'task_completed', taskId: task.id, taskTitle: task.title, recipientUserId: task.assignedTo, dueDate: task.dueDate ?? null });
         }
       }
-    } catch {
-      toast({ title: 'Failed to update task', variant: 'destructive' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      toast({ title: 'Failed to update task', description: msg, variant: 'destructive' });
     }
   };
 
@@ -3637,8 +3638,9 @@ export default function MyTasksV2() {
           notify({ event, taskId: id, taskTitle: task.title, recipientUserId: task.assignedTo, dueDate: task.dueDate ?? null });
         }
       }
-    } catch {
-      toast({ title: 'Failed to save task', variant: 'destructive' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      toast({ title: 'Failed to save task', description: msg, variant: 'destructive' });
     }
   };
 
