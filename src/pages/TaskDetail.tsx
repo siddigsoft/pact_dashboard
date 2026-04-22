@@ -815,7 +815,11 @@ export default function TaskDetail() {
                 <div className="min-w-0">
                   <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
                     <ListChecks className="w-4 h-4" /> Dependencies requested at Start
+                    <span className="text-[9px] font-normal text-slate-400 normal-case tracking-normal ml-1">(blockers — confirm when ready)</span>
                   </h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    These are people / depts / items needed before the work can move. Each row is confirmed by the listed person (or by the owner for item-type rows). They are <i>not</i> co-doers and don't share hours.
+                  </p>
                   {(task.start_requirements as string | null) && (
                     <p className="text-[11px] text-slate-500 mt-1">
                       <b>Requirements:</b> {task.start_requirements as string}
@@ -1213,6 +1217,7 @@ function AssigneesPanel({
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
           <Users className="w-3.5 h-3.5" /> Assignees & Elements
+          <span className="text-[9px] font-normal text-slate-400 normal-case tracking-normal ml-1">(co-doers — share hours & ack)</span>
         </h3>
         {progress && (
           <span className="text-[10px] font-semibold text-slate-500" data-testid="text-elements-progress">

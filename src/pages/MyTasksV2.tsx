@@ -984,8 +984,11 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               <div>
                 <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
                   <Users className="w-3 h-3" /> Co-assignees
-                  <span className="text-slate-400 font-normal normal-case tracking-normal">(optional collaborators — also notified)</span>
+                  <span className="text-slate-400 font-normal normal-case tracking-normal">(people who DO the task with you)</span>
                 </label>
+                <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1 mb-1.5 leading-snug">
+                  💡 Co-assignees share the work — they get their own hours, must acknowledge, and follow the full task lifecycle (start, delay, done…). Different from <b>Dependencies</b> below.
+                </p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   {coAssignees.length > 0 && (
                     <div className="flex flex-col gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
@@ -1080,8 +1083,11 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
                 <ArrowRight className="w-3 h-3 text-slate-400" />
                 Dependencies
-                <span className="text-slate-400 font-normal normal-case tracking-normal">(optional)</span>
+                <span className="text-slate-400 font-normal normal-case tracking-normal">(things you NEED before you can start)</span>
               </label>
+              <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2 leading-snug">
+                ⚠️ Dependencies are <b>not</b> co-doers. They’re people, depts, dates, or items that block the start. After you click <b>Start the task</b>, each one becomes a confirm row — the listed user / dept manager (or you, for items) ticks <i>Confirm</i> when ready.
+              </p>
               {/* Sub-tabs */}
               <div className="flex gap-1.5 mb-2">
                 {([
@@ -1909,8 +1915,11 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
               <div>
                 <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
                   <Users className="w-3 h-3" /> Co-assignees
-                  <span className="text-slate-400 font-normal normal-case tracking-normal">(optional collaborators — also notified)</span>
+                  <span className="text-slate-400 font-normal normal-case tracking-normal">(people who DO the task with you)</span>
                 </label>
+                <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1 mb-1.5 leading-snug">
+                  💡 Co-assignees share the work — they get their own hours, must acknowledge, and follow the full task lifecycle (start, delay, done…). Different from <b>Dependencies</b> below.
+                </p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   {coAssignees.length > 0 && (
                     <div className="flex flex-col gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
@@ -1981,6 +1990,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
               <div>
                 <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
                   <ArrowRight className="w-3 h-3 text-slate-400" /> Dependencies
+                  <span className="text-slate-400 font-normal normal-case tracking-normal">(things needed to start — confirmed at Start)</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {task.dependencies.map((d, i) => (
