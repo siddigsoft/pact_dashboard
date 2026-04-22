@@ -380,21 +380,53 @@ export default function TaskDetail() {
         .update({ co_assignees: next, updated_at: new Date().toISOString() })
         .eq('id', id!);
       if (error) throw error;
+      return next;
     },
-    onSuccess: async (_d, next) => {
+    onSuccess: async (next, _vars, ctx: any) => {
       qc.invalidateQueries({ queryKey: ['task-detail', id] });
       qc.invalidateQueries({ queryKey: ['personal_tasks'] });
       await addActivity.mutateAsync({
         taskId: id!, kind: 'system',
         body: `Co-assignees updated (${next.length})`,
       });
+      // Fire in-app + email + WhatsApp notification to any newly added co-assignees
+      const previousIds: Set<string> = ctx?.previousIds ?? new Set();
+      const added = next.filter(c => !previousIds.has(c.id));
+      for (const a of added) {
+        try {
+          await notify({
+            event: 'task_assigned',
+            taskId: id!,
+            taskTitle: (task?.title as string) ?? 'Task',
+            recipientUserId: a.id,
+            recipientName: a.name,
+            dueDate: (task?.due_date as string | null) ?? null,
+            priority: (task?.priority as string | null) ?? null,
+          });
+        } catch (err) {
+          console.error('[TaskDetail] co-assignee notify failed:', err);
+        }
+      }
+      if (added.length > 0) {
+        toast({
+          title: `Notified ${added.length} co-assignee${added.length === 1 ? '' : 's'}`,
+          description: 'In-app, email and WhatsApp messages sent.',
+        });
+      }
+    },
+    onMutate: (next) => {
+      const prev = (task?.co_assignees as Array<{ id: string }> | undefined) ?? [];
+      return { previousIds: new Set(prev.map(p => p.id)) };
     },
   });
 
   const addCoAssignee = (uid: string, uname: string) => {
     const existing = (task?.co_assignees as Array<{ id: string; name: string }> | undefined) ?? [];
     if (existing.find(c => c.id === uid)) return;
-    if (task?.assigned_to === uid) return;
+    if (task?.assigned_to === uid) {
+      toast({ title: 'Already the primary assignee', description: 'This person is already assigned to the task.' });
+      return;
+    }
     updateCoAssignees.mutate([...existing, { id: uid, name: uname }]);
   };
   const removeCoAssignee = (uid: string) => {
