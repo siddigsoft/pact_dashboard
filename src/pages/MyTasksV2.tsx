@@ -45,6 +45,7 @@ import {
   type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus,
 } from '@/hooks/usePersonalTasks';
 import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
+import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -1603,9 +1604,10 @@ interface TaskCardProps {
   task: PersonalTask;
   onToggleDone: () => void;
   onEdit: () => void;
+  onStatusChange?: (next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   isUpdating: boolean;
 }
-function TaskCard({ task, onToggleDone, onEdit, isUpdating }: TaskCardProps) {
+function TaskCard({ task, onToggleDone, onEdit, onStatusChange, isUpdating }: TaskCardProps) {
   const cfg = PRIORITY_CFG[task.priority];
   const isDone = task.status === 'done';
 
@@ -1665,6 +1667,11 @@ function TaskCard({ task, onToggleDone, onEdit, isUpdating }: TaskCardProps) {
             <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0.5 border-0', cfg.bg, cfg.color)}>
               {cfg.label}
             </Badge>
+            {onStatusChange && (
+              <div onClick={e => e.stopPropagation()}>
+                <TaskStatusMenu taskId={task.id} current={task.status} onChange={onStatusChange} size="sm" />
+              </div>
+            )}
             {task.dueDate && (
               <span className={cn(
                 'flex items-center gap-1 text-[10px] font-medium',
@@ -1937,10 +1944,11 @@ interface EnhancedTaskCardProps {
   subtasks: PersonalTask[];
   onToggleDone: () => void;
   onEdit: () => void;
+  onStatusChange?: (next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   isUpdating: boolean;
 }
 
-function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, isUpdating }: EnhancedTaskCardProps) {
+function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, onStatusChange, isUpdating }: EnhancedTaskCardProps) {
   const cfg = PRIORITY_CFG[task.priority];
   const isDone = task.status === 'done';
   const isInProgress = task.status === 'inprogress';
@@ -1992,6 +2000,11 @@ function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, isUpdating }: 
               <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', cfg.bg, cfg.color)}>
                 {cfg.label}
               </span>
+              {onStatusChange && (
+                <div onClick={e => e.stopPropagation()}>
+                  <TaskStatusMenu taskId={task.id} current={task.status} onChange={onStatusChange} size="sm" />
+                </div>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -2074,10 +2087,11 @@ interface DailyPlannerProps {
   projectTasks: import('@/hooks/usePersonalTasks').AssignedProjectTask[];
   onEdit: (task: PersonalTask) => void;
   onToggleDone: (task: PersonalTask) => void;
+  onStatusChange?: (taskId: string, next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   isUpdating: boolean;
 }
 
-function DailyPlannerView({ tasks, projectTasks, onEdit, onToggleDone, isUpdating }: DailyPlannerProps) {
+function DailyPlannerView({ tasks, projectTasks, onEdit, onToggleDone, onStatusChange, isUpdating }: DailyPlannerProps) {
   const navigate = useNavigate();
   const activeTasks = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
 
@@ -2149,6 +2163,16 @@ function DailyPlannerView({ tasks, projectTasks, onEdit, onToggleDone, isUpdatin
                   <div className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', cfg.bg, cfg.color)}>
                     {cfg.label}
                   </div>
+                  {onStatusChange && (
+                    <div onClick={e => e.stopPropagation()}>
+                      <TaskStatusMenu
+                        taskId={task.id}
+                        current={task.status}
+                        onChange={(next, reason) => onStatusChange(task.id, next, reason)}
+                        size="sm"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -2240,6 +2264,7 @@ interface KanbanBoardViewProps {
   isUpdating: boolean;
   onEdit: (task: PersonalTask) => void;
   onToggleDone: (task: PersonalTask) => void;
+  onStatusChange?: (taskId: string, next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   onAddTask: () => void;
 }
 
@@ -2284,12 +2309,13 @@ const KANBAN_COLUMNS: { key: string; label: string; dot: string; filter: (t: Per
 ];
 
 function KanbanTaskCard({
-  task, subtasks, onEdit, onToggleDone, isUpdating,
+  task, subtasks, onEdit, onToggleDone, onStatusChange, isUpdating,
 }: {
   task: PersonalTask;
   subtasks: PersonalTask[];
   onEdit: (t: PersonalTask) => void;
   onToggleDone: (t: PersonalTask) => void;
+  onStatusChange?: (taskId: string, next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   isUpdating: boolean;
 }) {
   const navigate = useNavigate();
@@ -2366,6 +2392,16 @@ function KanbanTaskCard({
                 {dueLabel}
               </span>
             )}
+            {onStatusChange && (
+              <div onClick={e => e.stopPropagation()}>
+                <TaskStatusMenu
+                  taskId={task.id}
+                  current={task.status}
+                  onChange={(next, reason) => onStatusChange(task.id, next, reason)}
+                  size="sm"
+                />
+              </div>
+            )}
             <button
               className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={e => { e.stopPropagation(); onToggleDone(task); }}
@@ -2385,7 +2421,7 @@ function KanbanTaskCard({
   );
 }
 
-function KanbanBoardView({ tasks, subtaskMap, isLoading, isUpdating, onEdit, onToggleDone, onAddTask }: KanbanBoardViewProps) {
+function KanbanBoardView({ tasks, subtaskMap, isLoading, isUpdating, onEdit, onToggleDone, onStatusChange, onAddTask }: KanbanBoardViewProps) {
   const todoCount      = tasks.filter(KANBAN_COLUMNS[0].filter).length;
   const inProgressCount= tasks.filter(KANBAN_COLUMNS[1].filter).length;
   const overdueCount   = tasks.filter(KANBAN_COLUMNS[2].filter).length;
@@ -2435,6 +2471,7 @@ function KanbanBoardView({ tasks, subtaskMap, isLoading, isUpdating, onEdit, onT
                       subtasks={subtaskMap.get(task.id) ?? []}
                       onEdit={onEdit}
                       onToggleDone={onToggleDone}
+                      onStatusChange={onStatusChange}
                       isUpdating={isUpdating}
                     />
                   ))
@@ -3874,6 +3911,7 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
+                                onStatusChange={(next) => handleSave(task.id, { status: next })}
                                 isUpdating={isUpdating}
                               />
                             ))}
@@ -3891,6 +3929,7 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
+                                onStatusChange={(next) => handleSave(task.id, { status: next })}
                                 isUpdating={isUpdating}
                               />
                             ))}
@@ -3908,6 +3947,7 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
+                                onStatusChange={(next) => handleSave(task.id, { status: next })}
                                 isUpdating={isUpdating}
                               />
                             ))}
@@ -3949,6 +3989,7 @@ export default function MyTasksV2() {
                     projectTasks={projectTasks}
                     onEdit={setEditingTask}
                     onToggleDone={handleToggleDone}
+                    onStatusChange={(taskId, next) => handleSave(taskId, { status: next })}
                     isUpdating={isUpdating}
                   />
                 )}
@@ -3964,6 +4005,7 @@ export default function MyTasksV2() {
                 isUpdating={isUpdating}
                 onEdit={setEditingTask}
                 onToggleDone={handleToggleDone}
+                onStatusChange={(taskId, next) => handleSave(taskId, { status: next })}
                 onAddTask={() => setShowAdd(true)}
               />
             )}
