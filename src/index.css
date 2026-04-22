@@ -225,35 +225,42 @@
   }
 }
 
-/* TipTap rich-text editor list styling — Tailwind preflight resets ul/ol so we restore here */
+/* TipTap rich-text editor list styling — Tailwind preflight + prose resets ul/ol so we
+   restore here with !important to win over both. The "tiptap-content" class is applied
+   to the editor wrapper from src/components/tasks/TaskRichEditor.tsx. */
 .tiptap-content ul,
 .tiptap-content ol {
-  padding-left: 1.5rem;
-  margin: 0.5rem 0;
+  padding-left: 1.5rem !important;
+  margin: 0.5rem 0 !important;
+  list-style-position: outside !important;
 }
 .tiptap-content ul {
-  list-style-type: disc;
+  list-style-type: disc !important;
 }
 .tiptap-content ul ul {
-  list-style-type: circle;
+  list-style-type: circle !important;
 }
 .tiptap-content ul ul ul {
-  list-style-type: square;
+  list-style-type: square !important;
 }
 .tiptap-content ol {
-  list-style-type: decimal;
+  list-style-type: decimal !important;
 }
 .tiptap-content ol ol {
-  list-style-type: lower-alpha;
+  list-style-type: lower-alpha !important;
 }
 .tiptap-content ol ol ol {
-  list-style-type: lower-roman;
+  list-style-type: lower-roman !important;
 }
 .tiptap-content li {
-  margin: 0.15rem 0;
+  margin: 0.15rem 0 !important;
+  display: list-item !important;
 }
 .tiptap-content li > p {
-  margin: 0;
+  margin: 0 !important;
+}
+.tiptap-content li::marker {
+  color: rgb(71 85 105);
 }
 /* Task list (checkboxes) — keep custom rendering */
 .tiptap-content ul[data-type="taskList"] {
