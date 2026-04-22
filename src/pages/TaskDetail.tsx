@@ -94,14 +94,28 @@ export default function TaskDetail() {
   }, [task, currentUser?.id]);
 
   // ---------- Acknowledge ("I've seen it") — does NOT auto-start ----------
+  // Updates the right column depending on who is acknowledging:
+  //   • Primary assignee / owner → top-level `acknowledged_at` / `_by`
+  //   • Co-assignee              → that user's slot inside `co_assignees` JSON
+  // This way every collaborator can independently confirm they've seen the task.
   const acknowledgeTask = useMutation({
     mutationFn: async () => {
       const now = new Date().toISOString();
-      const patch: Record<string, unknown> = {
-        acknowledged_at: now,
-        acknowledged_by: currentUser?.id ?? null,
-        updated_at: now,
-      };
+      const uid = currentUser?.id ?? null;
+      if (!uid) throw new Error('Not signed in');
+      const isPrimary =
+        task?.assigned_to === uid || (task?.user_id === uid && !task?.assigned_to);
+      const patch: Record<string, unknown> = { updated_at: now };
+      if (isPrimary) {
+        patch.acknowledged_at = now;
+        patch.acknowledged_by = uid;
+      } else {
+        // Co-assignee path: stamp the matching slot inside co_assignees.
+        const co = (task?.co_assignees as Array<Record<string, unknown>> | undefined) ?? [];
+        patch.co_assignees = co.map(c =>
+          c?.id === uid ? { ...c, acknowledged_at: now, acknowledged_by: uid } : c,
+        );
+      }
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id!);
       if (error) throw error;
     },
@@ -434,15 +448,51 @@ export default function TaskDetail() {
     updateCoAssignees.mutate(existing.filter(c => c.id !== uid));
   };
 
-  // ---------- Assignees list ----------
-  const allAssignees = useMemo(() => {
-    if (!task) return [] as Array<{ id: string; name: string }>;
-    const out: Array<{ id: string; name: string }> = [];
-    if (task.assigned_to && task.assigned_to_name) out.push({ id: task.assigned_to, name: task.assigned_to_name });
-    const co = (task.co_assignees as Array<{ id: string; name: string }> | undefined) ?? [];
-    co.forEach(c => { if (!out.find(x => x.id === c.id)) out.push({ id: c.id, name: c.name }); });
+  // ---------- Assignees list (with per-user hours + acknowledgment) ----------
+  type EnrichedAssignee = {
+    id: string;
+    name: string;
+    hours: number | null;
+    acknowledgedAt: string | null;
+    role: 'primary' | 'co';
+  };
+  const allAssignees = useMemo<EnrichedAssignee[]>(() => {
+    if (!task) return [];
+    const out: EnrichedAssignee[] = [];
+    if (task.assigned_to && task.assigned_to_name) {
+      out.push({
+        id: task.assigned_to as string,
+        name: task.assigned_to_name as string,
+        hours: (task.estimated_hours as number | null) ?? null,
+        acknowledgedAt: (task.acknowledged_at as string | null) ?? null,
+        role: 'primary',
+      });
+    }
+    const co = (task.co_assignees as Array<{
+      id: string;
+      name: string;
+      hours?: number | null;
+      acknowledged_at?: string | null;
+    }> | undefined) ?? [];
+    co.forEach(c => {
+      if (!out.find(x => x.id === c.id)) {
+        out.push({
+          id: c.id,
+          name: c.name,
+          hours: c.hours ?? null,
+          acknowledgedAt: c.acknowledged_at ?? null,
+          role: 'co',
+        });
+      }
+    });
     if (out.length === 0 && task.user_id) {
-      out.push({ id: task.user_id, name: 'Owner' });
+      out.push({
+        id: task.user_id as string,
+        name: 'Owner',
+        hours: (task.estimated_hours as number | null) ?? null,
+        acknowledgedAt: (task.acknowledged_at as string | null) ?? null,
+        role: 'primary',
+      });
     }
     return out;
   }, [task]);
@@ -491,13 +541,19 @@ export default function TaskDetail() {
         />
       </div>
 
-      {/* ── Acknowledge banner: shown to assignee until they confirm they've seen it ── */}
+      {/* ── Acknowledge banner — per user. Primary uses task.acknowledged_at;
+          each co-assignee uses their own slot in co_assignees. ── */}
       {(() => {
-        const isMine =
-          currentUser?.id &&
-          (task.assigned_to === currentUser.id ||
-            ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === currentUser.id));
-        const ackAt = task.acknowledged_at as string | null | undefined;
+        const uid = currentUser?.id;
+        if (!uid) return null;
+        const isPrimary = task.assigned_to === uid || (task.user_id === uid && !task.assigned_to);
+        const myCoSlot = ((task.co_assignees as Array<{ id: string; acknowledged_at?: string | null }> | undefined) ?? [])
+          .find(c => c.id === uid);
+        const isCo = !!myCoSlot;
+        const isMine = isPrimary || isCo;
+        const ackAt = (isPrimary
+          ? (task.acknowledged_at as string | null | undefined)
+          : (myCoSlot?.acknowledged_at ?? null));
         if (!isMine) return null;
         if (ackAt) {
           return (
@@ -1057,7 +1113,13 @@ function AssigneesPanel({
   primaryAssigneeId, profiles, onAddCoAssignee, onRemoveCoAssignee,
 }: {
   taskId: string;
-  assignees: Array<{ id: string; name: string }>;
+  assignees: Array<{
+    id: string;
+    name: string;
+    hours?: number | null;
+    acknowledgedAt?: string | null;
+    role?: 'primary' | 'co';
+  }>;
   elements: import('@/hooks/useTaskActivity').ElementRow[];
   onAddElement: (assigneeId: string, assigneeName: string, label: string) => void;
   onToggleElement: (id: string, done: boolean) => void;
@@ -1155,6 +1217,32 @@ function AssigneesPanel({
                     {isPrimary && <span className="text-[10px] text-[#1D3461] ml-1">(primary)</span>}
                     {isMine && <span className="text-[10px] text-emerald-600 ml-1">(you)</span>}
                   </p>
+                  {a.acknowledgedAt ? (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700"
+                      title={`Acknowledged ${a.acknowledgedAt}`}
+                      data-testid={`ack-badge-${a.id}`}
+                    >
+                      <Check className="w-2.5 h-2.5" /> Ack
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"
+                      title="Has not acknowledged yet"
+                      data-testid={`ack-pending-${a.id}`}
+                    >
+                      Pending
+                    </span>
+                  )}
+                  {a.hours != null && (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700"
+                      title="Hours allocated"
+                      data-testid={`hours-${a.id}`}
+                    >
+                      <Clock className="w-2.5 h-2.5" /> {a.hours}h
+                    </span>
+                  )}
                   {!isPrimary && (
                     <button
                       onClick={() => onRemoveCoAssignee(a.id)}

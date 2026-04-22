@@ -166,7 +166,7 @@ interface QuickAddDialogProps {
     assignedToUserId?: string | null;
     assignedToUserName?: string | null;
     targetDeptId?: string | null;
-    coAssignees?: Array<{ id: string; name: string }>;
+    coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
     planningQuadrant?: QuadrantKey | null;
@@ -218,7 +218,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const [assignedDept, setAssignedDept]     = useState<{ id: string; name: string } | null>(null);
   const [assignSearch, setAssignSearch]     = useState('');
   // Co-assignees (collaborators) — additional people notified alongside the primary assignee
-  const [coAssignees, setCoAssignees]       = useState<Array<{ id: string; full_name: string }>>([]);
+  const [coAssignees, setCoAssignees]       = useState<Array<{ id: string; full_name: string; hours?: number | null }>>([]);
   const [coSearch, setCoSearch]             = useState('');
 
   // Fetch departments this user manages
@@ -477,7 +477,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
         assignedToUserId:   assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
         assignedToUserName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
         targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
-        coAssignees:        coAssignees.map(c => ({ id: c.id, name: c.full_name })),
+        coAssignees:        coAssignees.map(c => ({ id: c.id, name: c.full_name, hours: c.hours ?? null })),
         rewardAmount,
         structuredDeps,
         planningQuadrant,
@@ -988,14 +988,26 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                 </label>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   {coAssignees.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
+                    <div className="flex flex-col gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
                       {coAssignees.map(c => (
-                        <span key={c.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-indigo-200 text-[11px] font-semibold text-indigo-700">
-                          {c.full_name}
+                        <div key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white border border-indigo-200">
+                          <span className="text-[11px] font-semibold text-indigo-700 flex-1 truncate">{c.full_name}</span>
+                          <input
+                            type="number" min="0" step="0.25" placeholder="hrs"
+                            value={c.hours ?? ''}
+                            onChange={e => {
+                              const v = e.target.value === '' ? null : parseFloat(e.target.value);
+                              setCoAssignees(prev => prev.map(x => x.id === c.id ? { ...x, hours: Number.isFinite(v as number) ? (v as number) : null } : x));
+                            }}
+                            data-testid={`coassignee-hours-${c.id}`}
+                            className="w-16 h-7 px-2 text-[11px] rounded border border-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-200 text-indigo-800"
+                            title="Hours allocated to this collaborator"
+                          />
+                          <span className="text-[10px] text-indigo-400">h</span>
                           <button type="button" onClick={() => setCoAssignees(prev => prev.filter(x => x.id !== c.id))} data-testid={`coassignee-remove-${c.id}`} className="text-indigo-400 hover:text-red-500">
-                            <X className="w-3 h-3" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
-                        </span>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -1348,7 +1360,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [assignedDept, setAssignedDept] = useState<{ id: string; name: string } | null>(null);
   const [assignSearch, setAssignSearch] = useState('');
   // Co-assignees (collaborators)
-  const [coAssignees, setCoAssignees]   = useState<Array<{ id: string; full_name: string }>>([]);
+  const [coAssignees, setCoAssignees]   = useState<Array<{ id: string; full_name: string; hours?: number | null }>>([]);
   const [coSearch, setCoSearch]         = useState('');
 
   const isOpen = !!task;
@@ -1456,7 +1468,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
         setAssignTab('myself');
       }
       // Co-assignees
-      setCoAssignees((task.coAssignees ?? []).map(c => ({ id: c.id, full_name: c.name })));
+      setCoAssignees((task.coAssignees ?? []).map(c => ({ id: c.id, full_name: c.name, hours: c.hours ?? null })));
       setCoSearch('');
     }
   }, [task, departments]);
@@ -1515,7 +1527,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       assignedTo: assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
       assignedToName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
       targetDepartmentId: assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
-      coAssignees: coAssignees.map(c => ({ id: c.id, name: c.full_name })),
+      coAssignees: coAssignees.map(c => ({ id: c.id, name: c.full_name, hours: c.hours ?? null })),
       planningQuadrant: planningQuadrant ?? null,
       recurrence: editRecurrenceOn ? editRecurrence : 'none',
       recurrenceDays: (editRecurrence === 'weekly' || editRecurrence === 'specific_days') && editRecurrenceOn ? editRecurrenceDays : [],
@@ -1901,14 +1913,26 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                 </label>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   {coAssignees.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
+                    <div className="flex flex-col gap-1.5 p-2 bg-indigo-50 border-b border-indigo-100">
                       {coAssignees.map(c => (
-                        <span key={c.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-indigo-200 text-[11px] font-semibold text-indigo-700">
-                          {c.full_name}
+                        <div key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white border border-indigo-200">
+                          <span className="text-[11px] font-semibold text-indigo-700 flex-1 truncate">{c.full_name}</span>
+                          <input
+                            type="number" min="0" step="0.25" placeholder="hrs"
+                            value={c.hours ?? ''}
+                            onChange={e => {
+                              const v = e.target.value === '' ? null : parseFloat(e.target.value);
+                              setCoAssignees(prev => prev.map(x => x.id === c.id ? { ...x, hours: Number.isFinite(v as number) ? (v as number) : null } : x));
+                            }}
+                            data-testid={`edit-coassignee-hours-${c.id}`}
+                            className="w-16 h-7 px-2 text-[11px] rounded border border-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-200 text-indigo-800"
+                            title="Hours allocated to this collaborator"
+                          />
+                          <span className="text-[10px] text-indigo-400">h</span>
                           <button type="button" onClick={() => setCoAssignees(prev => prev.filter(x => x.id !== c.id))} data-testid={`edit-coassignee-remove-${c.id}`} className="text-indigo-400 hover:text-red-500">
-                            <X className="w-3 h-3" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
-                        </span>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -4469,7 +4493,7 @@ export default function MyTasksV2() {
     assignedToUserId?: string | null;
     assignedToUserName?: string | null;
     targetDeptId?: string | null;
-    coAssignees?: Array<{ id: string; name: string }>;
+    coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
     planningQuadrant?: QuadrantKey | null;
@@ -4608,10 +4632,20 @@ export default function MyTasksV2() {
 
     // Snapshot prev co-assignees so we can notify newly added ones after save.
     const prevTask = allTasks.find(x => x.id === id);
-    const prevCoIds = new Set((prevTask?.coAssignees ?? []).map(c => c.id));
-    const nextCo = (payload as { coAssignees?: Array<{ id: string; name: string }> }).coAssignees;
+    const prevCoMap = new Map((prevTask?.coAssignees ?? []).map(c => [c.id, c]));
+    const nextCo = (payload as { coAssignees?: Array<{ id: string; name: string; hours?: number | null }> }).coAssignees;
+    // Merge new co-assignee entries with prior records so per-user
+    // acknowledgment timestamps survive edits (the dialog only tracks id/name/hours).
+    if (Array.isArray(nextCo)) {
+      (payload as { coAssignees: Array<Record<string, unknown>> }).coAssignees = nextCo.map(c => {
+        const prior = prevCoMap.get(c.id);
+        return prior
+          ? { ...prior, id: c.id, name: c.name, hours: c.hours ?? prior.hours ?? null }
+          : { id: c.id, name: c.name, hours: c.hours ?? null };
+      });
+    }
     const newlyAddedCo: Array<{ id: string; name: string }> = Array.isArray(nextCo)
-      ? nextCo.filter(c => c?.id && !prevCoIds.has(c.id))
+      ? nextCo.filter(c => c?.id && !prevCoMap.has(c.id))
       : [];
     const prevAssignedTo = prevTask?.assignedTo ?? null;
     const nextAssignedTo = (payload as { assignedTo?: string | null }).assignedTo;

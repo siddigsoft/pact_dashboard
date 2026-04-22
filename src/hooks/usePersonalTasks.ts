@@ -49,6 +49,12 @@ export interface TaskAssignee {
   id: string;
   name: string;
   email?: string | null;
+  /** Per-co-assignee hours allocation (set by creator/admin). */
+  hours?: number | null;
+  /** Per-co-assignee acknowledgment timestamp. NULL = unacknowledged. */
+  acknowledged_at?: string | null;
+  /** User id that acknowledged (almost always equals `id`). */
+  acknowledged_by?: string | null;
 }
 
 export type TaskType = 'project-task' | 'day-to-day';
