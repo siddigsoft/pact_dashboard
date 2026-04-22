@@ -690,10 +690,13 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                       <p className="text-[11px] text-slate-400">of each month</p>
                     </div>
                   )}
-                  {/* Ends on */}
+                  {/* Ends on — must fall within the task's [start, end] range */}
                   <div className="flex items-center gap-2">
                     <p className="text-[11px] text-slate-600 shrink-0">Ends on</p>
-                    <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)}
+                    <input type="date" value={recurrenceEndDate}
+                      min={startDateQA || undefined}
+                      max={dueDate || undefined}
+                      onChange={e => setRecurrenceEndDate(e.target.value)}
                       className="flex-1 h-8 rounded-lg border border-slate-200 text-sm px-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20" />
                     {recurrenceEndDate && (
                       <button type="button" onClick={() => setRecurrenceEndDate('')} className="text-slate-400 hover:text-slate-600">
@@ -1540,7 +1543,10 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                   )}
                   <div className="flex items-center gap-2">
                     <p className="text-[11px] text-slate-600 shrink-0">Ends on</p>
-                    <input type="date" value={editRecurrenceEndDate} onChange={e => setEditRecurrenceEndDate(e.target.value)}
+                    <input type="date" value={editRecurrenceEndDate}
+                      min={editStartDate || undefined}
+                      max={dueDate || undefined}
+                      onChange={e => setEditRecurrenceEndDate(e.target.value)}
                       className="flex-1 h-8 rounded-lg border border-slate-200 text-sm px-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20" />
                     {editRecurrenceEndDate && (
                       <button type="button" onClick={() => setEditRecurrenceEndDate('')} className="text-slate-400 hover:text-slate-600">

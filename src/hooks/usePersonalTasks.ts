@@ -598,42 +598,55 @@ export function usePersonalTasks(userId: string | undefined) {
     mutationFn: async (task: CreatePersonalTask & { userId: string; userEmail?: string | null }) => {
       const assignedTo = task.assignedTo ?? task.userId;
       const assignedToName = task.assignedToName ?? null;
-      const { data, error } = await supabase
+      const insertPayload: Record<string, unknown> = {
+        user_id: task.userId,
+        assigned_to: assignedTo,
+        assigned_to_name: assignedToName,
+        title: task.title,
+        description: task.description ?? null,
+        priority: task.priority ?? 'medium',
+        status: task.status ?? 'todo',
+        due_date: task.dueDate ?? null,
+        category: task.category ?? 'personal',
+        tags: task.tags ?? null,
+        notes: task.notes ?? null,
+        parent_task_id: task.parentTaskId ?? null,
+        target_department_id: task.targetDepartmentId ?? null,
+        completion_reward_amount: task.completionRewardAmount ?? null,
+        completion_reward_currency: task.completionRewardCurrency ?? 'USD',
+        recurrence: task.recurrence ?? 'none',
+        recurrence_days: task.recurrenceDays ?? [],
+        recurrence_monthly_day: task.recurrenceMonthlyDay ?? null,
+        template_id: task.templateId ?? null,
+        daily_task_date: task.dailyTaskDate ?? null,
+        recurrence_end_date: task.recurrenceEndDate ?? null,
+        co_assignees: task.coAssignees ?? [],
+        dependencies: task.dependencies ?? [],
+        tools: encodeToolsMeta(task.tools, task.taskType, task.attachments),
+        planning_quadrant: task.planningQuadrant ?? null,
+        estimated_hours: task.estimatedHours ?? null,
+        actual_hours: task.actualHours ?? null,
+        project_id: task.projectId ?? null,
+        start_date: task.startDate ?? null,
+        hours_per_day: task.hoursPerDay ?? null,
+      };
+
+      let { data, error } = await supabase
         .from('personal_tasks')
-        .insert({
-          user_id: task.userId,
-          assigned_to: assignedTo,
-          assigned_to_name: assignedToName,
-          title: task.title,
-          description: task.description ?? null,
-          priority: task.priority ?? 'medium',
-          status: task.status ?? 'todo',
-          due_date: task.dueDate ?? null,
-          category: task.category ?? 'personal',
-          tags: task.tags ?? null,
-          notes: task.notes ?? null,
-          parent_task_id: task.parentTaskId ?? null,
-          target_department_id: task.targetDepartmentId ?? null,
-          completion_reward_amount: task.completionRewardAmount ?? null,
-          completion_reward_currency: task.completionRewardCurrency ?? 'USD',
-          recurrence: task.recurrence ?? 'none',
-          recurrence_days: task.recurrenceDays ?? [],
-          recurrence_monthly_day: task.recurrenceMonthlyDay ?? null,
-          template_id: task.templateId ?? null,
-          daily_task_date: task.dailyTaskDate ?? null,
-          recurrence_end_date: task.recurrenceEndDate ?? null,
-          co_assignees: task.coAssignees ?? [],
-          dependencies: task.dependencies ?? [],
-          tools: encodeToolsMeta(task.tools, task.taskType, task.attachments),
-          planning_quadrant: task.planningQuadrant ?? null,
-          estimated_hours: task.estimatedHours ?? null,
-          actual_hours: task.actualHours ?? null,
-          project_id: task.projectId ?? null,
-          start_date: task.startDate ?? null,
-          hours_per_day: task.hoursPerDay ?? null,
-        })
+        .insert(insertPayload)
         .select('id')
         .single();
+
+      // Fallback: if the new columns aren't present in this Supabase yet
+      // (migration 20260424_personal_tasks_date_range.sql not applied),
+      // strip them and retry so creating a task still succeeds.
+      if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
+        const fallback = { ...insertPayload };
+        for (const k of ['start_date', 'hours_per_day']) delete fallback[k];
+        const retry = await supabase.from('personal_tasks').insert(fallback).select('id').single();
+        data = retry.data;
+        error = retry.error;
+      }
       if (error) throw error;
 
       const p = (task.priority ?? 'medium') as PersonalTaskPriority;
