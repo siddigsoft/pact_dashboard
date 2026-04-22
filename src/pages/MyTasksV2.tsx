@@ -4006,7 +4006,8 @@ function TaskTypePickerDialog({ open, onClose, currentUserId, currentUserFullNam
 
 export default function MyTasksV2() {
   const { toast } = useToast();
-  const { currentUser } = useUser();
+  const { currentUser, hasRole } = useUser();
+  const isAdmin = hasRole('admin') || hasRole('super_admin');
   const userId = currentUser?.id;
   const qc = useQueryClient();
   const { notify, notifySelf } = useTaskNotifications();
@@ -4208,6 +4209,36 @@ export default function MyTasksV2() {
 
   const handleToggleDone = async (task: PersonalTask) => {
     const newStatus: PersonalTaskStatus = task.status === 'done' ? 'todo' : 'done';
+
+    // Lifecycle gate: a task must be acknowledged + started before it can be marked Done from quick-toggle.
+    // Reverting Done → To-Do is a non-trivial revert, so it requires admin too.
+    if (!isAdmin) {
+      if (newStatus === 'done' && !task.acknowledgedAt) {
+        toast({
+          title: 'Acknowledge first',
+          description: 'Open the task and click "I acknowledge & accept" before marking it done.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (newStatus === 'done' && !task.startedAt) {
+        toast({
+          title: 'Start the task first',
+          description: 'Open the task, confirm your plan with "Start the task", then mark it done.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (newStatus === 'todo' && task.startedAt) {
+        toast({
+          title: 'Locked',
+          description: 'Only an admin can revert a started task back to To-Do.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     try {
       await updateTask(task.id, { status: newStatus });
       // Notify the task owner / assignee on completion
@@ -4225,6 +4256,46 @@ export default function MyTasksV2() {
   };
 
   const handleSave = async (id: string, data: Partial<PersonalTask>, reason?: string) => {
+    // Lifecycle gate for status transitions originating from MyTasks (Kanban drag, status menu).
+    if (data.status && !isAdmin) {
+      const t = allTasks.find(x => x.id === id);
+      const restrictedAfterStart: PersonalTaskStatus[] = ['todo', 'cancelled', 'rescheduled'];
+      if (t && data.status !== t.status) {
+        if (data.status === 'inprogress' && !t.acknowledgedAt) {
+          toast({
+            title: 'Acknowledge first',
+            description: 'Open the task and acknowledge it before starting.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        if (data.status === 'inprogress' && t.acknowledgedAt && !t.startedAt) {
+          toast({
+            title: 'Use "Start the task"',
+            description: 'Open the task and click "Start the task" so we can capture hours, days, and dependencies.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        if (t.startedAt && restrictedAfterStart.includes(data.status)) {
+          toast({
+            title: 'Locked',
+            description: 'Only an admin can revert, cancel, or reschedule a started task.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        if (data.status === 'done' && !t.startedAt) {
+          toast({
+            title: 'Start the task first',
+            description: 'A task must be started before it can be marked done.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+    }
+
     try {
       await updateTask(id, data);
       toast({ title: 'Task saved' });

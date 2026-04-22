@@ -6,7 +6,11 @@ import { useUser } from '@/context/user/UserContext';
 import {
   ArrowLeft, Calendar, Clock, User as UserIcon, Users, Tag, MessageSquare, FileText,
   MessageCircle, ListChecks, Plus, X, Check, Trash2, Send, History, Loader2,
+  PlayCircle, Lock, ShieldCheck, Target,
 } from 'lucide-react';
+import { StartTaskDialog, type StartTaskPayload } from '@/components/tasks/StartTaskDialog';
+import type { StartDependencyRecord } from '@/hooks/usePersonalTasks';
+import { useTaskNotifications } from '@/hooks/useTaskNotifications';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
@@ -25,13 +29,19 @@ export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { currentUser } = useUser();
+  const { currentUser, hasRole } = useUser();
   const { toast } = useToast();
+  const { notify } = useTaskNotifications();
+
+  const isAdmin = hasRole('admin') || hasRole('super_admin');
 
   const [activeTab, setActiveTab] = useState<'message' | 'log_note' | 'whatsapp' | 'activity'>('message');
   const [draft, setDraft] = useState('');
   const [scheduledFor, setScheduledFor] = useState('');
   const [savingDesc, setSavingDesc] = useState(false);
+  const [startDialogOpen, setStartDialogOpen] = useState(false);
+  const [outputDraft, setOutputDraft] = useState<string | null>(null);
+  const [savingOutput, setSavingOutput] = useState(false);
 
   // ---------- Fetch task ----------
   const { data: task, isLoading } = useQuery({
@@ -72,7 +82,18 @@ export default function TaskDetail() {
     },
   });
 
-  // ---------- Acknowledge ("I've seen it") ----------
+  // Recipient set for lifecycle notifications (owner + assignee + co-assignees, minus actor)
+  const lifecycleRecipients = useMemo(() => {
+    if (!task) return [] as string[];
+    const set = new Set<string>();
+    if (task.user_id) set.add(task.user_id as string);
+    if (task.assigned_to) set.add(task.assigned_to as string);
+    ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).forEach(c => { if (c?.id) set.add(c.id); });
+    if (currentUser?.id) set.delete(currentUser.id);
+    return Array.from(set);
+  }, [task, currentUser?.id]);
+
+  // ---------- Acknowledge ("I've seen it") — does NOT auto-start ----------
   const acknowledgeTask = useMutation({
     mutationFn: async () => {
       const now = new Date().toISOString();
@@ -81,47 +102,157 @@ export default function TaskDetail() {
         acknowledged_by: currentUser?.id ?? null,
         updated_at: now,
       };
-      // Auto-advance from todo → inprogress on first acknowledge
-      if (task?.status === 'todo') {
-        patch.status = 'inprogress';
-        if (!task?.started_at) patch.started_at = now;
-      }
       const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id!);
       if (error) throw error;
     },
     onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['task-detail', id] });
       qc.invalidateQueries({ queryKey: ['personal_tasks'] });
-      qc.invalidateQueries({ queryKey: ['task-status-history', id] });
       try {
         await addActivity.mutateAsync({
           taskId: id!, kind: 'system',
           body: `Task acknowledged by ${currentUser?.fullName ?? 'assignee'} — they have seen and accepted it.`,
         });
-        // Notify the creator/owner that the assignee has seen the task
-        if (task?.user_id && task.user_id !== currentUser?.id) {
-          await supabase.functions.invoke('dispatch-notification', {
-            body: {
-              event_type: 'task_acknowledged',
-              entity_type: 'task',
-              entity_id: id,
-              priority: 'normal',
-              recipient_ids: [task.user_id],
-              title_en: 'Task Acknowledged',
-              title_ar: 'تم الإقرار بالمهمة',
-              message_en: `${currentUser?.fullName ?? 'The assignee'} has acknowledged the task: "${task.title}".`,
-              message_ar: `${currentUser?.fullName ?? 'المُكلَّف'} أقرّ بالمهمة: "${task.title}".`,
-              triggered_by: currentUser?.id,
-              action_url: `https://app.pactorg.com/tasks/${id}`,
-              metadata: { task_name: task.title },
+        for (const rid of lifecycleRecipients) {
+          notify({
+            event: 'task_acknowledged',
+            taskId: id!,
+            taskTitle: task?.title as string,
+            recipientUserId: rid,
+            dueDate: (task?.due_date as string) ?? null,
+          });
+        }
+      } catch { /* non-critical */ }
+      toast({ title: 'Acknowledged', description: 'Now click Start the task when you\'re ready to begin.' });
+    },
+    onError: (e: Error) => toast({ title: 'Could not acknowledge', description: e.message, variant: 'destructive' }),
+  });
+
+  // ---------- Start the task ----------
+  const startTask = useMutation({
+    mutationFn: async (payload: StartTaskPayload) => {
+      const now = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        status: 'inprogress',
+        started_at: now,
+        estimated_hours: payload.estimatedHours,
+        start_estimated_days: payload.estimatedDays,
+        start_requirements: payload.requirements || null,
+        start_dependencies: payload.dependencies,
+        updated_at: now,
+      };
+      const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: async (_d, payload) => {
+      qc.invalidateQueries({ queryKey: ['task-detail', id] });
+      qc.invalidateQueries({ queryKey: ['personal_tasks'] });
+      qc.invalidateQueries({ queryKey: ['task-status-history', id] });
+      setStartDialogOpen(false);
+      try {
+        await addActivity.mutateAsync({
+          taskId: id!, kind: 'system',
+          body: `Task started by ${currentUser?.fullName ?? 'assignee'}: ${payload.estimatedHours}h over ${payload.estimatedDays}d. Fields are now locked.`,
+        });
+        for (const rid of lifecycleRecipients) {
+          notify({
+            event: 'task_started',
+            taskId: id!,
+            taskTitle: task?.title as string,
+            recipientUserId: rid,
+            dueDate: (task?.due_date as string) ?? null,
+            extra: {
+              estimated_hours: String(payload.estimatedHours),
+              estimated_days: String(payload.estimatedDays),
+              dependencies_count: String(payload.dependencies.length),
             },
           });
         }
       } catch { /* non-critical */ }
-      toast({ title: 'Acknowledged', description: 'Marked as seen. Status moved to In Progress.' });
+      toast({ title: 'Task started', description: 'Details are now locked. Track your progress in Output.' });
     },
-    onError: (e: Error) => toast({ title: 'Could not acknowledge', description: e.message, variant: 'destructive' }),
+    onError: (e: Error) => toast({ title: 'Could not start task', description: e.message, variant: 'destructive' }),
   });
+
+  // ---------- Confirm a dependency you own ----------
+  const confirmDependency = useMutation({
+    mutationFn: async (depIndex: number) => {
+      const list: StartDependencyRecord[] = Array.isArray(task?.start_dependencies)
+        ? (task!.start_dependencies as StartDependencyRecord[])
+        : [];
+      if (depIndex < 0 || depIndex >= list.length) throw new Error('Invalid dependency');
+      const next = list.map((d, i) =>
+        i === depIndex
+          ? {
+              ...d,
+              confirmed: true,
+              confirmed_at: new Date().toISOString(),
+              confirmed_by: currentUser?.id ?? undefined,
+              confirmed_by_name: currentUser?.fullName ?? undefined,
+            }
+          : d,
+      );
+      const { error } = await supabase
+        .from('personal_tasks')
+        .update({ start_dependencies: next, updated_at: new Date().toISOString() })
+        .eq('id', id!);
+      if (error) throw error;
+      return next[depIndex];
+    },
+    onSuccess: async (dep) => {
+      qc.invalidateQueries({ queryKey: ['task-detail', id] });
+      try {
+        await addActivity.mutateAsync({
+          taskId: id!, kind: 'system',
+          body: `Dependency confirmed by ${currentUser?.fullName ?? 'someone'}: "${dep.label}"`,
+        });
+        for (const rid of lifecycleRecipients) {
+          notify({
+            event: 'task_status_changed',
+            taskId: id!,
+            taskTitle: task?.title as string,
+            recipientUserId: rid,
+            extra: { reason: `Dependency confirmed: ${dep.label}` },
+          });
+        }
+      } catch { /* non-critical */ }
+      toast({ title: 'Dependency confirmed' });
+    },
+    onError: (e: Error) => toast({ title: 'Could not confirm', description: e.message, variant: 'destructive' }),
+  });
+
+  // ---------- Save Output ----------
+  const saveOutput = async (text: string) => {
+    setSavingOutput(true);
+    try {
+      const { error } = await supabase
+        .from('personal_tasks')
+        .update({ output_text: text, updated_at: new Date().toISOString() })
+        .eq('id', id!);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['task-detail', id] });
+      await addActivity.mutateAsync({
+        taskId: id!, kind: 'log_note',
+        body: `Output updated by ${currentUser?.fullName ?? 'assignee'}.`,
+      });
+      for (const rid of lifecycleRecipients) {
+        notify({
+          event: 'task_status_changed',
+          taskId: id!,
+          taskTitle: task?.title as string,
+          recipientUserId: rid,
+          extra: { reason: 'Output updated' },
+        });
+      }
+      toast({ title: 'Output saved' });
+      setOutputDraft(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to save output';
+      toast({ title: 'Save failed', description: msg, variant: 'destructive' });
+    } finally {
+      setSavingOutput(false);
+    }
+  };
 
   // ---------- Description save ----------
   const saveDescription = async (html: string) => {
@@ -135,6 +266,16 @@ export default function TaskDetail() {
 
   // ---------- Status change ----------
   const handleStatusChange = async (next: PersonalTaskStatus, reason?: string) => {
+    // Guard: once started, only admin/super_admin can move to todo / cancelled / rescheduled.
+    const restrictedAfterStart: PersonalTaskStatus[] = ['todo', 'cancelled', 'rescheduled'];
+    if (task?.started_at && restrictedAfterStart.includes(next) && !isAdmin) {
+      toast({
+        title: 'Locked',
+        description: 'Only an admin can revert, cancel, or reschedule a started task.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const patch: Record<string, unknown> = { status: next };
     const now = new Date().toISOString();
     if (next === 'inprogress' && !task?.started_at) patch.started_at = now;
@@ -143,6 +284,33 @@ export default function TaskDetail() {
     if (next === 'cancelled') patch.cancelled_at = now;
     if (next === 'done' && !task?.completed_at) patch.completed_at = now;
     await updateTask.mutateAsync(patch);
+
+    // Fan out lifecycle notification to all participants
+    try {
+      const event =
+        next === 'inprogress' ? 'task_started' as const :
+        next === 'done'       ? 'task_completed' as const :
+        next === 'cancelled'  ? 'task_cancelled' as const :
+        'task_status_changed' as const;
+      for (const rid of lifecycleRecipients) {
+        notify({
+          event,
+          taskId: id!,
+          taskTitle: task?.title as string,
+          recipientUserId: rid,
+          dueDate: (task?.due_date as string) ?? null,
+          extra: reason ? { reason: `${STATUS_LABELS[next]}: ${reason}` } : { reason: STATUS_LABELS[next] },
+        });
+      }
+      // Admin override audit trail
+      if (task?.started_at && restrictedAfterStart.includes(next) && isAdmin) {
+        await addActivity.mutateAsync({
+          taskId: id!, kind: 'system',
+          body: `🛡️ Admin override: ${currentUser?.fullName ?? 'Admin'} changed status to ${STATUS_LABELS[next]}${reason ? ` — ${reason}` : ''}.`,
+        });
+      }
+    } catch { /* non-critical */ }
+
     toast({ title: 'Status updated', description: STATUS_LABELS[next] + (reason ? ` — ${reason}` : '') });
   };
 
@@ -282,6 +450,12 @@ export default function TaskDetail() {
           current={task.status as PersonalTaskStatus}
           onChange={handleStatusChange}
           size="md"
+          disabledStatuses={
+            task.started_at && !isAdmin
+              ? (['todo', 'cancelled', 'rescheduled'] as PersonalTaskStatus[])
+              : []
+          }
+          lockedHint="Locked after Start — admin/super-admin only"
         />
       </div>
 
@@ -314,7 +488,7 @@ export default function TaskDetail() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-amber-900">This task is waiting for your acknowledgment</p>
               <p className="text-xs text-amber-700 mt-0.5">
-                Please confirm you've seen and accepted it. The creator will be notified, and the status will move to <b>In Progress</b>.
+                Please confirm you've seen and accepted it. After this, you'll review the details and click <b>Start the task</b> when you're ready to begin.
               </p>
             </div>
             <button
@@ -331,6 +505,55 @@ export default function TaskDetail() {
         );
       })()}
 
+      {/* ── Start banner: shown to assignee after ack but before start ── */}
+      {(() => {
+        const isMine =
+          currentUser?.id &&
+          (task.assigned_to === currentUser.id ||
+            ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === currentUser.id));
+        const ackAt = task.acknowledged_at as string | null | undefined;
+        const startedAt = task.started_at as string | null | undefined;
+        if (!isMine || !ackAt || startedAt) return null;
+        return (
+          <div
+            className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-blue-50 border border-blue-200"
+            data-testid="banner-start"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-blue-900 flex items-center gap-1.5">
+                <PlayCircle className="w-4 h-4" /> Ready to begin?
+              </p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Review the details below. When ready, click <b>Start the task</b> to lock the plan and begin tracking. You'll be asked to confirm hours, days, requirements, and dependencies.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStartDialogOpen(true)}
+              className="shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#1D3461] hover:bg-[#0F2041] text-white text-sm font-semibold transition-colors"
+              data-testid="btn-open-start-dialog"
+            >
+              <PlayCircle className="w-4 h-4" /> Start the task
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── Locked banner: shown after start so everyone knows fields are locked ── */}
+      {task.started_at && (
+        <div
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs"
+          data-testid="banner-locked"
+        >
+          <Lock className="w-3.5 h-3.5 text-slate-500" />
+          <span>
+            Locked since {format(parseISO(task.started_at as string), 'dd MMM yyyy, HH:mm')}.
+            {' '}Title, description, due date, priority, assignee, and dependencies can only be changed by an admin.
+            {isAdmin && <span className="ml-1 font-semibold text-[#1D3461]"><ShieldCheck className="inline w-3 h-3 -mt-0.5" /> Admin override available.</span>}
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* ── Left column: Description + Activity feed ── */}
         <div className="lg:col-span-2 space-y-4">
@@ -342,19 +565,150 @@ export default function TaskDetail() {
               </h2>
               {savingDesc && <span className="text-[10px] text-slate-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving…</span>}
             </div>
-            <TaskRichEditor
-              value={(task.description_html as string) || (task.description ? `<p>${task.description}</p>` : '')}
-              onChange={(html) => {
-                // Debounce save
-                if ((window as unknown as { __taskDescTimer?: number }).__taskDescTimer) {
-                  clearTimeout((window as unknown as { __taskDescTimer?: number }).__taskDescTimer);
-                }
-                (window as unknown as { __taskDescTimer?: number }).__taskDescTimer = window.setTimeout(() => saveDescription(html), 800);
-              }}
-              minHeight={220}
-              className="border-0 rounded-none"
-            />
+            {task.started_at && !isAdmin ? (
+              <div
+                className="prose prose-sm max-w-none p-4 text-slate-700"
+                data-testid="text-description-locked"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    (task.description_html as string) ||
+                    (task.description ? `<p>${task.description}</p>` : '<p class="italic text-slate-400">No description.</p>'),
+                }}
+              />
+            ) : (
+              <TaskRichEditor
+                value={(task.description_html as string) || (task.description ? `<p>${task.description}</p>` : '')}
+                onChange={(html) => {
+                  // Debounce save
+                  if ((window as unknown as { __taskDescTimer?: number }).__taskDescTimer) {
+                    clearTimeout((window as unknown as { __taskDescTimer?: number }).__taskDescTimer);
+                  }
+                  (window as unknown as { __taskDescTimer?: number }).__taskDescTimer = window.setTimeout(() => saveDescription(html), 800);
+                }}
+                minHeight={220}
+                className="border-0 rounded-none"
+              />
+            )}
           </div>
+
+          {/* Output / Accomplishments — appears once task is started */}
+          {task.started_at && (() => {
+            const isMine =
+              currentUser?.id &&
+              (task.assigned_to === currentUser.id ||
+                ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === currentUser.id));
+            const canEditOutput = isMine || isAdmin;
+            const stored = (task.output_text as string | null) ?? '';
+            const draftValue = outputDraft ?? stored;
+            const dirty = outputDraft !== null && outputDraft !== stored;
+            return (
+              <div className="bg-white rounded-2xl border border-emerald-200 overflow-hidden" data-testid="card-output">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-emerald-100 bg-emerald-50/50">
+                  <h2 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
+                    <Target className="w-4 h-4" /> Output / Accomplishments
+                  </h2>
+                  {savingOutput && <span className="text-[10px] text-slate-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving…</span>}
+                </div>
+                <div className="p-4 space-y-2">
+                  {canEditOutput ? (
+                    <>
+                      <textarea
+                        value={draftValue}
+                        onChange={e => setOutputDraft(e.target.value)}
+                        rows={5}
+                        placeholder="Describe what you accomplished, decisions made, links to deliverables…"
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-300/50 resize-y"
+                        data-testid="input-output-text"
+                      />
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] text-slate-400">
+                          {task.proof_file_url ? (
+                            <a href={task.proof_file_url as string} target="_blank" rel="noreferrer" className="underline hover:text-slate-700">
+                              View attached proof file
+                            </a>
+                          ) : 'Tip: attach a proof file from the activity composer.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => saveOutput((outputDraft ?? '').trim())}
+                          disabled={!dirty || savingOutput}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold"
+                          data-testid="btn-save-output"
+                        >
+                          {savingOutput ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          Save output
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap">
+                      {stored || <span className="italic text-slate-400">No output recorded yet.</span>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Start-time dependencies (people / depts / items) — appears once started */}
+          {task.started_at && Array.isArray(task.start_dependencies) && (task.start_dependencies as StartDependencyRecord[]).length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="card-start-deps">
+              <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
+                <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <ListChecks className="w-4 h-4" /> Dependencies confirmed at Start
+                </h2>
+                {(task.start_requirements as string | null) && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    <b>Requirements:</b> {task.start_requirements as string}
+                  </p>
+                )}
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {(task.start_dependencies as StartDependencyRecord[]).map((d, i) => {
+                  const canConfirm =
+                    !d.confirmed &&
+                    (isAdmin ||
+                      (d.userId && d.userId === currentUser?.id) ||
+                      // Owner / assignee can also confirm "item" deps (no specific person)
+                      (d.kind === 'item' &&
+                        (task.assigned_to === currentUser?.id ||
+                          task.user_id === currentUser?.id)));
+                  return (
+                    <li key={`${d.label}-${i}`} className="flex items-center gap-2 px-4 py-2 text-xs" data-testid={`dep-confirm-row-${i}`}>
+                      <span
+                        className={cn(
+                          'text-[10px] font-bold uppercase px-1.5 py-0.5 rounded',
+                          d.kind === 'person' ? 'bg-blue-100 text-blue-700'
+                          : d.kind === 'department' ? 'bg-purple-100 text-purple-700'
+                          : 'bg-slate-200 text-slate-600',
+                        )}
+                      >
+                        {d.kind}
+                      </span>
+                      <span className="flex-1 text-slate-700">{d.label}</span>
+                      {d.confirmed ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                          <Check className="w-3.5 h-3.5" /> {d.confirmed_by_name ?? 'Confirmed'}
+                        </span>
+                      ) : canConfirm ? (
+                        <button
+                          type="button"
+                          onClick={() => confirmDependency.mutate(i)}
+                          disabled={confirmDependency.isPending}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-semibold"
+                          data-testid={`btn-confirm-dep-${i}`}
+                        >
+                          <Check className="w-3 h-3" /> Confirm
+                        </button>
+                      ) : (
+                        <span className="text-amber-600 font-semibold">Pending</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {/* Activity feed */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -508,6 +862,19 @@ export default function TaskDetail() {
           <ApprovalHistoryPanel taskId={id!} />
         </div>
       </div>
+
+      {/* Start-the-task confirmation dialog */}
+      <StartTaskDialog
+        open={startDialogOpen}
+        onOpenChange={setStartDialogOpen}
+        taskTitle={(task.title as string) ?? ''}
+        defaultEstimatedHours={(task.estimated_hours as number | null) ?? null}
+        prefillDependencies={Array.isArray(task.dependencies)
+          ? (task.dependencies as Array<{ label: string; type?: string; userId?: string; userName?: string; deptId?: string; deptName?: string }>)
+          : []}
+        isPending={startTask.isPending}
+        onConfirm={(payload) => startTask.mutateAsync(payload)}
+      />
     </div>
   );
 }

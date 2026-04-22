@@ -12,6 +12,10 @@ interface Props {
   current: PersonalTaskStatus;
   onChange: (next: PersonalTaskStatus, reason?: string) => Promise<void> | void;
   size?: 'sm' | 'md';
+  /** Status options to disable (greyed out, not pickable). Used after Start to lock cancel/reschedule for non-admins. */
+  disabledStatuses?: PersonalTaskStatus[];
+  /** Tooltip shown on disabled options. */
+  lockedHint?: string;
 }
 
 const STATUS_ICONS: Record<PersonalTaskStatus, React.ComponentType<{ className?: string }>> = {
@@ -25,7 +29,8 @@ const STATUS_ICONS: Record<PersonalTaskStatus, React.ComponentType<{ className?:
 
 const STATUSES: PersonalTaskStatus[] = ['todo', 'inprogress', 'on_hold', 'rescheduled', 'done', 'cancelled'];
 
-export function TaskStatusMenu({ taskId, current, onChange, size = 'sm' }: Props) {
+export function TaskStatusMenu({ taskId, current, onChange, size = 'sm', disabledStatuses = [], lockedHint }: Props) {
+  const disabledSet = new Set(disabledStatuses);
   const [open, setOpen] = useState(false);
   const [askingReason, setAskingReason] = useState<PersonalTaskStatus | null>(null);
   const [reason, setReason] = useState('');
@@ -52,6 +57,7 @@ export function TaskStatusMenu({ taskId, current, onChange, size = 'sm' }: Props
   };
 
   const handlePick = (s: PersonalTaskStatus) => {
+    if (disabledSet.has(s)) return;
     if (s === 'on_hold' || s === 'cancelled' || s === 'rescheduled') {
       setAskingReason(s);
       return;
@@ -100,20 +106,25 @@ export function TaskStatusMenu({ taskId, current, onChange, size = 'sm' }: Props
           STATUSES.map(s => {
             const SI = STATUS_ICONS[s];
             const active = s === current;
+            const isDisabled = disabledSet.has(s);
             return (
               <button
                 key={s}
                 type="button"
                 onClick={() => handlePick(s)}
+                disabled={isDisabled}
+                title={isDisabled ? (lockedHint ?? 'Locked — admin only') : undefined}
                 data-testid={`menu-status-${s}`}
                 className={cn(
                   'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left text-sm transition-colors',
                   active ? 'bg-slate-100 font-semibold' : 'hover:bg-slate-50',
+                  isDisabled && 'opacity-40 cursor-not-allowed hover:bg-transparent',
                 )}
               >
                 <SI className="w-4 h-4 text-slate-500" />
                 <span className="flex-1 text-slate-700">{STATUS_LABELS[s]}</span>
                 {active && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                {isDisabled && !active && <span className="text-[9px] font-bold text-slate-400">🔒</span>}
               </button>
             );
           })

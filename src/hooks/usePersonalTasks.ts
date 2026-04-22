@@ -95,6 +95,26 @@ export interface PersonalTask {
   actualHours: number | null;
   startedAt: string | null;
   completedAt: string | null;
+  // Lifecycle v2: acknowledge → start → lock → output
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  startEstimatedDays: number | null;
+  startRequirements: string | null;
+  startDependencies: StartDependencyRecord[];
+  outputText: string | null;
+}
+
+export interface StartDependencyRecord {
+  label: string;
+  kind: 'person' | 'department' | 'item';
+  userId?: string;
+  userName?: string;
+  deptId?: string;
+  deptName?: string;
+  confirmed?: boolean;
+  confirmed_at?: string;
+  confirmed_by?: string;
+  confirmed_by_name?: string;
 }
 
 export interface CreatePersonalTask {
@@ -254,6 +274,12 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     actualHours: (r.actual_hours as number) ?? null,
     startedAt: (r.started_at as string) ?? null,
     completedAt: (r.completed_at as string) ?? null,
+    acknowledgedAt: (r.acknowledged_at as string) ?? null,
+    acknowledgedBy: (r.acknowledged_by as string) ?? null,
+    startEstimatedDays: (r.start_estimated_days as number) ?? null,
+    startRequirements: (r.start_requirements as string) ?? null,
+    startDependencies: Array.isArray(r.start_dependencies) ? (r.start_dependencies as StartDependencyRecord[]) : [],
+    outputText: (r.output_text as string) ?? null,
   };
 }
 
@@ -836,9 +862,16 @@ export function usePersonalTasks(userId: string | undefined) {
       // still succeeds. The status itself + status_history trigger remain unaffected.
       if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
         const fallback = { ...patch };
-        delete (fallback as Record<string, unknown>).on_hold_at;
-        delete (fallback as Record<string, unknown>).rescheduled_at;
-        delete (fallback as Record<string, unknown>).cancelled_at;
+        // Strip every column that comes from a deferred migration so the core
+        // status/title/description update still goes through.
+        for (const k of [
+          'on_hold_at', 'rescheduled_at', 'cancelled_at',
+          'acknowledged_at', 'acknowledged_by',
+          'start_estimated_days', 'start_requirements', 'start_dependencies',
+          'output_text',
+        ]) {
+          delete (fallback as Record<string, unknown>)[k];
+        }
         const retry = await supabase.from('personal_tasks').update(fallback).eq('id', id);
         error = retry.error;
       }
