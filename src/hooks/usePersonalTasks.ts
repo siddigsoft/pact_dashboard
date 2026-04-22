@@ -964,6 +964,46 @@ export function usePersonalTasks(userId: string | undefined) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Best-effort: clean up attached files from storage if not referenced elsewhere
+      try {
+        const { data: row } = await supabase.from('personal_tasks').select('tools').eq('id', id).maybeSingle();
+        const atts = parseAttachments((row?.tools as string | null) ?? null);
+        const paths = atts
+          .map(a => {
+            const m = a.url.match(/\/workspace-files\/(.+)$/);
+            return m ? decodeURIComponent(m[1].split('?')[0]) : null;
+          })
+          .filter((p): p is string => !!p);
+        if (paths.length > 0) {
+          // Don't delete a storage object that's also referenced by workspace_files
+          const { data: wfRefs } = await supabase
+            .from('workspace_files')
+            .select('storage_path')
+            .in('storage_path', paths);
+          const wfReferenced = new Set((wfRefs ?? []).map(r => r.storage_path as string));
+
+          // Or by another personal_task's attachments (URL contains the storage path)
+          const { data: otherTasks } = await supabase
+            .from('personal_tasks')
+            .select('id, tools')
+            .neq('id', id)
+            .not('tools', 'is', null);
+          const otherTaskReferenced = new Set<string>();
+          for (const t of otherTasks ?? []) {
+            const otherAtts = parseAttachments((t.tools as string | null) ?? null);
+            for (const a of otherAtts) {
+              const m = a.url.match(/\/workspace-files\/(.+)$/);
+              if (m) otherTaskReferenced.add(decodeURIComponent(m[1].split('?')[0]));
+            }
+          }
+
+          const toRemove = paths.filter(p => !wfReferenced.has(p) && !otherTaskReferenced.has(p));
+          if (toRemove.length > 0) {
+            await supabase.storage.from('workspace-files').remove(toRemove);
+          }
+        }
+      } catch { /* best-effort cleanup; never block delete */ }
+
       const { error } = await supabase.from('personal_tasks').delete().eq('id', id);
       if (error) throw error;
     },

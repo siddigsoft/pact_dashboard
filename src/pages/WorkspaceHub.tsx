@@ -400,12 +400,16 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
   async function handleUpload() {
     if (files.length === 0) return;
     setUploading(true); setProgress(0);
+    // Only paths whose DB insert NEVER completed — these are the true orphans to roll back
+    const pendingOrphanPaths: string[] = [];
     try {
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         const path = `${currentUserId}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
         const { error: uploadErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
         if (uploadErr) throw uploadErr;
+        // Track as orphan until DB insert succeeds
+        pendingOrphanPaths.push(path);
         const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
         const ext = f.name.split('.').pop()?.toLowerCase() ?? null;
         const { error: dbErr } = await supabase.from('workspace_files').insert({
@@ -416,11 +420,18 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
           tags: tags.split(',').map(t => t.trim()).filter(Boolean),
         });
         if (dbErr) throw dbErr;
+        // DB insert committed — no longer an orphan
+        const idx = pendingOrphanPaths.indexOf(path);
+        if (idx >= 0) pendingOrphanPaths.splice(idx, 1);
         setProgress(Math.round(((i + 1) / files.length) * 100));
       }
       toast({ title: `${files.length} file${files.length > 1 ? 's' : ''} uploaded`, description: `Security: ${SEC_CFG[secLevel].label}` });
       onUploaded(); onClose(); setFiles([]); setDescription(''); setTags('');
     } catch (e: any) {
+      // Rollback: remove only storage objects whose DB insert never completed
+      if (pendingOrphanPaths.length > 0) {
+        try { await supabase.storage.from('workspace-files').remove(pendingOrphanPaths); } catch { /* best effort */ }
+      }
       toast({ title: 'Upload failed', description: e.message, variant: 'destructive' });
     } finally { setUploading(false); }
   }
@@ -519,14 +530,25 @@ function UploadDialog({ folderId, folderName, open, onClose, currentUserId, onUp
 
 // ─── File detail panel ────────────────────────────────────────────────────────
 
-function FileDetailPanel({ file, currentUserId, onClose, onRefresh }: {
+function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, isLocked, openShareSignal, onShareConsumed }: {
   file: WFile; currentUserId: string; onClose: () => void; onRefresh: () => void;
+  canManage: boolean; isLocked: boolean;
+  openShareSignal?: string | null;
+  onShareConsumed?: () => void;
 }) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('info');
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+
+  // Auto-open share dialog when external signal matches this file
+  useEffect(() => {
+    if (openShareSignal && openShareSignal === file.id) {
+      setShareOpen(true);
+      onShareConsumed?.();
+    }
+  }, [openShareSignal, file.id, onShareConsumed]);
 
   const { data: comments = [], refetch: refetchComments } = useQuery<WComment[]>({
     queryKey: ['workspace_comments', file.id],
@@ -638,12 +660,21 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh }: {
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 px-4 py-2 border-b bg-muted/20">
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={downloadFile}>
-          <Download className="h-3 w-3" />Download
-        </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShareOpen(true)}>
-          <Share2 className="h-3 w-3" />Share
-        </Button>
+        {(file.allow_download || canManage) && !isLocked && (
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={downloadFile}>
+            <Download className="h-3 w-3" />Download
+          </Button>
+        )}
+        {!file.allow_download && !canManage && (
+          <span className="flex items-center gap-1 text-[11px] text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded-md">
+            <Ban className="h-3 w-3" />Downloads disabled · التحميل معطل
+          </span>
+        )}
+        {canManage && (
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShareOpen(true)}>
+            <Share2 className="h-3 w-3" />Share
+          </Button>
+        )}
         <button onClick={togglePin} className={cn('p-1.5 rounded-lg border transition-all', file.is_pinned ? 'bg-amber-100 border-amber-300 text-amber-700' : 'border-border text-muted-foreground hover:text-foreground')}>
           {file.is_pinned ? <Star className="h-3.5 w-3.5" /> : <StarOff className="h-3.5 w-3.5" />}
         </button>
@@ -778,6 +809,18 @@ export default function WorkspaceHub() {
 
   const userId = currentUser?.id ?? '';
 
+  // Permission helpers — owner of the file/folder, or admin/superadmin
+  const canManageFile = useCallback(
+    (f: { created_by: string | null }) => isSuperAdmin || isAdmin || f.created_by === userId,
+    [isSuperAdmin, isAdmin, userId]
+  );
+  const canManageFolder = useCallback(
+    (f: { created_by: string | null }) => isSuperAdmin || isAdmin || f.created_by === userId,
+    [isSuperAdmin, isAdmin, userId]
+  );
+  // Pending "open share for this file" — set by file menu Share item, consumed by FileDetailPanel
+  const [openShareForFileId, setOpenShareForFileId] = useState<string | null>(null);
+
   // Fetch current user's security clearance
   const { data: myClearance } = useQuery<SecurityLevel>({
     queryKey: ['my-workspace-clearance', userId],
@@ -891,7 +934,7 @@ export default function WorkspaceHub() {
   // ── Data fetching ─────────────────────────────────────────────────────────
 
   const { data: folders = [], refetch: refetchFolders } = useQuery<WFolder[]>({
-    queryKey: ['workspace_folders'],
+    queryKey: ['workspace_folders', userId],
     queryFn: async () => {
       const { data } = await supabase.from('workspace_folders').select('*').eq('archived', false).order('name');
       return (data ?? []) as WFolder[];
@@ -900,7 +943,7 @@ export default function WorkspaceHub() {
   });
 
   const { data: allFiles = [], refetch: refetchFiles } = useQuery<WFile[]>({
-    queryKey: ['workspace_files'],
+    queryKey: ['workspace_files', userId],
     queryFn: async () => {
       const { data: files } = await supabase.from('workspace_files').select('*').eq('archived', false).order('updated_at', { ascending: false });
       if (!files) return [];
@@ -949,6 +992,7 @@ export default function WorkspaceHub() {
     if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
     else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
     else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
+    else if (selectedFolderId === '__all__') { /* no-op: show every visible file */ }
     else if (selectedFolderId) files = files.filter(f => f.folder_id === selectedFolderId);
     else files = files.filter(f => !f.folder_id); // null = root only (no folder)
     // Hide files that belong to locked folders
@@ -1395,24 +1439,24 @@ export default function WorkspaceHub() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="text-xs">
             <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
-            <OpenAsSubMenu file={file} />
-            <DropdownMenuSeparator />
-            {(isSuperAdmin || file.created_by === userId) && (
+            {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
+            {canManageFile(file) && <>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-              <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setShareFolderTarget(null)}><Share2 className="h-3.5 w-3.5 mr-2" />Share</DropdownMenuItem>
-            {file.public_url && !['top_secret','restricted'].includes(file.security_level) && (
+              <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => { openFile(file); setOpenShareForFileId(file.id); }}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
+            </>}
+            {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
               <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
                 <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
               </DropdownMenuItem>
             )}
-            {isAdmin && <>
+            {canManageFile(file) && <>
               <DropdownMenuSeparator />
               <SecuritySubMenu current={file.security_level} onSelect={l => changeFileSecurity(file, l)} />
               <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
@@ -1456,24 +1500,24 @@ export default function WorkspaceHub() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="text-xs">
                 <DropdownMenuItem onClick={() => openFile(file)}><Eye className="h-3.5 w-3.5 mr-2" />View Details</DropdownMenuItem>
-                <OpenAsSubMenu file={file} />
-                <DropdownMenuSeparator />
-                {(isSuperAdmin || file.created_by === userId) && (
+                {(!file.password_hash || unlockedIds.has(file.id) || canManageFile(file)) && <OpenAsSubMenu file={file} />}
+                {canManageFile(file) && <>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => { setRenameTarget({ type: 'file', id: file.id, currentName: file.name }); setRenameValue(file.name); }}><Edit2 className="h-3.5 w-3.5 mr-2" />Rename</DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
-                  <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem><Share2 className="h-3.5 w-3.5 mr-2" />Share</DropdownMenuItem>
-                {file.public_url && !['top_secret','restricted'].includes(file.security_level) && (
+                  <DropdownMenuItem onClick={() => { setMoveTarget(file); setMoveFolderId(file.folder_id ?? '__root__'); }}><ArrowUpDown className="h-3.5 w-3.5 mr-2" />Move to…</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={e => { e.stopPropagation(); setPasswordSetTarget({ id: file.id, name: file.name, password_hash: file.password_hash, isFolder: false }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
+                    <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { openFile(file); setOpenShareForFileId(file.id); }}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
+                </>}
+                {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
                     <QrCode className="h-3.5 w-3.5 mr-2 text-[#1D3461]" />Share QR Code
                   </DropdownMenuItem>
                 )}
-                {isAdmin && <>
+                {canManageFile(file) && <>
                   <DropdownMenuSeparator />
                   <SecuritySubMenu current={file.security_level} onSelect={l => changeFileSecurity(file, l)} />
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); toggleDownload(file); }}>
@@ -1569,7 +1613,8 @@ export default function WorkspaceHub() {
               { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false },
               { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false },
               { id: '__task_docs__', label: 'Task Documents', icon: CheckCircle2, count: totalTaskAttachments, droppable: false },
-              { id: null, label: 'All Files', icon: FolderOpen, count: stats.root, droppable: true },
+              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false },
+              { id: null, label: 'Root (no folder)', icon: Folder, count: stats.root, droppable: true },
             ].map(item => {
               const isSelected = selectedFolderId === item.id;
               const isRootDragOver = dragOverFolderId === '__root__' && item.droppable;
@@ -1832,6 +1877,10 @@ export default function WorkspaceHub() {
             <FileDetailPanel
               file={selectedFile} currentUserId={userId}
               onClose={() => setSelectedFile(null)} onRefresh={refetch}
+              canManage={canManageFile(selectedFile)}
+              isLocked={!!selectedFile.password_hash && !unlockedIds.has(selectedFile.id)}
+              openShareSignal={openShareForFileId}
+              onShareConsumed={() => setOpenShareForFileId(null)}
             />
           </div>
         )}

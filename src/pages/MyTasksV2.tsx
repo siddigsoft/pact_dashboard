@@ -390,6 +390,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
 
     // Upload attachments to storage if any
     let uploadedAttachments: TaskAttachment[] = [];
+    const uploadedPaths: string[] = [];
     if (attachments.length > 0) {
       setUploadingAttachments(true);
       try {
@@ -398,10 +399,15 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
           const path = `task-attachments/${currentUserId ?? 'anon'}/${Date.now()}_${safeName}`;
           const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
           if (upErr) {
+            // Roll back any successfully uploaded files in this batch
+            if (uploadedPaths.length > 0) {
+              try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best effort */ }
+            }
             toast({ title: 'Attachment upload failed', description: `${f.name}: ${upErr.message}`, variant: 'destructive' });
             setUploadingAttachments(false);
             return;
           }
+          uploadedPaths.push(path);
           const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
           uploadedAttachments.push({ name: f.name, url: urlData?.publicUrl ?? '', uploadedAt: new Date().toISOString() });
         }
@@ -410,23 +416,31 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       }
     }
 
-    onCreate({
-      title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes,
-      projectId: taskTypeKey === 'project' ? projectId : null,
-      assignedToUserId:   assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
-      assignedToUserName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
-      targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
-      rewardAmount,
-      structuredDeps,
-      planningQuadrant,
-      recurrence: recurrenceOn ? recurrence : 'none',
-      recurrenceDays: (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceOn ? recurrenceDaysQA : [],
-      recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
-      recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
-      estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
-      attachments: uploadedAttachments,
-    });
-    reset();
+    try {
+      await Promise.resolve(onCreate({
+        title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes,
+        projectId: taskTypeKey === 'project' ? projectId : null,
+        assignedToUserId:   assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
+        assignedToUserName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
+        targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
+        rewardAmount,
+        structuredDeps,
+        planningQuadrant,
+        recurrence: recurrenceOn ? recurrence : 'none',
+        recurrenceDays: (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceOn ? recurrenceDaysQA : [],
+        recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
+        recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
+        estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
+        attachments: uploadedAttachments,
+      }));
+      reset();
+    } catch (e: any) {
+      // Roll back uploaded storage objects so we don't leave orphans
+      if (uploadedPaths.length > 0) {
+        try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best effort */ }
+      }
+      toast({ title: 'Could not create task', description: e?.message ?? 'Please try again', variant: 'destructive' });
+    }
   };
 
   const initial = (currentUserFullName ?? 'U')[0].toUpperCase();
