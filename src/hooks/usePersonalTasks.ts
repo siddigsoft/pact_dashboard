@@ -381,6 +381,56 @@ async function sendTaskEmail(opts: {
   }
 }
 
+// Dispatch a task event through the central multi-channel router
+// (in-app + email + WhatsApp + push, bilingual). Fire-and-forget.
+async function dispatchTaskMultiChannel(opts: {
+  recipientId: string;
+  taskId: string;
+  taskTitle: string;
+  actorId?: string | null;
+  event: string;
+  titleEn: string;
+  titleAr: string;
+  messageEn: string;
+  messageAr: string;
+}) {
+  // 1. Central dispatcher (handles in-app + email + push + WhatsApp routing per user prefs)
+  try {
+    await supabase.functions.invoke('dispatch-notification', {
+      body: {
+        event_type: opts.event,
+        entity_type: 'task',
+        entity_id: opts.taskId,
+        priority: 'normal',
+        recipient_ids: [opts.recipientId],
+        title_en: opts.titleEn,
+        title_ar: opts.titleAr,
+        message_en: opts.messageEn,
+        message_ar: opts.messageAr,
+        triggered_by: opts.actorId ?? undefined,
+        action_url: 'https://app.pactorg.com/my-tasks',
+        metadata: { task_name: opts.taskTitle },
+      },
+    });
+  } catch { /* non-critical */ }
+
+  // 2. WhatsApp via send-whatsapp (auto-skips users without phone or opt-in)
+  try {
+    await supabase.functions.invoke('send-whatsapp', {
+      body: {
+        user_ids: [opts.recipientId],
+        event_type: opts.event,
+        data: {
+          task_title: opts.taskTitle,
+          message: opts.messageEn,
+          message_ar: opts.messageAr,
+          url: 'https://app.pactorg.com/my-tasks',
+        },
+      },
+    });
+  } catch { /* non-critical — needs WASENDER_API_KEY or Meta */ }
+}
+
 const KEY = ['personal_tasks'];
 
 // ── Credit wallet on task completion ─────────────────────────────────────────
@@ -569,7 +619,91 @@ export function usePersonalTasks(userId: string | undefined) {
               body: `You have been assigned a new task: "${task.title}".\n\nView your tasks: https://app.pactorg.com/my-tasks`,
             });
           }
+          // ── Multi-channel (in-app + email + WhatsApp + push) for primary assignee ─
+          await dispatchTaskMultiChannel({
+            recipientId: assignedTo,
+            taskId: data.id,
+            taskTitle: task.title,
+            actorId: task.userId,
+            event: 'task_assigned',
+            titleEn: 'New Task Assigned',
+            titleAr: 'تم تعيين مهمة جديدة',
+            messageEn: `You have been assigned a new task: "${task.title}".`,
+            messageAr: `تم تعيين مهمة جديدة لك: "${task.title}".`,
+          });
         } catch { /* non-critical */ }
+      }
+
+      // ── Notify co-assignees (people added alongside the primary assignee) ─────
+      if (data?.id && Array.isArray(task.coAssignees) && task.coAssignees.length > 0) {
+        for (const co of task.coAssignees) {
+          const coId = (co as { id?: string })?.id;
+          if (!coId || coId === task.userId || coId === assignedTo) continue;
+          try {
+            await sendTaskNotification({ userId: coId, taskId: data.id, title: task.title, priority: p, event: 'assigned' });
+            const { data: prof } = await supabase.from('profiles').select('email').eq('id', coId).maybeSingle();
+            if (prof?.email) {
+              await sendTaskEmail({
+                email: prof.email as string,
+                titleEn: 'You were added to a task',
+                body: `You have been added as a collaborator on the task: "${task.title}".\n\nView the task: https://app.pactorg.com/my-tasks`,
+              });
+            }
+            await dispatchTaskMultiChannel({
+              recipientId: coId,
+              taskId: data.id,
+              taskTitle: task.title,
+              actorId: task.userId,
+              event: 'task_assigned',
+              titleEn: 'Added to a Task',
+              titleAr: 'تمت إضافتك إلى مهمة',
+              messageEn: `You were added as a collaborator on "${task.title}".`,
+              messageAr: `تمت إضافتك كمتعاون في "${task.title}".`,
+            });
+          } catch { /* non-critical */ }
+        }
+      }
+
+      // ── Notify owners of tasks linked as dependencies (their task now blocks this one) ─
+      if (data?.id && Array.isArray(task.dependencies) && task.dependencies.length > 0) {
+        const depTaskIds = task.dependencies
+          .filter(d => (d as { type?: string }).type === 'task' && (d as { taskId?: string }).taskId)
+          .map(d => (d as { taskId: string }).taskId);
+        if (depTaskIds.length > 0) {
+          try {
+            const { data: depTasks } = await supabase
+              .from('personal_tasks')
+              .select('id, title, assigned_to, user_id')
+              .in('id', depTaskIds);
+            for (const dt of (depTasks ?? []) as Record<string, unknown>[]) {
+              const ownerId = (dt.assigned_to as string | null) ?? (dt.user_id as string | null);
+              if (!ownerId || ownerId === task.userId) continue;
+              const dtTitle = (dt.title as string) ?? 'your task';
+              try {
+                await sendTaskNotification({ userId: ownerId, taskId: dt.id as string, title: dtTitle, priority: p, event: 'dependency_added', extra: task.title });
+                const { data: ownerProf } = await supabase.from('profiles').select('email').eq('id', ownerId).maybeSingle();
+                if (ownerProf?.email) {
+                  await sendTaskEmail({
+                    email: ownerProf.email as string,
+                    titleEn: 'Your task is now blocking another task',
+                    body: `Your task "${dtTitle}" was linked as a dependency of a new task: "${task.title}".\n\nThe new task can't proceed until your task is complete.\n\nView your tasks: https://app.pactorg.com/my-tasks`,
+                  });
+                }
+                await dispatchTaskMultiChannel({
+                  recipientId: ownerId,
+                  taskId: dt.id as string,
+                  taskTitle: dtTitle,
+                  actorId: task.userId,
+                  event: 'task_updated',
+                  titleEn: 'Your task is now a dependency',
+                  titleAr: 'مهمتك أصبحت اعتماداً لمهمة أخرى',
+                  messageEn: `Your task "${dtTitle}" is now blocking a new task: "${task.title}". Please complete it to unblock the team.`,
+                  messageAr: `مهمتك "${dtTitle}" أصبحت تعيق مهمة جديدة: "${task.title}". يرجى إكمالها لرفع الحجب.`,
+                });
+              } catch { /* per-recipient non-critical */ }
+            }
+          } catch { /* non-critical */ }
+        }
       }
 
       if (task.dueDate && data?.id) {
