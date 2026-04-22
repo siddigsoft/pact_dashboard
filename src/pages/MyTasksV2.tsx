@@ -12,6 +12,7 @@ import {
   CheckSquare, Circle, Zap, ChevronDown, ChevronUp,
   Inbox, Archive, Star, AlertTriangle, Flag,
   Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil, BookOpen,
+  Share2, Globe, Shield, Folder, ExternalLink, FileText, FileImage,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Link, useNavigate } from 'react-router-dom';
@@ -42,7 +43,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, materialiseDailyTasks,
-  type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus,
+  parseAttachments,
+  type PersonalTask, type PersonalTaskPriority, type PersonalTaskStatus, type TaskAttachment,
 } from '@/hooks/usePersonalTasks';
 import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
 import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
@@ -172,6 +174,7 @@ interface QuickAddDialogProps {
     recurrenceMonthlyDay?: number | null;
     recurrenceEndDate?: string | null;
     estimatedHours?: number | null;
+    attachments?: TaskAttachment[];
   }) => void;
   isCreating: boolean;
   currentUserFullName?: string | null;
@@ -371,7 +374,9 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setDeps(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const submit = () => {
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+
+  const submit = async () => {
     if (!title.trim()) return;
     if (taskTypeKey === 'project' && !projectId) return;
     if (recurrenceOn && (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceDaysQA.length === 0) return;
@@ -382,6 +387,29 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     };
     const { taskType, category } = typeMap[taskTypeKey];
     const rewardAmount = reward ? parseFloat(reward) : null;
+
+    // Upload attachments to storage if any
+    let uploadedAttachments: TaskAttachment[] = [];
+    if (attachments.length > 0) {
+      setUploadingAttachments(true);
+      try {
+        for (const f of attachments) {
+          const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const path = `task-attachments/${currentUserId ?? 'anon'}/${Date.now()}_${safeName}`;
+          const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
+          if (upErr) {
+            toast({ title: 'Attachment upload failed', description: `${f.name}: ${upErr.message}`, variant: 'destructive' });
+            setUploadingAttachments(false);
+            return;
+          }
+          const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
+          uploadedAttachments.push({ name: f.name, url: urlData?.publicUrl ?? '', uploadedAt: new Date().toISOString() });
+        }
+      } finally {
+        setUploadingAttachments(false);
+      }
+    }
+
     onCreate({
       title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes,
       projectId: taskTypeKey === 'project' ? projectId : null,
@@ -396,6 +424,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
       recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
       recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
       estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
+      attachments: uploadedAttachments,
     });
     reset();
   };
@@ -1065,12 +1094,12 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
           </button>
           <button
             onClick={submit}
-            disabled={!title.trim() || isCreating}
+            disabled={!title.trim() || isCreating || uploadingAttachments}
             data-testid="button-create-task"
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-sm font-semibold transition-all disabled:opacity-50 shadow-sm"
           >
-            {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Create Task
+            {(isCreating || uploadingAttachments) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {uploadingAttachments ? 'Uploading…' : 'Create Task'}
           </button>
         </div>
       </DialogContent>
@@ -3205,6 +3234,7 @@ interface InboxViewProps {
   onToggleDone: (task: PersonalTask) => void;
   onSave: (id: string, data: Partial<PersonalTask>) => Promise<void>;
   onAddTask: () => void;
+  currentUserId?: string | null;
 }
 
 const stripHtml = (s?: string | null): string => {
@@ -3223,7 +3253,314 @@ const stripHtml = (s?: string | null): string => {
     .trim();
 };
 
-function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave, onAddTask }: InboxViewProps) {
+// ── Attachments block (reading pane) ──
+function TaskAttachmentsBlock({ task, currentUserId }: { task: PersonalTask; currentUserId?: string | null }) {
+  const [shareOpen, setShareOpen] = useState(false);
+  const attachments = useMemo(
+    () => (task.attachments && task.attachments.length > 0 ? task.attachments : parseAttachments(task.tools)),
+    [task.attachments, task.tools]
+  );
+  const isOwner = !!currentUserId && task.userId === currentUserId;
+
+  if (attachments.length === 0) return null;
+
+  const iconFor = (name: string) => {
+    const ext = name.split('.').pop()?.toLowerCase() ?? '';
+    if (['png','jpg','jpeg','gif','webp','svg'].includes(ext)) return FileImage;
+    return FileText;
+  };
+
+  return (
+    <>
+      <div className="border border-slate-200 rounded-xl p-4 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+            <Paperclip className="w-3.5 h-3.5" />
+            Attachments ({attachments.length})
+          </p>
+          {isOwner && (
+            <button
+              onClick={() => setShareOpen(true)}
+              data-testid="button-share-to-workspace"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1D3461] hover:bg-[#0F2041] text-white text-[11px] font-semibold transition-all"
+            >
+              <Share2 className="w-3 h-3" />
+              Share to Workspace · مشاركة
+            </button>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          {attachments.map((a, i) => {
+            const Icon = iconFor(a.name);
+            return (
+              <a
+                key={i}
+                href={a.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid={`link-attachment-${i}`}
+                className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-all group"
+              >
+                <Icon className="w-4 h-4 text-slate-400 shrink-0" />
+                <span className="text-[13px] text-slate-700 truncate flex-1">{a.name}</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 shrink-0" />
+              </a>
+            );
+          })}
+        </div>
+      </div>
+      {shareOpen && (
+        <ShareTaskAttachmentsDialog
+          task={task}
+          attachments={attachments}
+          currentUserId={currentUserId ?? null}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Share to Workspace dialog ──
+type SecurityLevel = 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
+
+function ShareTaskAttachmentsDialog({
+  task, attachments, currentUserId, onClose,
+}: {
+  task: PersonalTask;
+  attachments: TaskAttachment[];
+  currentUserId: string | null;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [folderId, setFolderId] = useState<string>('');
+  const [security, setSecurity] = useState<SecurityLevel>('internal');
+  const [grantUserIds, setGrantUserIds] = useState<string[]>([]);
+  const [grantRoles, setGrantRoles] = useState<string[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const { data: folders = [] } = useQuery({
+    queryKey: ['workspace-folders-share'],
+    queryFn: async () => {
+      const { data } = await supabase.from('workspace_folders').select('id, name, parent_id').order('name');
+      return (data ?? []) as { id: string; name: string; parent_id: string | null }[];
+    },
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['workspace-share-users'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').order('full_name');
+      return (data ?? []) as { id: string; full_name: string | null; role: string | null }[];
+    },
+  });
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    return users.filter(u => u.id !== currentUserId && (!q || (u.full_name ?? '').toLowerCase().includes(q)));
+  }, [users, userSearch, currentUserId]);
+
+  const allRoles = useMemo(() => {
+    const set = new Set<string>();
+    users.forEach(u => { if (u.role) set.add(u.role); });
+    return Array.from(set).sort();
+  }, [users]);
+
+  const toggle = (arr: string[], setArr: (v: string[]) => void, val: string) => {
+    setArr(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]);
+  };
+
+  const submit = async () => {
+    if (!folderId) {
+      toast({ title: 'Select a folder', description: 'Choose a workspace folder · اختر مجلد', variant: 'destructive' });
+      return;
+    }
+    if (!currentUserId) return;
+    setSubmitting(true);
+    try {
+      for (const a of attachments) {
+        const storagePath = a.url.split('/workspace-files/')[1] ?? `task-attachments/${task.id}/${a.name}`;
+        const ext = a.name.split('.').pop()?.toLowerCase() ?? '';
+        const { data: file, error: fErr } = await supabase
+          .from('workspace_files')
+          .insert({
+            folder_id: folderId,
+            name: a.name,
+            description: `Shared from task: ${task.title}`,
+            storage_path: storagePath,
+            public_url: a.url,
+            file_size: 0,
+            mime_type: 'application/octet-stream',
+            extension: ext,
+            security_level: security,
+            created_by: currentUserId,
+            last_modified_by: currentUserId,
+            tags: ['from-task', task.id],
+          })
+          .select('id')
+          .single();
+        if (fErr) throw fErr;
+
+        const grants: Array<{ file_id: string; folder_id: null; grantee_type: string; grantee_id: string | null; access_level: string; granted_by: string }> = [];
+        grantUserIds.forEach(uid => grants.push({ file_id: file!.id, folder_id: null, grantee_type: 'user', grantee_id: uid, access_level: 'viewer', granted_by: currentUserId }));
+        grantRoles.forEach(r => grants.push({ file_id: file!.id, folder_id: null, grantee_type: 'role', grantee_id: r, access_level: 'viewer', granted_by: currentUserId }));
+        if (grants.length > 0) {
+          const { error: pErr } = await supabase.from('workspace_permissions').insert(grants);
+          if (pErr) throw pErr;
+        }
+      }
+      toast({ title: 'Shared to Workspace', description: `${attachments.length} file(s) shared · تمت المشاركة` });
+      onClose();
+    } catch (e: any) {
+      toast({ title: 'Share failed', description: e?.message ?? 'Could not share files', variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const securityOptions: Array<{ value: SecurityLevel; label: string; labelAr: string; icon: any; color: string }> = [
+    { value: 'public',       label: 'Public',       labelAr: 'عام',      icon: Globe,  color: 'text-emerald-600' },
+    { value: 'internal',     label: 'Internal',     labelAr: 'داخلي',    icon: Users,  color: 'text-blue-600' },
+    { value: 'confidential', label: 'Confidential', labelAr: 'سري',      icon: Lock,   color: 'text-amber-600' },
+    { value: 'restricted',   label: 'Restricted',   labelAr: 'مقيد',     icon: Shield, color: 'text-orange-600' },
+    { value: 'top_secret',   label: 'Top Secret',   labelAr: 'سري للغاية', icon: Shield, color: 'text-red-600' },
+  ];
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2.5 shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#1D3461] flex items-center justify-center">
+            <Share2 className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-bold text-slate-900">Share to Workspace</h3>
+            <p className="text-[11px] text-slate-500">مشاركة المرفقات إلى مساحة العمل</p>
+          </div>
+        </div>
+        <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
+          <div>
+            <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">Files · الملفات ({attachments.length})</label>
+            <div className="bg-slate-50 rounded-lg p-2 space-y-1 max-h-24 overflow-y-auto">
+              {attachments.map((a, i) => (
+                <div key={i} className="text-[12px] text-slate-700 truncate flex items-center gap-1.5">
+                  <Paperclip className="w-3 h-3 text-slate-400" />{a.name}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">Folder · المجلد *</label>
+            <select
+              value={folderId}
+              onChange={e => setFolderId(e.target.value)}
+              data-testid="select-share-folder"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-[13px] focus:outline-none focus:border-[#1D3461]"
+            >
+              <option value="">— Select folder —</option>
+              {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">Security · السرية</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {securityOptions.map(opt => {
+                const Ico = opt.icon;
+                const active = security === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSecurity(opt.value)}
+                    data-testid={`button-security-${opt.value}`}
+                    className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg border text-[12px] font-medium transition-all ${active ? 'border-[#1D3461] bg-[#1D3461]/5' : 'border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <Ico className={`w-3.5 h-3.5 ${opt.color}`} />
+                    <span className="text-slate-700">{opt.label}</span>
+                    <span className="text-[10px] text-slate-400 ml-auto">{opt.labelAr}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {allRoles.length > 0 && (
+            <div>
+              <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">Grant to roles · صلاحيات لأدوار</label>
+              <div className="flex flex-wrap gap-1.5">
+                {allRoles.map(r => {
+                  const active = grantRoles.includes(r);
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => toggle(grantRoles, setGrantRoles, r)}
+                      data-testid={`chip-role-${r}`}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${active ? 'bg-[#1D3461] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                    >
+                      {r}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="text-[11px] font-semibold text-slate-600 mb-1.5 block">Grant to users · صلاحيات لمستخدمين</label>
+            <input
+              type="text"
+              value={userSearch}
+              onChange={e => setUserSearch(e.target.value)}
+              placeholder="Search users…"
+              data-testid="input-share-user-search"
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-[13px] focus:outline-none focus:border-[#1D3461] mb-2"
+            />
+            <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-100">
+              {filteredUsers.slice(0, 50).map(u => {
+                const active = grantUserIds.includes(u.id);
+                return (
+                  <label key={u.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={active}
+                      onChange={() => toggle(grantUserIds, setGrantUserIds, u.id)}
+                      data-testid={`checkbox-user-${u.id}`}
+                      className="rounded"
+                    />
+                    <span className="text-[12px] text-slate-700 flex-1 truncate">{u.full_name ?? '—'}</span>
+                    {u.role && <span className="text-[10px] text-slate-400">{u.role}</span>}
+                  </label>
+                );
+              })}
+              {filteredUsers.length === 0 && <div className="px-2.5 py-3 text-center text-[12px] text-slate-400">No users</div>}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/80 shrink-0">
+          <button
+            onClick={onClose}
+            className="px-3.5 py-2 rounded-lg border border-slate-200 text-[13px] font-semibold text-slate-600 hover:bg-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting || !folderId}
+            data-testid="button-confirm-share"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#1D3461] hover:bg-[#0F2041] text-white text-[13px] font-semibold disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+            Share
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave, onAddTask, currentUserId }: InboxViewProps) {
   const [activeFolder, setActiveFolder] = useState<InboxFolder>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [noteText, setNoteText]   = useState('');
@@ -3515,6 +3852,9 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
                 <p className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">{stripHtml(selected.description)}</p>
               </div>
             )}
+
+            {/* Attachments */}
+            <TaskAttachmentsBlock task={selected} currentUserId={currentUserId} />
 
             {/* Notes area */}
             <div className="border border-slate-200 rounded-xl p-4">
@@ -3813,9 +4153,12 @@ export default function MyTasksV2() {
     recurrenceMonthlyDay?: number | null;
     recurrenceEndDate?: string | null;
     estimatedHours?: number | null;
+    attachments?: TaskAttachment[];
+    projectId?: string | null;
   }) => {
     try {
       await createTask({
+        attachments: data.attachments ?? null,
         title: data.title, priority: data.priority, status: data.status,
         dueDate: data.dueDate || null, description: data.description || null,
         taskType: data.taskType, category: data.category,
@@ -4223,6 +4566,7 @@ export default function MyTasksV2() {
                 onToggleDone={handleToggleDone}
                 onSave={handleSave}
                 onAddTask={openTypePicker}
+                currentUserId={currentUser?.id ?? null}
               />
             )}
 

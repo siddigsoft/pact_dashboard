@@ -189,7 +189,7 @@ function parseTaskType(raw: string | null): TaskType | null {
   return meta.taskType ?? null;
 }
 
-function parseAttachments(raw: string | null): TaskAttachment[] {
+export function parseAttachments(raw: string | null): TaskAttachment[] {
   const meta = parseToolsMeta(raw);
   return meta.attachments ?? [];
 }
