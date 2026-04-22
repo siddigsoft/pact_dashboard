@@ -20,6 +20,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -164,6 +166,65 @@ function SecBadge({ level, size = 'sm' }: { level: SecurityLevel; size?: 'xs' | 
 }
 
 // ─── Share dialog ─────────────────────────────────────────────────────────────
+
+function UserPickerCombobox({ profiles, value, onChange }: {
+  profiles: ProfileOption[]; value: string; onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = profiles.find(p => p.id === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full h-8 px-3 text-xs rounded-md border border-input bg-background flex items-center justify-between hover:bg-accent/50 transition"
+        >
+          <span className={cn('truncate', !selected && 'text-muted-foreground')}>
+            {selected ? (
+              <>
+                {selected.full_name ?? selected.id.slice(0, 8)}
+                {selected.role && <span className="text-muted-foreground ml-1">({selected.role})</span>}
+              </>
+            ) : 'Select user…'}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0 ml-2" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[280px]" align="start">
+        <Command
+          filter={(itemValue, search) => {
+            // itemValue includes name + role (lowercased) so search matches both
+            return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+          }}
+        >
+          <CommandInput placeholder="Search by name or role…" className="h-9 text-xs" />
+          <CommandList className="max-h-[260px]">
+            <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">No users found.</CommandEmpty>
+            <CommandGroup>
+              {profiles.map(p => {
+                const label = `${p.full_name ?? p.id.slice(0, 8)} ${p.role ?? ''}`.trim();
+                return (
+                  <CommandItem
+                    key={p.id}
+                    value={label}
+                    onSelect={() => { onChange(p.id); setOpen(false); }}
+                    className="text-xs cursor-pointer"
+                  >
+                    <Check className={cn('h-3.5 w-3.5 mr-2', value === p.id ? 'opacity-100 text-[#1D3461]' : 'opacity-0')} />
+                    <span className="flex-1 truncate">{p.full_name ?? p.id.slice(0, 8)}</span>
+                    {p.role && <span className="text-muted-foreground ml-2 text-[10px]">{p.role}</span>}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function ShareDialog({ file, folder, open, onClose, currentUserId }: {
   file?: WFile; folder?: WFolder; open: boolean; onClose: () => void; currentUserId: string;
@@ -314,16 +375,11 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
                   {granteeType === 'user' ? 'Select User' : granteeType === 'role' ? 'Role Name' : granteeType === 'department' ? 'Department Name' : 'Hub Name'}
                 </label>
                 {granteeType === 'user' ? (
-                  <Select value={granteeId} onValueChange={setGranteeId}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select user…" /></SelectTrigger>
-                    <SelectContent>
-                      {profiles.map(p => (
-                        <SelectItem key={p.id} value={p.id} className="text-xs">
-                          {p.full_name ?? p.id.slice(0, 8)} {p.role && <span className="text-muted-foreground">({p.role})</span>}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <UserPickerCombobox
+                    profiles={profiles}
+                    value={granteeId}
+                    onChange={setGranteeId}
+                  />
                 ) : (
                   <Input value={granteeId} onChange={e => setGranteeId(e.target.value)}
                     placeholder={granteeType === 'role' ? 'e.g. admin, supervisor' : 'Enter name'} className="h-8 text-xs" />
@@ -820,6 +876,7 @@ export default function WorkspaceHub() {
   );
   // Pending "open share for this file" — set by file menu Share item, consumed by FileDetailPanel
   const [openShareForFileId, setOpenShareForFileId] = useState<string | null>(null);
+  const [shareFileTarget, setShareFileTarget] = useState<WFile | null>(null);
 
   // Fetch current user's security clearance
   const { data: myClearance } = useQuery<SecurityLevel>({
@@ -1449,7 +1506,7 @@ export default function WorkspaceHub() {
                 <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { openFile(file); setOpenShareForFileId(file.id); }}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
             </>}
             {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
               <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
@@ -1510,7 +1567,7 @@ export default function WorkspaceHub() {
                     <Key className="h-3.5 w-3.5 mr-2" />{file.password_hash ? 'Change Password' : 'Set Password'}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { openFile(file); setOpenShareForFileId(file.id); }}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShareFileTarget(file)}><Share2 className="h-3.5 w-3.5 mr-2" />Share / Manage Access</DropdownMenuItem>
                 </>}
                 {file.public_url && !['top_secret','restricted'].includes(file.security_level) && file.allow_download && (!file.password_hash || unlockedIds.has(file.id)) && (
                   <DropdownMenuItem onClick={e => { e.stopPropagation(); setQrFile(file); }}>
@@ -1931,6 +1988,9 @@ export default function WorkspaceHub() {
         </Dialog>
 
         {/* Share folder dialog */}
+        {shareFileTarget && (
+          <ShareDialog file={shareFileTarget} open={!!shareFileTarget} onClose={() => setShareFileTarget(null)} currentUserId={userId} />
+        )}
         {shareFolderTarget && (
           <ShareDialog folder={shareFolderTarget} open={!!shareFolderTarget} onClose={() => setShareFolderTarget(null)} currentUserId={userId} />
         )}
