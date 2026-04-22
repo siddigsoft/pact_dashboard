@@ -4296,8 +4296,16 @@ export default function MyTasksV2() {
       }
       setShowAdd(false);
       toast({ title: data.assignedToUserName ? `Task assigned to ${data.assignedToUserName}` : 'Task created' });
-    } catch {
-      toast({ title: 'Failed to create task', variant: 'destructive' });
+    } catch (err: any) {
+      // Surface the real reason so the user (and we) can see why it failed
+      // instead of swallowing it behind a generic "Failed to create task".
+      const reason = err?.message || err?.error_description || err?.details || (typeof err === 'string' ? err : null);
+      console.error('[MyTasksV2] handleCreate failed:', err);
+      toast({
+        title: 'Failed to create task',
+        description: reason ? String(reason) : 'Unknown error — check the browser console for details.',
+        variant: 'destructive',
+      });
     }
   };
 
