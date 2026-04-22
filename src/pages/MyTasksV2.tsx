@@ -414,7 +414,19 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     }
     const estH = estimatedHoursQA ? parseFloat(estimatedHoursQA) : NaN;
     const hpd  = hoursPerDayQA ? parseFloat(hoursPerDayQA) : NaN;
-    if ((!Number.isFinite(estH) || estH <= 0) && (!Number.isFinite(hpd) || hpd <= 0)) {
+    const hasDeps = structuredDeps.length > 0;
+    if (hasDeps) {
+      // When dependencies are listed, BOTH total and per-day hours are required
+      // so the planner can sequence work and reserve calendar slots correctly.
+      if (!Number.isFinite(estH) || estH <= 0 || !Number.isFinite(hpd) || hpd <= 0) {
+        toast({
+          title: 'Hours required for tasks with dependencies',
+          description: 'Enter both Estimated total hours and Hours per day so dependencies can be scheduled.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else if ((!Number.isFinite(estH) || estH <= 0) && (!Number.isFinite(hpd) || hpd <= 0)) {
       toast({ title: 'Hours are required', description: 'Enter Estimated total hours and/or Hours per day so we can plan the timeline.', variant: 'destructive' });
       return;
     }
@@ -1474,6 +1486,22 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const handleSave = () => {
     if (!title.trim()) return;
     if (editRecurrenceOn && (editRecurrence === 'weekly' || editRecurrence === 'specific_days') && editRecurrenceDays.length === 0) return;
+    // If the task has any dependencies (existing or freshly added), require
+    // both total hours and hours-per-day so scheduling stays consistent.
+    const hasAnyDeps =
+      (Array.isArray(task.dependencies) && task.dependencies.length > 0);
+    if (hasAnyDeps) {
+      const eh = editEstimatedHours ? parseFloat(editEstimatedHours) : NaN;
+      const hpd = editHoursPerDay ? parseFloat(editHoursPerDay) : NaN;
+      if (!Number.isFinite(eh) || eh <= 0 || !Number.isFinite(hpd) || hpd <= 0) {
+        toast({
+          title: 'Hours required for tasks with dependencies',
+          description: 'Enter both Estimated total hours and Hours per day so dependencies can be scheduled.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
     const typeMap = { general: null as null, project: 'project-task' as const, daytoday: 'day-to-day' as const };
     onSave(task.id, {
       title: title.trim(), priority, status,

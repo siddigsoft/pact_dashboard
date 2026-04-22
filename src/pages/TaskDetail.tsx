@@ -843,7 +843,8 @@ export default function TaskDetail() {
             {task.due_date && <MetaRow icon={Calendar} label="Due" value={format(parseISO(task.due_date as string), 'PP')} />}
             {task.started_at && <MetaRow icon={Clock} label="Started" value={format(parseISO(task.started_at as string), 'PP p')} />}
             {task.completed_at && <MetaRow icon={Check} label="Completed" value={format(parseISO(task.completed_at as string), 'PP p')} />}
-            {task.estimated_hours != null && <MetaRow icon={Clock} label="Estimated" value={`${task.estimated_hours}h`} />}
+            {task.estimated_hours != null && <MetaRow icon={Clock} label="Estimated" value={`${task.estimated_hours}h total`} />}
+            {task.hours_per_day != null && <MetaRow icon={Clock} label="Per day" value={`${task.hours_per_day}h / day`} />}
             {task.actual_hours != null && <MetaRow icon={Clock} label="Actual" value={`${task.actual_hours}h`} />}
             {task.recurrence && task.recurrence !== 'none' && (
               <MetaRow icon={History} label="Recurrence" value={String(task.recurrence)} />
