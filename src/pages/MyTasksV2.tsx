@@ -3970,7 +3970,7 @@ export default function MyTasksV2() {
                       <Loader2 className="w-6 h-6 animate-spin text-[#1D3461]" />
                     </div>
                   ) : (
-                    <Timeline tasks={tasks} weekOffset={weekOffset} onTaskClick={(t) => navigate(`/tasks/${t.id}`)} />
+                    <Timeline tasks={categoryFiltered} weekOffset={weekOffset} onTaskClick={(t) => navigate(`/tasks/${t.id}`)} />
                   )}
                 </div>
               </ScrollArea>
@@ -3985,7 +3985,7 @@ export default function MyTasksV2() {
                   </div>
                 ) : (
                   <DailyPlannerView
-                    tasks={tasks}
+                    tasks={categoryFiltered}
                     projectTasks={projectTasks}
                     onEdit={setEditingTask}
                     onToggleDone={handleToggleDone}
@@ -3999,7 +3999,7 @@ export default function MyTasksV2() {
             {/* ── KANBAN BOARD VIEW ── */}
             {mainView === 'kanban' && (
               <KanbanBoardView
-                tasks={tasks}
+                tasks={categoryFiltered}
                 subtaskMap={subtaskMap}
                 isLoading={isLoading}
                 isUpdating={isUpdating}
@@ -4013,7 +4013,7 @@ export default function MyTasksV2() {
             {/* ── INBOX VIEW ── */}
             {mainView === 'inbox' && (
               <InboxView
-                tasks={tasks}
+                tasks={categoryFiltered}
                 isLoading={isLoading}
                 isUpdating={isUpdating}
                 onEdit={setEditingTask}
@@ -4026,7 +4026,7 @@ export default function MyTasksV2() {
             {/* ── PLANNING VIEW ── */}
             {mainView === 'planning' && (
               <PlanningCompanion
-                tasks={tasks}
+                tasks={categoryFiltered}
                 projectTasks={projectTasks}
                 isLoading={isLoading}
                 onMarkPersonalDone={handleMarkPersonalDone}
