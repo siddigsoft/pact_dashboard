@@ -1701,44 +1701,71 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
     return { d, day: format(d, 'EEE'), date: format(d, 'd'), isToday: isToday(d) };
   });
 
-  // Build positioned task pills (only tasks with due_date in this 7-day window)
-  const positioned = useMemo(() => {
-    const rows: Array<{ task: PersonalTask; col: number; span: number; row: number }> = [];
-    const rowOccupied: boolean[][] = Array.from({ length: 4 }, () => Array(7).fill(false));
+  // Build positioned task pills.
+  // - Tasks with a due date in the 7-day window are placed on their due day.
+  // - Overdue tasks (due before window start) are pinned to today's column so they're visible.
+  // - Tasks without a due date are surfaced separately below the grid.
+  const isFirstWeek = weekOffset === 0;
+  const todayCol = differenceInCalendarDays(today, startDay); // 0 when weekOffset === 0
+  const { positioned, undated, futureCount } = useMemo(() => {
+    const rows: Array<{ task: PersonalTask; col: number; span: number; row: number; overdue: boolean }> = [];
+    const undatedTasks: PersonalTask[] = [];
+    let future = 0;
+    const ROW_COUNT = 6;
+    const rowOccupied: boolean[][] = Array.from({ length: ROW_COUNT }, () => Array(7).fill(false));
 
-    tasks
-      .filter(t => t.status !== 'cancelled')
-      .filter(t => {
-        if (!t.dueDate) return false;
+    const visible = tasks.filter(t => t.status !== 'cancelled' && t.status !== 'done');
+
+    // 1. Collect undated → bucket below
+    visible.forEach(t => { if (!t.dueDate) undatedTasks.push(t); });
+
+    // 2. Datedonly, sorted by priority then date
+    const dated = visible
+      .filter(t => !!t.dueDate)
+      .map(t => {
         try {
-          const d = parseISO(t.dueDate);
-          if (!isValid(d)) return false;
-          const col = differenceInCalendarDays(startOfDay(d), startDay);
-          return col >= 0 && col < 7;
-        } catch { return false; }
+          const d = parseISO(t.dueDate!);
+          if (!isValid(d)) return null;
+          const rawCol = differenceInCalendarDays(startOfDay(d), startDay);
+          return { task: t, rawCol };
+        } catch { return null; }
       })
-      .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2))
-      .forEach(task => {
-        try {
-          const d = parseISO(task.dueDate!);
-          const col = differenceInCalendarDays(startOfDay(d), startDay);
-          const span = Math.min(1, 7 - col);
-          // Find first free row
-          for (let r = 0; r < 4; r++) {
-            let fits = true;
-            for (let c = col; c < col + span; c++) {
-              if (rowOccupied[r][c]) { fits = false; break; }
-            }
-            if (fits) {
-              for (let c = col; c < col + span; c++) rowOccupied[r][c] = true;
-              rows.push({ task, col, span, row: r });
-              break;
-            }
-          }
-        } catch {}
+      .filter((x): x is { task: PersonalTask; rawCol: number } => !!x)
+      .sort((a, b) => {
+        const pa = PRIORITY_ORDER[a.task.priority] ?? 2;
+        const pb = PRIORITY_ORDER[b.task.priority] ?? 2;
+        if (pa !== pb) return pa - pb;
+        return a.rawCol - b.rawCol;
       });
-    return rows;
-  }, [tasks, startDay]);
+
+    dated.forEach(({ task, rawCol }) => {
+      let col: number;
+      let overdue = false;
+      if (rawCol < 0) {
+        // Past due — only show on the first week and pin to today's column
+        if (!isFirstWeek) return;
+        col = Math.max(0, todayCol);
+        overdue = true;
+      } else if (rawCol >= 7) {
+        future += 1;
+        return;
+      } else {
+        col = rawCol;
+      }
+      const span = 1;
+      for (let r = 0; r < ROW_COUNT; r++) {
+        if (!rowOccupied[r][col]) {
+          rowOccupied[r][col] = true;
+          rows.push({ task, col, span, row: r, overdue });
+          return;
+        }
+      }
+      // No row free — drop into undated bucket so it's still surfaced
+      undatedTasks.push(task);
+    });
+
+    return { positioned: rows, undated: undatedTasks, futureCount: future };
+  }, [tasks, startDay, isFirstWeek, todayCol]);
 
   return (
     <>
@@ -1770,42 +1797,91 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
         </div>
 
         {/* Task pills */}
-        {positioned.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-            No tasks due this week
+        {positioned.length === 0 && undated.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-sm text-slate-400 gap-1">
+            <span>No tasks due this week</span>
+            {futureCount > 0 && (
+              <span className="text-xs text-slate-400">{futureCount} task{futureCount > 1 ? 's' : ''} scheduled later — use the arrows above to navigate.</span>
+            )}
           </div>
         )}
-        {positioned.map(({ task, col, span, row }) => {
+        {positioned.map(({ task, col, span, row, overdue }) => {
           const typeKey: TypeKey = task.category === 'project-task' ? 'project' : 'personal';
           const typeCfg = TYPE_CFG[typeKey];
           const priorityCfg = PRIORITY_CFG[task.priority];
           const left = `${(col / 7) * 100}%`;
           const width = `calc(${(span / 7) * 100}% - 8px)`;
-          const top = `${row * 25 + 4}%`;
+          const ROW_H = 100 / 6; // 6 rows
+          const top = `${row * ROW_H + 1}%`;
 
           return (
             <button
               key={task.id}
               className={cn(
-                'absolute h-[18%] rounded-lg p-1.5 flex flex-col justify-center shadow-sm border transition-all hover:shadow-md hover:z-10 text-left overflow-hidden',
-                task.status === 'done' ? 'bg-slate-100 border-slate-200 opacity-60' : cn(typeCfg.bg, typeCfg.border),
+                'absolute rounded-lg p-1.5 flex flex-col justify-center shadow-sm border transition-all hover:shadow-md hover:z-10 text-left overflow-hidden',
+                overdue
+                  ? 'bg-red-50 border-red-300 ring-1 ring-red-200'
+                  : task.status === 'done'
+                  ? 'bg-slate-100 border-slate-200 opacity-60'
+                  : cn(typeCfg.bg, typeCfg.border),
               )}
-              style={{ left, width, top, marginLeft: '4px' }}
+              style={{ left, width, top, height: `${ROW_H - 2}%`, marginLeft: '4px' }}
               onClick={() => onTaskClick(task)}
               data-testid={`pill-task-${task.id}`}
+              title={overdue ? `Overdue · originally due ${task.dueDate}` : task.title}
             >
               <div className="flex items-center gap-1 overflow-hidden">
-                <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', task.status === 'done' ? 'bg-slate-400' : priorityCfg.pill)} />
-                <span className="text-[10px] font-semibold truncate text-slate-800 leading-tight">{task.title}</span>
+                <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', overdue ? 'bg-red-500' : task.status === 'done' ? 'bg-slate-400' : priorityCfg.pill)} />
+                <span className={cn('text-[10px] font-semibold truncate leading-tight', overdue ? 'text-red-800' : 'text-slate-800')}>
+                  {overdue && <span className="mr-1">⏰</span>}
+                  {task.title}
+                </span>
                 <RecurringBadge task={task} compact />
               </div>
               {task.category && (
-                <span className="text-[9px] text-slate-500 truncate pl-2.5">{task.category}</span>
+                <span className={cn('text-[9px] truncate pl-2.5', overdue ? 'text-red-600' : 'text-slate-500')}>{task.category}</span>
               )}
             </button>
           );
         })}
       </div>
+
+      {/* Undated tasks bucket */}
+      {undated.length > 0 && (
+        <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-3" data-testid="bucket-undated">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Without due date · {undated.length}
+            </p>
+            <span className="text-[10px] text-slate-400">Set a due date to place them on the timeline</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {undated.map(t => {
+              const typeKey: TypeKey = t.category === 'project-task' ? 'project' : 'personal';
+              const typeCfg = TYPE_CFG[typeKey];
+              const priorityCfg = PRIORITY_CFG[t.priority];
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => onTaskClick(t)}
+                  className={cn('inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-medium hover:shadow-sm transition-all', typeCfg.bg, typeCfg.border, 'text-slate-700')}
+                  data-testid={`pill-undated-${t.id}`}
+                >
+                  <div className={cn('w-1.5 h-1.5 rounded-full', priorityCfg.pill)} />
+                  <span className="truncate max-w-[180px]">{t.title}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Future tasks counter (only first week, if more tasks exist beyond visible window) */}
+      {isFirstWeek && futureCount > 0 && (
+        <p className="mt-2 text-[11px] text-slate-400 text-center">
+          + {futureCount} more task{futureCount > 1 ? 's' : ''} scheduled beyond this week
+        </p>
+      )}
     </>
   );
 }
@@ -3852,7 +3928,7 @@ export default function MyTasksV2() {
                       <Loader2 className="w-6 h-6 animate-spin text-[#1D3461]" />
                     </div>
                   ) : (
-                    <Timeline tasks={tasks} weekOffset={weekOffset} onTaskClick={setEditingTask} />
+                    <Timeline tasks={tasks} weekOffset={weekOffset} onTaskClick={(t) => navigate(`/tasks/${t.id}`)} />
                   )}
                 </div>
               </ScrollArea>
