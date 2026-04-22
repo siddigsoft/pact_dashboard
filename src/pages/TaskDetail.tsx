@@ -739,13 +739,13 @@ export default function TaskDetail() {
 
           {/* Output / Accomplishments — appears once task is started.
               Editable by the primary assignee, any co-assignee, the task
-              creator/owner (when there's no separate assignee), or an admin. */}
+              creator/owner, or an admin. */}
           {task.started_at && (() => {
             const uid = currentUser?.id;
             const isMine = !!uid && (
               task.assigned_to === uid ||
-              ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === uid) ||
-              (task.user_id === uid && !task.assigned_to)
+              task.user_id === uid ||
+              ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === uid)
             );
             const canEditOutput = isMine || isAdmin;
             const stored = (task.output_text as string | null) ?? '';
@@ -762,6 +762,11 @@ export default function TaskDetail() {
                 <div className="p-4 space-y-2">
                   {canEditOutput ? (
                     <>
+                      {!stored && (
+                        <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5">
+                          Type below what you accomplished, then click <b>Save output</b>.
+                        </p>
+                      )}
                       <textarea
                         value={draftValue}
                         onChange={e => setOutputDraft(e.target.value)}
