@@ -1714,11 +1714,11 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
   // - Tasks without a due date are surfaced separately below the grid.
   const isFirstWeek = weekOffset === 0;
   const todayCol = differenceInCalendarDays(today, startDay); // 0 when weekOffset === 0
+  const ROW_COUNT = 4;
   const { positioned, undated, futureCount } = useMemo(() => {
     const rows: Array<{ task: PersonalTask; col: number; span: number; row: number; overdue: boolean }> = [];
     const undatedTasks: PersonalTask[] = [];
     let future = 0;
-    const ROW_COUNT = 6;
     const rowOccupied: boolean[][] = Array.from({ length: ROW_COUNT }, () => Array(7).fill(false));
 
     const visible = tasks.filter(t => t.status !== 'cancelled' && t.status !== 'done');
@@ -1777,11 +1777,11 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
   return (
     <>
       {/* Days header */}
-      <div className="grid grid-cols-7 gap-2 mb-3 px-2">
+      <div className="grid grid-cols-7 gap-2 mb-4 px-2">
         {days.map(({ d, day, date, isToday: tod }) => (
-          <div key={d.toISOString()} className="flex flex-col items-center gap-1">
-            <span className={cn('text-xs font-medium uppercase tracking-wider', tod ? 'text-blue-600' : 'text-slate-400')}>{day}</span>
-            <span className={cn('w-7 h-7 rounded-full flex items-center justify-center text-sm font-semibold', tod ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700')}>
+          <div key={d.toISOString()} className="flex flex-col items-center gap-1.5">
+            <span className={cn('text-[11px] font-semibold uppercase tracking-wider', tod ? 'text-blue-600' : 'text-slate-500')}>{day}</span>
+            <span className={cn('w-9 h-9 rounded-full flex items-center justify-center text-base font-bold', tod ? 'bg-blue-600 text-white shadow-md' : 'text-slate-700')}>
               {date}
             </span>
           </div>
@@ -1789,7 +1789,7 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
       </div>
 
       {/* Grid */}
-      <div className="relative flex-1 border border-slate-100 rounded-xl bg-slate-50/40 overflow-hidden min-h-[220px]">
+      <div className="relative flex-1 border border-slate-200 rounded-xl bg-slate-50/40 overflow-hidden min-h-[460px]">
         {/* Column lines */}
         <div className="absolute inset-0 grid grid-cols-7">
           {days.map(({ d, isToday: tod }) => (
@@ -1798,7 +1798,7 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
         </div>
         {/* Row lines */}
         <div className="absolute inset-0 flex flex-col">
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: ROW_COUNT }).map((_, i) => (
             <div key={i} className="flex-1 border-b border-dashed border-slate-100 last:border-b-0" />
           ))}
         </div>
@@ -1817,37 +1817,47 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
           const typeCfg = TYPE_CFG[typeKey];
           const priorityCfg = PRIORITY_CFG[task.priority];
           const left = `${(col / 7) * 100}%`;
-          const width = `calc(${(span / 7) * 100}% - 8px)`;
-          const ROW_H = 100 / 6; // 6 rows
+          const width = `calc(${(span / 7) * 100}% - 10px)`;
+          const ROW_H = 100 / ROW_COUNT;
           const top = `${row * ROW_H + 1}%`;
+          const dueLabelPill = task.dueDate && isValid(parseISO(task.dueDate))
+            ? format(parseISO(task.dueDate), 'dd MMM')
+            : null;
 
           return (
             <button
               key={task.id}
               className={cn(
-                'absolute rounded-lg p-1.5 flex flex-col justify-center shadow-sm border transition-all hover:shadow-md hover:z-10 text-left overflow-hidden',
+                'absolute rounded-lg p-2.5 flex flex-col justify-center gap-1 shadow-sm border-l-4 border border-l-current transition-all hover:shadow-md hover:z-10 text-left overflow-hidden',
                 overdue
-                  ? 'bg-red-50 border-red-300 ring-1 ring-red-200'
+                  ? 'bg-red-50 border-red-300 ring-1 ring-red-200 text-red-500'
                   : task.status === 'done'
-                  ? 'bg-slate-100 border-slate-200 opacity-60'
-                  : cn(typeCfg.bg, typeCfg.border),
+                  ? 'bg-slate-100 border-slate-200 opacity-60 text-slate-400'
+                  : cn(typeCfg.bg, typeCfg.border, priorityCfg.color),
               )}
-              style={{ left, width, top, height: `${ROW_H - 2}%`, marginLeft: '4px' }}
+              style={{ left, width, top, height: `${ROW_H - 2}%`, marginLeft: '5px' }}
               onClick={() => onTaskClick(task)}
               data-testid={`pill-task-${task.id}`}
               title={overdue ? `Overdue · originally due ${task.dueDate}` : task.title}
             >
-              <div className="flex items-center gap-1 overflow-hidden">
-                <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', overdue ? 'bg-red-500' : task.status === 'done' ? 'bg-slate-400' : priorityCfg.pill)} />
-                <span className={cn('text-[10px] font-semibold truncate leading-tight', overdue ? 'text-red-800' : 'text-slate-800')}>
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                <div className={cn('w-2 h-2 rounded-full shrink-0', overdue ? 'bg-red-500' : task.status === 'done' ? 'bg-slate-400' : priorityCfg.pill)} />
+                <span className={cn('text-[13px] font-semibold truncate leading-tight', overdue ? 'text-red-800' : 'text-slate-900')}>
                   {overdue && <span className="mr-1">⏰</span>}
                   {task.title}
                 </span>
                 <RecurringBadge task={task} compact />
               </div>
-              {task.category && (
-                <span className={cn('text-[9px] truncate pl-2.5', overdue ? 'text-red-600' : 'text-slate-500')}>{task.category}</span>
-              )}
+              <div className="flex items-center gap-2 pl-3.5 overflow-hidden">
+                {dueLabelPill && (
+                  <span className={cn('text-[11px] flex items-center gap-0.5 shrink-0', overdue ? 'text-red-700 font-semibold' : 'text-slate-500')}>
+                    <Clock className="w-3 h-3" />{dueLabelPill}
+                  </span>
+                )}
+                {task.category && (
+                  <span className={cn('text-[11px] truncate', overdue ? 'text-red-600' : 'text-slate-500')}>· {task.category}</span>
+                )}
+              </div>
             </button>
           );
         })}
@@ -3121,6 +3131,22 @@ interface InboxViewProps {
   onAddTask: () => void;
 }
 
+const stripHtml = (s?: string | null): string => {
+  if (!s) return '';
+  return s
+    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave, onAddTask }: InboxViewProps) {
   const [activeFolder, setActiveFolder] = useState<InboxFolder>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -3300,7 +3326,7 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
                   </div>
                   <div className="pl-9">
                     <p className={cn('text-[12px] truncate', isDone ? 'line-through text-slate-400' : 'font-semibold text-slate-800')}>{task.title}</p>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{task.description ?? task.notes ?? 'No description added'}</p>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{stripHtml(task.description ?? task.notes) || 'No description added'}</p>
                     <div className="flex items-center gap-1.5 mt-1">
                       <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', INBOX_PRIO_DOT[task.priority] ?? 'bg-slate-300')} />
                       {(task.tags ?? []).slice(0, 2).map(tag => (
@@ -3408,9 +3434,9 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
             )}
 
             {/* Description */}
-            {selected.description && (
+            {selected.description && stripHtml(selected.description) && (
               <div className="bg-slate-50 rounded-xl p-5 mb-5">
-                <p className="text-[14px] text-slate-700 leading-relaxed">{selected.description}</p>
+                <p className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">{stripHtml(selected.description)}</p>
               </div>
             )}
 
