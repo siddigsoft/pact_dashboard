@@ -486,16 +486,23 @@ export default function TaskDetail() {
       }
     });
     if (out.length === 0 && task.user_id) {
+      // Owner-only task (no separate assignee picked). Show their real name
+      // when we know it, otherwise fall back to "Owner".
+      const ownerId = task.user_id as string;
+      const ownerName =
+        (currentUser?.id === ownerId ? currentUser?.fullName : null) ??
+        (profiles?.[ownerId]?.full_name as string | undefined) ??
+        'Owner';
       out.push({
-        id: task.user_id as string,
-        name: 'Owner',
+        id: ownerId,
+        name: ownerName,
         hours: (task.estimated_hours as number | null) ?? null,
         acknowledgedAt: (task.acknowledged_at as string | null) ?? null,
         role: 'primary',
       });
     }
     return out;
-  }, [task]);
+  }, [task, currentUser?.id, currentUser?.fullName, profiles]);
 
   // ---------- Elements progress ----------
   const elementProgress = useMemo(() => {
@@ -730,12 +737,16 @@ export default function TaskDetail() {
             )}
           </div>
 
-          {/* Output / Accomplishments — appears once task is started */}
+          {/* Output / Accomplishments — appears once task is started.
+              Editable by the primary assignee, any co-assignee, the task
+              creator/owner (when there's no separate assignee), or an admin. */}
           {task.started_at && (() => {
-            const isMine =
-              currentUser?.id &&
-              (task.assigned_to === currentUser.id ||
-                ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === currentUser.id));
+            const uid = currentUser?.id;
+            const isMine = !!uid && (
+              task.assigned_to === uid ||
+              ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === uid) ||
+              (task.user_id === uid && !task.assigned_to)
+            );
             const canEditOutput = isMine || isAdmin;
             const stored = (task.output_text as string | null) ?? '';
             const draftValue = outputDraft ?? stored;
