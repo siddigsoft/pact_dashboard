@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
-import { EmailNotificationService } from '@/services/email-notification.service';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -280,19 +279,23 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
       if (error) throw error;
 
       const userName = profiles.find(p => p.id === uid)?.full_name ?? 'User';
-      await supabase.from('notifications').insert({
-        recipient_id: uid,
-        event_type: 'workspace_access_granted',
-        entity_type: 'workspace',
-        title_en: 'Workspace Hub Access Granted',
-        message_en: `You have been granted ${lvl} access to the Workspace Hub by ${currentUser.name ?? 'Admin'}.${notes.trim() ? ' Note: ' + notes.trim() : ''}`,
-        priority: 'high',
-        status: 'pending',
-        triggered_by: currentUser.id,
-        triggered_by_name: currentUser.name ?? 'Admin',
-        action_url: '/workspace',
-        email_sent: false,
-      });
+      // Bell + email + WhatsApp via dispatch-notification (fire-and-forget)
+      supabase.functions.invoke('dispatch-notification', {
+        body: {
+          event_type:        'workspace_access_granted',
+          entity_type:       'workspace',
+          recipient_ids:     [uid],
+          triggered_by:      currentUser.id,
+          triggered_by_name: currentUser.name ?? 'Admin',
+          priority:          'high',
+          title_en:          'Workspace Hub Access Granted',
+          title_ar:          'تم منحك الوصول إلى مساحة العمل',
+          message_en:        `You have been granted ${lvl} access to the Workspace Hub by ${currentUser.name ?? 'Admin'}.${notes.trim() ? ' Note: ' + notes.trim() : ''}`,
+          message_ar:        `تم منحك صلاحية ${lvl} على مركز مساحة العمل من قبل ${currentUser.name ?? 'المسؤول'}.${notes.trim() ? ' ملاحظة: ' + notes.trim() : ''}`,
+          action_url:        '/workspace',
+          metadata: { access_level: lvl, granted_by: currentUser.name ?? 'Admin', notes: notes.trim() },
+        },
+      }).catch(() => { /* non-blocking */ });
 
       toast({ title: 'Access granted', description: `${userName} now has ${lvl} access` });
       if (!userId) { setSelectedUser(''); setNotes(''); setAccessLevel('viewer'); }
@@ -334,19 +337,22 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         revoked_by: currentUser.id,
       }).eq('id', grant.id);
 
-      await supabase.from('notifications').insert({
-        recipient_id: grant.user_id,
-        event_type: 'workspace_access_revoked',
-        entity_type: 'workspace',
-        title_en: 'Workspace Hub Access Revoked',
-        message_en: `Your access to the Workspace Hub has been revoked by ${currentUser.name ?? 'Admin'}.`,
-        priority: 'medium',
-        status: 'pending',
-        triggered_by: currentUser.id,
-        triggered_by_name: currentUser.name ?? 'Admin',
-        action_url: '/workspace',
-        email_sent: false,
-      });
+      supabase.functions.invoke('dispatch-notification', {
+        body: {
+          event_type:        'workspace_access_revoked',
+          entity_type:       'workspace',
+          recipient_ids:     [grant.user_id],
+          triggered_by:      currentUser.id,
+          triggered_by_name: currentUser.name ?? 'Admin',
+          priority:          'high',
+          title_en:          'Workspace Hub Access Revoked',
+          title_ar:          'تم سحب صلاحية الوصول إلى مساحة العمل',
+          message_en:        `Your access to the Workspace Hub has been revoked by ${currentUser.name ?? 'Admin'}.`,
+          message_ar:        `تم سحب صلاحية وصولك إلى مركز مساحة العمل من قبل ${currentUser.name ?? 'المسؤول'}.`,
+          action_url:        '/workspace',
+          metadata: { revoked_by: currentUser.name ?? 'Admin' },
+        },
+      }).catch(() => { /* non-blocking */ });
 
       toast({ title: 'Access revoked', description: `${grant._userName}'s access has been removed` });
       refetchGrants();
@@ -400,36 +406,23 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         revoked_by: null,
       }, { onConflict: 'user_id' });
 
-      await supabase.from('notifications').insert({
-        recipient_id: req.user_id,
-        event_type: 'workspace_access_granted',
-        entity_type: 'workspace',
-        title_en: 'Workspace Hub Access Granted',
-        message_en: `Your request for Workspace Hub access has been approved. You now have viewer access.`,
-        priority: 'high',
-        status: 'pending',
-        triggered_by: currentUser.id,
-        triggered_by_name: currentUser.name ?? 'Admin',
-        action_url: '/workspace',
-        email_sent: false,
-      });
-
-      // Send email notification to the requester
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('email, full_name')
-        .eq('id', req.user_id)
-        .maybeSingle();
-      if (profile?.email) {
-        await EmailNotificationService.sendApprovalApproved(
-          profile.email,
-          profile.full_name ?? req.user_name ?? 'User',
-          'Workspace Hub Access',
-          'Workspace Hub',
-          currentUser.name ?? 'Admin',
-          new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-        );
-      }
+      // Bell + email + WhatsApp via dispatch-notification (single source of truth)
+      supabase.functions.invoke('dispatch-notification', {
+        body: {
+          event_type:        'workspace_access_granted',
+          entity_type:       'workspace',
+          recipient_ids:     [req.user_id],
+          triggered_by:      currentUser.id,
+          triggered_by_name: currentUser.name ?? 'Admin',
+          priority:          'high',
+          title_en:          'Workspace Hub Access Granted',
+          title_ar:          'تمت الموافقة على طلب الوصول إلى مساحة العمل',
+          message_en:        `Your request for Workspace Hub access has been approved. You now have viewer access.`,
+          message_ar:        `تمت الموافقة على طلبك للوصول إلى مركز مساحة العمل. لديك الآن صلاحية عرض.`,
+          action_url:        '/workspace',
+          metadata: { access_level: 'viewer', granted_by: currentUser.name ?? 'Admin' },
+        },
+      }).catch(() => { /* non-blocking */ });
 
       toast({ title: 'Request approved', description: `${req.user_name ?? 'User'} now has viewer access` });
       refetchRequests(); refetchGrants();
@@ -452,37 +445,24 @@ export function WorkspaceAccessManager({ open, onClose }: WorkspaceAccessManager
         reviewed_at: new Date().toISOString(),
       }).eq('id', req.id);
 
-      await supabase.from('notifications').insert({
-        recipient_id: req.user_id,
-        event_type: 'workspace_access_rejected',
-        entity_type: 'workspace',
-        title_en: 'Workspace Access Request Not Approved',
-        message_en: `Your request for Workspace Hub access was not approved. Contact your administrator for more information.`,
-        priority: 'medium',
-        status: 'pending',
-        triggered_by: currentUser.id,
-        triggered_by_name: currentUser.name ?? 'Admin',
-        action_url: '/workspace',
-        email_sent: false,
-      });
+      supabase.functions.invoke('dispatch-notification', {
+        body: {
+          event_type:        'workspace_access_rejected',
+          entity_type:       'workspace',
+          recipient_ids:     [req.user_id],
+          triggered_by:      currentUser.id,
+          triggered_by_name: currentUser.name ?? 'Admin',
+          priority:          'high',
+          title_en:          'Workspace Access Request Not Approved',
+          title_ar:          'لم تتم الموافقة على طلب الوصول إلى مساحة العمل',
+          message_en:        `Your request for Workspace Hub access was not approved. Contact your administrator for more information.`,
+          message_ar:        `لم تتم الموافقة على طلبك للوصول إلى مركز مساحة العمل. تواصل مع مسؤول النظام لمزيد من المعلومات.`,
+          action_url:        '/workspace',
+          metadata: { reviewed_by: currentUser.name ?? 'Admin' },
+        },
+      }).catch(() => { /* non-blocking */ });
 
       // Send email notification to the requester
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('email, full_name')
-        .eq('id', req.user_id)
-        .maybeSingle();
-      if (profile?.email) {
-        await EmailNotificationService.sendApprovalRejected(
-          profile.email,
-          profile.full_name ?? req.user_name ?? 'User',
-          'Workspace Hub Access',
-          'Workspace Hub',
-          currentUser.name ?? 'Admin',
-          'Your access request was not approved. Please contact your administrator for more information.'
-        );
-      }
-
       toast({ title: 'Request rejected' });
       refetchRequests();
     } catch (e) {

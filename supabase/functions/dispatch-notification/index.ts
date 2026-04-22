@@ -51,6 +51,12 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   'task_reminder_1day':         { title_en: 'Task Due Tomorrow',                    title_ar: 'موعد المهمة غداً',                            category: 'system',       priority: 'high'   },
   'task_reminder_3day':         { title_en: 'Task Due in 3 Days',                   title_ar: 'موعد المهمة خلال 3 أيام',                     category: 'system',       priority: 'normal' },
   'task_comment_added':         { title_en: 'New Comment on Task',                  title_ar: 'تعليق جديد على المهمة',                       category: 'system',       priority: 'normal' },
+  // Workspace Hub
+  'workspace_share':            { title_en: 'File Shared With You',                 title_ar: 'تمت مشاركة ملف معك',                          category: 'system',       priority: 'high'   },
+  'workspace_access_request':   { title_en: 'Workspace Access Request',             title_ar: 'طلب الوصول إلى مساحة العمل',                  category: 'approvals',    priority: 'high'   },
+  'workspace_access_granted':   { title_en: 'Workspace Access Granted',             title_ar: 'تم منحك الوصول إلى مساحة العمل',              category: 'approvals',    priority: 'high'   },
+  'workspace_access_revoked':   { title_en: 'Workspace Access Revoked',             title_ar: 'تم سحب صلاحية الوصول إلى مساحة العمل',        category: 'approvals',    priority: 'high'   },
+  'workspace_access_rejected':  { title_en: 'Workspace Access Request Rejected',    title_ar: 'تم رفض طلب الوصول إلى مساحة العمل',           category: 'approvals',    priority: 'high'   },
   // Site Visits
   'site_visit_assigned':        { title_en: 'Site Visit Assigned',                  title_ar: 'تم تعيين زيارة ميدانية',                      category: 'assignments',  priority: 'normal' },
   'site_visit_started':         { title_en: 'Site Visit Started',                   title_ar: 'بدأت الزيارة الميدانية',                      category: 'assignments',  priority: 'normal' },

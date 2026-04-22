@@ -278,19 +278,27 @@ function ShareDialog({ file, folder, open, onClose, currentUserId }: {
       setGranteeId(''); setNotes(''); setExpiresAt('');
       toast({ title: 'Permission added', description: `${ACCESS_CFG[accessLevel].label} access granted` });
       if (granteeType === 'user' && granteeId) {
-        await supabase.from('notifications').insert({
-          event_type: 'workspace_share',
-          entity_type: isFile ? 'workspace_file' : 'workspace_folder',
-          entity_id: targetId,
-          recipient_id: granteeId,
-          triggered_by: currentUserId,
-          title_en: `You have been given access to "${targetName}"`,
-          title_ar: `تم منحك الوصول إلى "${targetName}"`,
-          message_en: `You have been granted ${ACCESS_CFG[accessLevel].label} access to the ${isFile ? 'file' : 'folder'} "${targetName}" in the Workspace Hub.`,
-          message_ar: `تم منحك صلاحية ${ACCESS_CFG[accessLevel].label} على ${isFile ? 'الملف' : 'المجلد'} "${targetName}" في مركز مساحة العمل.`,
-          priority: 'medium',
-          action_url: '/workspace',
-        }).then(({ error: ne }) => { if (ne) console.warn('[Workspace] notification insert failed:', ne.message); });
+        // Fire bell + email + WhatsApp via dispatch-notification (fire-and-forget)
+        supabase.functions.invoke('dispatch-notification', {
+          body: {
+            event_type:    'workspace_share',
+            entity_type:   isFile ? 'workspace_file' : 'workspace_folder',
+            entity_id:     targetId,
+            recipient_ids: [granteeId],
+            triggered_by:  currentUserId,
+            priority:      'high',
+            title_en:      `You have been given access to "${targetName}"`,
+            title_ar:      `تم منحك الوصول إلى "${targetName}"`,
+            message_en:    `You have been granted ${ACCESS_CFG[accessLevel].label} access to the ${isFile ? 'file' : 'folder'} "${targetName}" in the Workspace Hub.`,
+            message_ar:    `تم منحك صلاحية ${ACCESS_CFG[accessLevel].label} على ${isFile ? 'الملف' : 'المجلد'} "${targetName}" في مركز مساحة العمل.`,
+            action_url:    '/workspace',
+            metadata: {
+              file_name:    isFile ? targetName : '',
+              folder_name:  !isFile ? targetName : '',
+              access_level: ACCESS_CFG[accessLevel].label,
+            },
+          },
+        }).catch(() => { /* non-blocking */ });
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });

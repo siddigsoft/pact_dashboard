@@ -105,25 +105,34 @@ export function WorkspaceAccessGate({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      // Notify super admins
+      // Notify super admins via dispatch-notification (bell + email + WhatsApp)
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('id')
         .eq('role', 'SuperAdmin');
       if (superAdmins?.length) {
-        await supabase.from('notifications').insert(superAdmins.map((a: { id: string }) => ({
-          recipient_id: a.id,
-          event_type: 'workspace_access_request',
-          entity_type: 'workspace',
-          title_en: 'Workspace Access Request',
-          message_en: `${currentUser.name ?? 'A user'} (${currentUser.role ?? ''}) has requested access to the Workspace Hub.${reason.trim() ? ` Reason: ${reason.trim()}` : ''}`,
-          priority: 'medium',
-          status: 'pending',
-          triggered_by: currentUser.id,
-          triggered_by_name: currentUser.name ?? '',
-          action_url: '/workspace?action=manage-access',
-          email_sent: false,
-        })));
+        const messageEn = `${currentUser.name ?? 'A user'} (${currentUser.role ?? ''}) has requested access to the Workspace Hub.${reason.trim() ? ` Reason: ${reason.trim()}` : ''}`;
+        const messageAr = `${currentUser.name ?? 'مستخدم'} (${currentUser.role ?? ''}) طلب الوصول إلى مركز مساحة العمل.${reason.trim() ? ` السبب: ${reason.trim()}` : ''}`;
+        supabase.functions.invoke('dispatch-notification', {
+          body: {
+            event_type:        'workspace_access_request',
+            entity_type:       'workspace',
+            recipient_ids:     superAdmins.map((a: { id: string }) => a.id),
+            triggered_by:      currentUser.id,
+            triggered_by_name: currentUser.name ?? '',
+            priority:          'high',
+            title_en:          'Workspace Access Request',
+            title_ar:          'طلب الوصول إلى مساحة العمل',
+            message_en:        messageEn,
+            message_ar:        messageAr,
+            action_url:        '/workspace?action=manage-access',
+            metadata: {
+              requester_name: currentUser.name ?? '',
+              requester_role: currentUser.role ?? '',
+              reason:         reason.trim(),
+            },
+          },
+        }).catch(() => { /* non-blocking */ });
       }
 
       toast({ title: 'Access request sent', description: 'A super admin will review your request.' });
