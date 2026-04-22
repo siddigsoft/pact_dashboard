@@ -22,6 +22,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { dispatchNotification } from '@/lib/notify';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -456,6 +457,39 @@ export default function Timesheet() {
       if (error) throw new Error(error.message);
       toast({ title: 'Timesheet submitted for approval' });
       invalidateAll();
+
+      // Notify the manager (reports_to) – fire-and-forget
+      try {
+        const { data: me } = await supabase
+          .from('profiles')
+          .select('reports_to, full_name')
+          .eq('id', userId)
+          .maybeSingle();
+        const managerId = (me as any)?.reports_to as string | undefined;
+        if (managerId) {
+          const totalHours = weekEntriesEnriched.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+          const employeeName = (me as any)?.full_name || currentUser?.email || 'Employee';
+          const weekLabel = `${format(weekStart, 'MMM d')} – ${format(endOfWeek(weekStart, { weekStartsOn: 1 }), 'MMM d, yyyy')}`;
+          await dispatchNotification({
+            event: 'timesheet_submitted',
+            recipientIds: [managerId],
+            titleEn: 'Timesheet Submitted for Your Approval',
+            titleAr: 'تم تقديم كشف الدوام لاعتمادك',
+            messageEn: `${employeeName} submitted their timesheet for ${weekLabel} (${totalHours.toFixed(1)} hrs across ${weekEntriesEnriched.length} entries).`,
+            messageAr: `قام ${employeeName} بتقديم كشف الدوام لـ ${weekLabel} (${totalHours.toFixed(1)} ساعة في ${weekEntriesEnriched.length} إدخال).`,
+            priority: 'high',
+            entityType: 'timesheet',
+            entityId: tsId,
+            actionUrl: '/timesheet',
+            sendWhatsApp: true,
+            triggeredBy: userId,
+            triggeredByName: employeeName,
+            metadata: { week: weekLabel, total_hours: totalHours.toFixed(1), entries: weekEntriesEnriched.length },
+          });
+        }
+      } catch (notifyErr) {
+        console.warn('[Timesheet] submit notify failed:', notifyErr);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast({ title: 'Error submitting', description: msg, variant: 'destructive' });
@@ -466,6 +500,26 @@ export default function Timesheet() {
 
   // ── Supervisor actions ─────────────────────────────────────────────────────
 
+  /** Helper: fetch timesheet rows + approver display name for notifications. */
+  async function fetchTimesheetMeta(ids: string[]) {
+    if (ids.length === 0) return { rows: [] as any[], approverName: 'Manager' };
+    const [{ data: rows }, { data: approver }] = await Promise.all([
+      supabase
+        .from('timesheets')
+        .select('id, user_id, week_start')
+        .in('id', ids),
+      supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle(),
+    ]);
+    return {
+      rows: (rows ?? []) as Array<{ id: string; user_id: string; week_start: string }>,
+      approverName: ((approver as any)?.full_name) || currentUser?.email || 'Manager',
+    };
+  }
+
   async function handleApprove(timesheetId: string) {
     const now = new Date().toISOString();
     const { error } = await supabase
@@ -475,6 +529,32 @@ export default function Timesheet() {
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Timesheet approved' });
     invalidateAll();
+
+    try {
+      const { rows, approverName } = await fetchTimesheetMeta([timesheetId]);
+      const row = rows[0];
+      if (row?.user_id) {
+        const weekLabel = row.week_start ? format(parseISO(row.week_start), 'MMM d, yyyy') : '';
+        await dispatchNotification({
+          event: 'timesheet_approved',
+          recipientIds: [row.user_id],
+          titleEn: 'Your Timesheet was Approved',
+          titleAr: 'تمت الموافقة على كشف الدوام الخاص بك',
+          messageEn: `Your timesheet for week of ${weekLabel} was approved by ${approverName}.`,
+          messageAr: `تمت الموافقة على كشف دوامك لأسبوع ${weekLabel} من قبل ${approverName}.`,
+          priority: 'normal',
+          entityType: 'timesheet',
+          entityId: timesheetId,
+          actionUrl: '/timesheet',
+          sendWhatsApp: false,
+          triggeredBy: userId,
+          triggeredByName: approverName,
+          metadata: { week_start: weekLabel, approver: approverName },
+        });
+      }
+    } catch (notifyErr) {
+      console.warn('[Timesheet] approve notify failed:', notifyErr);
+    }
   }
 
   async function handleApproveAll() {
@@ -488,6 +568,36 @@ export default function Timesheet() {
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     toast({ title: `${ids.length} timesheet(s) approved` });
     invalidateAll();
+
+    try {
+      const { rows, approverName } = await fetchTimesheetMeta(ids);
+      // Group by employee to send a single notification per recipient
+      const byUser = new Map<string, string[]>();
+      rows.forEach(r => {
+        const list = byUser.get(r.user_id) ?? [];
+        list.push(r.week_start ? format(parseISO(r.week_start), 'MMM d') : '');
+        byUser.set(r.user_id, list);
+      });
+      await Promise.all(Array.from(byUser.entries()).map(([uid, weeks]) =>
+        dispatchNotification({
+          event: 'timesheet_approved',
+          recipientIds: [uid],
+          titleEn: weeks.length > 1 ? `${weeks.length} of Your Timesheets were Approved` : 'Your Timesheet was Approved',
+          titleAr: weeks.length > 1 ? `تمت الموافقة على ${weeks.length} من كشوف دوامك` : 'تمت الموافقة على كشف الدوام الخاص بك',
+          messageEn: `${approverName} approved your timesheet${weeks.length > 1 ? 's' : ''} for: ${weeks.join(', ')}.`,
+          messageAr: `قام ${approverName} بالموافقة على كشف دوامك لـ: ${weeks.join('، ')}.`,
+          priority: 'normal',
+          entityType: 'timesheet',
+          actionUrl: '/timesheet',
+          sendWhatsApp: false,
+          triggeredBy: userId,
+          triggeredByName: approverName,
+          metadata: { weeks: weeks.join(', '), approver: approverName },
+        })
+      ));
+    } catch (notifyErr) {
+      console.warn('[Timesheet] bulk approve notify failed:', notifyErr);
+    }
   }
 
   async function handleRejectOrRevision(timesheetId: string, newStatus: 'rejected' | 'revision') {
@@ -497,12 +607,45 @@ export default function Timesheet() {
       return;
     }
     const now = new Date().toISOString();
+    const reason = rejectComment.trim() || null;
     const { error } = await supabase
       .from('timesheets')
-      .update({ status: newStatus, reject_comment: rejectComment.trim() || null, updated_at: now })
+      .update({ status: newStatus, reject_comment: reason, updated_at: now })
       .eq('id', timesheetId);
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     toast({ title: newStatus === 'rejected' ? 'Timesheet rejected' : 'Revision requested' });
+
+    try {
+      const { rows, approverName } = await fetchTimesheetMeta([timesheetId]);
+      const row = rows[0];
+      if (row?.user_id) {
+        const weekLabel = row.week_start ? format(parseISO(row.week_start), 'MMM d, yyyy') : '';
+        const isReject = newStatus === 'rejected';
+        await dispatchNotification({
+          event: isReject ? 'timesheet_rejected' : 'timesheet_revision_requested',
+          recipientIds: [row.user_id],
+          titleEn: isReject ? 'Your Timesheet was Not Approved' : 'Timesheet Revision Requested',
+          titleAr: isReject ? 'لم تتم الموافقة على كشف الدوام الخاص بك' : 'مطلوب مراجعة كشف الدوام',
+          messageEn: isReject
+            ? `${approverName} rejected your timesheet for week of ${weekLabel}. Reason: ${reason ?? '—'}`
+            : `${approverName} asked you to revise your timesheet for week of ${weekLabel}.${reason ? ` Notes: ${reason}` : ''}`,
+          messageAr: isReject
+            ? `قام ${approverName} برفض كشف دوامك لأسبوع ${weekLabel}. السبب: ${reason ?? '—'}`
+            : `طلب منك ${approverName} مراجعة كشف دوامك لأسبوع ${weekLabel}.${reason ? ` ملاحظات: ${reason}` : ''}`,
+          priority: 'high',
+          entityType: 'timesheet',
+          entityId: timesheetId,
+          actionUrl: '/timesheet',
+          sendWhatsApp: true,
+          triggeredBy: userId,
+          triggeredByName: approverName,
+          metadata: { week_start: weekLabel, reviewer: approverName, reason: reason ?? '' },
+        });
+      }
+    } catch (notifyErr) {
+      console.warn('[Timesheet] reject/revision notify failed:', notifyErr);
+    }
+
     setRejectDialog(null);
     setRejectComment('');
     setReviewAction(null);

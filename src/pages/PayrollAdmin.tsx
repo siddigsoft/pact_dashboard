@@ -21,6 +21,7 @@ import {
   Timer, Zap, Calendar,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { dispatchNotification } from '@/lib/notify';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
@@ -2854,6 +2855,88 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
       };
       toast({ title: labels[newStatus] });
       qc.invalidateQueries({ queryKey: ['payroll-runs'] });
+
+      // ── Notifications ─────────────────────────────────────────────────────
+      // Notification failure must NEVER break the payroll save itself.
+      try {
+        const employeeIds = Array.from(new Set(preview.map(p => p.user_id).filter(Boolean) as string[]));
+        const totalNet = preview.reduce((s, r) => s + adjNet(r).net, 0);
+        const currency = preview[0]?.currency ?? '';
+        const fmtAmt = `${currency} ${totalNet.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+        if (newStatus === 'submitted') {
+          // Notify everyone who can approve payroll
+          const { data: approvers } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('role', ['admin', 'super_admin', 'finance_manager', 'cfo']);
+          const approverIds = (approvers ?? []).map((a: any) => a.id).filter(Boolean);
+          if (approverIds.length > 0) {
+            await dispatchNotification({
+              event: 'payroll_approval_needed',
+              recipientIds: approverIds,
+              titleEn: 'Payroll Awaiting Your Approval',
+              titleAr: 'كشف رواتب بانتظار اعتمادك',
+              messageEn: `Payroll for ${periodLabel} (${preview.length} employees, total ${fmtAmt}) was submitted and needs your approval.`,
+              messageAr: `كشف رواتب فترة ${periodLabel} (${preview.length} موظف، الإجمالي ${fmtAmt}) تم تقديمه وينتظر اعتمادك.`,
+              priority: 'high',
+              entityType: 'payroll_run',
+              entityId: runId ?? undefined,
+              actionUrl: '/payroll-admin',
+              sendWhatsApp: true,
+              triggeredBy: currentUserId ?? undefined,
+              metadata: { period: periodLabel, employees: preview.length, total: fmtAmt },
+            });
+          }
+        }
+
+        if (newStatus === 'approved' && employeeIds.length > 0) {
+          // Notify each employee that their payslip is ready
+          await dispatchNotification({
+            event: 'payroll_slip_ready',
+            recipientIds: employeeIds,
+            titleEn: 'Your Payslip is Ready',
+            titleAr: 'قسيمة راتبك جاهزة',
+            messageEn: `Your payslip for ${periodLabel} has been approved and is now available.`,
+            messageAr: `تمت الموافقة على قسيمة راتبك لفترة ${periodLabel} وأصبحت متاحة الآن.`,
+            priority: 'normal',
+            entityType: 'payroll_run',
+            entityId: runId ?? undefined,
+            actionUrl: '/my-payslip',
+            sendWhatsApp: true,
+            triggeredBy: currentUserId ?? undefined,
+            metadata: { period: periodLabel },
+          });
+        }
+
+        if (newStatus === 'locked') {
+          // Notify finance/admins that the payroll cycle is closed
+          const { data: admins } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('role', ['admin', 'super_admin', 'finance_manager', 'cfo']);
+          const adminIds = (admins ?? []).map((a: any) => a.id).filter(Boolean);
+          if (adminIds.length > 0) {
+            await dispatchNotification({
+              event: 'payroll_run_completed',
+              recipientIds: adminIds,
+              titleEn: 'Payroll Cycle Locked',
+              titleAr: 'تم إغلاق دورة كشف الرواتب',
+              messageEn: `Payroll for ${periodLabel} (${preview.length} employees, total ${fmtAmt}) was locked.`,
+              messageAr: `تم إغلاق كشف رواتب ${periodLabel} (${preview.length} موظف، الإجمالي ${fmtAmt}).`,
+              priority: 'normal',
+              entityType: 'payroll_run',
+              entityId: runId ?? undefined,
+              actionUrl: '/payroll-admin',
+              sendWhatsApp: false,
+              triggeredBy: currentUserId ?? undefined,
+              metadata: { period: periodLabel, employees: preview.length, total: fmtAmt },
+            });
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('[PayrollAdmin] notification dispatch failed:', notifyErr);
+      }
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally { setSaving(false); setSubmitting(false); setApproving(false); setLocking(false); }

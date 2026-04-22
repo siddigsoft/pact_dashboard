@@ -119,6 +119,16 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   // Account / User
   'user_approved':              { title_en: 'Account Approved',                     title_ar: 'تمت الموافقة على الحساب',                    category: 'account',      priority: 'normal' },
   'user_rejected':              { title_en: 'Account Status Updated',               title_ar: 'تم تحديث حالة الحساب',                       category: 'account',      priority: 'normal' },
+  // Task Dependencies
+  'dependency_added':           { title_en: 'New Dependency Added to Your Task',    title_ar: 'تمت إضافة اعتمادية جديدة لمهمتك',            category: 'assignments',  priority: 'high'   },
+  'dependency_acknowledged':    { title_en: 'Dependency Acknowledged',              title_ar: 'تم إقرار الاعتمادية',                          category: 'system',       priority: 'normal' },
+  'dependency_blocked':         { title_en: 'Task is Blocked by a Dependency',      title_ar: 'المهمة محظورة بسبب اعتمادية',                  category: 'assignments',  priority: 'high'   },
+  'dependency_resolved':        { title_en: 'Dependency Resolved – You Can Proceed',title_ar: 'تم حل الاعتمادية – يمكنك المتابعة',            category: 'system',       priority: 'normal' },
+  // Timesheet
+  'timesheet_submitted':        { title_en: 'Timesheet Submitted for Your Approval',title_ar: 'تم تقديم كشف الدوام لاعتمادك',                category: 'approvals',    priority: 'high'   },
+  'timesheet_approved':         { title_en: 'Your Timesheet was Approved',          title_ar: 'تمت الموافقة على كشف الدوام الخاص بك',         category: 'system',       priority: 'normal' },
+  'timesheet_rejected':         { title_en: 'Your Timesheet was Not Approved',      title_ar: 'لم تتم الموافقة على كشف الدوام الخاص بك',      category: 'system',       priority: 'high'   },
+  'timesheet_revision_requested':{ title_en: 'Timesheet Revision Requested',         title_ar: 'مطلوب مراجعة كشف الدوام',                      category: 'system',       priority: 'high'   },
   // Broadcast / System
   'broadcast':                  { title_en: 'System Announcement',                  title_ar: 'إعلان النظام',                                category: 'broadcast',    priority: 'normal' },
   'reminder':                   { title_en: 'Reminder',                             title_ar: 'تذكير',                                       category: 'system',       priority: 'normal' },
@@ -203,6 +213,16 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'payroll_slip_ready':          'email_notify_payroll',
   'retainer_payment_processed':  'email_notify_payroll',
   'retainer_overdue':            'email_notify_payroll',
+  // Task dependencies
+  'dependency_added':            'email_notify_task_assigned',
+  'dependency_acknowledged':     'email_notify_task_assigned',
+  'dependency_blocked':          'email_notify_task_assigned',
+  'dependency_resolved':         'email_notify_task_assigned',
+  // Timesheet
+  'timesheet_submitted':         'email_notify_approval_needed',
+  'timesheet_approved':          'email_notify_payroll',
+  'timesheet_rejected':          'email_notify_payroll',
+  'timesheet_revision_requested':'email_notify_payroll',
 }
 
 // ── Per-event email accent colors ─────────────────────────────────────────────

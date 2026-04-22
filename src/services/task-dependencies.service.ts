@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/supabase';
+import { dispatchNotification } from '@/lib/notify';
 
 type TaskDependency = Database['public']['Tables']['task_dependencies']['Row'];
 type TaskSchedule = Database['public']['Tables']['task_schedules']['Row'];
@@ -65,6 +66,90 @@ export async function addTaskDependency(
 
     // Recalculate schedules
     await supabase.rpc('recalculate_task_schedules');
+
+    // ── Notify the people who own/are assigned to BOTH tasks ──────────────
+    // The dependent-task's owner+assignee need to know they now have a blocker.
+    // The parent-task's owner+assignee need to know someone is waiting on them.
+    try {
+      const { data: tasks } = await supabase
+        .from('personal_tasks')
+        .select('id, title, user_id, assigned_to, assigned_to_name, co_assignees, due_date, priority')
+        .in('id', [parentTaskId, dependentTaskId]);
+
+      const parent = tasks?.find((t: any) => t.id === parentTaskId);
+      const dependent = tasks?.find((t: any) => t.id === dependentTaskId);
+      const actorName = userData.user.user_metadata?.full_name || userData.user.email || 'A team member';
+
+      const collectIds = (t: any): string[] => {
+        if (!t) return [];
+        const ids: string[] = [];
+        if (t.user_id) ids.push(t.user_id);
+        if (t.assigned_to) ids.push(t.assigned_to);
+        const co = (t.co_assignees as Array<{ id: string }> | null) ?? [];
+        co.forEach((c) => c?.id && ids.push(c.id));
+        return ids;
+      };
+
+      const parentRecipients = collectIds(parent).filter((id) => id !== userData.user!.id);
+      const dependentRecipients = collectIds(dependent).filter((id) => id !== userData.user!.id);
+
+      const desc = description?.trim() || `${dependencyType.replace(/_/g, ' ')}`;
+
+      // Notify parent-task owners: "Someone is waiting on your task"
+      if (parentRecipients.length > 0 && parent && dependent) {
+        await dispatchNotification({
+          event: 'dependency_added',
+          recipientIds: parentRecipients,
+          titleEn: 'Someone is waiting on your task',
+          titleAr: 'هناك من ينتظر إنجاز مهمتك',
+          messageEn: `${actorName} marked "${dependent.title}" as depending on your task "${parent.title}". Requested: ${desc}.`,
+          messageAr: `قام ${actorName} بربط المهمة "${dependent.title}" باعتمادها على مهمتك "${parent.title}". المطلوب: ${desc}.`,
+          priority: 'high',
+          entityType: 'task',
+          entityId: parent.id,
+          actionUrl: `/my-tasks/${parent.id}`,
+          sendWhatsApp: true,
+          triggeredBy: userData.user.id,
+          triggeredByName: actorName,
+          metadata: {
+            dependent_task: dependent.title,
+            parent_task: parent.title,
+            dependency_type: dependencyType,
+            requested: desc,
+            lead_time_days: leadTimeDays,
+            due_date: parent.due_date ?? '',
+          },
+        });
+      }
+
+      // Notify dependent-task owners: "Your task now has a new blocker"
+      if (dependentRecipients.length > 0 && parent && dependent) {
+        await dispatchNotification({
+          event: 'dependency_blocked',
+          recipientIds: dependentRecipients,
+          titleEn: 'Your task now depends on another',
+          titleAr: 'مهمتك أصبحت معتمدة على مهمة أخرى',
+          messageEn: `"${dependent.title}" now requires "${parent.title}" to be completed first. Type: ${dependencyType}.`,
+          messageAr: `المهمة "${dependent.title}" تتطلب الآن إنجاز "${parent.title}" أولاً. النوع: ${dependencyType}.`,
+          priority: 'normal',
+          entityType: 'task',
+          entityId: dependent.id,
+          actionUrl: `/my-tasks/${dependent.id}`,
+          sendWhatsApp: false,
+          triggeredBy: userData.user.id,
+          triggeredByName: actorName,
+          metadata: {
+            blocking_task: parent.title,
+            dependency_type: dependencyType,
+            requested: desc,
+            lead_time_days: leadTimeDays,
+          },
+        });
+      }
+    } catch (notifyErr) {
+      // Notification failure must NEVER block the dependency creation
+      console.warn('[task-dependencies] notify failed:', notifyErr);
+    }
 
     return { dependency: data, error: null };
   } catch (err) {
