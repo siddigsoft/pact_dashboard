@@ -515,7 +515,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
-      <DialogContent className="sm:max-w-[1600px] w-[98vw] max-h-[96vh] h-[96vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+      <DialogContent className="!max-w-none w-screen h-screen sm:w-screen sm:h-screen sm:max-w-none sm:max-h-none max-h-screen overflow-hidden flex flex-col p-0 gap-0 rounded-none border-0">
         {/* ── Header ── */}
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 shrink-0">
           <div className="w-7 h-7 rounded-lg bg-[#1D3461] flex items-center justify-center shrink-0">
@@ -1548,7 +1548,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
 
   return (
     <Dialog open={!!task} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-[1600px] w-[98vw] max-h-[96vh] h-[96vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+      <DialogContent className="!max-w-none w-screen h-screen sm:w-screen sm:h-screen sm:max-w-none sm:max-h-none max-h-screen overflow-hidden flex flex-col p-0 gap-0 rounded-none border-0">
         {/* Header */}
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 shrink-0 bg-gradient-to-r from-[#0F2041] to-[#1D3461]">
           <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
