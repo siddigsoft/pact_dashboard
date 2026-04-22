@@ -225,6 +225,50 @@
   }
 }
 
+/* TipTap rich-text editor list styling — Tailwind preflight resets ul/ol so we restore here */
+.tiptap-content ul,
+.tiptap-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.tiptap-content ul {
+  list-style-type: disc;
+}
+.tiptap-content ul ul {
+  list-style-type: circle;
+}
+.tiptap-content ul ul ul {
+  list-style-type: square;
+}
+.tiptap-content ol {
+  list-style-type: decimal;
+}
+.tiptap-content ol ol {
+  list-style-type: lower-alpha;
+}
+.tiptap-content ol ol ol {
+  list-style-type: lower-roman;
+}
+.tiptap-content li {
+  margin: 0.15rem 0;
+}
+.tiptap-content li > p {
+  margin: 0;
+}
+/* Task list (checkboxes) — keep custom rendering */
+.tiptap-content ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+.tiptap-content ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.tiptap-content ul[data-type="taskList"] li > label {
+  margin-top: 0.2rem;
+}
+
 /* Improved scrolling behavior */
 @layer utilities {
   /* Smooth scrolling for all scrollable containers */

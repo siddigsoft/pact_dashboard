@@ -231,6 +231,33 @@ const CostSubmission = () => {
   const [groupApprovalAttachments, setGroupApprovalAttachments] = useState<File[]>([]);
 
   const [viewingSubmission, setViewingSubmission] = useState<OperationalCostSubmission | null>(null);
+  const [resolvedProfiles, setResolvedProfiles] = useState<Record<string, { name: string; email: string }>>({});
+
+  // Resolve any submitted_by IDs that aren't in the cached `users` array
+  // (happens when RLS hides certain profiles from the current viewer's role)
+  useEffect(() => {
+    const id = viewingSubmission?.submitted_by;
+    if (!id) return;
+    if (users.find(u => u.id === id)) return;
+    if (resolvedProfiles[id]) return;
+    supabase
+      .from('profiles')
+      .select('id, full_name, username, email')
+      .eq('id', id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const p = data as any;
+          setResolvedProfiles(prev => ({
+            ...prev,
+            [id]: {
+              name: p.full_name || p.username || (p.email ? p.email.split('@')[0] : '') || `User ${id.slice(0, 8)}`,
+              email: p.email || '',
+            },
+          }));
+        }
+      });
+  }, [viewingSubmission?.submitted_by, users, resolvedProfiles]);
 
   const [signatureModal, setSignatureModal] = useState<{
     open: boolean;
@@ -4736,7 +4763,7 @@ const CostSubmission = () => {
                     <div className="rounded-lg border divide-y text-sm">
                       <div className="px-3 py-2">
                         <p className="text-xs text-muted-foreground mb-0.5">Submitted By / مقدم الطلب</p>
-                        <p className="font-medium">{submitter?.name || submitter?.email || oc.submitted_by.slice(0, 8)}</p>
+                        <p className="font-medium">{submitter?.name || submitter?.email || resolvedProfiles[oc.submitted_by]?.name || resolvedProfiles[oc.submitted_by]?.email || `User ${oc.submitted_by.slice(0, 8)}`}</p>
                         {oc.submitter_role && <p className="text-xs text-muted-foreground capitalize">{oc.submitter_role.replace(/_/g, ' ')}</p>}
                       </div>
                       {oc.submitted_at && (

@@ -49,6 +49,8 @@ export function TaskRichEditor({ value, onChange, placeholder = "Type '/' for co
           'prose-headings:font-bold prose-h1:text-xl prose-h2:text-lg',
           'prose-table:border prose-td:border prose-td:border-slate-200 prose-td:p-2 prose-td:align-top',
           'prose-hr:my-4 prose-hr:border-slate-300',
+          // Force list styling — Tailwind preflight resets ul/ol to list-style:none
+          'tiptap-content',
         ),
         style: `min-height: ${minHeight}px;`,
       },
