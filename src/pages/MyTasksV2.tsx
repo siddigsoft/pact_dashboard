@@ -1729,6 +1729,7 @@ interface TaskCardProps {
 function TaskCard({ task, onToggleDone, onEdit, onStatusChange, isUpdating }: TaskCardProps) {
   const cfg = PRIORITY_CFG[task.priority];
   const isDone = task.status === 'done';
+  const navigate = useNavigate();
 
   return (
     <Card
@@ -1736,7 +1737,7 @@ function TaskCard({ task, onToggleDone, onEdit, onStatusChange, isUpdating }: Ta
         'border transition-all hover:shadow-md cursor-pointer overflow-hidden bg-white group',
         isDone ? 'opacity-60 border-slate-200' : cfg.border,
       )}
-      onClick={onEdit}
+      onClick={() => navigate(`/tasks/${task.id}`)}
       data-testid={`card-task-${task.id}`}
     >
       <div className="flex">
@@ -2078,6 +2079,7 @@ interface EnhancedTaskCardProps {
 }
 
 function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, onStatusChange, isUpdating }: EnhancedTaskCardProps) {
+  const navigate = useNavigate();
   const cfg = PRIORITY_CFG[task.priority];
   const isDone = task.status === 'done';
   const isInProgress = task.status === 'inprogress';
@@ -2104,7 +2106,7 @@ function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, onStatusChange
         'border transition-all hover:shadow-md cursor-pointer overflow-hidden bg-white group',
         isDone ? 'opacity-60 border-slate-200' : overdueFlag ? 'border-red-200 hover:border-red-400' : cfg.border,
       )}
-      onClick={onEdit}
+      onClick={() => navigate(`/tasks/${task.id}`)}
       data-testid={`card-task-${task.id}`}
     >
       <div className="flex">
@@ -4222,17 +4224,34 @@ export default function MyTasksV2() {
     }
   };
 
-  const handleSave = async (id: string, data: Partial<PersonalTask>) => {
+  const handleSave = async (id: string, data: Partial<PersonalTask>, reason?: string) => {
     try {
       await updateTask(id, data);
       toast({ title: 'Task saved' });
-      // Fire lifecycle notification if status changed
+      // Fire lifecycle notification if status changed — notify ALL participants
+      // (owner + assignee + co-assignees) across in-app, email, and WhatsApp.
       if (data.status && userId) {
         const task = allTasks.find(t => t.id === id);
-        const event = statusToEvent(data.status);
-        notifySelf(event, task?.title ?? 'Task', task?.dueDate ?? null);
-        if (task?.assignedTo && task.assignedTo !== userId) {
-          notify({ event, taskId: id, taskTitle: task.title, recipientUserId: task.assignedTo, dueDate: task.dueDate ?? null });
+        if (task) {
+          const event = statusToEvent(data.status);
+          const extra = reason ? { reason } : undefined;
+          // Build the unique recipient set from all task participants.
+          const recipients = new Set<string>();
+          if (task.userId) recipients.add(task.userId);
+          if (task.assignedTo) recipients.add(task.assignedTo);
+          (task.coAssignees ?? []).forEach(c => { if (c?.id) recipients.add(c.id); });
+          // The actor is filtered out inside notify(); keep the broadcast inclusive.
+          for (const recipientId of recipients) {
+            notify({
+              event,
+              taskId: id,
+              taskTitle: task.title,
+              recipientUserId: recipientId,
+              dueDate: task.dueDate ?? null,
+              priority: task.priority,
+              extra,
+            });
+          }
         }
       }
     } catch (err: unknown) {
@@ -4471,7 +4490,7 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
-                                onStatusChange={(next) => handleSave(task.id, { status: next })}
+                                onStatusChange={(next, reason) => handleSave(task.id, { status: next }, reason)}
                                 isUpdating={isUpdating}
                               />
                             ))}
@@ -4489,7 +4508,7 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
-                                onStatusChange={(next) => handleSave(task.id, { status: next })}
+                                onStatusChange={(next, reason) => handleSave(task.id, { status: next }, reason)}
                                 isUpdating={isUpdating}
                               />
                             ))}
@@ -4507,7 +4526,7 @@ export default function MyTasksV2() {
                                 subtasks={subtaskMap.get(task.id) ?? []}
                                 onToggleDone={() => handleToggleDone(task)}
                                 onEdit={() => setEditingTask(task)}
-                                onStatusChange={(next) => handleSave(task.id, { status: next })}
+                                onStatusChange={(next, reason) => handleSave(task.id, { status: next }, reason)}
                                 isUpdating={isUpdating}
                               />
                             ))}
@@ -4549,7 +4568,7 @@ export default function MyTasksV2() {
                     projectTasks={projectTasks}
                     onEdit={setEditingTask}
                     onToggleDone={handleToggleDone}
-                    onStatusChange={(taskId, next) => handleSave(taskId, { status: next })}
+                    onStatusChange={(taskId, next, reason) => handleSave(taskId, { status: next }, reason)}
                     isUpdating={isUpdating}
                   />
                 )}
@@ -4565,7 +4584,7 @@ export default function MyTasksV2() {
                 isUpdating={isUpdating}
                 onEdit={setEditingTask}
                 onToggleDone={handleToggleDone}
-                onStatusChange={(taskId, next) => handleSave(taskId, { status: next })}
+                onStatusChange={(taskId, next, reason) => handleSave(taskId, { status: next }, reason)}
                 onAddTask={openTypePicker}
               />
             )}

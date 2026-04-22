@@ -87,52 +87,61 @@ const EVENT_TYPES: Record<TaskEvent, 'info' | 'success' | 'warning' | 'error'> =
 };
 
 /** English notification message */
-function buildMessageEn(event: TaskEvent, taskTitle: string, actorName: string, dueDate?: string | null): string {
+function buildMessageEn(event: TaskEvent, taskTitle: string, actorName: string, dueDate?: string | null, reason?: string): string {
   const due = dueDate ? ` (due ${dueDate})` : '';
+  const why = reason ? ` — Reason: ${reason}` : '';
   switch (event) {
     case 'task_created':      return `Task "${taskTitle}" was created by ${actorName}${due}`;
     case 'task_assigned':     return `${actorName} assigned you: "${taskTitle}"${due}`;
-    case 'task_started':      return `"${taskTitle}" has been started`;
+    case 'task_started':      return `"${taskTitle}" has been started by ${actorName}`;
     case 'task_acknowledged': return `"${taskTitle}" was acknowledged by the assignee`;
-    case 'task_completed':    return `"${taskTitle}" has been marked as completed 🎉`;
-    case 'task_delayed':      return `"${taskTitle}" has been marked as delayed${due}`;
-    case 'task_rejected':     return `"${taskTitle}" was rejected by ${actorName}`;
-    case 'task_cancelled':    return `"${taskTitle}" was cancelled`;
+    case 'task_completed':    return `"${taskTitle}" has been marked as completed by ${actorName} 🎉`;
+    case 'task_delayed':      return `"${taskTitle}" has been marked as delayed${due}${why}`;
+    case 'task_rejected':     return `"${taskTitle}" was rejected by ${actorName}${why}`;
+    case 'task_cancelled':    return `"${taskTitle}" was cancelled by ${actorName}${why}`;
     case 'task_overdue':      return `"${taskTitle}" is now overdue${due} — please take action immediately`;
     case 'task_reminder_1day':return `"${taskTitle}" is due tomorrow${due}`;
     case 'task_reminder_3day':return `"${taskTitle}" is due in 3 days${due}`;
-    case 'task_status_changed':return `"${taskTitle}" status updated by ${actorName}`;
-    default:                  return `Task "${taskTitle}" updated`;
+    case 'task_status_changed':return `"${taskTitle}" status updated by ${actorName}${why}`;
+    default:                  return `Task "${taskTitle}" updated${why}`;
   }
 }
 
 /** Arabic notification message */
-function buildMessageAr(event: TaskEvent, taskTitle: string, actorName: string, dueDate?: string | null): string {
+function buildMessageAr(event: TaskEvent, taskTitle: string, actorName: string, dueDate?: string | null, reason?: string): string {
   const due = dueDate ? ` (الموعد: ${dueDate})` : '';
+  const why = reason ? ` — السبب: ${reason}` : '';
   switch (event) {
     case 'task_created':      return `أنشأ ${actorName} مهمة جديدة: "${taskTitle}"${due}`;
     case 'task_assigned':     return `عيّن لك ${actorName} المهمة: "${taskTitle}"${due}`;
-    case 'task_started':      return `بدأ تنفيذ "${taskTitle}"`;
+    case 'task_started':      return `بدأ ${actorName} تنفيذ "${taskTitle}"`;
     case 'task_acknowledged': return `تم إقرار استلام "${taskTitle}"`;
-    case 'task_completed':    return `اكتملت "${taskTitle}" 🎉`;
-    case 'task_delayed':      return `تم تأجيل "${taskTitle}"${due}`;
-    case 'task_rejected':     return `رُفضت "${taskTitle}" بواسطة ${actorName}`;
-    case 'task_cancelled':    return `تم إلغاء "${taskTitle}"`;
+    case 'task_completed':    return `أكمل ${actorName} المهمة "${taskTitle}" 🎉`;
+    case 'task_delayed':      return `تم تأجيل "${taskTitle}"${due}${why}`;
+    case 'task_rejected':     return `رُفضت "${taskTitle}" بواسطة ${actorName}${why}`;
+    case 'task_cancelled':    return `ألغى ${actorName} المهمة "${taskTitle}"${why}`;
     case 'task_overdue':      return `"${taskTitle}" متأخرة${due} — يرجى اتخاذ إجراء فوري`;
     case 'task_reminder_1day':return `موعد "${taskTitle}" غداً${due}`;
     case 'task_reminder_3day':return `موعد "${taskTitle}" خلال 3 أيام${due}`;
-    case 'task_status_changed':return `تم تحديث حالة "${taskTitle}" بواسطة ${actorName}`;
-    default:                  return `تم تحديث "${taskTitle}"`;
+    case 'task_status_changed':return `حدّث ${actorName} حالة "${taskTitle}"${why}`;
+    default:                  return `تم تحديث "${taskTitle}"${why}`;
   }
 }
 
-/** Events that should also trigger WhatsApp (high-urgency only) */
+/**
+ * Events that also trigger WhatsApp.
+ * Per user request: ALL status changes notify ALL channels (in-app + email + WhatsApp).
+ */
 const WHATSAPP_EVENTS = new Set<TaskEvent>([
   'task_assigned',
-  'task_overdue',
-  'task_reminder_1day',
+  'task_started',
+  'task_completed',
+  'task_cancelled',
   'task_rejected',
   'task_delayed',
+  'task_overdue',
+  'task_reminder_1day',
+  'task_status_changed',
 ]);
 
 /** Map a status value to the appropriate TaskEvent */
@@ -169,11 +178,15 @@ export function useTaskNotifications() {
 
     const actorName   = currentUser?.fullName ?? 'A manager';
     const actorId     = currentUser?.id;
+    const reason      = (extra as { reason?: string }).reason;
     const titleEn     = EVENT_LABELS_EN[event];
     const titleAr     = EVENT_LABELS_AR[event];
-    const messageEn   = buildMessageEn(event, taskTitle, actorName, dueDate);
-    const messageAr   = buildMessageAr(event, taskTitle, actorName, dueDate);
+    const messageEn   = buildMessageEn(event, taskTitle, actorName, dueDate, reason);
+    const messageAr   = buildMessageAr(event, taskTitle, actorName, dueDate, reason);
     const type        = EVENT_TYPES[event];
+
+    // Don't notify the actor themselves about their own action
+    if (actorId && actorId === recipientUserId) return;
 
     // ── 1. In-app notification ────────────────────────────────────────────────
     addNotification({

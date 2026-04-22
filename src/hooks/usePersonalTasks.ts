@@ -829,7 +829,19 @@ export function usePersonalTasks(userId: string | undefined) {
         }
       }
 
-      const { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
+      let { error } = await supabase.from('personal_tasks').update(patch).eq('id', id);
+      // Some Supabase environments may not yet have the on_hold_at / rescheduled_at /
+      // cancelled_at columns from migration 20260422. Detect undefined_column (42703)
+      // and retry once without those optional timestamp columns so the status update
+      // still succeeds. The status itself + status_history trigger remain unaffected.
+      if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
+        const fallback = { ...patch };
+        delete (fallback as Record<string, unknown>).on_hold_at;
+        delete (fallback as Record<string, unknown>).rescheduled_at;
+        delete (fallback as Record<string, unknown>).cancelled_at;
+        const retry = await supabase.from('personal_tasks').update(fallback).eq('id', id);
+        error = retry.error;
+      }
       if (error) throw error;
 
       // Dependency-added notification: only fires when new dependencies are actually added (diff old vs new)
