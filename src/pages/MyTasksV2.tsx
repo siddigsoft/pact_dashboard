@@ -160,6 +160,7 @@ interface QuickAddDialogProps {
     taskType: 'project-task' | 'day-to-day' | null;
     category: string | null;
     notes: string;
+    projectId?: string | null;
     assignedToUserId?: string | null;
     assignedToUserName?: string | null;
     targetDeptId?: string | null;
@@ -176,14 +177,23 @@ interface QuickAddDialogProps {
   currentUserFullName?: string | null;
   currentUserId?: string | null;
   currentUserRole?: string | null;
+  initialTaskTypeKey?: 'general' | 'project' | 'daytoday';
 }
 type DepTab = 'custom' | 'date' | 'user' | 'department';
 type AssignTab = 'myself' | 'someone' | 'dept';
 
-function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullName, currentUserId, currentUserRole }: QuickAddDialogProps) {
+function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullName, currentUserId, currentUserRole, initialTaskTypeKey = 'general' }: QuickAddDialogProps) {
   const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
-  const [taskTypeKey, setTaskTypeKey] = useState<'general' | 'project' | 'daytoday'>('general');
+  const [taskTypeKey, setTaskTypeKey] = useState<'general' | 'project' | 'daytoday'>(initialTaskTypeKey);
+  const [projectId, setProjectId]   = useState<string>('');
+  // Sync to the requested initial type whenever the dialog opens
+  useEffect(() => {
+    if (open) {
+      setTaskTypeKey(initialTaskTypeKey);
+      setProjectId('');
+    }
+  }, [open, initialTaskTypeKey]);
   const [priority, setPriority]     = useState<PersonalTaskPriority>('medium');
   const [dueDate, setDueDate]       = useState('');
   const [notes, setNotes]           = useState('');
@@ -256,6 +266,30 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch projects the user is a member of (for "Project Task" type)
+  const { data: myProjects = [], isLoading: loadingProjects } = useQuery({
+    queryKey: ['my-projects', currentUserId, currentUserFullName],
+    queryFn: async () => {
+      if (!currentUserId) return [] as { id: string; name: string }[];
+      const { data } = await supabase.from('projects').select('id, name, team');
+      const rows = (data ?? []) as Array<{ id: string; name: string; team: { projectManager?: string; teamComposition?: Array<{ userId?: string }> } | null }>;
+      return rows.filter(p => {
+        const t = p.team ?? {};
+        if (t.projectManager && currentUserFullName && t.projectManager.trim().toLowerCase() === currentUserFullName.trim().toLowerCase()) return true;
+        return Array.isArray(t.teamComposition) && t.teamComposition.some(m => m.userId === currentUserId);
+      }).map(p => ({ id: p.id, name: p.name }));
+    },
+    enabled: open && !!currentUserId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Auto-select project if exactly one available
+  useEffect(() => {
+    if (taskTypeKey === 'project' && !projectId && myProjects.length === 1) {
+      setProjectId(myProjects[0].id);
+    }
+  }, [taskTypeKey, myProjects, projectId]);
+
   // Fetch all users
   const { data: allUsers = [] } = useQuery({
     queryKey: ['dialog-users'],
@@ -311,7 +345,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   const [estimatedHoursQA, setEstimatedHoursQA] = useState('');
 
   const reset = () => {
-    setTitle(''); setDescription(''); setTaskTypeKey('general');
+    setTitle(''); setDescription(''); setTaskTypeKey(initialTaskTypeKey); setProjectId('');
     setPriority('medium'); setDueDate(''); setNotes('');
     setReward(''); setDepInput(''); setDepDateInput(''); setDeps([]);
     setUserSearch(''); setAttachments([]);
@@ -339,6 +373,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
 
   const submit = () => {
     if (!title.trim()) return;
+    if (taskTypeKey === 'project' && !projectId) return;
     if (recurrenceOn && (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceDaysQA.length === 0) return;
     const typeMap = {
       general:  { taskType: null as null,                    category: 'personal' },
@@ -349,6 +384,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     const rewardAmount = reward ? parseFloat(reward) : null;
     onCreate({
       title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes,
+      projectId: taskTypeKey === 'project' ? projectId : null,
       assignedToUserId:   assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
       assignedToUserName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
       targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
@@ -422,30 +458,70 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
             {/* Task Type */}
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
-                Task Type <span className="text-slate-400 font-normal normal-case tracking-normal">(optional)</span>
+                Task Type <span className="text-red-500 normal-case tracking-normal">*</span>
               </label>
               <div className="flex gap-2">
-                {TASK_TYPES.map(t => (
-                  <button
-                    key={t.key}
-                    onClick={() => {
-                      setTaskTypeKey(t.key);
-                      // Auto-enable recurrence when Day-to-Day is selected
-                      if (t.key === 'daytoday') setRecurrenceOn(true);
-                    }}
-                    className={cn(
-                      'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border text-xs font-semibold transition-all',
-                      taskTypeKey === t.key
-                        ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50',
-                    )}
-                  >
-                    <t.Icon className="w-3.5 h-3.5" />
-                    {t.label}
-                  </button>
-                ))}
+                {TASK_TYPES.map(t => {
+                  const isProject = t.key === 'project';
+                  const disabled = isProject && !loadingProjects && myProjects.length === 0;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      disabled={disabled}
+                      data-testid={`type-tab-${t.key}`}
+                      onClick={() => {
+                        setTaskTypeKey(t.key);
+                        if (t.key === 'daytoday') setRecurrenceOn(true);
+                        if (t.key !== 'project') setProjectId('');
+                      }}
+                      title={disabled ? 'You are not a member of any project' : undefined}
+                      className={cn(
+                        'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border text-xs font-semibold transition-all',
+                        disabled && 'opacity-40 cursor-not-allowed',
+                        taskTypeKey === t.key
+                          ? 'bg-[#1D3461] text-white border-[#1D3461] shadow-sm'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50',
+                      )}
+                    >
+                      <t.Icon className="w-3.5 h-3.5" />
+                      {t.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+
+            {/* Project picker (only when Project Task is selected) */}
+            {taskTypeKey === 'project' && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
+                  Project <span className="text-red-500 normal-case tracking-normal">*</span>
+                </label>
+                {loadingProjects ? (
+                  <div className="h-10 px-3.5 rounded-xl border border-slate-200 flex items-center text-sm text-slate-400">
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading your projects…
+                  </div>
+                ) : myProjects.length === 0 ? (
+                  <div className="px-3.5 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-[12px] text-amber-800 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    You are not a member of any project, so you cannot create a project task.
+                  </div>
+                ) : (
+                  <select
+                    value={projectId}
+                    onChange={e => setProjectId(e.target.value)}
+                    data-testid="select-project"
+                    className="w-full h-10 px-3.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461]"
+                  >
+                    <option value="">Select a project…</option>
+                    {myProjects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
 
             {/* Planning Quadrant Picker */}
             <div>
@@ -3480,6 +3556,98 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
 // ── Main Component ────────────────────────────────────────────────────────────
 
 
+// ── Task Type Picker (shown first when user clicks New Task) ──────────────────
+interface TaskTypePickerDialogProps {
+  open: boolean;
+  onClose: () => void;
+  currentUserId?: string | null;
+  currentUserFullName?: string | null;
+  onChoose: (key: 'general' | 'project' | 'daytoday') => void;
+}
+
+function TaskTypePickerDialog({ open, onClose, currentUserId, currentUserFullName, onChoose }: TaskTypePickerDialogProps) {
+  const { data: myProjects = [], isLoading } = useQuery({
+    queryKey: ['my-projects', currentUserId, currentUserFullName],
+    queryFn: async () => {
+      if (!currentUserId) return [] as { id: string; name: string }[];
+      const { data } = await supabase.from('projects').select('id, name, team');
+      const rows = (data ?? []) as Array<{ id: string; name: string; team: { projectManager?: string; teamComposition?: Array<{ userId?: string }> } | null }>;
+      return rows.filter(p => {
+        const t = p.team ?? {};
+        if (t.projectManager && currentUserFullName && t.projectManager.trim().toLowerCase() === currentUserFullName.trim().toLowerCase()) return true;
+        return Array.isArray(t.teamComposition) && t.teamComposition.some(m => m.userId === currentUserId);
+      }).map(p => ({ id: p.id, name: p.name }));
+    },
+    enabled: open && !!currentUserId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const noProjects = !isLoading && myProjects.length === 0;
+
+  const TYPES: Array<{
+    key: 'general' | 'project' | 'daytoday';
+    label: string; sub: string; Icon: typeof CheckSquare; color: string;
+  }> = [
+    { key: 'general',  label: 'General Task',  sub: 'A standalone to-do for yourself or your team.', Icon: CheckSquare, color: 'bg-blue-50 border-blue-200 hover:border-blue-400 text-blue-700' },
+    { key: 'project',  label: 'Project Task',  sub: 'A task linked to a project you are a member of.', Icon: Briefcase,   color: 'bg-violet-50 border-violet-200 hover:border-violet-400 text-violet-700' },
+    { key: 'daytoday', label: 'Day-to-Day',    sub: 'A recurring task that repeats on a schedule.', Icon: RefreshCw,    color: 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 text-emerald-700' },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="sm:max-w-[520px] p-0 gap-0 rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-[#1D3461] flex items-center justify-center shrink-0">
+            <Plus className="w-4 h-4 text-white" />
+          </div>
+          <DialogTitle className="text-base font-bold text-slate-800 m-0">What kind of task are you creating?</DialogTitle>
+        </div>
+        <div className="p-4 flex flex-col gap-2.5">
+          {TYPES.map(t => {
+            const disabled = t.key === 'project' && noProjects;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChoose(t.key)}
+                data-testid={`type-pick-${t.key}`}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all text-left',
+                  disabled ? 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed' : t.color,
+                )}
+              >
+                <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', disabled ? 'bg-slate-200 text-slate-400' : 'bg-white shadow-sm')}>
+                  <t.Icon className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={cn('text-[14px] font-bold', disabled ? 'text-slate-500' : '')}>{t.label}</p>
+                  <p className={cn('text-[11px] mt-0.5', disabled ? 'text-slate-400' : 'opacity-80')}>
+                    {disabled ? 'You are not a member of any project yet.' : t.sub}
+                  </p>
+                </div>
+                {!disabled && <ChevronRight className="w-4 h-4 opacity-60" />}
+              </button>
+            );
+          })}
+          {isLoading && (
+            <p className="text-[11px] text-slate-400 flex items-center gap-1.5 px-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Checking your project memberships…
+            </p>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-slate-100 flex justify-end">
+          <button
+            onClick={onClose}
+            data-testid="type-pick-cancel"
+            className="px-4 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-[12px] font-semibold hover:bg-slate-50"
+          >Cancel</button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function MyTasksV2() {
   const { toast } = useToast();
   const { currentUser } = useUser();
@@ -3516,6 +3684,14 @@ export default function MyTasksV2() {
   const [showSearch, setShowSearch] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [showAdd, setShowAdd] = useState(false);
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const [pendingTypeKey, setPendingTypeKey] = useState<'general' | 'project' | 'daytoday'>('general');
+  const openTypePicker = () => { setPendingTypeKey('general'); setTypePickerOpen(true); };
+  const handleTypeChosen = (key: 'general' | 'project' | 'daytoday') => {
+    setPendingTypeKey(key);
+    setTypePickerOpen(false);
+    setShowAdd(true);
+  };
   const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
   const [mainView, setMainView] = useState<'cards' | 'timeline' | 'planner' | 'kanban' | 'inbox' | 'planning'>('planning');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'personal' | 'project' | 'recurring'>('all');
@@ -3658,6 +3834,7 @@ export default function MyTasksV2() {
         recurrenceMonthlyDay: data.recurrenceMonthlyDay ?? null,
         recurrenceEndDate: data.recurrenceEndDate ?? null,
         estimatedHours: data.estimatedHours ?? null,
+        projectId: data.projectId ?? null,
       });
       // Notify assigned user if task was delegated to someone else
       if (data.assignedToUserId && data.assignedToUserId !== userId) {
@@ -3785,7 +3962,7 @@ export default function MyTasksV2() {
             </button>
             <Button
               className="bg-[#1D3461] hover:bg-[#0F2041] text-white shadow-sm h-8 px-3 text-xs font-semibold"
-              onClick={() => setShowAdd(true)}
+              onClick={openTypePicker}
               data-testid="button-quick-add"
             >
               <Plus className="w-3.5 h-3.5 mr-1" />New Task
@@ -3919,7 +4096,7 @@ export default function MyTasksV2() {
                       <Button
                         size="sm"
                         className="bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs"
-                        onClick={() => setShowAdd(true)}
+                        onClick={openTypePicker}
                       >
                         <Plus className="w-3.5 h-3.5 mr-1" />Add a Task
                       </Button>
@@ -4032,7 +4209,7 @@ export default function MyTasksV2() {
                 onEdit={setEditingTask}
                 onToggleDone={handleToggleDone}
                 onStatusChange={(taskId, next) => handleSave(taskId, { status: next })}
-                onAddTask={() => setShowAdd(true)}
+                onAddTask={openTypePicker}
               />
             )}
 
@@ -4045,7 +4222,7 @@ export default function MyTasksV2() {
                 onEdit={setEditingTask}
                 onToggleDone={handleToggleDone}
                 onSave={handleSave}
-                onAddTask={() => setShowAdd(true)}
+                onAddTask={openTypePicker}
               />
             )}
 
@@ -4057,7 +4234,7 @@ export default function MyTasksV2() {
                 isLoading={isLoading}
                 onMarkPersonalDone={handleMarkPersonalDone}
                 onMarkProjectDone={handleMarkProjectDone}
-                onOpenNewTask={() => setShowAdd(true)}
+                onOpenNewTask={openTypePicker}
                 currentUserFullName={currentUser?.fullName}
                 overallPct={overallPct}
                 totalDone={totalDone}
@@ -4071,6 +4248,13 @@ export default function MyTasksV2() {
       </main>
 
       {/* Dialogs */}
+      <TaskTypePickerDialog
+        open={typePickerOpen}
+        onClose={() => setTypePickerOpen(false)}
+        currentUserId={currentUser?.id}
+        currentUserFullName={currentUser?.fullName}
+        onChoose={handleTypeChosen}
+      />
       <QuickAddDialog
         open={showAdd}
         onClose={() => setShowAdd(false)}
@@ -4079,6 +4263,7 @@ export default function MyTasksV2() {
         currentUserFullName={currentUser?.fullName}
         currentUserId={currentUser?.id}
         currentUserRole={currentUser?.role}
+        initialTaskTypeKey={pendingTypeKey}
       />
       <EditDialog
         task={editingTask}

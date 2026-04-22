@@ -138,6 +138,8 @@ export interface CreatePersonalTask {
   // Time tracking
   estimatedHours?: number | null;
   actualHours?: number | null;
+  // Optional project linkage when taskType === 'project-task'
+  projectId?: string | null;
 }
 
 export interface DailyTaskDefinition {
@@ -592,6 +594,7 @@ export function usePersonalTasks(userId: string | undefined) {
           planning_quadrant: task.planningQuadrant ?? null,
           estimated_hours: task.estimatedHours ?? null,
           actual_hours: task.actualHours ?? null,
+          project_id: task.projectId ?? null,
         })
         .select('id')
         .single();
