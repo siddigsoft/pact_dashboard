@@ -402,7 +402,7 @@ async function sendTaskNotification(opts: {
       message_ar: m.msgAr,
       priority: notifPriority(opts.priority),
       status: 'unread',
-      action_url: '/my-tasks',
+      action_url: opts.taskId ? `/tasks/${opts.taskId}` : '/my-tasks',
     });
   } catch {
     // Non-critical — don't throw
@@ -455,7 +455,9 @@ async function dispatchTaskMultiChannel(opts: {
         message_en: opts.messageEn,
         message_ar: opts.messageAr,
         triggered_by: opts.actorId ?? undefined,
-        action_url: 'https://app.pactorg.com/my-tasks',
+        action_url: opts.taskId
+          ? `https://app.pactorg.com/tasks/${opts.taskId}`
+          : 'https://app.pactorg.com/my-tasks',
         metadata: { task_name: opts.taskTitle },
       },
     });
@@ -471,7 +473,9 @@ async function dispatchTaskMultiChannel(opts: {
           task_title: opts.taskTitle,
           message: opts.messageEn,
           message_ar: opts.messageAr,
-          url: 'https://app.pactorg.com/my-tasks',
+          url: opts.taskId
+            ? `https://app.pactorg.com/tasks/${opts.taskId}`
+            : 'https://app.pactorg.com/my-tasks',
         },
       },
     });

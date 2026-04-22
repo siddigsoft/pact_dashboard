@@ -72,8 +72,13 @@ const Auth = () => {
     // is confirmed. Without the authReady guard, a stale currentUser value
     // from React 18 batching can fire this redirect right after logout,
     // sending the user back to the dashboard instead of the login page.
-    if (authReady && currentUser) navigate("/dashboard");
-  }, [authReady, currentUser, navigate]);
+    if (authReady && currentUser) {
+      const raw = searchParams.get("redirect");
+      // Only honour same-origin paths to avoid open-redirect risks.
+      const safe = raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+      navigate(safe, { replace: true });
+    }
+  }, [authReady, currentUser, navigate, searchParams]);
 
   const securityFeatures = [
     { 

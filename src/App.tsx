@@ -282,7 +282,9 @@ const AuthGuard = ({ children }) => {
     !location.pathname.startsWith('/demo/') &&
     !location.pathname.startsWith('/view/')
   ) {
-    return <Navigate to="/auth" replace />;
+    const target = `${location.pathname}${location.search}${location.hash}`;
+    const redirectTo = `/auth?redirect=${encodeURIComponent(target)}`;
+    return <Navigate to={redirectTo} replace />;
   }
 
   return children;

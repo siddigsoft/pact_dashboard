@@ -194,7 +194,7 @@ export function useTaskNotifications() {
       title: titleEn,
       message: messageEn,
       type,
-      link: '/my-tasks',
+      link: taskId ? `/tasks/${taskId}` : '/my-tasks',
     });
 
     // ── 2. Email via dispatch-notification (bilingual, fire-and-forget) ───────
@@ -211,7 +211,9 @@ export function useTaskNotifications() {
         message_ar:        messageAr,
         triggered_by:      actorId,
         triggered_by_name: actorName,
-        action_url:        'https://app.pactorg.com/my-tasks',
+        action_url:        taskId
+                              ? `https://app.pactorg.com/tasks/${taskId}`
+                              : 'https://app.pactorg.com/my-tasks',
         metadata: {
           task_name:   taskTitle,
           due_date:    dueDate ?? '',
@@ -234,7 +236,9 @@ export function useTaskNotifications() {
             due_date:         dueDate ?? '',
             priority:         priority ?? 'normal',
             recipient_name:   recipientName ?? '',
-            url:              'https://app.pactorg.com/my-tasks',
+            url:              taskId
+                                 ? `https://app.pactorg.com/tasks/${taskId}`
+                                 : 'https://app.pactorg.com/my-tasks',
             message:          messageEn,
             message_ar:       messageAr,
             ...extra,
