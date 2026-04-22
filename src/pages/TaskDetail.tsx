@@ -651,17 +651,32 @@ export default function TaskDetail() {
           })()}
 
           {/* Start-time dependencies (people / depts / items) — appears once started */}
-          {task.started_at && Array.isArray(task.start_dependencies) && (task.start_dependencies as StartDependencyRecord[]).length > 0 && (
+          {task.started_at && Array.isArray(task.start_dependencies) && (task.start_dependencies as StartDependencyRecord[]).length > 0 && (() => {
+            const deps = task.start_dependencies as StartDependencyRecord[];
+            const confirmedCount = deps.filter(d => d.confirmed).length;
+            return (
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="card-start-deps">
-              <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
-                <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <ListChecks className="w-4 h-4" /> Dependencies confirmed at Start
-                </h2>
-                {(task.start_requirements as string | null) && (
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    <b>Requirements:</b> {task.start_requirements as string}
-                  </p>
-                )}
+              <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <ListChecks className="w-4 h-4" /> Dependencies requested at Start
+                  </h2>
+                  {(task.start_requirements as string | null) && (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      <b>Requirements:</b> {task.start_requirements as string}
+                    </p>
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    'shrink-0 text-[10px] font-bold px-2 py-1 rounded-full',
+                    confirmedCount === deps.length ? 'bg-emerald-100 text-emerald-700'
+                    : confirmedCount > 0 ? 'bg-amber-100 text-amber-700'
+                    : 'bg-rose-100 text-rose-700',
+                  )}
+                >
+                  {confirmedCount} / {deps.length} confirmed
+                </span>
               </div>
               <ul className="divide-y divide-slate-100">
                 {(task.start_dependencies as StartDependencyRecord[]).map((d, i) => {
@@ -708,7 +723,8 @@ export default function TaskDetail() {
                 })}
               </ul>
             </div>
-          )}
+            );
+          })()}
 
           {/* Activity feed */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -801,6 +817,80 @@ export default function TaskDetail() {
               <MetaRow icon={History} label="Recurrence" value={String(task.recurrence)} />
             )}
           </div>
+
+          {/* Assignee's Start Commitment — visible to creator + everyone after Start */}
+          {task.started_at && (() => {
+            const deps: StartDependencyRecord[] = Array.isArray(task.start_dependencies)
+              ? (task.start_dependencies as StartDependencyRecord[])
+              : [];
+            const confirmedCount = deps.filter(d => d.confirmed).length;
+            const allConfirmed = deps.length > 0 && confirmedCount === deps.length;
+            const anyPending = deps.length > 0 && confirmedCount < deps.length;
+            const assigneeName = (task.assigned_to_name as string | null) ?? 'The assignee';
+            return (
+              <div className="bg-white rounded-2xl border border-blue-200 p-4 space-y-2.5" data-testid="card-start-commitment">
+                <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5" /> Start Commitment
+                </h3>
+                <p className="text-[11px] text-slate-500 -mt-1">
+                  What {assigneeName} committed to when starting this task.
+                </p>
+                {task.estimated_hours != null && (
+                  <MetaRow icon={Clock} label="Hours requested" value={`${task.estimated_hours}h`} />
+                )}
+                {task.start_estimated_days != null && (
+                  <MetaRow icon={Calendar} label="Days needed" value={`${task.start_estimated_days}d`} />
+                )}
+                {(task.start_requirements as string | null) && (
+                  <div className="text-xs">
+                    <p className="text-slate-500 flex items-center gap-1.5 mb-0.5">
+                      <ListChecks className="w-3.5 h-3.5" /> Requirements
+                    </p>
+                    <p className="text-slate-700 whitespace-pre-wrap pl-5">
+                      {task.start_requirements as string}
+                    </p>
+                  </div>
+                )}
+                {deps.length > 0 && (
+                  <div className="pt-1.5 mt-1 border-t border-slate-100">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-slate-500">
+                        <Users className="w-3.5 h-3.5" /> Dependencies
+                      </span>
+                      <span
+                        className={cn(
+                          'font-bold px-2 py-0.5 rounded-full text-[10px]',
+                          allConfirmed ? 'bg-emerald-100 text-emerald-700'
+                          : anyPending ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-600',
+                        )}
+                        data-testid="text-deps-count"
+                      >
+                        {confirmedCount} / {deps.length} confirmed
+                      </span>
+                    </div>
+                    {anyPending && (
+                      <ul className="mt-1.5 space-y-1 text-[11px]">
+                        {deps.filter(d => !d.confirmed).slice(0, 4).map((d, i) => (
+                          <li key={`pending-${i}`} className="flex items-center gap-1.5 text-amber-700" data-testid={`text-pending-dep-${i}`}>
+                            <span className="w-1 h-1 rounded-full bg-amber-500" />
+                            <span className="font-medium">{d.label}</span>
+                            <span className="text-slate-400">·</span>
+                            <span className="text-slate-500 capitalize">{d.kind}{d.userName ? ` · ${d.userName}` : ''}</span>
+                          </li>
+                        ))}
+                        {deps.filter(d => !d.confirmed).length > 4 && (
+                          <li className="text-slate-400 italic pl-2.5">
+                            + {deps.filter(d => !d.confirmed).length - 4} more pending…
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Assignees & Elements */}
           <AssigneesPanel
