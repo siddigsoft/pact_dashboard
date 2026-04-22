@@ -791,6 +791,86 @@ export function usePersonalTasks(userId: string | undefined) {
         }
       }
 
+      // ── Notify person/department dependencies on creation ──────────────────
+      // Lets the listed user (or the dept manager) know up-front that they're
+      // a blocker for this new task — so they don't only find out at "Start".
+      if (data?.id && Array.isArray(task.dependencies) && task.dependencies.length > 0) {
+        const personDeps = task.dependencies.filter(
+          d => (d as { type?: string }).type === 'user' && (d as { userId?: string }).userId,
+        ) as Array<{ userId: string; label: string }>;
+        const deptDeps = task.dependencies.filter(
+          d => (d as { type?: string }).type === 'department' && (d as { deptId?: string }).deptId,
+        ) as Array<{ deptId: string; label: string }>;
+
+        // Person dependencies — notify the named user directly
+        for (const dep of personDeps) {
+          if (dep.userId === task.userId || dep.userId === assignedTo) continue;
+          try {
+            await sendTaskNotification({ userId: dep.userId, taskId: data.id, title: task.title, priority: p, event: 'dependency_added', extra: dep.label });
+            const { data: prof } = await supabase.from('profiles').select('email').eq('id', dep.userId).maybeSingle();
+            if (prof?.email) {
+              await sendTaskEmail({
+                email: prof.email as string,
+                titleEn: 'You are listed as a dependency',
+                body: `You were listed as a dependency on the new task: "${task.title}".\n\nThe task owner will need your input/approval before they can start, and you'll be asked to confirm when ready.\n\nView: https://app.pactorg.com/my-tasks`,
+              });
+            }
+            await dispatchTaskMultiChannel({
+              recipientId: dep.userId,
+              taskId: data.id,
+              taskTitle: task.title,
+              actorId: task.userId,
+              event: 'task_assigned',
+              titleEn: 'You are a dependency on a new task',
+              titleAr: 'تم إدراجك كاعتماد لمهمة جديدة',
+              messageEn: `You were listed as a dependency on "${task.title}". You'll be asked to confirm when ready.`,
+              messageAr: `تم إدراجك كاعتماد للمهمة "${task.title}". سيُطلب منك التأكيد عند الجاهزية.`,
+            });
+          } catch { /* per-recipient non-critical */ }
+        }
+
+        // Department dependencies — notify the department's manager
+        if (deptDeps.length > 0) {
+          try {
+            const deptIds = Array.from(new Set(deptDeps.map(d => d.deptId)));
+            const { data: depts } = await supabase
+              .from('departments')
+              .select('id, name, manager_user_id')
+              .in('id', deptIds);
+            const byId = new Map<string, { name?: string; manager_user_id?: string | null }>(
+              ((depts ?? []) as Array<{ id: string; name?: string; manager_user_id?: string | null }>).map(d => [d.id, d]),
+            );
+            for (const dep of deptDeps) {
+              const dept = byId.get(dep.deptId);
+              const managerId = dept?.manager_user_id ?? null;
+              if (!managerId || managerId === task.userId || managerId === assignedTo) continue;
+              try {
+                await sendTaskNotification({ userId: managerId, taskId: data.id, title: task.title, priority: p, event: 'dependency_added', extra: dep.label });
+                const { data: prof } = await supabase.from('profiles').select('email').eq('id', managerId).maybeSingle();
+                if (prof?.email) {
+                  await sendTaskEmail({
+                    email: prof.email as string,
+                    titleEn: 'Your department is listed as a dependency',
+                    body: `Your department (${dept?.name ?? 'department'}) was listed as a dependency on the new task: "${task.title}".\n\nThe task can't start until your team delivers / approves. You'll be asked to confirm when ready.\n\nView: https://app.pactorg.com/my-tasks`,
+                  });
+                }
+                await dispatchTaskMultiChannel({
+                  recipientId: managerId,
+                  taskId: data.id,
+                  taskTitle: task.title,
+                  actorId: task.userId,
+                  event: 'task_assigned',
+                  titleEn: 'Your department is a dependency',
+                  titleAr: 'قسمك أصبح اعتماداً لمهمة',
+                  messageEn: `Your department (${dept?.name ?? ''}) was listed as a dependency on "${task.title}".`,
+                  messageAr: `تم إدراج قسمك (${dept?.name ?? ''}) كاعتماد للمهمة "${task.title}".`,
+                });
+              } catch { /* per-recipient non-critical */ }
+            }
+          } catch { /* non-critical */ }
+        }
+      }
+
       if (task.dueDate && data?.id) {
         try {
           const d = parseISO(task.dueDate);

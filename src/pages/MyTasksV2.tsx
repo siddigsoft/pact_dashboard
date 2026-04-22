@@ -168,7 +168,7 @@ interface QuickAddDialogProps {
     targetDeptId?: string | null;
     coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
-    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
+    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean; id?: string }>;
     planningQuadrant?: QuadrantKey | null;
     recurrence?: string;
     recurrenceDays?: number[];
@@ -338,7 +338,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   );
 
   // Structured deps (with type + requiresAck)
-  const [structuredDeps, setStructuredDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean }>>([]);
+  const [structuredDeps, setStructuredDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean; id?: string }>>([]);
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
   // Recurrence state
@@ -374,10 +374,10 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setHoursPerDayQA('');
   };
 
-  const addDep = (label: string, type: string = 'custom', requiresAck = false) => {
+  const addDep = (label: string, type: string = 'custom', requiresAck = false, id?: string) => {
     const v = label.trim();
     if (!v || structuredDeps.some(d => d.label === v)) return;
-    setStructuredDeps(prev => [...prev, { type, label: v, requiresAck }]);
+    setStructuredDeps(prev => [...prev, { type, label: v, requiresAck, id }]);
     setDeps(prev => [...prev, v]);
     setDepInput('');
     setDepDateInput('');
@@ -1173,7 +1173,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                     ) : filteredDepUsers.map(u => (
                       <button
                         key={u.id}
-                        onClick={() => addDep(`User: ${u.full_name}`, 'user', true)}
+                        onClick={() => addDep(`User: ${u.full_name}`, 'user', true, u.id)}
                         data-testid={`dep-user-${u.id}`}
                         className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-50 last:border-0"
                       >
@@ -1203,7 +1203,7 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                     ) : (departments as { id: string; name: string }[]).map(dept => (
                       <button
                         key={dept.id}
-                        onClick={() => addDep(`Dept: ${dept.name}`, 'department', true)}
+                        onClick={() => addDep(`Dept: ${dept.name}`, 'department', true, dept.id)}
                         data-testid={`dep-dept-${dept.id}`}
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0"
                       >
@@ -4505,7 +4505,7 @@ export default function MyTasksV2() {
     targetDeptId?: string | null;
     coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
-    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean }>;
+    structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean; id?: string }>;
     planningQuadrant?: QuadrantKey | null;
     recurrence?: string;
     recurrenceDays?: number[];
@@ -4531,7 +4531,13 @@ export default function MyTasksV2() {
         completionRewardAmount: data.rewardAmount ?? null,
         completionRewardCurrency: data.rewardAmount ? 'USD' : null,
         dependencies: data.structuredDeps?.length
-          ? data.structuredDeps.map(d => ({ label: d.label, type: d.type, requiresAck: d.requiresAck }))
+          ? data.structuredDeps.map(d => ({
+              label: d.label,
+              type: d.type,
+              requiresAck: d.requiresAck,
+              ...(d.type === 'user' && d.id ? { userId: d.id } : {}),
+              ...(d.type === 'department' && d.id ? { deptId: d.id } : {}),
+            }))
           : undefined,
         planningQuadrant: data.planningQuadrant ?? null,
         recurrence: data.recurrence ?? 'none',
