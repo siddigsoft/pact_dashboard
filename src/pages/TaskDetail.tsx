@@ -593,15 +593,66 @@ export default function TaskDetail() {
         );
       })()}
 
-      {/* ── Start banner: shown to assignee after ack but before start ── */}
+      {/* ── Start banner: shown to current participant after they've acknowledged.
+          Gating rule: when the task has dependencies AND more than one participant,
+          everyone must acknowledge before any of them can press Start. A solo
+          assignee (no co-assignees) can always start once they have acknowledged. ── */}
       {(() => {
-        const isMine =
-          currentUser?.id &&
-          (task.assigned_to === currentUser.id ||
-            ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === currentUser.id));
-        const ackAt = task.acknowledged_at as string | null | undefined;
+        const uid = currentUser?.id;
+        if (!uid) return null;
+        const isPrimary = task.assigned_to === uid || (task.user_id === uid && !task.assigned_to);
+        const coList = (task.co_assignees as Array<{ id: string; name: string; acknowledged_at?: string | null }> | undefined) ?? [];
+        const myCoSlot = coList.find(c => c.id === uid);
+        const isMine = isPrimary || !!myCoSlot;
+        const myAck = isPrimary
+          ? (task.acknowledged_at as string | null | undefined)
+          : (myCoSlot?.acknowledged_at ?? null);
         const startedAt = task.started_at as string | null | undefined;
-        if (!isMine || !ackAt || startedAt) return null;
+        if (!isMine || !myAck || startedAt) return null;
+
+        // Dependencies were defined at task creation step → require all-acknowledged.
+        const deps = Array.isArray(task.dependencies) ? (task.dependencies as unknown[]) : [];
+        const hasDeps = deps.length > 0;
+        const participantsCount = (task.assigned_to ? 1 : 0) + coList.length || 1;
+        const requireAllAck = hasDeps && participantsCount > 1;
+
+        // Build the list of participants still missing an acknowledgment.
+        const pending: string[] = [];
+        if (requireAllAck) {
+          if (task.assigned_to && !task.acknowledged_at && task.assigned_to !== uid) {
+            pending.push((task.assigned_to_name as string) || 'Primary assignee');
+          }
+          coList.forEach(c => {
+            if (!c.acknowledged_at && c.id !== uid) pending.push(c.name);
+          });
+        }
+        const blocked = pending.length > 0;
+
+        if (blocked) {
+          return (
+            <div
+              className="flex flex-col gap-2 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200"
+              data-testid="banner-start-blocked"
+            >
+              <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                <Clock className="w-4 h-4" /> Waiting for everyone to acknowledge
+              </p>
+              <p className="text-xs text-slate-600">
+                This task has dependencies, so it can only be started once every assignee has confirmed they've seen it. Still pending:
+                {' '}<span className="font-semibold">{pending.join(', ')}</span>.
+              </p>
+              <button
+                type="button"
+                disabled
+                className="shrink-0 self-start inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-300 text-white text-sm font-semibold cursor-not-allowed"
+                data-testid="btn-open-start-dialog"
+              >
+                <PlayCircle className="w-4 h-4" /> Start the task
+              </button>
+            </div>
+          );
+        }
+
         return (
           <div
             className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-xl bg-blue-50 border border-blue-200"
