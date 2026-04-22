@@ -1044,16 +1044,19 @@ export default function WorkspaceHub() {
 
   const displayedFiles = useMemo(() => {
     let files = allFiles;
-    // Enforce security clearance — hide files above user's clearance level
-    files = files.filter(f => CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]);
+    // The uploader (created_by === userId) ALWAYS keeps access to their file
+    // unless ownership has been transferred. Admins and superadmins also bypass.
+    const isOwnerOrAdmin = (f: WFile) => isSuperAdmin || isAdmin || f.created_by === userId;
+    // Enforce security clearance — hide files above user's clearance level (uploader/admin bypass)
+    files = files.filter(f => isOwnerOrAdmin(f) || CLEARANCE_ORDER[f.security_level] <= CLEARANCE_ORDER[effectiveClearance]);
     if (selectedFolderId === '__pinned__') files = files.filter(f => f.is_pinned);
     else if (selectedFolderId === '__recent__') files = [...files].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 20);
     else if (selectedFolderId === '__mine__') files = files.filter(f => f.created_by === userId);
     else if (selectedFolderId === '__all__') { /* no-op: show every visible file */ }
     else if (selectedFolderId) files = files.filter(f => f.folder_id === selectedFolderId);
     else files = files.filter(f => !f.folder_id); // null = root only (no folder)
-    // Hide files that belong to locked folders
-    files = files.filter(f => !f.folder_id || !lockedFolderIdSet.has(f.folder_id));
+    // Hide files that belong to locked folders (uploader/admin bypass)
+    files = files.filter(f => isOwnerOrAdmin(f) || !f.folder_id || !lockedFolderIdSet.has(f.folder_id));
     if (secFilter !== 'all') files = files.filter(f => f.security_level === secFilter);
     if (searchQuery.trim()) { const q = searchQuery.toLowerCase(); files = files.filter(f => f.name.toLowerCase().includes(q) || (f.description ?? '').toLowerCase().includes(q) || f.tags.some(t => t.toLowerCase().includes(q))); }
     return [...files].sort((a, b) => {
