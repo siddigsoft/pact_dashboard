@@ -166,6 +166,12 @@ class WebRTCService {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private iceRestartPending: boolean = false;
 
+  // Signaling-channel resilience
+  private signalingRetryTimer: NodeJS.Timeout | null = null;
+  private signalingRetryAttempts: number = 0;
+  private visibilityHandler: (() => void) | null = null;
+  private onlineHandler: (() => void) | null = null;
+
   async initialize(userId: string, userName: string, userAvatar?: string, handlers?: CallEventHandler) {
     this.currentUserId = userId;
     this.currentUserName = userName;
@@ -176,6 +182,81 @@ class WebRTCService {
 
     await this.setupSignalingChannel();
     await this.setupUserPresence();
+    this.attachConnectivityWatchers();
+  }
+
+  /**
+   * Re-subscribe the signaling + presence channels when the tab becomes visible
+   * or the network comes back. Without this, a brief realtime disconnect leaves
+   * the user unable to receive incoming calls until they reload.
+   */
+  private attachConnectivityWatchers() {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    if (!this.visibilityHandler) {
+      this.visibilityHandler = () => {
+        if (document.visibilityState === 'visible' && this.currentUserId) {
+          // Don't tear down the signaling channel mid-call — WebRTC may need it
+          // for ICE restart / renegotiation. Only refresh when idle.
+          if (this.currentCallId) {
+            console.log('[WebRTC] Tab visible during active call — skipping channel refresh');
+            return;
+          }
+          console.log('[WebRTC] Tab became visible — refreshing signaling channel');
+          void this.setupSignalingChannel();
+          void this.setupUserPresence();
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityHandler);
+    }
+    if (!this.onlineHandler) {
+      this.onlineHandler = () => {
+        if (this.currentUserId) {
+          if (this.currentCallId) {
+            console.log('[WebRTC] Network back during active call — skipping channel refresh');
+            return;
+          }
+          console.log('[WebRTC] Network back online — refreshing signaling channel');
+          void this.setupSignalingChannel();
+          void this.setupUserPresence();
+        }
+      };
+      window.addEventListener('online', this.onlineHandler);
+    }
+  }
+
+  private detachConnectivityWatchers() {
+    if (typeof document !== 'undefined' && this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
+    if (typeof window !== 'undefined' && this.onlineHandler) {
+      window.removeEventListener('online', this.onlineHandler);
+      this.onlineHandler = null;
+    }
+    if (this.signalingRetryTimer) {
+      clearTimeout(this.signalingRetryTimer);
+      this.signalingRetryTimer = null;
+    }
+  }
+
+  private scheduleSignalingRetry() {
+    if (!this.currentUserId) return;
+    if (this.signalingRetryTimer) return;
+    const attempt = Math.min(this.signalingRetryAttempts, 5);
+    const delay = Math.min(1000 * Math.pow(2, attempt), 30000); // 1s, 2s, 4s, 8s, 16s, 30s
+    this.signalingRetryAttempts += 1;
+    console.log(`[WebRTC] Scheduling signaling channel retry in ${delay}ms (attempt ${this.signalingRetryAttempts})`);
+    this.signalingRetryTimer = setTimeout(() => {
+      this.signalingRetryTimer = null;
+      // Don't reset the channel mid-call — let the existing one keep trying
+      // to deliver in-flight signals. Schedule another check shortly.
+      if (this.currentCallId) {
+        this.scheduleSignalingRetry();
+        return;
+      }
+      if (this.currentUserId) void this.setupSignalingChannel();
+    }, delay);
   }
 
   private async setupUserPresence() {
@@ -335,16 +416,20 @@ class WebRTCService {
         console.log('[WebRTC] Signaling channel status:', status);
         if (status === 'SUBSCRIBED') {
           clearTimeout(timeout);
+          this.signalingRetryAttempts = 0; // reset on success
           resolve();
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           clearTimeout(timeout);
           console.error('[WebRTC] Signaling channel error:', status);
+          // Schedule a retry — without this the user silently stops receiving
+          // incoming calls until they reload the page.
+          this.scheduleSignalingRetry();
           reject(new Error(`Signaling channel failed: ${status}`));
         }
       });
     }).catch((error) => {
       console.error('[WebRTC] Signaling channel setup failed:', error);
-      // Continue anyway - we'll try to recover during call initiation
+      this.scheduleSignalingRetry();
     });
     
     console.log('[WebRTC] Signaling channel ready');
@@ -1089,6 +1174,7 @@ class WebRTCService {
 
   destroy() {
     this.cleanup();
+    this.detachConnectivityWatchers();
     if (this.signalingChannel) {
       supabase.removeChannel(this.signalingChannel);
       this.signalingChannel = null;
@@ -1097,6 +1183,7 @@ class WebRTCService {
       supabase.removeChannel(this.userPresenceChannel);
       this.userPresenceChannel = null;
     }
+    this.signalingRetryAttempts = 0;
     this.currentUserId = null;
     this.eventHandlers = null;
   }

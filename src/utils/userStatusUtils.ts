@@ -12,7 +12,18 @@ export interface UserStatusInfo {
 
 const ONLINE_THRESHOLD_MINUTES = 5;
 
-export const getUserStatus = (user: User): UserStatusInfo => {
+export const getUserStatus = (user: User, isOnlineRealtime: boolean = false): UserStatusInfo => {
+  // Realtime presence is the source of truth — if the user is connected to the
+  // presence channel right now, they are online regardless of GPS or last_activity.
+  if (isOnlineRealtime) {
+    return {
+      type: 'online',
+      color: 'bg-green-500',
+      badgeVariant: 'default',
+      label: 'Online'
+    };
+  }
+
   const avail = (user.availability || '').toLowerCase();
   if (avail === 'offline') {
     return {
@@ -42,16 +53,14 @@ export const getUserStatus = (user: User): UserStatusInfo => {
   }
 
   const lastSeenTime = user.location?.lastUpdated || user.lastActive;
-  
+
   if (lastSeenTime) {
     try {
       const lastSeenDate = parseISO(lastSeenTime);
       const minutesAgo = differenceInMinutes(new Date(), lastSeenDate);
-      
-      const hasValidLocation = user.location?.latitude && user.location?.longitude;
-      const isRecentlyActive = minutesAgo <= ONLINE_THRESHOLD_MINUTES;
-      
-      if (hasValidLocation && isRecentlyActive) {
+
+      // Recently active = online (no GPS requirement — many users don't share location)
+      if (minutesAgo <= ONLINE_THRESHOLD_MINUTES) {
         return {
           type: 'online',
           color: 'bg-green-500',
@@ -59,7 +68,7 @@ export const getUserStatus = (user: User): UserStatusInfo => {
           label: 'Online'
         };
       }
-      
+
       if (isToday(lastSeenDate)) {
         return {
           type: 'same-day',

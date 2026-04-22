@@ -243,7 +243,11 @@ const Chat: React.FC = () => {
   };
 
   const getUserStatusDisplay = (user: User): UserStatus => {
-    // Use lastActive for last seen, show Online if active in last 5 minutes
+    // Realtime presence wins — user is currently connected to the app right now.
+    if (onlineUserIds.includes(user.id)) {
+      return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
+    }
+    // Otherwise fall back to the persisted last_activity timestamp.
     const lastActive = user.lastActive;
     if (lastActive) {
       try {

@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/user/UserContext';
+import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -27,8 +28,8 @@ import {
 
 const USERS_PAGE_SIZE = 10;
 
-const getUserStatusDisplay = (user: User) => {
-  const status = getUserStatus(user);
+const getUserStatusDisplay = (user: User, isOnlineRealtime: boolean = false) => {
+  const status = getUserStatus(user, isOnlineRealtime);
   if (status.type === 'online') {
     return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
   }
@@ -173,6 +174,7 @@ const ChatSidebar: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [userPage, setUserPage] = useState(1);
   const { currentUser, users } = useUser();
+  const { isUserOnline } = useGlobalPresence();
   const availableUsers = useMemo(
     () => users.filter(u => u.id !== currentUser?.id),
     [users, currentUser?.id]
@@ -267,7 +269,7 @@ const ChatSidebar: React.FC = () => {
                             </AvatarFallback>
                           </Avatar>
                           {(() => {
-                            const status = getUserStatusDisplay(u);
+                            const status = getUserStatusDisplay(u, isUserOnline(u.id));
                             return <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 ${status.dotColor} rounded-full border-2 border-background`} />;
                           })()}
                         </div>
@@ -275,9 +277,10 @@ const ChatSidebar: React.FC = () => {
                           <div className="text-sm font-medium truncate">
                             {u.fullName || u.name || u.username || 'User'}
                           </div>
-                          <div className={`text-xs truncate ${getUserStatusDisplay(u).color}`}>
-                            {getUserStatusDisplay(u).text}
-                          </div>
+                          {(() => {
+                            const status = getUserStatusDisplay(u, isUserOnline(u.id));
+                            return <div className={`text-xs truncate ${status.color}`}>{status.text}</div>;
+                          })()}
                         </div>
                       </button>
                     ))}
@@ -334,7 +337,7 @@ const ChatSidebar: React.FC = () => {
                   if (!targetUserId) return null;
                   const targetUser = users.find(u => u.id === targetUserId);
                   if (!targetUser) return null;
-                  return getUserStatusDisplay(targetUser);
+                  return getUserStatusDisplay(targetUser, isUserOnline(targetUser.id));
                 }}
               />
             ))

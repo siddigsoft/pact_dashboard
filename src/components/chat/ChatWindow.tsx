@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { formatDistanceToNow, format, isToday, isYesterday, parseISO } from 'date-fns';
 import { useUser } from '@/context/user/UserContext';
+import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -36,6 +37,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
   const { currentUser, users } = useUser();
+  const { isUserOnline } = useGlobalPresence();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -76,7 +78,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
 
   const getTargetUserStatus = () => {
     if (!targetUser) return null;
-    const status = getUserStatus(targetUser);
+    const status = getUserStatus(targetUser, isUserOnline(targetUser.id));
     if (status.type === 'online') return { text: 'Online', color: 'text-green-600 dark:text-green-400', dotColor: 'bg-green-500' };
     const lastSeenTime = targetUser.location?.lastUpdated || targetUser.lastActive;
     if (lastSeenTime) {
