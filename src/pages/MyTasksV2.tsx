@@ -175,6 +175,8 @@ interface QuickAddDialogProps {
     recurrenceEndDate?: string | null;
     estimatedHours?: number | null;
     attachments?: TaskAttachment[];
+    startDate?: string | null;
+    hoursPerDay?: number | null;
   }) => void;
   isCreating: boolean;
   currentUserFullName?: string | null;
@@ -347,6 +349,11 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
   // Time tracking state (estimated only — actual is auto-calculated from start/end timestamps)
   const [estimatedHoursQA, setEstimatedHoursQA] = useState('');
 
+  // Date-range planning (Outlook-style)
+  const today = new Date().toISOString().slice(0, 10);
+  const [startDateQA, setStartDateQA]   = useState(today);
+  const [hoursPerDayQA, setHoursPerDayQA] = useState('');
+
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey(initialTaskTypeKey); setProjectId('');
     setPriority('medium'); setDueDate(''); setNotes('');
@@ -358,6 +365,8 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     setRecurrenceOn(false); setRecurrence('daily');
     setRecurrenceDaysQA([]); setRecurrenceMonthlyDayQA(1); setRecurrenceEndDate('');
     setEstimatedHoursQA('');
+    setStartDateQA(new Date().toISOString().slice(0, 10));
+    setHoursPerDayQA('');
   };
 
   const addDep = (label: string, type: string = 'custom', requiresAck = false) => {
@@ -380,6 +389,14 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     if (!title.trim()) return;
     if (taskTypeKey === 'project' && !projectId) return;
     if (recurrenceOn && (recurrence === 'weekly' || recurrence === 'specific_days') && recurrenceDaysQA.length === 0) return;
+    if (!startDateQA || !dueDate) {
+      toast({ title: 'Start and end dates are required', description: 'Pick when work begins and when it should be done.', variant: 'destructive' });
+      return;
+    }
+    if (startDateQA > dueDate) {
+      toast({ title: 'Invalid date range', description: 'Start date must be on or before the end date.', variant: 'destructive' });
+      return;
+    }
     const typeMap = {
       general:  { taskType: null as null,                    category: 'personal' },
       project:  { taskType: 'project-task' as const,        category: 'project'  },
@@ -432,6 +449,8 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
         recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
         estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
         attachments: uploadedAttachments,
+        startDate: startDateQA || null,
+        hoursPerDay: hoursPerDayQA ? parseFloat(hoursPerDayQA) : null,
       }));
       reset();
     } catch (e: any) {
@@ -699,27 +718,64 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
                   {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
+              <div />
+            </div>
+
+            {/* Date range — Start + End (both required), Outlook-style multi-day span */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Due date</label>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
+                  Start date <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="date"
+                  required
+                  value={startDateQA}
+                  max={dueDate || undefined}
+                  onChange={e => setStartDateQA(e.target.value)}
+                  data-testid="input-start-date"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
+                  End date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
                   value={dueDate}
+                  min={startDateQA || undefined}
                   onChange={e => setDueDate(e.target.value)}
+                  data-testid="input-end-date"
                   className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
                 />
               </div>
             </div>
 
-            {/* Time tracking — Estimated only; Actual is auto-calculated when task is completed */}
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Estimated hrs
-              </label>
-              <input type="number" min="0" step="0.25" placeholder="0.0"
-                value={estimatedHoursQA} onChange={e => setEstimatedHoursQA(e.target.value)}
-                data-testid="input-estimated-hours"
-                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
-              <p className="text-[10px] text-slate-400 mt-1">Actual hours are tracked automatically when the task is started and completed.</p>
+            {/* Time tracking — Estimated total + per-day allocation */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Estimated total hrs
+                </label>
+                <input type="number" min="0" step="0.25" placeholder="0.0"
+                  value={estimatedHoursQA} onChange={e => setEstimatedHoursQA(e.target.value)}
+                  data-testid="input-estimated-hours"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Hours / day
+                </label>
+                <input type="number" min="0" step="0.25" placeholder="e.g. 2"
+                  value={hoursPerDayQA} onChange={e => setHoursPerDayQA(e.target.value)}
+                  data-testid="input-hours-per-day"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              </div>
+              <p className="col-span-2 text-[10px] text-slate-400 -mt-1">
+                The task will appear on the calendar from <b>start</b> through <b>end</b>, showing <b>hours / day</b> on each day. Actual hours are auto-tracked.
+              </p>
             </div>
 
             {/* Assign to */}
@@ -1139,6 +1195,8 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [priority, setPriority]     = useState<PersonalTaskPriority>('medium');
   const [status, setStatus]         = useState<PersonalTaskStatus>('todo');
   const [dueDate, setDueDate]       = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editHoursPerDay, setEditHoursPerDay] = useState('');
   const [notes, setNotes]           = useState('');
   const [reward, setReward]         = useState('');
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
@@ -1238,6 +1296,8 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       setPriority(task.priority);
       setStatus(task.status);
       setDueDate(task.dueDate ?? '');
+      setEditStartDate(task.startDate ?? '');
+      setEditHoursPerDay(task.hoursPerDay != null ? String(task.hoursPerDay) : '');
       setDescription(task.description ?? '');
       setNotes(task.notes ?? '');
       setReward(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
@@ -1299,6 +1359,8 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
     onSave(task.id, {
       title: title.trim(), priority, status,
       dueDate: dueDate || null, description: description || null,
+      startDate: editStartDate || null,
+      hoursPerDay: editHoursPerDay ? parseFloat(editHoursPerDay) : null,
       notes: notes || null,
       taskType: typeMap[taskTypeKey],
       completionRewardAmount: reward ? parseFloat(reward) : null,
@@ -1509,10 +1571,32 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
               </div>
             </div>
 
-            {/* Due Date */}
+            {/* Date range */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Start date</label>
+                <input type="date" value={editStartDate} max={dueDate || undefined}
+                  onChange={e => setEditStartDate(e.target.value)}
+                  data-testid="edit-input-start-date"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">End date</label>
+                <input type="date" value={dueDate} min={editStartDate || undefined}
+                  onChange={e => setDueDate(e.target.value)}
+                  data-testid="edit-input-end-date"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+              </div>
+            </div>
+
+            {/* Hours per day */}
             <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Due date</label>
-              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Hours / day
+              </label>
+              <input type="number" min="0" step="0.25" placeholder="e.g. 2"
+                value={editHoursPerDay} onChange={e => setEditHoursPerDay(e.target.value)}
+                data-testid="edit-input-hours-per-day"
                 className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
             </div>
 
@@ -4172,6 +4256,8 @@ export default function MyTasksV2() {
     estimatedHours?: number | null;
     attachments?: TaskAttachment[];
     projectId?: string | null;
+    startDate?: string | null;
+    hoursPerDay?: number | null;
   }) => {
     try {
       await createTask({
@@ -4195,6 +4281,8 @@ export default function MyTasksV2() {
         recurrenceEndDate: data.recurrenceEndDate ?? null,
         estimatedHours: data.estimatedHours ?? null,
         projectId: data.projectId ?? null,
+        startDate: data.startDate ?? null,
+        hoursPerDay: data.hoursPerDay ?? null,
       });
       // Notify assigned user if task was delegated to someone else
       if (data.assignedToUserId && data.assignedToUserId !== userId) {

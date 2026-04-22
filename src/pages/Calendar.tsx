@@ -5,7 +5,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DateRange } from "react-day-picker";
-import { format, addMonths, isToday, isSameDay, parseISO, isValid, startOfDay, endOfDay, getDay } from "date-fns";
+import { format, addMonths, isToday, isSameDay, parseISO, isValid, startOfDay, endOfDay, getDay, addDays, differenceInCalendarDays } from "date-fns";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -73,7 +73,7 @@ const CalendarPage = () => {
     from: new Date(),
     to: addMonths(new Date(), 1),
   });
-  const [viewMode, setViewMode] = useState<"daily" | "range">("daily");
+  const [viewMode, setViewMode] = useState<"daily" | "range" | "timeline">("daily");
 
   const userRole = currentUser?.role || '';
   const isGlobalAdmin = hasRoleIn(userRole, GLOBAL_ADMIN_ROLES);
@@ -170,10 +170,39 @@ const CalendarPage = () => {
     const d = new Date(v.dueDate); return isValid(d) && inSelectedRange(d);
   }), [roleFilteredVisits, date, dateRange, viewMode]);
 
-  const filteredTasks = useMemo(() => myOneTimeTasks.filter(t => {
+  // Multi-day-aware: a task is shown on day D if startDate <= D <= dueDate.
+  // Falls back to single-day match on dueDate if no startDate.
+  const taskCoversDate = (t: PersonalTask, day: Date): boolean => {
     if (!t.dueDate) return false;
-    try { const d = parseISO(t.dueDate); return isValid(d) && inSelectedRange(d); } catch { return false; }
-  }), [myOneTimeTasks, date, dateRange, viewMode]);
+    try {
+      const due = parseISO(t.dueDate);
+      if (!isValid(due)) return false;
+      const start = t.startDate ? parseISO(t.startDate) : due;
+      if (!isValid(start)) return false;
+      return day >= startOfDay(start) && day <= endOfDay(due);
+    } catch { return false; }
+  };
+
+  const taskInSelectedRange = (t: PersonalTask): boolean => {
+    if (!t.dueDate) return false;
+    if (viewMode === 'daily') return taskCoversDate(t, date);
+    if (!dateRange?.from) return false;
+    const rStart = startOfDay(dateRange.from);
+    const rEnd = endOfDay(dateRange.to ?? dateRange.from);
+    try {
+      const due = parseISO(t.dueDate);
+      if (!isValid(due)) return false;
+      const start = t.startDate ? parseISO(t.startDate) : due;
+      if (!isValid(start)) return false;
+      // overlap
+      return start <= rEnd && due >= rStart;
+    } catch { return false; }
+  };
+
+  const filteredTasks = useMemo(
+    () => myOneTimeTasks.filter(taskInSelectedRange),
+    [myOneTimeTasks, date, dateRange, viewMode]
+  );
 
   const filteredDailyWorks = useMemo(() => {
     return myDailyWorks.filter(t => {
@@ -206,7 +235,7 @@ const CalendarPage = () => {
   // ── Calendar dot indicators (any item that day) ──────────────────────────────
   const isDayWithItems = (day: Date) => {
     if (canSeeSiteVisits && roleFilteredVisits.some(v => { const d = new Date(v.dueDate); return isValid(d) && isSameDay(d, day); })) return true;
-    if (myOneTimeTasks.some(t => { try { const d = parseISO(t.dueDate ?? ''); return isValid(d) && isSameDay(d, day); } catch { return false; } })) return true;
+    if (myOneTimeTasks.some(t => taskCoversDate(t, day))) return true;
     if (outlook.events.some(e => { try { const d = e.start ? new Date(e.start) : null; return d && isValid(d) && isSameDay(d, day); } catch { return false; } })) return true;
     return false;
   };
@@ -257,8 +286,8 @@ const CalendarPage = () => {
         </div>
         <Tabs
           value={viewMode}
-          onValueChange={(v) => setViewMode(v as "daily" | "range")}
-          className="w-[240px]"
+          onValueChange={(v) => setViewMode(v as "daily" | "range" | "timeline")}
+          className="w-[360px]"
         >
           <TabsList className="w-full">
             <TabsTrigger value="daily" className="flex-1">
@@ -269,9 +298,22 @@ const CalendarPage = () => {
               <CalendarClock className="h-4 w-4 mr-1" />
               Range
             </TabsTrigger>
+            <TabsTrigger value="timeline" className="flex-1" data-testid="tab-timeline">
+              <CalendarDays className="h-4 w-4 mr-1" />
+              Timeline
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
+
+      {viewMode === 'timeline' && (
+        <TimelineView
+          startDate={date}
+          tasks={myOneTimeTasks}
+          dailyWorks={myDailyWorks}
+          onOpenTask={(id) => navigate(`/my-tasks?taskId=${id}`)}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* ─── Calendar (left) ─── */}
@@ -561,6 +603,179 @@ const CalendarPage = () => {
 };
 
 // ── Sub-components ──────────────────────────────────────────────────────────────
+
+// ── Timeline (Outlook-style 14-day horizontal grid) ─────────────────────────
+function TimelineView({
+  startDate,
+  tasks,
+  dailyWorks,
+  onOpenTask,
+}: {
+  startDate: Date;
+  tasks: PersonalTask[];
+  dailyWorks: PersonalTask[];
+  onOpenTask: (id: string) => void;
+}) {
+  const DAYS = 14;
+  const days = Array.from({ length: DAYS }, (_, i) => addDays(startOfDay(startDate), i));
+  const rangeStart = days[0];
+  const rangeEnd = endOfDay(days[DAYS - 1]);
+
+  // Materialise rows: any task whose [start..due] overlaps the visible window
+  const rows = useMemo(() => {
+    const all = [...tasks, ...dailyWorks];
+    const out: Array<{
+      task: PersonalTask;
+      offset: number;       // 0..DAYS-1
+      span: number;         // 1..DAYS
+      hoursPerDay: number | null;
+      isRecurring: boolean;
+      recurringDays: Set<number>;
+    }> = [];
+    for (const t of all) {
+      const isRecurring = t.recurrence && t.recurrence !== 'none';
+      if (isRecurring) {
+        // Recurring: show as a strip across all days, mark which weekdays apply
+        const recDays = new Set<number>();
+        if (t.recurrence === 'daily') {
+          for (let i = 0; i < 7; i++) recDays.add(i);
+        } else if (Array.isArray(t.recurrenceDays) && t.recurrenceDays.length > 0) {
+          t.recurrenceDays.forEach(d => recDays.add(d));
+        }
+        if (recDays.size > 0) {
+          out.push({ task: t, offset: 0, span: DAYS, hoursPerDay: t.hoursPerDay, isRecurring: true, recurringDays: recDays });
+        }
+        continue;
+      }
+      if (!t.dueDate) continue;
+      try {
+        const due = parseISO(t.dueDate);
+        if (!isValid(due)) continue;
+        const start = t.startDate ? parseISO(t.startDate) : due;
+        if (!isValid(start)) continue;
+        // Clip to visible window
+        if (due < rangeStart || start > rangeEnd) continue;
+        const clipStart = start < rangeStart ? rangeStart : startOfDay(start);
+        const clipEnd = due > rangeEnd ? rangeEnd : endOfDay(due);
+        const offset = Math.max(0, differenceInCalendarDays(clipStart, rangeStart));
+        const span = Math.min(DAYS - offset, differenceInCalendarDays(clipEnd, clipStart) + 1);
+        if (span <= 0) continue;
+        out.push({ task: t, offset, span, hoursPerDay: t.hoursPerDay, isRecurring: false, recurringDays: new Set() });
+      } catch { /* ignore */ }
+    }
+    return out;
+  }, [tasks, dailyWorks, rangeStart, rangeEnd]);
+
+  return (
+    <Card data-testid="card-timeline">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-indigo-600" />
+            Timeline · next {DAYS} days
+          </CardTitle>
+          <Badge variant="outline">{rows.length} task{rows.length !== 1 ? 's' : ''}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">
+            No scheduled tasks in the next {DAYS} days. Set <b>start</b> + <b>end</b> dates on a task to see it here.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="min-w-[800px]">
+              {/* Day header row */}
+              <div className="grid" style={{ gridTemplateColumns: `220px repeat(${DAYS}, minmax(56px, 1fr))` }}>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide px-2 py-1.5 border-b border-slate-200">
+                  Task
+                </div>
+                {days.map((d) => (
+                  <div
+                    key={d.toISOString()}
+                    className={`text-center text-[10px] font-semibold px-1 py-1.5 border-b border-slate-200 ${
+                      isToday(d) ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500'
+                    }`}
+                  >
+                    <div>{format(d, 'EEE')}</div>
+                    <div className={isToday(d) ? 'text-indigo-700 font-bold' : 'text-slate-700'}>{format(d, 'd')}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Task rows */}
+              {rows.map((r, idx) => (
+                <div
+                  key={`${r.task.id}-${idx}`}
+                  className="grid border-b border-slate-100 hover:bg-slate-50/60"
+                  style={{ gridTemplateColumns: `220px repeat(${DAYS}, minmax(56px, 1fr))` }}
+                  data-testid={`timeline-row-${r.task.id}`}
+                >
+                  <button
+                    onClick={() => onOpenTask(r.task.id)}
+                    className="text-left px-2 py-2 truncate text-xs font-medium text-slate-700 hover:text-indigo-700 flex items-center gap-1.5"
+                  >
+                    {r.isRecurring ? (
+                      <RefreshCw className="h-3 w-3 shrink-0 text-emerald-600" />
+                    ) : r.task.category === 'project' ? (
+                      <Briefcase className="h-3 w-3 shrink-0 text-violet-600" />
+                    ) : (
+                      <CheckSquare className="h-3 w-3 shrink-0 text-blue-600" />
+                    )}
+                    <span className="truncate">{r.task.title}</span>
+                  </button>
+
+                  {/* Empty cells for offset */}
+                  {Array.from({ length: r.offset }).map((_, i) => (
+                    <div key={`pad-${i}`} className="border-l border-slate-50" />
+                  ))}
+
+                  {/* For recurring: dot per matching weekday; for one-time: single bar */}
+                  {r.isRecurring ? (
+                    days.map((d) => {
+                      const matches = r.recurringDays.has(getDay(d));
+                      return (
+                        <div key={d.toISOString()} className="border-l border-slate-50 flex items-center justify-center py-2">
+                          {matches && (
+                            <div
+                              className="w-full h-6 rounded bg-emerald-100 border border-emerald-300 text-[9px] font-bold text-emerald-800 flex items-center justify-center"
+                              title={`${r.task.title}${r.hoursPerDay ? ` · ${r.hoursPerDay}h` : ''}`}
+                            >
+                              {r.hoursPerDay ? `${r.hoursPerDay}h` : '•'}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div
+                      className={`my-2 rounded px-1.5 text-[10px] font-bold flex items-center justify-between gap-1 truncate ${
+                        r.task.priority === 'critical' ? 'bg-rose-100 border border-rose-300 text-rose-800'
+                        : r.task.priority === 'high' ? 'bg-amber-100 border border-amber-300 text-amber-800'
+                        : r.task.category === 'project' ? 'bg-violet-100 border border-violet-300 text-violet-800'
+                        : 'bg-blue-100 border border-blue-300 text-blue-800'
+                      }`}
+                      style={{ gridColumn: `span ${r.span} / span ${r.span}` }}
+                      title={`${r.task.title}${r.hoursPerDay ? ` · ${r.hoursPerDay}h/day` : ''}`}
+                    >
+                      <span className="truncate">{r.task.title}</span>
+                      {r.hoursPerDay != null && <span className="shrink-0">{r.hoursPerDay}h/d</span>}
+                    </div>
+                  )}
+
+                  {/* Trailing pad cells */}
+                  {!r.isRecurring && Array.from({ length: Math.max(0, DAYS - r.offset - r.span) }).map((_, i) => (
+                    <div key={`tail-${i}`} className="border-l border-slate-50" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function TaskRow({ task, onOpen, compact = false }: { task: PersonalTask; onOpen: () => void; compact?: boolean }) {
   const due = (() => {

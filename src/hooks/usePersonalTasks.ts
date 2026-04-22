@@ -102,6 +102,9 @@ export interface PersonalTask {
   startRequirements: string | null;
   startDependencies: StartDependencyRecord[];
   outputText: string | null;
+  // Date-range (Outlook-style multi-day span) + per-day hours
+  startDate: string | null;
+  hoursPerDay: number | null;
 }
 
 export interface StartDependencyRecord {
@@ -160,6 +163,9 @@ export interface CreatePersonalTask {
   actualHours?: number | null;
   // Optional project linkage when taskType === 'project-task'
   projectId?: string | null;
+  // Date-range (Outlook-style multi-day span) + per-day hours
+  startDate?: string | null;
+  hoursPerDay?: number | null;
 }
 
 export interface DailyTaskDefinition {
@@ -280,6 +286,8 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     startRequirements: (r.start_requirements as string) ?? null,
     startDependencies: Array.isArray(r.start_dependencies) ? (r.start_dependencies as StartDependencyRecord[]) : [],
     outputText: (r.output_text as string) ?? null,
+    startDate: (r.start_date as string) ?? null,
+    hoursPerDay: (r.hours_per_day as number) ?? null,
   };
 }
 
@@ -621,6 +629,8 @@ export function usePersonalTasks(userId: string | undefined) {
           estimated_hours: task.estimatedHours ?? null,
           actual_hours: task.actualHours ?? null,
           project_id: task.projectId ?? null,
+          start_date: task.startDate ?? null,
+          hours_per_day: task.hoursPerDay ?? null,
         })
         .select('id')
         .single();
@@ -809,6 +819,12 @@ export function usePersonalTasks(userId: string | undefined) {
       if ('recurrence' in updates && updates.recurrence !== undefined) patch.recurrence = updates.recurrence;
       if (updates.estimatedHours !== undefined) patch.estimated_hours = updates.estimatedHours ?? null;
       if (updates.actualHours !== undefined) patch.actual_hours = updates.actualHours ?? null;
+      if ((updates as { startDate?: string | null }).startDate !== undefined) {
+        patch.start_date = (updates as { startDate?: string | null }).startDate ?? null;
+      }
+      if ((updates as { hoursPerDay?: number | null }).hoursPerDay !== undefined) {
+        patch.hours_per_day = (updates as { hoursPerDay?: number | null }).hoursPerDay ?? null;
+      }
       // Assignment / department fields (so Edit dialog reassignments actually persist)
       if ((updates as { assignedTo?: string | null }).assignedTo !== undefined) {
         patch.assigned_to = (updates as { assignedTo?: string | null }).assignedTo;
@@ -869,6 +885,7 @@ export function usePersonalTasks(userId: string | undefined) {
           'acknowledged_at', 'acknowledged_by',
           'start_estimated_days', 'start_requirements', 'start_dependencies',
           'output_text',
+          'start_date', 'hours_per_day',
         ]) {
           delete (fallback as Record<string, unknown>)[k];
         }
