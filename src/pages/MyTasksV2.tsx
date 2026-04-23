@@ -1007,8 +1007,11 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
                   <Users className="w-3 h-3" /> Co-assignees
                   <span className="text-slate-400 font-normal normal-case tracking-normal">(people who DO the task with you)</span>
                 </label>
-                <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1 mb-1.5 leading-snug">
-                  💡 Co-assignees share the work — they get their own hours, must acknowledge, and follow the full task lifecycle (start, delay, done…). Different from <b>Dependencies</b> below.
+                <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1 mb-1 leading-snug">
+                  💡 Co-assignees share the work — each gets their own hours and follows the full lifecycle (start, delay, done…). Different from <b>Dependencies</b> below.
+                </p>
+                <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-1.5 leading-snug" data-testid="hint-coassignee-ack-gate">
+                  🔒 <b>Start gate:</b> this task cannot be started until every co-assignee has <b>acknowledged &amp; confirmed</b> it. Any co-assignee who hasn't confirmed blocks Start for everyone.
                 </p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   {coAssignees.length > 0 && (
@@ -1940,8 +1943,11 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                   <Users className="w-3 h-3" /> Co-assignees
                   <span className="text-slate-400 font-normal normal-case tracking-normal">(people who DO the task with you)</span>
                 </label>
-                <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1 mb-1.5 leading-snug">
-                  💡 Co-assignees share the work — they get their own hours, must acknowledge, and follow the full task lifecycle (start, delay, done…). Different from <b>Dependencies</b> below.
+                <p className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1 mb-1 leading-snug">
+                  💡 Co-assignees share the work — each gets their own hours and follows the full lifecycle (start, delay, done…). Different from <b>Dependencies</b> below.
+                </p>
+                <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-1.5 leading-snug" data-testid="hint-coassignee-ack-gate">
+                  🔒 <b>Start gate:</b> this task cannot be started until every co-assignee has <b>acknowledged &amp; confirmed</b> it. Any co-assignee who hasn't confirmed blocks Start for everyone.
                 </p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   {coAssignees.length > 0 && (
