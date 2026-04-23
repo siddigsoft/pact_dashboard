@@ -18,7 +18,12 @@ import {
   Eye,
   GitBranch,
   Archive,
+  X,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useProjectContext } from '@/context/project/ProjectContext';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { useToast } from '@/hooks/use-toast';
 
 import { Project } from '@/types/project';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
@@ -46,10 +51,48 @@ const ProjectList: React.FC<ProjectListProps> = ({
   loading = false
 }) => {
   const navigate = useNavigate();
+  const { updateProject } = useProjectContext();
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const { toast } = useToast();
+  const canArchive = isSuperAdmin || hasAnyRole(['admin', 'fom', 'pm']);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showArchived, setShowArchived] = useState(false);
+  // T24 — bulk select / archive
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleSelected = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+  const bulkArchive = async (archive: boolean) => {
+    if (!selectedIds.size) return;
+    setBulkBusy(true);
+    let ok = 0, fail = 0;
+    for (const id of selectedIds) {
+      const project = projects.find(p => p.id === id);
+      if (!project) { fail++; continue; }
+      try {
+        await updateProject({ ...project, archived: archive });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setBulkBusy(false);
+    clearSelection();
+    toast({
+      title: archive ? 'Projects archived' : 'Projects restored',
+      description: `${ok} succeeded${fail ? `, ${fail} failed` : ''}.`,
+      variant: fail ? 'destructive' : 'success',
+    });
+  };
   
   // Format date safely - handles invalid dates
   const formatDate = (dateString: string): string => {
@@ -247,19 +290,68 @@ const ProjectList: React.FC<ProjectListProps> = ({
           Showing {filteredProjects.length} of {projects.filter(p => showArchived || !p.archived).length} projects
         </p>
       )}
-      
+
+      {/* T24 — Bulk action bar (appears when at least one project is selected) */}
+      {canArchive && selectedIds.size > 0 && (
+        <div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-3 px-4 py-2 rounded-lg border border-[#1D3461]/20 bg-[#1D3461]/5">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-semibold text-[#1D3461]">{selectedIds.size}</span>
+            <span className="text-muted-foreground">selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkBusy}
+              onClick={() => bulkArchive(true)}
+              data-testid="button-bulk-archive"
+            >
+              <Archive className="h-3.5 w-3.5 mr-1.5" />
+              Archive selected
+            </Button>
+            {showArchived && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkBusy}
+                onClick={() => bulkArchive(false)}
+                data-testid="button-bulk-restore"
+              >
+                Restore
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={clearSelection} data-testid="button-bulk-clear">
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {filteredProjects.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredProjects.map((project) => (
             <Card 
               key={project.id} 
-              className="overflow-hidden hover-elevate flex flex-col border border-border/60 shadow-sm hover:shadow-md transition-shadow"
+              className="overflow-hidden hover-elevate flex flex-col border border-border/60 shadow-sm hover:shadow-md transition-shadow relative"
               data-testid={`card-project-${project.id}`}
             >
+              {canArchive && (
+                <div
+                  className="absolute top-2 left-2 z-10"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={selectedIds.has(project.id)}
+                    onCheckedChange={() => toggleSelected(project.id)}
+                    data-testid={`checkbox-project-${project.id}`}
+                    aria-label="Select project"
+                  />
+                </div>
+              )}
               {/* Zone 1: Header - Status badge + project code */}
               <CardHeader className="p-4 pb-3 space-y-0">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
+                  <div className={`min-w-0 flex-1 ${canArchive ? 'pl-7' : ''}`}>
                     <h3 className="font-semibold text-base leading-tight line-clamp-2" title={project.name}>
                       {project.name}
                     </h3>

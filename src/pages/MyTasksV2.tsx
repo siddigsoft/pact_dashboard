@@ -180,7 +180,10 @@ interface QuickAddDialogProps {
     attachments?: TaskAttachment[];
     startDate?: string | null;
     hoursPerDay?: number | null;
-  }) => void;
+  }) => Promise<{ id: string } | void> | void;
+  /** T06 — patch attachments after the task row exists, so failed uploads
+   * can never leave orphan storage objects pointing at no row. */
+  onPatchAttachments?: (taskId: string, attachments: TaskAttachment[]) => Promise<void>;
   isCreating: boolean;
   currentUserFullName?: string | null;
   currentUserId?: string | null;
@@ -190,7 +193,7 @@ interface QuickAddDialogProps {
 type DepTab = 'custom' | 'date' | 'user' | 'department';
 type AssignTab = 'myself' | 'someone' | 'dept';
 
-function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullName, currentUserId, currentUserRole, initialTaskTypeKey = 'general' }: QuickAddDialogProps) {
+function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreating, currentUserFullName, currentUserId, currentUserRole, initialTaskTypeKey = 'general' }: QuickAddDialogProps) {
   // T17 — Reward field is admin-only. Non-admins should not be able to set
   // a wallet reward when creating a task for someone else.
   const _normRole = (currentUserRole ?? '').toLowerCase().replace(/[\s_-]/g, '');
@@ -448,36 +451,16 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
     const { taskType, category } = typeMap[taskTypeKey];
     const rewardAmount = reward ? parseFloat(reward) : null;
 
-    // Upload attachments to storage if any
-    let uploadedAttachments: TaskAttachment[] = [];
-    const uploadedPaths: string[] = [];
-    if (attachments.length > 0) {
-      setUploadingAttachments(true);
-      try {
-        for (const f of attachments) {
-          const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const path = `task-attachments/${currentUserId ?? 'anon'}/${Date.now()}_${safeName}`;
-          const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
-          if (upErr) {
-            // Roll back any successfully uploaded files in this batch
-            if (uploadedPaths.length > 0) {
-              try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best effort */ }
-            }
-            toast({ title: 'Attachment upload failed', description: `${f.name}: ${upErr.message}`, variant: 'destructive' });
-            setUploadingAttachments(false);
-            return;
-          }
-          uploadedPaths.push(path);
-          const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
-          uploadedAttachments.push({ name: f.name, url: urlData?.publicUrl ?? '', uploadedAt: new Date().toISOString() });
-        }
-      } finally {
-        setUploadingAttachments(false);
-      }
-    }
-
+    // T06 — Insert-task-first flow:
+    //   1. Create the task row WITHOUT attachments and capture its id.
+    //   2. Upload files to task-attachments/<taskId>/<name>.
+    //   3. Patch the row's attachments[] array.
+    //   If 2 or 3 fail we clean up storage objects; the task survives with
+    //   no attachments (the user can re-attach), and we never end up with
+    //   orphan storage files pointing at a row that does not exist.
+    let createdTaskId: string | null = null;
     try {
-      await Promise.resolve(onCreate({
+      const created = await Promise.resolve(onCreate({
         title: title.trim(), priority, status: 'todo', dueDate, description, taskType, category, notes,
         projectId: taskTypeKey === 'project' ? projectId : null,
         assignedToUserId:   assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
@@ -492,18 +475,50 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
         recurrenceMonthlyDay: recurrence === 'monthly' && recurrenceOn ? recurrenceMonthlyDayQA : null,
         recurrenceEndDate: recurrenceOn && recurrenceEndDate ? recurrenceEndDate : null,
         estimatedHours: estimatedHoursQA ? parseFloat(estimatedHoursQA) : null,
-        attachments: uploadedAttachments,
+        attachments: [],
         startDate: startDateQA || null,
         hoursPerDay: hoursPerDayQA ? parseFloat(hoursPerDayQA) : null,
       }));
-      reset();
+      createdTaskId = (created && typeof created === 'object' && 'id' in created)
+        ? String((created as { id: string }).id)
+        : null;
     } catch (e: any) {
-      // Roll back uploaded storage objects so we don't leave orphans
-      if (uploadedPaths.length > 0) {
-        try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best effort */ }
-      }
       toast({ title: 'Could not create task', description: e?.message ?? 'Please try again', variant: 'destructive' });
+      return;
     }
+
+    if (attachments.length > 0 && createdTaskId) {
+      const uploadedPaths: string[] = [];
+      const uploadedAttachments: TaskAttachment[] = [];
+      setUploadingAttachments(true);
+      try {
+        for (const f of attachments) {
+          const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const path = `task-attachments/${createdTaskId}/${Date.now()}_${safeName}`;
+          const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
+          if (upErr) throw new Error(`${f.name}: ${upErr.message}`);
+          uploadedPaths.push(path);
+          const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
+          uploadedAttachments.push({ name: f.name, url: urlData?.publicUrl ?? '', uploadedAt: new Date().toISOString() });
+        }
+        if (onPatchAttachments) {
+          await onPatchAttachments(createdTaskId, uploadedAttachments);
+        }
+      } catch (attErr: any) {
+        if (uploadedPaths.length > 0) {
+          try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best effort */ }
+        }
+        toast({
+          title: 'Task created, but attachments failed',
+          description: attErr?.message ?? 'You can re-attach files from the task detail.',
+          variant: 'destructive',
+        });
+      } finally {
+        setUploadingAttachments(false);
+      }
+    }
+
+    reset();
   };
 
   const initial = (currentUserFullName ?? 'U')[0].toUpperCase();
@@ -2552,6 +2567,19 @@ function EnhancedTaskCard({ task, subtasks, onToggleDone, onEdit, onStatusChange
                 {totalSubs} subtask{totalSubs !== 1 ? 's' : ''}
               </span>
             )}
+            {/* T15 — quick subtask entry: navigates to TaskDetail with focus flag */}
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                navigate(`/tasks/${task.id}?addSubtask=1`);
+              }}
+              className="text-[10px] text-violet-600 hover:bg-violet-50 px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 border border-violet-200"
+              data-testid={`button-add-subtask-${task.id}`}
+              title="Add subtask"
+            >
+              <Plus className="w-2.5 h-2.5" /> Subtask
+            </button>
             <RecurringBadge task={task} />
           </div>
         </div>
@@ -5116,6 +5144,7 @@ export default function MyTasksV2() {
         open={showAdd}
         onClose={() => setShowAdd(false)}
         onCreate={handleCreate}
+        onPatchAttachments={(taskId, atts) => updateTask(taskId, { attachments: atts as any })}
         isCreating={isCreating}
         currentUserFullName={currentUser?.fullName}
         currentUserId={currentUser?.id}

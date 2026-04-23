@@ -213,6 +213,11 @@ export default function TeamTaskMonitor() {
   const [taskForm, setTaskForm] = useState({ title: '', description: '', notes: '', priority: 'medium', due_date: '', category: 'daily', status: 'todo' });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [taskStatusFilter, setTaskStatusFilter] = useState('all');
+  // T12 — pagination so very large teams stay snappy
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 25;
+  // Reset to first page when filters change
+  useEffect(() => { setPage(0); }, [search, deptFilter, statusFilter]);
 
   const [waTarget, setWaTarget] = useState<ReturnType<typeof buildEmployeeMetrics>[number] | null>(null);
   const [waMsg, setWaMsg] = useState('');
@@ -549,7 +554,7 @@ export default function TeamTaskMonitor() {
           <div className="py-12 text-center text-muted-foreground text-sm">No employees match the current filter</div>
         ) : (
           <div className="divide-y">
-            {filtered.map((m, idx) => {
+            {filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((m, idx) => {
               const weekDays = m.dayTaskCounts;
               const maxCount = Math.max(1, ...weekDays.map(d => d.count));
               const isExpanded = expandedRows.has(m.emp.id);
@@ -767,6 +772,34 @@ export default function TeamTaskMonitor() {
                 </div>
               );
             })}
+          </div>
+        )}
+        {filtered.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/20 text-xs">
+            <span className="text-muted-foreground">
+              Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 0}
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                data-testid="btn-team-prev-page"
+              >
+                Previous
+              </Button>
+              <span className="text-muted-foreground">Page {page + 1} of {Math.ceil(filtered.length / PAGE_SIZE)}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={(page + 1) * PAGE_SIZE >= filtered.length}
+                onClick={() => setPage(p => p + 1)}
+                data-testid="btn-team-next-page"
+              >
+                Next
+              </Button>
+            </div>
           </div>
         )}
       </div>

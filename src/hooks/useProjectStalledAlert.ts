@@ -11,19 +11,57 @@ import { useUser } from '@/context/user/UserContext';
 import { differenceInDays, parseISO, startOfDay } from 'date-fns';
 
 const STALL_DAYS = 14;
+const REALTIME_DEBOUNCE_MS = 30_000;
 
 export function useProjectStalledAlert() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useUser();
   const ranRef = useRef(false);
+  const lastRunRef = useRef(0);
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (ranRef.current) return;
     if (!currentUser?.id) return;
     if (!hasAnyRole(['super_admin', 'admin', 'fom'])) return;
 
-    ranRef.current = true;
-    checkStalledProjects(currentUser.id).catch(() => {});
+    const userId = currentUser.id;
+
+    const runCheck = () => {
+      lastRunRef.current = Date.now();
+      checkStalledProjects(userId).catch(() => {});
+    };
+
+    if (!ranRef.current) {
+      ranRef.current = true;
+      runCheck();
+    }
+
+    // T19 — realtime: re-evaluate when a flow log entry is added or a
+    // project record changes (e.g. unarchived). Debounced so a burst of
+    // updates only triggers one recompute.
+    const scheduleDebounced = () => {
+      if (pendingTimerRef.current) return;
+      const elapsed = Date.now() - lastRunRef.current;
+      const wait = Math.max(0, REALTIME_DEBOUNCE_MS - elapsed);
+      pendingTimerRef.current = setTimeout(() => {
+        pendingTimerRef.current = null;
+        runCheck();
+      }, wait);
+    };
+
+    const channel = supabase
+      .channel(`stalled-projects-${userId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'project_flow_log' }, scheduleDebounced)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects' }, scheduleDebounced)
+      .subscribe();
+
+    return () => {
+      if (pendingTimerRef.current) {
+        clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      supabase.removeChannel(channel);
+    };
   }, [currentUser?.id]);
 }
 

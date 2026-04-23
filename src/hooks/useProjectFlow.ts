@@ -307,6 +307,27 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
       const stageToComplete = effectiveStages.find(s => s.id === stageId);
       if (!stageToComplete) throw new Error('Stage not found');
 
+      // T21 — Readiness check: all checklist items for this stage must be completed.
+      // If the schema/table is missing we silently skip rather than block.
+      try {
+        const { data: pending, error: chkErr } = await supabase
+          .from('project_stage_checklist')
+          .select('id, item_text, completed')
+          .eq('project_id', project.id)
+          .eq('stage_id', stageId)
+          .eq('completed', false);
+        if (!chkErr && pending && pending.length > 0) {
+          const labels = pending.slice(0, 3).map((r: any) => r.item_text).filter(Boolean).join(', ');
+          const more = pending.length > 3 ? ` +${pending.length - 3} more` : '';
+          throw new Error(
+            `Cannot advance: ${pending.length} checklist item(s) still open${labels ? ` — ${labels}${more}` : ''}.`
+          );
+        }
+      } catch (e: any) {
+        // Re-throw our own readiness error; ignore schema-missing errors.
+        if (e?.message?.startsWith('Cannot advance:')) throw e;
+      }
+
       const entryForStage = customEntries.find(e => e.id === stageId);
       const isMilestone = entryForStage?.isMilestone ?? false;
 
