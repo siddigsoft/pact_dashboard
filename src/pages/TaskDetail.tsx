@@ -1508,7 +1508,31 @@ export default function TaskDetail() {
               );
             })()}
             {task.hours_per_day != null && <MetaRow icon={Clock} label="Per day" value={`${task.hours_per_day}h / day`} />}
-            {task.actual_hours != null && <MetaRow icon={Clock} label="Actual" value={`${task.actual_hours}h`} />}
+            {(() => {
+              // Total ACTUAL hours = primary actual + sum of every co-assignee's actual hours.
+              // Previously only the primary's actual_hours was shown — co-assignee work was invisible
+              // in the meta card even though each person logged their own time in the Timesheet.
+              const cosA = ((task.co_assignees as Array<{ actual_hours?: number | null }> | undefined) ?? []);
+              const primaryActual = typeof task.actual_hours === 'number' ? task.actual_hours : 0;
+              const coActual = cosA.reduce((s, c) => s + (typeof c.actual_hours === 'number' && Number.isFinite(c.actual_hours) ? c.actual_hours : 0), 0);
+              const totalActual = primaryActual + coActual;
+              if (totalActual <= 0 && task.actual_hours == null) return null;
+              const hasCo = cosA.length > 0;
+              return (
+                <MetaRow
+                  icon={Clock}
+                  label="Actual (all)"
+                  value={
+                    <span data-testid="text-total-actual">
+                      <b>{totalActual.toFixed(1)}h</b>
+                      {hasCo && (
+                        <span className="text-slate-400 font-normal"> · {primaryActual.toFixed(1)}h primary + {coActual.toFixed(1)}h co</span>
+                      )}
+                    </span>
+                  }
+                />
+              );
+            })()}
             {task.recurrence && task.recurrence !== 'none' && (
               <MetaRow icon={History} label="Recurrence" value={String(task.recurrence)} />
             )}
@@ -1573,6 +1597,39 @@ export default function TaskDetail() {
                             <span className="font-medium">{d.label}</span>
                             <span className="text-slate-400">·</span>
                             <span className="text-slate-500 capitalize">{d.kind}{d.userName ? ` · ${d.userName}` : ''}</span>
+                            {/* Send-reminder nudge: previously the depended-on user got one
+                                notification at Start and was never pinged again. This button
+                                lets the assignee (or any viewer) re-ping the user on demand. */}
+                            {d.userId && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await supabase.from('notifications').insert({
+                                      recipient_id: d.userId,
+                                      event_type: 'task_dependency_reminder',
+                                      entity_type: 'personal_task',
+                                      entity_id: id!,
+                                      triggered_by: currentUser?.id ?? null,
+                                      title_en: 'Reminder: someone is waiting on you',
+                                      title_ar: 'تذكير: هناك من ينتظرك',
+                                      message_en: `${currentUser?.fullName ?? 'A teammate'} is waiting on "${d.label}" to progress task "${task.title}".`,
+                                      message_ar: `${currentUser?.fullName ?? 'زميل'} ينتظر "${d.label}" لإكمال مهمة "${task.title}".`,
+                                      priority: 'normal',
+                                      action_url: `/tasks/${id}`,
+                                    });
+                                    toast({ title: 'Reminder sent', description: `Pinged ${d.userName ?? 'user'} about "${d.label}".` });
+                                  } catch {
+                                    toast({ title: 'Could not send reminder', variant: 'destructive' });
+                                  }
+                                }}
+                                className="ml-auto text-[10px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-full"
+                                data-testid={`btn-nudge-dep-${i}`}
+                                title={`Send a reminder to ${d.userName ?? 'this user'}`}
+                              >
+                                Nudge
+                              </button>
+                            )}
                           </li>
                         ))}
                         {deps.filter(d => !d.confirmed).length > 4 && (
@@ -1638,10 +1695,29 @@ export default function TaskDetail() {
                     {' / '}{totalPlanned.toFixed(1)}h planned
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500 mb-3">
+                <p className="text-[11px] text-slate-500 mb-2">
                   Each person edits only their own actual hours.
                   {canConfirmHours ? ' As task owner, confirm reported hours below.' : ''}
                 </p>
+                {/* Owner-confirmation nudge: count rows with reported actuals not yet confirmed.
+                    Stops tasks stalling at 99% because the owner forgot to click Confirm. */}
+                {(() => {
+                  if (!canConfirmHours) return null;
+                  const pending = rows.filter(r => (r.actual ?? 0) > 0 && !r.confirmedAt);
+                  if (pending.length === 0) return null;
+                  return (
+                    <div
+                      className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800"
+                      data-testid="banner-hours-pending-confirm"
+                    >
+                      <Clock className="w-3.5 h-3.5 mt-px shrink-0" />
+                      <span>
+                        <b>{pending.length}</b> {pending.length === 1 ? 'person has' : 'people have'} reported hours awaiting your confirmation:{' '}
+                        <span className="font-semibold">{pending.map(p => p.name).join(', ')}</span>.
+                      </span>
+                    </div>
+                  );
+                })()}
                 <ul className="divide-y divide-slate-100">
                   {rows.map((r) => (
                     <TimesheetRow
