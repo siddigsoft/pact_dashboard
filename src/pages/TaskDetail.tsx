@@ -6,7 +6,7 @@ import { useUser } from '@/context/user/UserContext';
 import {
   ArrowLeft, Calendar, Clock, User as UserIcon, Users, Tag, MessageSquare, FileText,
   MessageCircle, ListChecks, Plus, X, Check, Trash2, Send, History, Loader2,
-  PlayCircle, Lock, ShieldCheck, Target,
+  PlayCircle, Lock, ShieldCheck, Target, CheckCircle2,
 } from 'lucide-react';
 import { StartTaskDialog, type StartTaskPayload } from '@/components/tasks/StartTaskDialog';
 import type { StartDependencyRecord } from '@/hooks/usePersonalTasks';
@@ -879,6 +879,30 @@ export default function TaskDetail() {
           <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">Task</p>
           <h1 className="text-xl md:text-2xl font-bold text-slate-800 truncate" data-testid="text-task-title">{task.title}</h1>
         </div>
+        {/* Prominent Mark-as-Done button — visible when task is in progress
+            and the current user is the primary assignee, owner, or admin.
+            Avoids forcing users to hunt for the status dropdown to complete. */}
+        {task.status === 'inprogress' && (() => {
+          const uid = currentUser?.id;
+          const isPrimary = uid && (task.assigned_to === uid || (task.user_id === uid && !task.assigned_to));
+          const canComplete = isPrimary || isOwner || isAdmin;
+          if (!canComplete) return null;
+          return (
+            <button
+              type="button"
+              onClick={() => handleStatusChange('done' as PersonalTaskStatus)}
+              disabled={updateTask.isPending}
+              data-testid="btn-mark-task-done"
+              title="Mark this task as done"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              {updateTask.isPending
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Mark as Done
+            </button>
+          );
+        })()}
         <TaskStatusMenu
           taskId={id!}
           current={task.status as PersonalTaskStatus}
