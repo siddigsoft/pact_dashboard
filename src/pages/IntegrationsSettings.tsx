@@ -175,6 +175,8 @@ export default function IntegrationsSettings() {
   const [saving, setSaving] = useState(false);
   const [connectingCalendar, setConnectingCalendar] = useState(false);
   const [disconnectingCalendar, setDisconnectingCalendar] = useState(false);
+  // T26 — surface the last connect error inline so the user has a one-click retry.
+  const [calendarConnectError, setCalendarConnectError] = useState<string | null>(null);
   const [notificationEmail, setNotificationEmail] = useState("");
   const [tipBannerDismissed, setTipBannerDismissed] = useState(false);
   const [tipExpanded, setTipExpanded] = useState(true);
@@ -395,6 +397,7 @@ export default function IntegrationsSettings() {
   };
 
   const handleConnectGoogleCalendar = async () => {
+    setCalendarConnectError(null);
     if (!currentUser?.id) return;
     setConnectingCalendar(true);
     try {
@@ -428,6 +431,7 @@ export default function IntegrationsSettings() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to connect Google Calendar";
       toast({ title: "Connection failed", description: message, variant: "destructive" });
+      setCalendarConnectError(message);
       setConnectingCalendar(false);
     }
   };
@@ -650,6 +654,37 @@ export default function IntegrationsSettings() {
                 >
                   {integration.google_calendar_email}
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* T26 — show an inline retry card when the previous connect attempt failed */}
+          {!isCalendarConnected && calendarConnectError && (
+            <div
+              className="flex items-start gap-3 p-3 border rounded-lg bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+              data-testid="alert-calendar-connect-error"
+            >
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div>
+                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                    Last connection attempt failed
+                  </p>
+                  <p className="text-xs text-red-700 dark:text-red-300 break-words">
+                    {calendarConnectError}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleConnectGoogleCalendar}
+                  disabled={connectingCalendar}
+                  className="gap-2 h-7 text-xs"
+                  data-testid="button-retry-google-calendar"
+                >
+                  <RefreshCw className={cn("h-3 w-3", connectingCalendar && "animate-spin")} />
+                  Retry connection
+                </Button>
               </div>
             </div>
           )}

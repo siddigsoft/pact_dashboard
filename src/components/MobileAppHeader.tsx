@@ -65,6 +65,11 @@ const MobileAppHeader = ({
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  // T27 — display the last successful sync time so users know how fresh their data is.
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(() => {
+    const raw = localStorage.getItem('pact_last_sync_at');
+    return raw ? new Date(raw) : null;
+  });
 
   // Track online status and pending sync items
   useEffect(() => {
@@ -93,6 +98,10 @@ const MobileAppHeader = ({
     const unsubComplete = syncManager.onComplete(() => {
       setIsSyncing(false);
       updateStats();
+      // T27 — record successful sync timestamp.
+      const now = new Date();
+      setLastSyncAt(now);
+      try { localStorage.setItem('pact_last_sync_at', now.toISOString()); } catch { /* ignore */ }
     });
 
     return () => {
@@ -150,6 +159,18 @@ const MobileAppHeader = ({
     }
   }, [logout, navigate]);
   
+  // T27 helper — short relative time string for last-sync display.
+  function formatLastSync(d: Date): string {
+    const diffMs = Date.now() - d.getTime();
+    const m = Math.floor(diffMs / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const days = Math.floor(h / 24);
+    return `${days}d ago`;
+  }
+
   const getInitials = (name: string) => {
     if (!name) return 'FO';
     try {
@@ -405,7 +426,12 @@ const MobileAppHeader = ({
             <h1 className="text-xl font-bold text-white">{title}</h1>
             <RealtimeStatusDot className="h-2.5 w-2.5" />
           </div>
-          <p className="text-white/60 text-xs">Stay connected</p>
+          {/* T27 — last-sync time display */}
+          <p className="text-white/60 text-xs" data-testid="text-last-sync">
+            {lastSyncAt
+              ? `Synced ${formatLastSync(lastSyncAt)}`
+              : isOnline ? 'Stay connected' : 'Offline — changes queued'}
+          </p>
         </div>
       </div>
       

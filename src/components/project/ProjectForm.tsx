@@ -207,6 +207,20 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
 
   const handleFormSubmit = async (values: FormSchema) => {
     try {
+      // T35 — region validation: a Sudan project without any state selection
+      // breaks geo-zone matching, MMP coverage, and site dispatch. Block submit
+      // and tell the user exactly what to do.
+      const isSudan = (values.country || '').toLowerCase() === 'sudan';
+      const hasAnyRegion = !!(values.selectedState || values.state);
+      if (isSudan && !hasAnyRegion) {
+        toast({
+          title: "Region required",
+          description: "Sudan projects need at least a state. Pick one in the Location section before saving.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const projectCode = isEditing && initialData?.projectCode
         ? initialData.projectCode
         : `PROJ-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;

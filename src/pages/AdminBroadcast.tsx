@@ -836,6 +836,17 @@ export default function AdminBroadcastPage() {
       toast({ title: 'Invalid time', description: 'Scheduled time must be in the future.', variant: 'destructive' });
       return;
     }
+    // T31 — Scheduled broadcasts only fire while the tab is open; cap at 24h
+    // so users don't accidentally schedule something a week out and forget.
+    const maxScheduleAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (new Date(scheduleAt) > maxScheduleAt) {
+      toast({
+        title: 'Too far in the future / بعيد جدًا',
+        description: 'Scheduled broadcasts must be within the next 24 hours (this tab needs to stay open). For longer-term scheduling, use the recurring reminder system.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (audience === 'by_state' && !stateFilter) {
       toast({ title: 'Select a state', description: 'Please choose a Sudan state to target.', variant: 'destructive' });
       return;

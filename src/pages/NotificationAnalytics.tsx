@@ -2,12 +2,42 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useNotifications } from '@/context/notifications/NotificationContext';
+import { useAppContext } from '@/context/AppContext';
 import { isToday, isYesterday, isThisWeek, format, subDays, startOfDay, differenceInMinutes } from 'date-fns';
-import { Bell, TrendingUp, Clock, AlertCircle, CheckCircle2, BarChart3, PieChart, Activity, Eye, EyeOff, Zap, Timer } from 'lucide-react';
+import { Bell, TrendingUp, Clock, AlertCircle, CheckCircle2, BarChart3, PieChart, Activity, Eye, EyeOff, Zap, Timer, ShieldAlert } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 export default function NotificationAnalytics() {
   const { notifications } = useNotifications();
+  const { currentUser, roles } = useAppContext();
+
+  // T30 — admin-only guard. The page renders org-wide aggregates, so non-admins
+  // (including FOM/PM with broad access elsewhere) should not see it.
+  const allRoles = [currentUser?.role ?? '', ...(roles ?? [])]
+    .filter(Boolean)
+    .map(r => String(r).toLowerCase().replace(/[\s_-]/g, ''));
+  const isAdmin = allRoles.some(r => r === 'admin' || r === 'superadmin');
+  if (!isAdmin) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <CardTitle>Admin only</CardTitle>
+                <CardDescription>
+                  Notification analytics show organisation-wide delivery data and are restricted to administrators.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
 
   const stats = useMemo(() => {
     const total = notifications.length;

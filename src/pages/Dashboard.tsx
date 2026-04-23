@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import { useEffect, useState, useMemo, useRef, lazy, Suspense } from 'react';
+import { toast } from '@/hooks/use-toast';
 import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/settings/SettingsContext';
@@ -94,10 +95,35 @@ const Dashboard = () => {
   }, [roles, dashboardPreferences?.defaultZone, currentUser?.role]);
 
   const [activeZone, setActiveZone] = useState<DashboardZone>(defaultZone);
-  
+
   useEffect(() => {
     setActiveZone(defaultZone);
   }, [defaultZone]);
+
+  // T32 — toast once when the user lands on the operations zone *only* because
+  // no role matched (i.e. the final fallback). Skip when operations is the
+  // legitimate primary zone (admin/superadmin) or the user explicitly saved it.
+  const fallbackToastShown = useRef(false);
+  useEffect(() => {
+    if (fallbackToastShown.current) return;
+    if (defaultZone !== 'operations') return;
+    if (!currentUser?.role && (!roles || roles.length === 0)) return;
+    const role = currentUser?.role ? normalizeRole(currentUser.role) : '';
+    const allRoles = [role, ...(roles ?? []).map(r => normalizeRole(r))].filter(Boolean);
+    const matchedAnything = allRoles.some(r =>
+      r === 'admin' || r === 'superadmin'
+      || r.includes('fom') || r.includes('fieldoperationmanager')
+      || r.includes('supervisor') || r.includes('coordinator')
+      || r.includes('projectmanager') || r.includes('datacollector') || r.includes('employee'));
+    const savedPref = dashboardPreferences?.defaultZone;
+    if (!matchedAnything && !savedPref) {
+      fallbackToastShown.current = true;
+      toast({
+        title: 'Default dashboard loaded',
+        description: 'Your role didn\'t match a specific dashboard zone, so we\'re showing Operations. You can change this in Settings.',
+      });
+    }
+  }, [defaultZone, currentUser?.role, roles, dashboardPreferences?.defaultZone]);
 
   useEffect(() => {
     showDueReminders();

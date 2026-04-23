@@ -768,38 +768,65 @@
       useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
+    // T33 — surface persistence errors so users notice when favourites silently fail to save.
     const toggleFavorite = useCallback(async (url: string, title: string, iconName: string) => {
       const currentFavorites = menuPrefs.favoritePages || [];
       const isFavorite = currentFavorites.includes(url);
-      
-      if (isFavorite) {
-        await updateMenuPreferences({
-          favoritePages: currentFavorites.filter(f => f !== url)
-        });
-      } else {
-        await updateMenuPreferences({
-          favoritePages: [...currentFavorites, url]
+      try {
+        if (isFavorite) {
+          await updateMenuPreferences({
+            favoritePages: currentFavorites.filter(f => f !== url)
+          });
+        } else {
+          await updateMenuPreferences({
+            favoritePages: [...currentFavorites, url]
+          });
+        }
+      } catch (err) {
+        console.error('[Sidebar] Failed to toggle favourite', err);
+        toast({
+          title: 'Could not save favourite',
+          description: err instanceof Error ? err.message : 'Please try again.',
+          variant: 'destructive',
         });
       }
     }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
     const removeFavorite = useCallback(async (url: string) => {
       const currentFavorites = menuPrefs.favoritePages || [];
-      await updateMenuPreferences({
-        favoritePages: currentFavorites.filter(f => f !== url)
-      });
+      try {
+        await updateMenuPreferences({
+          favoritePages: currentFavorites.filter(f => f !== url)
+        });
+      } catch (err) {
+        console.error('[Sidebar] Failed to remove favourite', err);
+        toast({
+          title: 'Could not remove favourite',
+          description: err instanceof Error ? err.message : 'Please try again.',
+          variant: 'destructive',
+        });
+      }
     }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
     const handleDragEnd = useCallback(async (event: DragEndEvent) => {
       const { active, over } = event;
-      
+
       if (over && active.id !== over.id) {
         const currentFavorites = menuPrefs.favoritePages || [];
         const oldIndex = currentFavorites.indexOf(active.id as string);
         const newIndex = currentFavorites.indexOf(over.id as string);
-        
+
         const newOrder = arrayMove(currentFavorites, oldIndex, newIndex);
-        await updateMenuPreferences({ favoritePages: newOrder });
+        try {
+          await updateMenuPreferences({ favoritePages: newOrder });
+        } catch (err) {
+          console.error('[Sidebar] Failed to reorder favourites', err);
+          toast({
+            title: 'Could not save new order',
+            description: err instanceof Error ? err.message : 'Please try again.',
+            variant: 'destructive',
+          });
+        }
       }
     }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
