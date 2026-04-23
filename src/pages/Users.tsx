@@ -441,16 +441,34 @@ const Users = () => {
     setIsRejectingWithReason(true);
     try {
       // Mark profile as rejected (soft reject) rather than deleting, so the notification persists
-      // The profile gets status='rejected' so they cannot log in but we can retain the notification
-      const { error: statusError } = await supabase
+      // The profile gets status='rejected' so they cannot log in but we can retain the notification.
+      // We .select('id') so we can detect when RLS silently blocks the update (no error, 0 rows).
+      const { data: updated, error: statusError } = await supabase
         .from('profiles')
         .update({ status: 'rejected', is_active: false })
-        .eq('id', userId);
+        .eq('id', userId)
+        .select('id');
 
-      if (statusError) {
-        // Fall back to hard delete path via rejectUser if update fails (e.g. column doesn't exist)
-        await rejectUser(userId);
-        toast({ title: "User rejected", description: `${userName || 'User'}'s registration has been rejected.` });
+      const blockedByRls = !statusError && (!updated || updated.length === 0);
+      const missingColumn = !!statusError && /column .* (does not exist|status)/i.test(statusError.message || '');
+
+      if (missingColumn) {
+        // Schema doesn't have the soft-reject columns yet — fall back to hard delete and trust its toast.
+        const ok = await rejectUser(userId);
+        if (ok) {
+          toast({ title: "User rejected", description: `${userName || 'User'}'s registration has been rejected.` });
+        }
+        setRejectWithReasonDialog({ open: false });
+        setRejectionReason('');
+        return;
+      }
+
+      if (statusError || blockedByRls) {
+        toast({
+          title: "Rejection blocked by security policy",
+          description: "Your role does not have permission to reject this user. Ask a Super Admin to update the Row Level Security policy on the profiles table to allow admins to UPDATE status/is_active.",
+          variant: "destructive",
+        });
         setRejectWithReasonDialog({ open: false });
         setRejectionReason('');
         return;

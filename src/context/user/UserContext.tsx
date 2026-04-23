@@ -1142,8 +1142,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (error || !data || data.length === 0) {
         toast({
-          title: "Rejection blocked",
-          description: "No user was deleted. Check Row Level Security policies for profiles.",
+          title: "Rejection blocked by security policy",
+          description: "Your role can't delete this profile. A Super Admin needs to grant admins DELETE permission on the profiles table (or use the soft-reject flow that sets status='rejected').",
           variant: "destructive",
         });
         return false;
