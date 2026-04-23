@@ -234,6 +234,40 @@ export default function TaskDetail() {
     onError: (e: Error) => toast({ title: 'Could not start task', description: e.message, variant: 'destructive' }),
   });
 
+  // ---------- Delete the entire task ----------
+  // Owner / primary assignee / admin only. Cascades to comments, activity,
+  // elements, attachments via FK on delete cascade. After success we navigate
+  // back to the task list because the current page no longer points anywhere.
+  const deleteTask = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Missing task id');
+      const { error } = await supabase.from('personal_tasks').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['personal_tasks'] });
+      qc.removeQueries({ queryKey: ['task-detail', id] });
+      toast({ title: 'Task deleted' });
+      navigate('/my-tasks');
+    },
+    onError: (e: Error) => toast({ title: 'Could not delete task', description: e.message, variant: 'destructive' }),
+  });
+
+  const canDeleteTask = !!currentUser?.id && (
+    isAdmin
+    || task?.user_id === currentUser.id
+    || task?.assigned_to === currentUser.id
+  );
+
+  const handleDeleteClick = () => {
+    if (!task) return;
+    const ok = window.confirm(
+      `Delete "${task.title}"?\n\nThis cannot be undone. All comments, activity, attachments, and elements will be removed.`,
+    );
+    if (!ok) return;
+    deleteTask.mutate();
+  };
+
   // ---------- Confirm a dependency you own ----------
   const confirmDependency = useMutation({
     mutationFn: async (depIndex: number) => {
@@ -628,6 +662,21 @@ export default function TaskDetail() {
           }
           lockedHint="Locked after Start — admin/super-admin only"
         />
+        {canDeleteTask && (
+          <button
+            type="button"
+            onClick={handleDeleteClick}
+            disabled={deleteTask.isPending}
+            title="Delete this task"
+            data-testid="btn-delete-task"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors"
+          >
+            {deleteTask.isPending
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Trash2 className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Delete</span>
+          </button>
+        )}
       </div>
 
       {/* ── Acknowledge banner — per user. Primary uses task.acknowledged_at;

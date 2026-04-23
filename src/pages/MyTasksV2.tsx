@@ -2062,7 +2062,14 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
         {/* Footer */}
         <div className="flex items-center gap-2 px-5 py-4 border-t border-slate-100 bg-white shrink-0">
           <button
-            onClick={() => { onDelete(task.id); onClose(); }}
+            onClick={() => {
+              const ok = window.confirm(
+                `Delete "${task.title}"?\n\nThis cannot be undone. All comments, activity, attachments, and elements will be removed.`,
+              );
+              if (!ok) return;
+              onDelete(task.id);
+              onClose();
+            }}
             data-testid="edit-button-delete"
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
           >
