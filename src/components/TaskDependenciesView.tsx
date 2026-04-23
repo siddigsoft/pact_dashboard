@@ -7,7 +7,7 @@ import {
   addTaskDependency,
 } from '@/services/task-dependencies.service';
 import { supabase } from '@/lib/supabase';
-import { useUser } from '@/context/UserContext';
+import { useUser } from '@/context/user/UserContext';
 import {
   AlertCircle, CheckCircle, Link2, ArrowRight, Trash2, Lock, Plus, Search, Loader2,
 } from 'lucide-react';
