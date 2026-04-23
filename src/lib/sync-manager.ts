@@ -637,6 +637,12 @@ class SyncManager {
           case 'cost_submission':
             await this.syncCostSubmission(action);
             break;
+          case 'personal_task_status':
+            await this.syncPersonalTaskStatus(action);
+            break;
+          case 'personal_task_complete':
+            await this.syncPersonalTaskComplete(action);
+            break;
           default:
             console.warn(`[SyncManager] Unknown action type: ${action.type}`);
         }
@@ -851,6 +857,32 @@ class SyncManager {
       // Log but don't throw - sync should continue even if wallet transaction fails
       console.error(`[SyncManager] Error creating wallet transaction for site visit ${siteEntryId}:`, error);
     }
+  }
+
+  // T05 — Personal task status updates queued while offline.
+  private async syncPersonalTaskStatus(action: PendingSyncAction): Promise<void> {
+    const { taskId, status, updatedAt } = action.payload as {
+      taskId: string; status: string; updatedAt?: string;
+    };
+    const { error } = await supabase
+      .from('personal_tasks')
+      .update({ status, updated_at: updatedAt ?? new Date().toISOString() })
+      .eq('id', taskId);
+    if (error) throw error;
+  }
+
+  // T05 — Mark a personal task complete (toggle done) while offline.
+  private async syncPersonalTaskComplete(action: PendingSyncAction): Promise<void> {
+    const { taskId, completedAt, completed } = action.payload as {
+      taskId: string; completedAt?: string | null; completed: boolean;
+    };
+    const patch: Record<string, unknown> = {
+      status: completed ? 'done' : 'todo',
+      completed_at: completed ? (completedAt ?? new Date().toISOString()) : null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('personal_tasks').update(patch).eq('id', taskId);
+    if (error) throw error;
   }
 
   private async syncLocationUpdate(action: PendingSyncAction): Promise<void> {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, differenceInDays, isToday, isPast, isSameDay, addWeeks, subWeeks, addMonths, subMonths } from 'date-fns';
 import { Users, CheckSquare, AlertTriangle, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Plus, Clock, CheckCircle2, BarChart2, MessageSquare, Bell, Phone, Mail, Filter, Search, RefreshCw, Eye, User, Layers, ChevronDown, ChevronUp, Flag, Briefcase, Send } from 'lucide-react';
@@ -344,6 +344,25 @@ export default function TeamTaskMonitor() {
   });
 
   // ── WhatsApp nudge ──────────────────────────────────────────────────────────
+  // T14 — Per-employee 1-hour cooldown to prevent nudge spam.
+  const NUDGE_COOLDOWN_MS = 60 * 60 * 1000;
+  const lastNudgedRef = useRef<Map<string, number>>(new Map());
+
+  const openNudge = (m: any) => {
+    const last = lastNudgedRef.current.get(m.emp.id) ?? 0;
+    const elapsed = Date.now() - last;
+    if (elapsed < NUDGE_COOLDOWN_MS) {
+      const minsLeft = Math.ceil((NUDGE_COOLDOWN_MS - elapsed) / 60000);
+      toast({
+        title: 'Recently nudged',
+        description: `You already messaged ${m.emp.full_name ?? 'this employee'} less than an hour ago. Try again in ${minsLeft} min.`,
+      });
+      return;
+    }
+    setWaTarget(m);
+    setWaMsg(buildNudgeMessage(m));
+  };
+
   const handleSendWhatsApp = async () => {
     if (!waTarget || !waMsg.trim()) return;
     setWaSending(true);
@@ -368,6 +387,8 @@ export default function TeamTaskMonitor() {
       } else {
         const partialNote = waData?.failed > 0 ? ` (${waData.failed} failed)` : '';
         toast({ title: 'WhatsApp sent', description: `Message delivered to ${waTarget.emp.full_name ?? 'employee'}${partialNote}.`, variant: 'success' });
+        // T14 — record last successful nudge for cooldown
+        lastNudgedRef.current.set(waTarget.emp.id, Date.now());
         setWaTarget(null);
         setWaMsg('');
       }
@@ -656,7 +677,7 @@ export default function TeamTaskMonitor() {
                           <Plus className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={e => { e.stopPropagation(); setWaTarget(m); setWaMsg(buildNudgeMessage(m)); }}
+                          onClick={e => { e.stopPropagation(); openNudge(m); }}
                           className="p-1.5 rounded-lg text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 transition-all"
                           title="Send WhatsApp message"
                           data-testid={`btn-whatsapp-${m.emp.id}`}

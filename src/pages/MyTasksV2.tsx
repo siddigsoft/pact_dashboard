@@ -191,6 +191,10 @@ type DepTab = 'custom' | 'date' | 'user' | 'department';
 type AssignTab = 'myself' | 'someone' | 'dept';
 
 function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullName, currentUserId, currentUserRole, initialTaskTypeKey = 'general' }: QuickAddDialogProps) {
+  // T17 — Reward field is admin-only. Non-admins should not be able to set
+  // a wallet reward when creating a task for someone else.
+  const _normRole = (currentUserRole ?? '').toLowerCase().replace(/[\s_-]/g, '');
+  const canSetReward = ['admin', 'superadmin', 'fom', 'fieldoperationmanager'].includes(_normRole);
   const [title, setTitle]           = useState('');
   const [description, setDescription] = useState('');
   const [taskTypeKey, setTaskTypeKey] = useState<'general' | 'project' | 'daytoday'>(initialTaskTypeKey);
@@ -1056,29 +1060,31 @@ function QuickAddDialog({ open, onClose, onCreate, isCreating, currentUserFullNa
               </div>
             )}
 
-            {/* Completion Reward */}
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-amber-500" />
-                Completion Reward
-                <span className="text-slate-400 font-normal normal-case tracking-normal">(optional — credited to wallet on completion)</span>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={reward}
-                  onChange={e => setReward(e.target.value)}
-                  data-testid="input-reward"
-                  className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
-                />
-                <div className="h-10 px-4 rounded-xl border border-slate-200 bg-slate-50 flex items-center text-sm font-semibold text-slate-500">
-                  USD
+            {/* Completion Reward — T17: admin-only */}
+            {canSetReward && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
+                  <Zap className="w-3 h-3 text-amber-500" />
+                  Completion Reward
+                  <span className="text-slate-400 font-normal normal-case tracking-normal">(optional — credited to wallet on completion)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={reward}
+                    onChange={e => setReward(e.target.value)}
+                    data-testid="input-reward"
+                    className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
+                  />
+                  <div className="h-10 px-4 rounded-xl border border-slate-200 bg-slate-50 flex items-center text-sm font-semibold text-slate-500">
+                    USD
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Dependencies */}
             <div>

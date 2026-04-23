@@ -434,12 +434,23 @@ export default function TaskDetail() {
   });
 
   const updateCoAssignees = useMutation({
-    mutationFn: async (next: Array<{ id: string; name: string }>) => {
-      const { error } = await supabase
-        .from('personal_tasks')
-        .update({ co_assignees: next, updated_at: new Date().toISOString() })
-        .eq('id', id!);
-      if (error) throw error;
+    mutationFn: async (next: Array<{ id: string; name: string; hours?: number | null }>) => {
+      // T03: prefer the atomic RPC; fall back to direct update if the RPC
+      // hasn't been deployed yet so the UI still works on older environments.
+      const { error: rpcErr } = await supabase.rpc('update_task_co_assignees', {
+        p_task_id: id!,
+        p_co_assignees: next,
+      });
+      if (rpcErr && !/function .* does not exist/i.test(rpcErr.message ?? '')) {
+        throw rpcErr;
+      }
+      if (rpcErr) {
+        const { error } = await supabase
+          .from('personal_tasks')
+          .update({ co_assignees: next, updated_at: new Date().toISOString() })
+          .eq('id', id!);
+        if (error) throw error;
+      }
       return next;
     },
     onSuccess: async (next, _vars, ctx: any) => {
@@ -452,6 +463,8 @@ export default function TaskDetail() {
       // Fire in-app + email + WhatsApp notification to any newly added co-assignees
       const previousIds: Set<string> = ctx?.previousIds ?? new Set();
       const added = next.filter(c => !previousIds.has(c.id));
+      let notifyOk = 0;
+      let notifyFail = 0;
       for (const a of added) {
         try {
           await notify({
@@ -463,15 +476,32 @@ export default function TaskDetail() {
             dueDate: (task?.due_date as string | null) ?? null,
             priority: (task?.priority as string | null) ?? null,
           });
+          notifyOk++;
         } catch (err) {
+          notifyFail++;
           console.error('[TaskDetail] co-assignee notify failed:', err);
         }
       }
       if (added.length > 0) {
-        toast({
-          title: `Notified ${added.length} co-assignee${added.length === 1 ? '' : 's'}`,
-          description: 'In-app, email and WhatsApp messages sent.',
-        });
+        // T11 — Surface notification failures so users know if delivery silently broke.
+        if (notifyFail === 0) {
+          toast({
+            title: `Notified ${notifyOk} co-assignee${notifyOk === 1 ? '' : 's'}`,
+            description: 'In-app, email and WhatsApp messages sent.',
+          });
+        } else if (notifyOk === 0) {
+          toast({
+            title: 'Co-assignees added — notifications failed',
+            description: `Could not deliver notifications to ${notifyFail} user(s). Try resending from the task page.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: `Notified ${notifyOk} of ${added.length} co-assignees`,
+            description: `${notifyFail} delivery failure(s); the rest received in-app, email and WhatsApp.`,
+            variant: 'destructive',
+          });
+        }
       }
     },
     onMutate: (next) => {
@@ -492,6 +522,12 @@ export default function TaskDetail() {
   const removeCoAssignee = (uid: string) => {
     const existing = (task?.co_assignees as Array<{ id: string; name: string }> | undefined) ?? [];
     updateCoAssignees.mutate(existing.filter(c => c.id !== uid));
+  };
+  // T04 — Update a single co-assignee's allocated hours.
+  const setCoAssigneeHours = (uid: string, hours: number | null) => {
+    const existing = (task?.co_assignees as Array<{ id: string; name: string; hours?: number | null }> | undefined) ?? [];
+    if (!existing.some(c => c.id === uid)) return;
+    updateCoAssignees.mutate(existing.map(c => c.id === uid ? { ...c, hours } : c));
   };
 
   // ---------- Assignees list (with per-user hours + acknowledgment) ----------
@@ -1135,6 +1171,7 @@ export default function TaskDetail() {
             profiles={profiles}
             onAddCoAssignee={addCoAssignee}
             onRemoveCoAssignee={removeCoAssignee}
+            onSetCoAssigneeHours={setCoAssigneeHours}
             elements={elements}
             onAddElement={(assigneeId, assigneeName, label) =>
               addElement.mutate({ taskId: id!, assigneeId, assigneeName, label, position: elements.length })}
@@ -1256,7 +1293,7 @@ function ActivityItem({ a }: { a: import('@/hooks/useTaskActivity').ActivityRow 
 
 function AssigneesPanel({
   assignees, elements, onAddElement, onToggleElement, onDeleteElement, progress, currentUserId,
-  primaryAssigneeId, profiles, onAddCoAssignee, onRemoveCoAssignee,
+  primaryAssigneeId, profiles, onAddCoAssignee, onRemoveCoAssignee, onSetCoAssigneeHours,
 }: {
   taskId: string;
   assignees: Array<{
@@ -1276,6 +1313,7 @@ function AssigneesPanel({
   profiles: Array<{ id: string; full_name: string }>;
   onAddCoAssignee: (uid: string, uname: string) => void;
   onRemoveCoAssignee: (uid: string) => void;
+  onSetCoAssigneeHours?: (uid: string, hours: number | null) => void;
 }) {
   const [adding, setAdding] = useState<string | null>(null);
   const [label, setLabel] = useState('');
@@ -1381,14 +1419,41 @@ function AssigneesPanel({
                       Pending
                     </span>
                   )}
-                  {a.hours != null && (
-                    <span
-                      className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700"
-                      title="Hours allocated"
-                      data-testid={`hours-${a.id}`}
-                    >
-                      <Clock className="w-2.5 h-2.5" /> {a.hours}h
-                    </span>
+                  {/* T04 — primary shows static badge; co-assignees get editable hours input */}
+                  {isPrimary ? (
+                    a.hours != null && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700"
+                        title="Hours allocated"
+                        data-testid={`hours-${a.id}`}
+                      >
+                        <Clock className="w-2.5 h-2.5" /> {a.hours}h
+                      </span>
+                    )
+                  ) : (
+                    onSetCoAssigneeHours && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-slate-500" title="Hours allocated to this co-assignee">
+                        <Clock className="w-2.5 h-2.5" />
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.25}
+                          defaultValue={a.hours ?? ''}
+                          onBlur={e => {
+                            const raw = e.currentTarget.value.trim();
+                            const next = raw === '' ? null : Number(raw);
+                            const current = a.hours ?? null;
+                            if (next === current) return;
+                            if (next != null && (!Number.isFinite(next) || next < 0)) return;
+                            onSetCoAssigneeHours(a.id, next);
+                          }}
+                          className="w-12 h-5 px-1 text-[10px] text-right border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
+                          data-testid={`input-hours-${a.id}`}
+                          aria-label={`Hours for ${a.name}`}
+                        />
+                        <span className="text-slate-400">h</span>
+                      </span>
+                    )
                   )}
                   {!isPrimary && (
                     <button

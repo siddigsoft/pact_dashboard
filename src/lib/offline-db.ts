@@ -2,7 +2,15 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
 export interface PendingSyncAction {
   id: string;
-  type: 'site_visit_claim' | 'site_visit_start' | 'site_visit_complete' | 'location_update' | 'cost_submission' | 'photo_upload';
+  type:
+    | 'site_visit_claim'
+    | 'site_visit_start'
+    | 'site_visit_complete'
+    | 'location_update'
+    | 'cost_submission'
+    | 'photo_upload'
+    | 'personal_task_status'
+    | 'personal_task_complete';
   payload: any;
   timestamp: number;
   retries: number;

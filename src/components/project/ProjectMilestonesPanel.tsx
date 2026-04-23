@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
+import { logAuditEvent } from '@/utils/audit-logger';
 
 interface Milestone {
   id: string;
@@ -140,9 +141,28 @@ export function ProjectMilestonesPanel({ projectId }: Props) {
   const remove = async (id: string) => {
     if (!confirm('Delete this milestone?')) return;
     setDeleting(id);
+    // T20 — capture pre-delete state for audit trail
+    const target = milestones.find(m => m.id === id);
     const { error } = await supabase.from('project_milestones').delete().eq('id', id);
-    if (error) toast({ title: 'Error deleting', variant: 'destructive' });
-    else { toast({ title: 'Milestone deleted' }); load(); }
+    if (error) {
+      toast({ title: 'Error deleting', variant: 'destructive' });
+    } else {
+      toast({ title: 'Milestone deleted' });
+      // T20 — audit log on milestone delete
+      logAuditEvent({
+        action: 'delete',
+        module: 'projects' as any,
+        entityType: 'project_milestone',
+        entityId: id,
+        entityName: target?.title ?? 'Milestone',
+        severity: 'warning',
+        description: `Milestone "${target?.title ?? 'Unknown'}" deleted from project ${projectId}`,
+        previousState: target ? { ...target } : null,
+        userId: currentUser?.id,
+        userName: currentUser?.fullName ?? null,
+      } as any).catch(err => console.error('[milestone] audit failed:', err));
+      load();
+    }
     setDeleting(null);
   };
 
