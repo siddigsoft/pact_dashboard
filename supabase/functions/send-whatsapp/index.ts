@@ -207,13 +207,27 @@ function buildMetaPayload(to: string, eventType: string, data: Record<string, st
 // ── Build Wasender bilingual (EN + AR) free-text message ─────────────────────
 function buildWasenderText(eventType: string, data: Record<string, string>, lang: string = 'en'): string {
   const mapping = EVENT_TO_TEMPLATE[eventType]
-  const sep = '\n────────────────\n'
-  const footer = `\n\n— PACT Command Center\n${APP_URL}`
+  const sep = '\n━━━━━━━━━━━━━━━━\n'
+  // Logo preview at the top — WhatsApp will render the URL as a rich link card.
+  const header = `🏛️ *PACT Command Center*\n_A Synergy of Consulting Expertise for Transformation & Development_\n${APP_URL}/pact-logo-email.png\n\n`
+  const footer = `\n\n━━━━━━━━━━━━━━━━\n🔗 Open PACT: ${APP_URL}\n📧 Need help? Reply to this message or email ict@pactorg.com\n_This is an automated message from PACT Workflow Platform._\n_هذه رسالة آلية من منصة باكت._`
+
+  // Stamp every message so users can see when it was triggered (UTC + Africa/Khartoum).
+  const ts = new Date()
+  const stamp = (() => {
+    try {
+      return ts.toLocaleString('en-GB', { timeZone: 'Africa/Khartoum', hour12: false })
+    } catch {
+      return ts.toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
+    }
+  })()
+  const stampLine = `\n🕒 ${stamp} (Khartoum)`
 
   if (!mapping) {
     const en = data.message || `PACT update: ${eventType}`
     const ar = data.message_ar || data.message || `تحديث من باكت: ${eventType}`
-    return lang === 'ar' ? ar + sep + en + footer : en + sep + ar + footer
+    const body = lang === 'ar' ? ar + sep + en : en + sep + ar
+    return header + body + stampLine + footer
   }
   const p = mapping.vars(data)
 
@@ -222,34 +236,35 @@ function buildWasenderText(eventType: string, data: Record<string, string>, lang
     switch (mapping.template) {
       case 'pact_task_event':
         return {
-          en: `*Task Update*\n\nHello ${p[0]},\n\nTask: *${p[1]}*\nStatus: ${p[2]}\nDue date: ${p[3]}\n\nOpen task: ${p[4]}`,
-          ar: `*تحديث مهمة*\n\nمرحباً ${p[0]}،\n\nالمهمة: *${p[1]}*\nالحالة: ${p[2]}\nتاريخ الاستحقاق: ${p[3]}\n\nفتح المهمة: ${p[4]}`,
+          en: `📋 *TASK UPDATE*\n\nHello *${p[0]}*,\n\n📌 *Task:* ${p[1]}\n🔄 *Status:* ${p[2]}\n📅 *Due:* ${p[3]}\n\n👉 Open task: ${p[4]}`,
+          ar: `📋 *تحديث مهمة*\n\nمرحباً *${p[0]}*،\n\n📌 *المهمة:* ${p[1]}\n🔄 *الحالة:* ${p[2]}\n📅 *الاستحقاق:* ${p[3]}\n\n👉 فتح المهمة: ${p[4]}`,
         }
       case 'pact_approval_request':
         return {
-          en: `*Approval Required*\n\nHello ${p[0]},\n\n${p[1]} requires your approval.\nSubmitted by: ${p[2]}\n\nReview: ${p[3]}`,
-          ar: `*مطلوب موافقة*\n\nمرحباً ${p[0]}،\n\n${p[1]} يتطلب موافقتك.\nمقدم من: ${p[2]}\n\nللمراجعة: ${p[3]}`,
+          en: `✅ *APPROVAL REQUIRED*\n\nHello *${p[0]}*,\n\n📌 *Item:* ${p[1]}\n👤 *Submitted by:* ${p[2]}\n⚠️ Your approval is needed to proceed.\n\n👉 Review now: ${p[3]}`,
+          ar: `✅ *مطلوب موافقة*\n\nمرحباً *${p[0]}*،\n\n📌 *العنصر:* ${p[1]}\n👤 *مقدم من:* ${p[2]}\n⚠️ موافقتك مطلوبة للمتابعة.\n\n👉 للمراجعة الآن: ${p[3]}`,
         }
       case 'pact_status_update':
         return {
-          en: `*Status Update*\n\nHello ${p[0]},\n\nYour ${p[1]} has been *${p[2]}*.\nNotes: ${p[3]}`,
-          ar: `*تحديث حالة*\n\nمرحباً ${p[0]}،\n\nتم *${p[2]}* ${p[1]} الخاص بك.\nملاحظات: ${p[3]}`,
+          en: `🔔 *STATUS UPDATE*\n\nHello *${p[0]}*,\n\n📌 *Subject:* ${p[1]}\n✨ *Decision:* ${p[2]}\n📝 *Notes:* ${p[3]}`,
+          ar: `🔔 *تحديث حالة*\n\nمرحباً *${p[0]}*،\n\n📌 *الموضوع:* ${p[1]}\n✨ *القرار:* ${p[2]}\n📝 *ملاحظات:* ${p[3]}`,
         }
       case 'pact_alert':
         return {
-          en: `⚠️ *${p[0]}*\n\n${p[1]}\n\nDetails: ${p[2]}\nAction needed: ${p[3]}`,
-          ar: `⚠️ *${p[0]}*\n\n${p[1]}\n\nالتفاصيل: ${p[2]}\nالإجراء المطلوب: ${p[3]}`,
+          en: `⚠️ *ALERT — ${p[0]}*\n\n${p[1]}\n\n📌 *Details:* ${p[2]}\n🚨 *Action needed:* ${p[3]}`,
+          ar: `⚠️ *تنبيه — ${p[0]}*\n\n${p[1]}\n\n📌 *التفاصيل:* ${p[2]}\n🚨 *الإجراء المطلوب:* ${p[3]}`,
         }
       case 'pact_reminder':
       default:
         return {
-          en: `*Reminder*\n\nHello ${p[0]},\n\nYou have ${p[1]}.\n\nView: ${p[2]}`,
-          ar: `*تذكير*\n\nمرحباً ${p[0]}،\n\nلديك ${p[1]}.\n\nللعرض: ${p[2]}`,
+          en: `⏰ *REMINDER*\n\nHello *${p[0]}*,\n\nYou have *${p[1]}*.\n\n👉 View: ${p[2]}`,
+          ar: `⏰ *تذكير*\n\nمرحباً *${p[0]}*،\n\nلديك *${p[1]}*.\n\n👉 للعرض: ${p[2]}`,
         }
     }
   })()
 
-  return (lang === 'ar' ? pair.ar + sep + pair.en : pair.en + sep + pair.ar) + footer
+  const body = lang === 'ar' ? pair.ar + sep + pair.en : pair.en + sep + pair.ar
+  return header + body + stampLine + footer
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────

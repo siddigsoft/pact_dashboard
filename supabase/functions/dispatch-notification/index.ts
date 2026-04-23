@@ -495,10 +495,14 @@ function generateEventEmailHtml(
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         
         <!-- Brand header -->
-        <tr><td style="background:linear-gradient(135deg,#0F2041 0%,#1D3461 100%);padding:24px 32px;border-radius:12px 12px 0 0;text-align:center;">
-          <div style="font-size:28px;margin-bottom:4px;">${icon}</div>
-          <h1 style="color:white;margin:0;font-size:20px;font-weight:700;letter-spacing:-0.02em;">PACT Command Center</h1>
-          <p style="color:rgba(255,255,255,0.65);margin:4px 0 0;font-size:13px;">مركز قيادة باكت للعمليات الميدانية</p>
+        <tr><td style="background:linear-gradient(135deg,#0F2041 0%,#1D3461 100%);padding:28px 32px 22px;border-radius:12px 12px 0 0;text-align:center;">
+          <div style="background:white;display:inline-block;padding:10px 14px;border-radius:14px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.18);">
+            <img src="https://app.pactorg.com/pact-logo-email.png" alt="PACT" width="84" height="84" style="display:block;width:84px;height:auto;border:0;outline:none;" />
+          </div>
+          <div style="font-size:22px;margin-bottom:2px;">${icon}</div>
+          <h1 style="color:white;margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em;">PACT Command Center</h1>
+          <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:13px;">A Synergy of Consulting Expertise for Transformation &amp; Development</p>
+          <p style="color:rgba(255,255,255,0.55);margin:2px 0 0;font-size:12px;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;">مركز قيادة باكت للعمليات الميدانية</p>
         </td></tr>
 
         <!-- Priority stripe -->
@@ -547,14 +551,23 @@ function generateEventEmailHtml(
         </td></tr>
 
         <!-- Footer -->
-        <tr><td style="background:#f8fafc;padding:20px 32px;border-top:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+        <tr><td style="background:#f8fafc;padding:22px 32px;border-top:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="vertical-align:middle;width:64px;">
+              <img src="https://app.pactorg.com/pact-logo-email.png" alt="PACT" width="48" height="48" style="display:block;width:48px;height:auto;border:0;outline:none;" />
+            </td>
+            <td style="vertical-align:middle;padding-left:12px;">
+              <p style="margin:0;font-size:13px;color:#1D3461;font-weight:700;">PACT Command Center</p>
+              <p style="margin:2px 0 0;font-size:11px;color:#64748b;">A Synergy of Consulting Expertise for Transformation &amp; Development</p>
+            </td>
+          </tr></table>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:14px 0;">
           <p style="margin:0 0 8px;font-size:12px;color:#94a3b8;text-align:center;">${recipientNoticeEn}</p>
           <p style="margin:0 0 12px;font-size:12px;color:#94a3b8;text-align:center;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;">${recipientNoticeAr}</p>
-          <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
-          <p style="margin:0;font-size:11px;color:#cbd5e1;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#cbd5e1;text-align:center;line-height:1.6;">
             This is an automated message from PACT Workflow Platform.<br>
             <span style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;">هذه رسالة آلية من منصة باكت للعمليات الميدانية</span><br><br>
-            ICT Team · PACT Command Center · <a href="https://app.pactorg.com" style="color:#1D3461;">app.pactorg.com</a>
+            ICT Team · PACT Command Center · <a href="https://app.pactorg.com" style="color:#1D3461;text-decoration:none;font-weight:600;">app.pactorg.com</a>
           </p>
         </td></tr>
 

@@ -419,14 +419,32 @@ async function sendTaskEmail(opts: {
   email: string | null | undefined;
   titleEn: string;
   body: string;
+  titleAr?: string;
+  bodyAr?: string;
+  recipientName?: string;
+  actionUrl?: string;
+  priority?: 'normal' | 'high' | 'urgent';
+  details?: { label: string; value: string }[];
 }) {
   if (!opts.email) return;
   try {
+    // Use the structured 'notification' template so the email renders with the
+    // PACT brand header (logo + gradient), bilingual body, details table,
+    // action button, and footer — instead of a bare <p>.
     await supabase.functions.invoke('send-email', {
       body: {
         to: opts.email,
-        subject: opts.titleEn,
-        html: `<p style="font-family:sans-serif;white-space:pre-line">${opts.body}</p>`,
+        subject: `[PACT] ${opts.titleEn}`,
+        type: 'notification',
+        recipientName: opts.recipientName ?? 'Team Member',
+        title_en: opts.titleEn,
+        title_ar: opts.titleAr ?? opts.titleEn,
+        message_en: opts.body,
+        message_ar: opts.bodyAr ?? opts.body,
+        actionUrl: opts.actionUrl ?? '/my-tasks',
+        actionLabel: 'View Task',
+        priority: opts.priority ?? 'normal',
+        details: opts.details,
       },
     });
   } catch {

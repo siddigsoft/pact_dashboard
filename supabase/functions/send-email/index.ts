@@ -94,12 +94,18 @@ function generateCompactTemplate(
   ).join('') : ''
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5">
-<div style="background:#fff;border-radius:8px;padding:30px;box-shadow:0 2px 4px rgba(0,0,0,0.1)">
-<div style="text-align:center;margin-bottom:20px;border-bottom:2px solid ${priorityColor};padding-bottom:15px">
-<h1 style="color:#1a1a2e;margin:0;font-size:20px">PACT Command Center</h1>
-<p style="color:#666;margin:5px 0 0;font-size:12px">مركز قيادة باكت</p>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px;background:#f1f5f9">
+<div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.08)">
+<div style="background:linear-gradient(135deg,#0F2041 0%,#1D3461 100%);padding:24px;text-align:center;border-bottom:4px solid ${priorityColor}">
+<div style="background:#fff;display:inline-block;padding:8px 12px;border-radius:12px;margin-bottom:12px;box-shadow:0 2px 10px rgba(0,0,0,0.15)">
+<img src="${APP_URL}/pact-logo-email.png" alt="PACT" width="72" height="72" style="display:block;width:72px;height:auto;border:0;outline:none" />
 </div>
+<h1 style="color:#fff;margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">PACT Command Center</h1>
+<p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:12px">A Synergy of Consulting Expertise for Transformation &amp; Development</p>
+<p style="color:rgba(255,255,255,0.55);margin:2px 0 0;font-size:11px;direction:rtl">مركز قيادة باكت</p>
+</div>
+<div style="padding:24px">
+
 <div style="margin-bottom:20px;padding:15px;background:#f8f9fa;border-radius:6px;border-left:3px solid ${priorityColor}">
 <h2 style="color:#1a1a2e;margin:0 0 10px;font-size:16px">${title_en}</h2>
 <p style="color:#333;font-size:14px;line-height:1.5;margin:0 0 8px">Dear ${name},</p>
@@ -114,10 +120,23 @@ ${detailsHtml ? `<div style="margin-top:12px;padding-top:12px;border-top:1px sol
 ${fullUrl ? `<div style="text-align:center;margin:20px 0">
 <a href="${fullUrl}" style="display:inline-block;padding:12px 24px;background:${priorityColor};color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">View Details | عرض التفاصيل</a>
 </div>` : ''}
-<hr style="border:none;border-top:1px solid #eee;margin:20px 0">
-<p style="color:#999;font-size:11px;text-align:center">
-PACT Workflow Platform | منصة باكت<br>ICT Team | فريق تكنولوجيا المعلومات
+</div>
+<div style="background:#f8fafc;padding:18px 24px;border-top:1px solid #e2e8f0">
+<table width="100%" cellpadding="0" cellspacing="0"><tr>
+<td style="vertical-align:middle;width:52px">
+<img src="${APP_URL}/pact-logo-email.png" alt="PACT" width="40" height="40" style="display:block;width:40px;height:auto;border:0;outline:none" />
+</td>
+<td style="vertical-align:middle;padding-left:10px">
+<p style="margin:0;font-size:12px;color:#1D3461;font-weight:700">PACT Command Center</p>
+<p style="margin:2px 0 0;font-size:10px;color:#64748b">A Synergy of Consulting Expertise for Transformation &amp; Development</p>
+</td>
+</tr></table>
+<hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0">
+<p style="color:#94a3b8;font-size:11px;text-align:center;margin:0;line-height:1.6">
+PACT Workflow Platform | منصة باكت<br>
+ICT Team · <a href="${APP_URL}" style="color:#1D3461;text-decoration:none;font-weight:600">app.pactorg.com</a>
 </p>
+</div>
 </div></body></html>`
 
   const text = `${title_en}\n\nDear ${name},\n\n${message_en}\n\n---\n\n${title_ar}\n\nعزيزي ${name}،\n\n${message_ar}\n\n---\nPACT Command Center`
@@ -131,9 +150,12 @@ function generateOtpTemplate(name: string, otp: string, actionUrl?: string): { h
     html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5">
 <div style="background:#fff;border-radius:8px;padding:30px;box-shadow:0 2px 4px rgba(0,0,0,0.1)">
-<div style="text-align:center;margin-bottom:20px">
-<h1 style="color:#1a1a2e;margin:0;font-size:20px">PACT Workflow Platform</h1>
-<p style="color:#666;margin:5px 0 0;font-size:12px">منصة باكت للعمليات الميدانية</p>
+<div style="text-align:center;margin-bottom:20px;background:linear-gradient(135deg,#0F2041 0%,#1D3461 100%);padding:20px;border-radius:8px">
+<div style="background:#fff;display:inline-block;padding:6px 10px;border-radius:10px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+<img src="${APP_URL}/pact-logo-email.png" alt="PACT" width="64" height="64" style="display:block;width:64px;height:auto;border:0;outline:none" />
+</div>
+<h1 style="color:#fff;margin:0;font-size:18px;font-weight:800">PACT Workflow Platform</h1>
+<p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:11px">منصة باكت للعمليات الميدانية</p>
 </div>
 <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #eee">
 <p style="color:#333;font-size:14px">Hello ${name},</p>
