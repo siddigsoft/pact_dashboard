@@ -999,20 +999,49 @@ export default function TaskDetail() {
         // ── Predecessor-task gate (task_dependencies table) — independent of ack gate.
         // If another task must finish first, block Start regardless of acks.
         if (depBlocked) {
-          const names = (depGate?.blockingTasks ?? []).map((t: any) => t.title || 'Untitled').slice(0, 3);
-          const more = (depGate?.blockingTasks?.length ?? 0) - names.length;
+          const names = (depGate?.blockingTasks ?? [])
+            .map((t: any) => t?.title || t?.name || '')
+            .filter((s: string) => s.trim().length > 0)
+            .slice(0, 3);
+          const totalBlockers = depGate?.blockingTasks?.length ?? 0;
+          const more = totalBlockers - names.length;
+          // Three distinct states:
+          //   1) loading       → "Checking dependencies…"
+          //   2) errored       → "Couldn't verify dependencies"
+          //   3) really blocked → list the predecessor titles (or a generic line if titles missing)
+          let headerText: string;
+          let bodyContent: React.ReactNode;
+          if (depGateLoading) {
+            headerText = 'Checking dependencies…';
+            bodyContent = <>Verifying whether any predecessor tasks must finish first.</>;
+          } else if (depGateErrored) {
+            headerText = "Couldn't verify dependencies";
+            bodyContent = <>We couldn't check predecessor tasks. Please refresh — the task is locked until verification succeeds.</>;
+          } else if (names.length > 0) {
+            headerText = `Waiting on predecessor task${totalBlockers > 1 ? 's' : ''}`;
+            bodyContent = (
+              <>
+                This task can't start until: <span className="font-semibold">{names.join(', ')}</span>
+                {more > 0 ? ` and ${more} more` : ''} {totalBlockers > 1 ? 'are' : 'is'} marked done.
+              </>
+            );
+          } else {
+            headerText = `Waiting on predecessor task${totalBlockers > 1 ? 's' : ''}`;
+            bodyContent = (
+              <>
+                This task can't start until {totalBlockers > 0 ? `${totalBlockers} predecessor task${totalBlockers > 1 ? 's are' : ' is'}` : 'its predecessor is'} marked done.
+              </>
+            );
+          }
           return (
             <div
               className="flex flex-col gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200"
               data-testid="banner-start-blocked-by-deps"
             >
               <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
-                <Lock className="w-4 h-4" /> Waiting on predecessor task{(depGate?.blockingTasks?.length ?? 0) > 1 ? 's' : ''}
+                <Lock className="w-4 h-4" /> {headerText}
               </p>
-              <p className="text-xs text-amber-800">
-                This task can't start until: <span className="font-semibold">{names.join(', ')}</span>
-                {more > 0 ? ` and ${more} more` : ''} {(depGate?.blockingTasks?.length ?? 0) > 1 ? 'are' : 'is'} marked done.
-              </p>
+              <p className="text-xs text-amber-800">{bodyContent}</p>
               <button
                 type="button"
                 disabled
