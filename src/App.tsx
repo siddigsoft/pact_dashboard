@@ -153,6 +153,12 @@ const ChangelogPage = lazy(() => import('./pages/Changelog'));
 const SubscriptionsPage = lazy(() => import('./pages/Subscriptions'));
 const SalaryRetainerReport = lazy(() => import('./pages/SalaryRetainerReport'));
 const MonthEndFinancialSummary = lazy(() => import('./pages/MonthEndFinancialSummary'));
+const MyTeam = lazy(() => import('./pages/MyTeam'));
+const PerformanceReviews = lazy(() => import('./pages/PerformanceReviews'));
+const SalaryIncrements = lazy(() => import('./pages/SalaryIncrements'));
+const PositionsPage = lazy(() => import('./pages/Positions'));
+const TrainingCertificationsPage = lazy(() => import('./pages/TrainingCertifications'));
+const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -446,6 +452,12 @@ const AppRoutes = () => {
         <Route path="/subscriptions" element={<PageWrapper><SubscriptionsPage /></PageWrapper>} />
         <Route path="/salary-retainer-report" element={<PageWrapper><SalaryRetainerReport /></PageWrapper>} />
         <Route path="/month-end-summary" element={<PageWrapper><MonthEndFinancialSummary /></PageWrapper>} />
+        <Route path="/my-team" element={<PageWrapper><MyTeam /></PageWrapper>} />
+        <Route path="/performance-reviews" element={<PageWrapper><PerformanceReviews /></PageWrapper>} />
+        <Route path="/salary-increments" element={<PageWrapper><SalaryIncrements /></PageWrapper>} />
+        <Route path="/positions" element={<PageWrapper><PositionsPage /></PageWrapper>} />
+        <Route path="/training-certifications" element={<PageWrapper><TrainingCertificationsPage /></PageWrapper>} />
+        <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
       </Route>
 
       {/* Redirects */}

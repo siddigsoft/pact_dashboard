@@ -209,7 +209,7 @@ export default function LeaveRequests() {
     if (days <= 0) { toast({ title: 'End date must be after start date', variant: 'destructive' }); return; }
     setSaving(true);
     try {
-      const { error } = await supabase.from('leave_requests').insert({
+      const { data: inserted, error } = await supabase.from('leave_requests').insert({
         user_id: currentUser?.id,
         leave_type: form.leave_type,
         start_date: form.start_date,
@@ -217,8 +217,14 @@ export default function LeaveRequests() {
         days_count: days,
         reason: form.reason.trim() || null,
         status: 'pending',
-      });
+      }).select().single();
       if (error) throw error;
+      // Build the multi-tier approver chain (manager → HR). Best-effort:
+      // if the RPC isn't deployed yet the request still works as a single-tier approval.
+      if (inserted?.id) {
+        try { await supabase.rpc('build_leave_approver_chain', { p_request_id: inserted.id }); }
+        catch (chainErr) { console.warn('[Leave] approver chain build skipped:', chainErr); }
+      }
       toast({ title: 'Leave request submitted', description: `${days} day${days !== 1 ? 's' : ''} of ${LEAVE_TYPES.find(t => t.value === form.leave_type)?.label}` });
       setDialogOpen(false);
       setForm({ ...BLANK });
@@ -302,15 +308,50 @@ export default function LeaveRequests() {
     if (!reviewDialog) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('leave_requests').update({
-        status: reviewAction,
-        reviewed_by: currentUser?.id,
-        reviewed_at: new Date().toISOString(),
-        reviewer_notes: reviewNotes.trim() || null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', reviewDialog.id);
-      if (error) throw error;
-      toast({ title: `Request ${reviewAction}`, description: `${reviewDialog.user_name}'s leave has been ${reviewAction}` });
+      // Prefer the multi-tier RPC if the request has an approver chain; the RPC
+      // advances to the next tier (manager → HR) atomically. Falls back to the
+      // legacy single-step admin approval if the RPC is unavailable or the
+      // request predates the multi-tier feature.
+      const hasChain = Array.isArray((reviewDialog as any).approver_chain)
+        && (reviewDialog as any).approver_chain.length > 0;
+      let usedRpc = false;
+      let nextTier: string | null = null;
+      if (hasChain) {
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('decide_leave_request', {
+          p_request_id: reviewDialog.id,
+          p_decision:   reviewAction,
+          p_comment:    reviewNotes.trim() || null,
+        });
+        if (!rpcErr) { usedRpc = true; nextTier = (rpcData as any)?.next_tier ?? null; }
+        else {
+          // Only fall back to legacy single-step update when the RPC itself is
+          // not deployed yet. Any other error (auth, validation, transient)
+          // must surface — silently bypassing the chain would break tier
+          // sequencing and let a manager finalize when HR was still required.
+          const code = (rpcErr as any)?.code;
+          const msg  = String((rpcErr as any)?.message ?? '').toLowerCase();
+          const rpcMissing = code === 'PGRST202' || code === '42883'
+            || msg.includes('does not exist') || msg.includes('could not find the function');
+          if (!rpcMissing) {
+            throw rpcErr;
+          }
+          console.warn('[Leave] decide_leave_request RPC not deployed — using legacy single-step update');
+        }
+      }
+      if (!usedRpc) {
+        const { error } = await supabase.from('leave_requests').update({
+          status: reviewAction,
+          reviewed_by: currentUser?.id,
+          reviewed_at: new Date().toISOString(),
+          reviewer_notes: reviewNotes.trim() || null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', reviewDialog.id);
+        if (error) throw error;
+      }
+      toast({
+        title: nextTier ? `Approved — forwarded to ${nextTier === 'hr' ? 'HR' : nextTier}` : `Request ${reviewAction}`,
+        description: `${reviewDialog.user_name}'s leave has been ${nextTier ? 'forwarded' : reviewAction}`,
+      });
       setReviewDialog(null);
       setReviewNotes('');
       load();

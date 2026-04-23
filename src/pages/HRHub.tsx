@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter, Copy, X } from 'lucide-react';
+import { Banknote, FileText, Loader2, Settings2, Wrench, Plus, Minus, Calculator, GitBranch, Download, FileDown, RefreshCw, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, ExternalLink, Users, BarChart2, TableIcon, Filter, Copy, X } from 'lucide-react';
 import { ConnectedPagesBar } from '@/components/ui/connected-pages-bar';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
@@ -1008,6 +1008,49 @@ function OrgChartView() {
   const [searchQ, setSearchQ] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [expandAll, setExpandAll] = useState<boolean | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState<null | 'png' | 'pdf'>(null);
+
+  async function handleExport(kind: 'png' | 'pdf') {
+    if (!chartRef.current) return;
+    setExporting(kind);
+    // Force-expand everything before snapshot so the full hierarchy is in the image.
+    const prevExpand = expandAll;
+    setExpandAll(true);
+    try {
+      // Wait two animation frames for any controlled children to re-render.
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(chartRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      if (kind === 'png') {
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `org-chart-${new Date().toISOString().slice(0,10)}.png`;
+        a.click();
+      } else {
+        const { default: jsPDF } = await import('jspdf');
+        const isWide = canvas.width > canvas.height;
+        const pdf = new jsPDF({ orientation: isWide ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+        const pw = pdf.internal.pageSize.getWidth();
+        const ph = pdf.internal.pageSize.getHeight();
+        const ratio = Math.min(pw / canvas.width, ph / canvas.height);
+        const w = canvas.width * ratio;
+        const h = canvas.height * ratio;
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (pw - w) / 2, (ph - h) / 2, w, h);
+        pdf.save(`org-chart-${new Date().toISOString().slice(0,10)}.pdf`);
+      }
+    } catch (e) {
+      console.error('[OrgChart] export failed:', e);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const { data: people = [], isLoading } = useQuery<OrgPersonExtended[]>({
     queryKey: ['org-chart-people-v2'],
@@ -1113,8 +1156,24 @@ function OrgChartView() {
               <ChevronsDownUp className="h-3.5 w-3.5" />
             </button>
           </div>
+          {/* Export */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <button onClick={() => handleExport('png')} disabled={!!exporting} title="Export as PNG"
+              data-testid="button-export-orgchart-png"
+              className="h-8 px-2.5 text-xs flex items-center gap-1 bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors border-r disabled:opacity-50">
+              {exporting === 'png' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">PNG</span>
+            </button>
+            <button onClick={() => handleExport('pdf')} disabled={!!exporting} title="Export as PDF"
+              data-testid="button-export-orgchart-pdf"
+              className="h-8 px-2.5 text-xs flex items-center gap-1 bg-white dark:bg-slate-900 text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors disabled:opacity-50">
+              {exporting === 'pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+          </div>
         </div>
       </div>
+      <div ref={chartRef} className="bg-white dark:bg-slate-950 rounded-lg p-2">
 
       {/* Search flat list */}
       {filteredPeople ? (
@@ -1169,6 +1228,7 @@ function OrgChartView() {
           {roots.map(r => <OrgNode key={r.id} person={r} depth={0} expandAll={expandAll} childrenOf={childrenOf} navigate={navigate} />)}
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -20,6 +20,7 @@
     CreditCard,
     DollarSign,
     Award,
+    Briefcase,
     Receipt,
     TrendingUp,
     Building2,
@@ -129,6 +130,7 @@
     Shield,
     ShieldCheck,
     Award,
+    Briefcase,
     TrendingUp,
     DollarSign,
     Settings,
@@ -294,6 +296,9 @@
     }
     if (!isHidden('/team-tasks') && (isSuperAdmin || isAdmin || isCountryDirector || ['ceo','coo','cto','hr_manager'].includes(defaultRole.toLowerCase()))) {
       workspaceItems.push({ id: 'team-tasks', title: "Team Monitor", url: "/team-tasks", icon: Users, priority: 3, isPinned: isPinned('/team-tasks') });
+    }
+    if (!isHidden('/my-team')) {
+      workspaceItems.push({ id: 'my-team', title: "My Team", url: "/my-team", icon: Users, priority: 3, isPinned: isPinned('/my-team') });
     }
     if (!isDataCollector && !isHidden('/calendar')) {
       workspaceItems.push({ id: 'calendar', title: "Calendar", url: "/calendar", icon: Calendar, priority: 3, isPinned: isPinned('/calendar') });
@@ -500,6 +505,18 @@
     // 9. My Payslip — personal payslip for every staff member
     if (!isHidden('/hr')) {
       hrItems.push({ id: 'my-payslip', title: "My Payslip", url: "/hr?tab=payroll", icon: Receipt, priority: 9, isPinned: isPinned('/hr') });
+    }
+    // 10. Positions / Vacancies — visible to everyone, edit-restricted via RLS
+    if (!isHidden('/positions')) {
+      hrItems.push({ id: 'positions', title: "Positions & Vacancies", url: "/positions", icon: Briefcase, priority: 10, isPinned: isPinned('/positions') });
+    }
+    // 11. Training & Certifications — every staff sees their own; admins see all
+    if (!isHidden('/training-certifications')) {
+      hrItems.push({ id: 'training-certifications', title: "Training & Certifications", url: "/training-certifications", icon: Award, priority: 11, isPinned: isPinned('/training-certifications') });
+    }
+    // 12. Hierarchy Audit Log — HR/admin only
+    if (!isHidden('/hierarchy-audit') && (isSuperAdmin || isAdmin || ['hr','hr_manager'].includes(defaultRole.toLowerCase()))) {
+      hrItems.push({ id: 'hierarchy-audit', title: "Hierarchy Audit Log", url: "/hierarchy-audit", icon: ScrollText, priority: 12, isPinned: isPinned('/hierarchy-audit') });
     }
     if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
 
