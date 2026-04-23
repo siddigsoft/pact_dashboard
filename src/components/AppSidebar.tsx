@@ -88,6 +88,7 @@
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
   import { useAuthorization } from "@/hooks/use-authorization";
+  import { canSeePath } from "@/lib/page-roles";
   import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
   import { useSettings } from "@/context/settings/SettingsContext";
   import {
@@ -316,17 +317,17 @@
     if (!isHidden('/signatures')) {
       communicationItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 3, isPinned: isPinned('/signatures') });
     }
-    if (!isHidden('/admin/broadcast') && (isSuperAdmin || isAdmin)) {
+    if (!isHidden('/admin/broadcast') && canSeePath('/admin/broadcast', defaultRole)) {
       communicationItems.push({ id: 'admin-broadcast', title: "Broadcast Center", url: "/admin/broadcast", icon: Megaphone, priority: 4, isPinned: isPinned('/admin/broadcast') });
     }
-    if (!isHidden('/admin/whatsapp') && isSuperAdmin) {
+    if (!isHidden('/admin/whatsapp') && canSeePath('/admin/whatsapp', defaultRole)) {
       communicationItems.push({ id: 'admin-whatsapp', title: "WhatsApp Admin", url: "/admin/whatsapp", icon: Smartphone, priority: 5, isPinned: isPinned('/admin/whatsapp') });
     }
     if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 3, items: communicationItems });
 
     // ── 2. Programme Management ───────────────────────────────────────────────
     const planningItems: MenuGroup['items'] = [];
-    if (!isHidden('/projects') && isSuperAdmin) {
+    if (!isHidden('/projects') && canSeePath('/projects', defaultRole)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
     if (!isHidden('/projects/analytics') && (isSuperAdmin || isAdmin || isFOM || perms.projects)) {
@@ -339,7 +340,7 @@
       const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 4, isPinned: isPinned('/mmp') });
     }
-    if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
+    if (!isHidden('/hub-operations') && canSeePath('/hub-operations', defaultRole)) {
       planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 4, isPinned: isPinned('/hub-operations') });
     }
     if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT || isFOM || isProjectManager)) {
@@ -361,16 +362,16 @@
     if (!isHidden('/incident-reports') && (isSuperAdmin || isAdmin || isICT || isFOM || isCoordinator || isSupervisor || isDataTeam)) {
       fieldOpsItems.push({ id: 'incident-reports', title: "Incident Reports", url: "/incident-reports", icon: AlertTriangle, priority: 4, isPinned: isPinned('/incident-reports') });
     }
-    if (!isHidden('/equipment') && (isSuperAdmin || isAdmin || isFOM)) {
+    if (!isHidden('/equipment') && canSeePath('/equipment', defaultRole)) {
       fieldOpsItems.push({ id: 'equipment', title: "Equipment Tracking", url: "/equipment", icon: Package, priority: 5, isPinned: isPinned('/equipment') });
     }
     if (!isHidden('/field-team') && (isSuperAdmin || ((isAdmin || perms.fieldTeam) && !isICT))) {
       fieldOpsItems.push({ id: 'field-team', title: "Field Team", url: "/field-team", icon: Activity, priority: 6, isPinned: isPinned('/field-team') });
     }
-    if (!isHidden('/map') && (isSuperAdmin || isAdmin || isFOM)) {
+    if (!isHidden('/map') && canSeePath('/map', defaultRole)) {
       fieldOpsItems.push({ id: 'advanced-map', title: "Field Map", url: "/map", icon: Map, priority: 7, isPinned: isPinned('/map') });
     }
-    if (!isHidden('/field-operation-manager') && (isSuperAdmin || isAdmin || isFOM)) {
+    if (!isHidden('/field-operation-manager') && canSeePath('/field-operation-manager', defaultRole)) {
       fieldOpsItems.push({ id: 'field-operation-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: Compass, priority: 8, isPinned: isPinned('/field-operation-manager') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 4, items: fieldOpsItems });
@@ -380,16 +381,16 @@
     if (!isHidden('/supervisor/sites') && isSupervisor && !isCoordinator) {
       coordinationItems.push({ id: 'supervisor-site-management', title: "My Site Management", url: "/supervisor/sites", icon: Map, priority: 1, isPinned: isPinned('/supervisor/sites') });
     }
-    if (!isHidden('/coordinator/sites') && (isSuperAdmin || isCoordinator || isSupervisor)) {
+    if (!isHidden('/coordinator/sites') && canSeePath('/coordinator/sites', defaultRole)) {
       coordinationItems.push({ id: 'site-verification', title: "Site Verification", url: "/coordinator/sites", icon: CheckCircle, priority: 2, isPinned: isPinned('/coordinator/sites') });
     }
-    if (!isHidden('/coordinator/sites-for-verification') && (isSuperAdmin || isCoordinator || isSupervisor)) {
+    if (!isHidden('/coordinator/sites-for-verification') && canSeePath('/coordinator/sites', defaultRole)) {
       coordinationItems.push({ id: 'sites-for-verification', title: "Sites for Verification", url: "/coordinator/sites-for-verification", icon: CheckCircle, priority: 3, isPinned: isPinned('/coordinator/sites-for-verification') });
     }
     if (!isHidden('/mmp/cycle-close') && (isSuperAdmin || isAdmin || isFOM || isSupervisor)) {
       coordinationItems.push({ id: 'mmp-cycle-close', title: "Cycle Management", url: "/mmp/cycle-close", icon: CheckCircle, priority: 4, isPinned: isPinned('/mmp/cycle-close') });
     }
-    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin || isFinancialAdmin || isFOM)) {
+    if (!isHidden('/admin/staff-profiles') && canSeePath('/admin/staff-profiles', defaultRole)) {
       coordinationItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 5, isPinned: isPinned('/admin/staff-profiles') });
     }
     if (coordinationItems.length) groups.push({ id: 'coordination', label: "Coordination & Oversight", order: 4.5, items: coordinationItems });
@@ -408,28 +409,28 @@
     if (!isHidden('/approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
       approvalItems.push({ id: 'approvals-hub', title: "Approvals Hub", url: "/approvals", icon: Inbox, priority: 0, isPinned: isPinned('/approvals') });
     }
-    if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM)) {
+    if (!isHidden('/supervisor-approvals') && canSeePath('/supervisor-approvals', defaultRole)) {
       approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
     }
-    if (!isHidden('/withdrawal-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+    if (!isHidden('/withdrawal-approval') && canSeePath('/withdrawal-approval', defaultRole)) {
       approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
     }
     if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor)) {
       approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
-    if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+    if (!isHidden('/finance-approval') && canSeePath('/finance-approval', defaultRole)) {
       approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
     }
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
     const finMgmtItems: MenuGroup['items'] = [];
-    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+    if (!isHidden('/budget') && canSeePath('/budget', defaultRole)) {
       finMgmtItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 1, isPinned: isPinned('/budget') });
     }
-    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+    if (!isHidden('/admin/wallets') && canSeePath('/admin/wallets', defaultRole)) {
       finMgmtItems.push({ id: 'wallets', title: "Wallets Admin", url: "/admin/wallets", icon: CreditCard, priority: 2, isPinned: isPinned('/admin/wallets') });
     }
-    if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
+    if (!isHidden('/financial-operations') && (canSeePath('/financial-operations', defaultRole) || perms.financialOperations)) {
       finMgmtItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 3, isPinned: isPinned('/financial-operations') });
     }
     if (!isHidden('/reconciliation-dashboard') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
@@ -464,15 +465,16 @@
     // ── 7. HR & People — logical flow: Employees → Payroll → Retainer → Leave → Analytics → My Payslip ──
     const hrItems: MenuGroup['items'] = [];
     // 1. Employees — who works here: contracts, bank accounts, contract type
-    if (!isHidden('/employees') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
+    if (!isHidden('/employees') && hrAdminAccess) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
     // 2. Payroll — salary setup, run payroll, payslips, reports (admin only)
-    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'payroll-admin', title: "Payroll", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 2, isPinned: false });
     }
     // 3. Retainer Payments — retainer agreements and monthly payments (admin only)
-    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/retainer-management", icon: CreditCard, priority: 3, isPinned: isPinned('/retainer-management') });
     }
     // 4. Leave Requests — all staff submit; admins approve
@@ -480,7 +482,7 @@
       hrItems.push({ id: 'leave-requests', title: "Leave Requests", url: "/leave", icon: CalendarOff, priority: 4, isPinned: isPinned('/leave') });
     }
     // 5. HR Analytics — staff cost projections, org chart, budget vs actual (admin only)
-    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'hr-analytics', title: "HR Analytics", url: "/hr?tab=hr-tools", icon: TrendingUp, priority: 5, isPinned: false });
     }
     // 6. Timesheet — daily work log for all staff
@@ -488,11 +490,11 @@
       hrItems.push({ id: 'timesheet', title: "Timesheet", url: "/hr?tab=timesheet", icon: ClipboardCheck, priority: 6, isPinned: false });
     }
     // 7. Performance Reviews — admin-managed annual/quarterly reviews
-    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'performance-reviews', title: "Performance Reviews", url: "/hr?tab=performance", icon: Activity, priority: 7, isPinned: false });
     }
     // 8. Salary Increments — merit-based increment management
-    if (!isHidden('/hr') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'salary-increments', title: "Salary Increments", url: "/hr?tab=salary-increments", icon: Award, priority: 8, isPinned: false });
     }
     // 9. My Payslip — personal payslip for every staff member
@@ -550,7 +552,7 @@
 
     // ── 10. Administration ────────────────────────────────────────────────────
     const adminItems: MenuGroup['items'] = [];
-    if (!isHidden('/users') && (isSuperAdmin || isAdmin || isICT || perms.users)) {
+    if (!isHidden('/users') && (canSeePath('/users', defaultRole) || perms.users)) {
       adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
     }
     if (!isHidden('/audit-compliance') && (isSuperAdmin || isAdmin || isICT)) {
@@ -559,22 +561,22 @@
     if (!isHidden('/hub-management') && (isSuperAdmin || isAdmin || isICT)) {
       adminItems.push({ id: 'hub-management', title: "Hub Management", url: "/hub-management", icon: Building2, priority: 3, isPinned: isPinned('/hub-management') });
     }
-    if (!isHidden('/departments') && isSuperAdmin) {
+    if (!isHidden('/departments') && canSeePath('/departments', defaultRole)) {
       adminItems.push({ id: 'departments', title: "Departments", url: "/departments", icon: Building2, priority: 4, isPinned: isPinned('/departments') });
     }
-    if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
+    if (!isHidden('/role-management') && (canSeePath('/role-management', defaultRole) || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 4, isPinned: isPinned('/role-management') });
     }
     if (!isHidden('/page-access') && isSuperAdmin) {
       adminItems.push({ id: 'page-access', title: "Page Access Control", url: "/page-access", icon: Lock, priority: 5, isPinned: isPinned('/page-access') });
     }
-    if (!isHidden('/classifications') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+    if (!isHidden('/classifications') && canSeePath('/classifications', defaultRole)) {
       adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 5, isPinned: isPinned('/classifications') });
     }
-    if (!isHidden('/classification-fees') && (isSuperAdmin || isAdmin)) {
+    if (!isHidden('/classification-fees') && canSeePath('/classification-fees', defaultRole)) {
       adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 6, isPinned: isPinned('/classification-fees') });
     }
-    if (!isHidden('/task-admin') && (isSuperAdmin || isAdmin)) {
+    if (!isHidden('/task-admin') && canSeePath('/task-admin', defaultRole)) {
       adminItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: CheckSquare, priority: 7, isPinned: isPinned('/task-admin') });
     }
     if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {

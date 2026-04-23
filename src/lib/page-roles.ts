@@ -40,6 +40,23 @@ export function normalizeRoleCode(role: string | null | undefined): string {
   return ROLE_ALIASES[k] ?? role;
 }
 
+/** Path → slug lookup so callers that key off URL (sidebar) can use the same gate. */
+const PATH_TO_SLUG: Record<string, string> = (() => {
+  const m: Record<string, string> = {};
+  for (const p of PAGE_DEFS) m[p.path] = p.slug;
+  return m;
+})();
+
+/** URL-based variant of canSeePage. Fail-closed: an unknown path returns
+ *  `false` so an undeclared route never silently leaks to the sidebar. If a
+ *  caller wants to OR with custom logic (e.g. `perms.X`), it must do so
+ *  explicitly. */
+export function canSeePath(path: string, role: string | null | undefined): boolean {
+  const slug = PATH_TO_SLUG[path];
+  if (!slug) return false;
+  return canSeePage(slug, role);
+}
+
 /** Pure check against PAGE_DEFS; does not consult overrides table. */
 export function canSeePage(slug: string, role: string | null | undefined): boolean {
   const def = PAGE_DEFS.find(p => p.slug === slug);
