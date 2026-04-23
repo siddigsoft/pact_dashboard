@@ -25,6 +25,113 @@ import { ApprovalPendingCard } from '@/components/ApprovalPendingCard';
 import { ApprovalHistoryPanel } from '@/components/ApprovalHistoryPanel';
 import { TaskDependenciesView } from '@/components/TaskDependenciesView';
 import { canTaskStart } from '@/services/task-dependencies.service';
+import { useEffect } from 'react';
+
+type TimesheetRowProps = {
+  row: {
+    id: string;
+    name: string;
+    role: 'Primary' | 'Co-assignee';
+    planned: number | null;
+    actual: number | null;
+    confirmedAt: string | null;
+  };
+  taskStarted: boolean;
+  isSelf: boolean;
+  isAdmin: boolean;
+  canConfirmHours: boolean;
+  confirmedByName: string | null;
+  pending: boolean;
+  onChangeHours: (hours: number | null) => void;
+  onConfirm: () => void;
+};
+
+function TimesheetRow({
+  row, taskStarted, isSelf, isAdmin, canConfirmHours,
+  confirmedByName, pending, onChangeHours, onConfirm,
+}: TimesheetRowProps) {
+  // Admins can edit at any time. Self-edits require the task to be started.
+  const canEditActual = isAdmin || (isSelf && taskStarted);
+  const confirmed = !!row.confirmedAt;
+
+  // Controlled input — re-syncs whenever the server value changes.
+  const [draft, setDraft] = useState<string>(row.actual != null ? String(row.actual) : '');
+  useEffect(() => {
+    setDraft(row.actual != null ? String(row.actual) : '');
+  }, [row.actual]);
+
+  const commit = () => {
+    const raw = draft.trim();
+    if (raw === '') {
+      if (row.actual !== null) onChangeHours(null);
+      return;
+    }
+    const next = Number(raw);
+    if (Number.isNaN(next) || next < 0) {
+      setDraft(row.actual != null ? String(row.actual) : '');
+      return;
+    }
+    if (next === row.actual) return;
+    onChangeHours(next);
+  };
+
+  const tooltip = !canEditActual
+    ? (!taskStarted && isSelf ? 'Start the task before logging actual hours' : 'Only this person (or an admin) can edit their hours')
+    : '';
+
+  return (
+    <li className="py-2 flex items-center gap-3" data-testid={`row-timesheet-${row.id}`}>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-slate-800 truncate">{row.name}</p>
+        <p className="text-[10px] text-slate-400">
+          {row.role} · planned {row.planned != null ? `${row.planned}h` : '—'}
+        </p>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={0}
+          step={0.25}
+          value={draft}
+          placeholder="0"
+          disabled={!canEditActual || pending}
+          title={tooltip}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+          className="w-16 px-2 py-1 text-xs text-right rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-300/50 disabled:bg-slate-50 disabled:text-slate-400"
+          data-testid={`input-actual-hours-${row.id}`}
+        />
+        <span className="text-[10px] text-slate-400">h</span>
+      </div>
+      <div className="w-32 flex items-center justify-end">
+        {confirmed ? (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold"
+            title={`Confirmed by ${confirmedByName ?? 'owner'} on ${(() => { try { return format(parseISO(row.confirmedAt!), 'd MMM yyyy HH:mm'); } catch { return ''; } })()}`}
+            data-testid={`badge-hours-confirmed-${row.id}`}
+          >
+            <Check className="w-3 h-3" /> Confirmed
+          </span>
+        ) : canConfirmHours && row.actual != null && row.actual > 0 ? (
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-semibold"
+            data-testid={`btn-confirm-hours-${row.id}`}
+          >
+            <Check className="w-3 h-3" /> Confirm
+          </button>
+        ) : (
+          <span className="text-[10px] text-slate-400 italic">
+            {row.actual == null || row.actual === 0 ? 'Awaiting log' : 'Pending owner'}
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -311,6 +418,128 @@ export default function TaskDetail() {
         }
       } catch { /* non-critical */ }
       toast({ title: 'Dependency confirmed' });
+    },
+    onError: (e: Error) => toast({ title: 'Could not confirm', description: e.message, variant: 'destructive' }),
+  });
+
+  // ---------- Output proof files ----------
+  type OutputFile = { name: string; url: string; uploadedAt: string; uploadedBy?: string };
+
+  const uploadOutputFiles = useMutation({
+    mutationFn: async (files: File[]) => {
+      if (!id) throw new Error('Missing task id');
+      if (files.length === 0) return [] as OutputFile[];
+      const uploaded: OutputFile[] = [];
+      const failures: string[] = [];
+      for (const f of files) {
+        const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `task-attachments/${id}/output/${Date.now()}_${safeName}`;
+        const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
+        if (upErr) { failures.push(`${f.name}: ${upErr.message}`); continue; }
+        const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
+        uploaded.push({
+          name: f.name,
+          url: urlData?.publicUrl ?? '',
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: currentUser?.id,
+        });
+      }
+      if (failures.length > 0 && uploaded.length === 0) {
+        throw new Error(failures.join('; '));
+      }
+      const existing = ((task?.output_files as OutputFile[] | null) ?? []);
+      const next = [...existing, ...uploaded];
+      const { error } = await supabase
+        .from('personal_tasks')
+        .update({ output_files: next, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      return uploaded;
+    },
+    onSuccess: (uploaded) => {
+      qc.invalidateQueries({ queryKey: ['task-detail', id] });
+      if (uploaded.length > 0) {
+        toast({ title: `Attached ${uploaded.length} file${uploaded.length === 1 ? '' : 's'} to Output` });
+        addActivity.mutate({
+          taskId: id!, kind: 'log_note',
+          body: `${uploaded.length} proof file${uploaded.length === 1 ? '' : 's'} attached to Output by ${currentUser?.fullName ?? 'someone'}.`,
+        });
+      }
+    },
+    onError: (e: Error) => toast({ title: 'Upload failed', description: e.message, variant: 'destructive' }),
+  });
+
+  const removeOutputFile = useMutation({
+    mutationFn: async (fileUrl: string) => {
+      if (!id) throw new Error('Missing task id');
+      const existing = ((task?.output_files as OutputFile[] | null) ?? []);
+      const next = existing.filter(f => f.url !== fileUrl);
+      // Best-effort removal of the storage object — derive path from URL.
+      const marker = '/workspace-files/';
+      const idx = fileUrl.indexOf(marker);
+      if (idx >= 0) {
+        const path = fileUrl.slice(idx + marker.length).split('?')[0];
+        try { await supabase.storage.from('workspace-files').remove([path]); } catch { /* best effort */ }
+      }
+      const { error } = await supabase
+        .from('personal_tasks')
+        .update({ output_files: next, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-detail', id] });
+      toast({ title: 'File removed' });
+    },
+    onError: (e: Error) => toast({ title: 'Remove failed', description: e.message, variant: 'destructive' }),
+  });
+
+  // ---------- Per-person actual hours + owner confirmation ----------
+  // Primary: top-level personal_tasks.actual_hours / actual_hours_confirmed_at|by.
+  // Co-assignees: inline in co_assignees jsonb — { id, name, hours, acknowledged_at,
+  //   actual_hours, actual_hours_confirmed_at, actual_hours_confirmed_by }.
+  const isOwner = !!currentUser?.id && task?.user_id === currentUser.id;
+  const canConfirmHours = isOwner || isAdmin;
+
+  // All writes route through hardened SECURITY DEFINER RPCs that enforce
+  // self-or-admin for hours edits and owner-or-admin for confirmation, and
+  // patch the co_assignees jsonb atomically by id (no read-modify-write).
+
+  const setActualHoursForUser = useMutation({
+    mutationFn: async (args: { targetUserId: string; hours: number | null }) => {
+      if (!id) throw new Error('Missing task id');
+      const { error } = await supabase.rpc('set_task_actual_hours', {
+        p_task_id: id,
+        p_target_user_id: args.targetUserId,
+        p_hours: args.hours,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['task-detail', id] }),
+    onError: (e: Error) => toast({ title: 'Could not update hours', description: e.message, variant: 'destructive' }),
+  });
+
+  const confirmActualHoursForUser = useMutation({
+    mutationFn: async (targetUserId: string) => {
+      if (!id) throw new Error('Missing task id');
+      const { error } = await supabase.rpc('confirm_task_actual_hours', {
+        p_task_id: id,
+        p_target_user_id: targetUserId,
+      });
+      if (error) throw error;
+      return targetUserId;
+    },
+    onSuccess: (targetUserId) => {
+      qc.invalidateQueries({ queryKey: ['task-detail', id] });
+      toast({ title: 'Hours confirmed' });
+      const targetName = task?.assigned_to === targetUserId
+        ? 'primary assignee'
+        : ((task?.co_assignees as Array<Record<string, unknown>> | undefined ?? [])
+            .find(c => c.id === targetUserId)?.name as string) ?? 'a co-assignee';
+      addActivity.mutate({
+        taskId: id!, kind: 'system',
+        body: `${currentUser?.fullName ?? 'Owner'} confirmed actual hours for ${targetName}.`,
+      });
     },
     onError: (e: Error) => toast({ title: 'Could not confirm', description: e.message, variant: 'destructive' }),
   });
@@ -937,13 +1166,27 @@ export default function TaskDetail() {
                         data-testid="input-output-text"
                       />
                       <div className="flex items-center justify-between">
-                        <p className="text-[11px] text-slate-400">
-                          {task.proof_file_url ? (
-                            <a href={task.proof_file_url as string} target="_blank" rel="noreferrer" className="underline hover:text-slate-700">
-                              View attached proof file
-                            </a>
-                          ) : 'Tip: attach a proof file from the activity composer.'}
-                        </p>
+                        <label
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-50 cursor-pointer"
+                          data-testid="label-attach-output-file"
+                        >
+                          {uploadOutputFiles.isPending
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Plus className="w-3.5 h-3.5" />}
+                          Attach proof file
+                          <input
+                            type="file"
+                            multiple
+                            className="hidden"
+                            disabled={uploadOutputFiles.isPending}
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files ?? []);
+                              if (files.length > 0) uploadOutputFiles.mutate(files);
+                              e.currentTarget.value = '';
+                            }}
+                            data-testid="input-output-file"
+                          />
+                        </label>
                         <button
                           type="button"
                           onClick={() => saveOutput((outputDraft ?? '').trim())}
@@ -961,6 +1204,63 @@ export default function TaskDetail() {
                       {stored || <span className="italic text-slate-400">No output recorded yet.</span>}
                     </div>
                   )}
+
+                  {/* Output proof files list — visible to everyone, removable by editors. */}
+                  {(() => {
+                    const files = ((task.output_files as OutputFile[] | null) ?? []);
+                    const legacyProof = (task.proof_file_url as string | null) ?? null;
+                    if (files.length === 0 && !legacyProof) return null;
+                    return (
+                      <div className="mt-2 pt-2 border-t border-emerald-100" data-testid="list-output-files">
+                        <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1.5">
+                          Proof files ({files.length + (legacyProof ? 1 : 0)})
+                        </p>
+                        <ul className="space-y-1">
+                          {legacyProof && (
+                            <li className="flex items-center gap-2 text-xs">
+                              <FileText className="w-3.5 h-3.5 text-slate-400" />
+                              <a href={legacyProof} target="_blank" rel="noreferrer" className="text-[#1D3461] underline truncate flex-1">
+                                Legacy proof file
+                              </a>
+                            </li>
+                          )}
+                          {files.map((f) => (
+                            <li key={f.url} className="flex items-center gap-2 text-xs group">
+                              <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <a
+                                href={f.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[#1D3461] underline truncate flex-1"
+                                data-testid={`link-output-file-${f.name}`}
+                              >
+                                {f.name}
+                              </a>
+                              <span className="text-[10px] text-slate-400 shrink-0">
+                                {(() => { try { return format(parseISO(f.uploadedAt), 'd MMM HH:mm'); } catch { return ''; } })()}
+                              </span>
+                              {canEditOutput && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Remove "${f.name}" from Output?`)) {
+                                      removeOutputFile.mutate(f.url);
+                                    }
+                                  }}
+                                  disabled={removeOutputFile.isPending}
+                                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 disabled:opacity-30 transition-opacity"
+                                  title="Remove file"
+                                  data-testid={`btn-remove-output-file-${f.name}`}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -1231,6 +1531,82 @@ export default function TaskDetail() {
                     )}
                   </div>
                 )}
+              </div>
+            );
+          })()}
+
+          {/* Hours & Timesheet — per-person planned vs actual, with owner confirmation */}
+          {(() => {
+            const cos = ((task.co_assignees as Array<Record<string, unknown>> | undefined) ?? []);
+            const primaryProfile = profiles.find(p => p.id === task.assigned_to);
+            type Row = {
+              id: string;
+              name: string;
+              role: 'Primary' | 'Co-assignee';
+              planned: number | null;
+              actual: number | null;
+              confirmedAt: string | null;
+              confirmedBy: string | null;
+            };
+            const rows: Row[] = [];
+            if (task.assigned_to) {
+              rows.push({
+                id: task.assigned_to,
+                name: primaryProfile?.full_name ?? primaryProfile?.email ?? 'Primary assignee',
+                role: 'Primary',
+                planned: (task.estimated_hours as number | null) ?? null,
+                actual: (task.actual_hours as number | null) ?? null,
+                confirmedAt: (task.actual_hours_confirmed_at as string | null) ?? null,
+                confirmedBy: (task.actual_hours_confirmed_by as string | null) ?? null,
+              });
+            }
+            for (const c of cos) {
+              rows.push({
+                id: c.id as string,
+                name: (c.name as string) ?? 'Co-assignee',
+                role: 'Co-assignee',
+                planned: (c.hours as number | null) ?? null,
+                actual: (c.actual_hours as number | null) ?? null,
+                confirmedAt: (c.actual_hours_confirmed_at as string | null) ?? null,
+                confirmedBy: (c.actual_hours_confirmed_by as string | null) ?? null,
+              });
+            }
+            if (rows.length === 0) return null;
+            const totalPlanned = rows.reduce((s, r) => s + (r.planned ?? 0), 0);
+            const totalActual = rows.reduce((s, r) => s + (r.actual ?? 0), 0);
+            return (
+              <div className="bg-white rounded-2xl border border-slate-200 p-4" data-testid="card-timesheet">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" /> Hours & Timesheet
+                  </h3>
+                  <span className="text-[11px] text-slate-500">
+                    Total: <span className="font-semibold text-slate-700">{totalActual.toFixed(1)}h</span>
+                    {' / '}{totalPlanned.toFixed(1)}h planned
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mb-3">
+                  Each person edits only their own actual hours.
+                  {canConfirmHours ? ' As task owner, confirm reported hours below.' : ''}
+                </p>
+                <ul className="divide-y divide-slate-100">
+                  {rows.map((r) => (
+                    <TimesheetRow
+                      key={r.id}
+                      row={r}
+                      taskStarted={!!task.started_at}
+                      isSelf={currentUser?.id === r.id}
+                      isAdmin={isAdmin}
+                      canConfirmHours={canConfirmHours}
+                      confirmedByName={r.confirmedBy
+                        ? (profiles.find(p => p.id === r.confirmedBy)?.full_name ?? 'Owner')
+                        : null}
+                      onChangeHours={(hours) => setActualHoursForUser.mutate({ targetUserId: r.id, hours })}
+                      onConfirm={() => confirmActualHoursForUser.mutate(r.id)}
+                      pending={setActualHoursForUser.isPending || confirmActualHoursForUser.isPending}
+                    />
+                  ))}
+                </ul>
               </div>
             );
           })()}
