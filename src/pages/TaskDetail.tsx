@@ -699,11 +699,12 @@ export default function TaskDetail() {
         const startedAt = task.started_at as string | null | undefined;
         if (!isMine || !myAck || startedAt) return null;
 
-        // Dependencies were defined at task creation step → require all-acknowledged.
-        const deps = Array.isArray(task.dependencies) ? (task.dependencies as unknown[]) : [];
-        const hasDeps = deps.length > 0;
+        // Acknowledgment gate: whenever 2+ people share this task, everyone must
+        // acknowledge before anyone can press Start. Previously this only fired
+        // when formal dependencies existed, letting the primary start before
+        // co-assignees confirmed. A solo assignee can still start unilaterally.
         const participantsCount = (task.assigned_to ? 1 : 0) + coList.length || 1;
-        const requireAllAck = hasDeps && participantsCount > 1;
+        const requireAllAck = participantsCount > 1;
 
         // Build the list of participants still missing an acknowledgment.
         const pending: string[] = [];
@@ -756,7 +757,7 @@ export default function TaskDetail() {
                 <Clock className="w-4 h-4" /> Waiting for everyone to acknowledge
               </p>
               <p className="text-xs text-slate-600">
-                This task has dependencies, so it can only be started once every assignee has confirmed they've seen it. Still pending:
+                This task has multiple assignees, so it can only be started once every assignee has confirmed they've seen it. Still pending:
                 {' '}<span className="font-semibold">{pending.join(', ')}</span>.
               </p>
               <button
@@ -1081,7 +1082,29 @@ export default function TaskDetail() {
             {task.due_date && <MetaRow icon={Calendar} label="Due" value={format(parseISO(task.due_date as string), 'PP')} />}
             {task.started_at && <MetaRow icon={Clock} label="Started" value={format(parseISO(task.started_at as string), 'PP p')} />}
             {task.completed_at && <MetaRow icon={Check} label="Completed" value={format(parseISO(task.completed_at as string), 'PP p')} />}
-            {task.estimated_hours != null && <MetaRow icon={Clock} label="Estimated" value={`${task.estimated_hours}h total`} />}
+            {task.estimated_hours != null && <MetaRow icon={Clock} label="Primary hours" value={`${task.estimated_hours}h`} />}
+            {(() => {
+              // Total effort = primary estimated_hours + sum of each co-assignee's hours.
+              // Helps the team see the true cost of a shared task at a glance.
+              const coHours = ((task.co_assignees as Array<{ hours?: number | null }> | undefined) ?? [])
+                .reduce((sum, c) => sum + (typeof c.hours === 'number' && Number.isFinite(c.hours) ? c.hours : 0), 0);
+              const primary = typeof task.estimated_hours === 'number' ? task.estimated_hours : 0;
+              const total = primary + coHours;
+              const hasCo = ((task.co_assignees as Array<unknown> | undefined)?.length ?? 0) > 0;
+              if (!hasCo || total <= 0) return null;
+              return (
+                <MetaRow
+                  icon={Clock}
+                  label="Total effort"
+                  value={
+                    <span data-testid="text-total-effort">
+                      <b>{total}h</b>
+                      <span className="text-slate-400 font-normal"> · {primary}h primary + {coHours}h co</span>
+                    </span>
+                  }
+                />
+              );
+            })()}
             {task.hours_per_day != null && <MetaRow icon={Clock} label="Per day" value={`${task.hours_per_day}h / day`} />}
             {task.actual_hours != null && <MetaRow icon={Clock} label="Actual" value={`${task.actual_hours}h`} />}
             {task.recurrence && task.recurrence !== 'none' && (
@@ -1171,7 +1194,7 @@ export default function TaskDetail() {
             profiles={profiles}
             onAddCoAssignee={addCoAssignee}
             onRemoveCoAssignee={removeCoAssignee}
-            onSetCoAssigneeHours={setCoAssigneeHours}
+            onSetCoAssigneeHours={task.started_at && !isAdmin ? undefined : setCoAssigneeHours}
             elements={elements}
             onAddElement={(assigneeId, assigneeName, label) =>
               addElement.mutate({ taskId: id!, assigneeId, assigneeName, label, position: elements.length })}
@@ -1430,28 +1453,41 @@ function AssigneesPanel({
                         <Clock className="w-2.5 h-2.5" /> {a.hours}h
                       </span>
                     )
+                  ) : onSetCoAssigneeHours ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-[10px] text-slate-500"
+                      title={isMine ? 'Propose your own hours for this task' : 'Hours allocated to this co-assignee'}
+                    >
+                      <Clock className="w-2.5 h-2.5" />
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.25}
+                        defaultValue={a.hours ?? ''}
+                        onBlur={e => {
+                          const raw = e.currentTarget.value.trim();
+                          const next = raw === '' ? null : Number(raw);
+                          const current = a.hours ?? null;
+                          if (next === current) return;
+                          if (next != null && (!Number.isFinite(next) || next < 0)) return;
+                          onSetCoAssigneeHours(a.id, next);
+                        }}
+                        className="w-12 h-5 px-1 text-[10px] text-right border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
+                        data-testid={`input-hours-${a.id}`}
+                        aria-label={isMine ? `Propose your hours` : `Hours for ${a.name}`}
+                        placeholder="h"
+                      />
+                      <span className="text-slate-400">h</span>
+                      {isMine && <span className="text-[9px] text-[#1D3461] font-semibold ml-0.5">propose</span>}
+                    </span>
                   ) : (
-                    onSetCoAssigneeHours && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-slate-500" title="Hours allocated to this co-assignee">
-                        <Clock className="w-2.5 h-2.5" />
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.25}
-                          defaultValue={a.hours ?? ''}
-                          onBlur={e => {
-                            const raw = e.currentTarget.value.trim();
-                            const next = raw === '' ? null : Number(raw);
-                            const current = a.hours ?? null;
-                            if (next === current) return;
-                            if (next != null && (!Number.isFinite(next) || next < 0)) return;
-                            onSetCoAssigneeHours(a.id, next);
-                          }}
-                          className="w-12 h-5 px-1 text-[10px] text-right border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
-                          data-testid={`input-hours-${a.id}`}
-                          aria-label={`Hours for ${a.name}`}
-                        />
-                        <span className="text-slate-400">h</span>
+                    a.hours != null && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700"
+                        title="Hours locked after task start"
+                        data-testid={`hours-${a.id}`}
+                      >
+                        <Clock className="w-2.5 h-2.5" /> {a.hours}h
                       </span>
                     )
                   )}
