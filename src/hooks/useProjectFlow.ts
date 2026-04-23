@@ -247,10 +247,12 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
 
   // Permissions
   const isPrivilegedRole = hasAnyRole(['super_admin', 'admin', 'fom']);
+  // Match by UUID if available, fall back to fullName comparison for legacy data.
   const isProjectManager =
     !!currentUser?.id &&
     !!project.team?.projectManager &&
-    project.team.projectManager === currentUser.fullName;
+    (project.team.projectManager === currentUser.id ||
+      project.team.projectManager === currentUser.fullName);
   const canAdvance = (isPrivilegedRole || isProjectManager) && !isLastGroup;
   const canEditFlow = isPrivilegedRole || isProjectManager;
 

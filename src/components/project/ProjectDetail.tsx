@@ -262,7 +262,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const { toast } = useToast();
   const isAdminUser = isSuperAdmin() || hasAnyRole(['admin', 'fom']);
   const isProjectManagerUser =
-    !!currentUser?.fullName && project.team?.projectManager === currentUser.fullName;
+    !!project.team?.projectManager &&
+    ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
+      (!!currentUser?.fullName && project.team.projectManager === currentUser.fullName));
   const canArchive = isAdminUser || isProjectManagerUser;
   const projectBudget = getProjectBudget(project.id);
   const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});

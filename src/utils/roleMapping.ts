@@ -145,18 +145,27 @@ export function getVisibleRoleOptions(): { value: RoleCode; label: RoleLabel }[]
  * Supports backward compatibility with legacy formats
  */
 export function normalizeRole(input: string): RoleCode | null {
+  if (!input) return null;
   // Direct match
   if (input in ROLE_MAP) {
     return input as RoleCode;
   }
-  
-  // Legacy match
+
+  // Legacy match (exact)
   for (const [code, config] of Object.entries(ROLE_MAP)) {
     if (config.legacy.includes(input)) {
       return code as RoleCode;
     }
   }
-  
+
+  // Case-insensitive match against canonical codes and legacy aliases.
+  // Handles tokens stored in mixed case, e.g. 'FOM' vs 'fom', 'ICT' vs 'ict'.
+  const lower = input.toLowerCase();
+  for (const [code, config] of Object.entries(ROLE_MAP)) {
+    if (code.toLowerCase() === lower) return code as RoleCode;
+    if (config.legacy.some(l => l.toLowerCase() === lower)) return code as RoleCode;
+  }
+
   return null;
 }
 

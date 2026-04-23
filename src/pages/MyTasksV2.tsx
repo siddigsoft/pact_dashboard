@@ -65,10 +65,12 @@ const PRIORITY_CFG = {
 };
 
 const STATUS_CFG: Record<PersonalTaskStatus, { label: string }> = {
-  todo:       { label: 'To Do' },
-  inprogress: { label: 'In Progress' },
-  done:       { label: 'Done' },
-  cancelled:  { label: 'Cancelled' },
+  todo:        { label: 'To Do' },
+  inprogress:  { label: 'In Progress' },
+  on_hold:     { label: 'On Hold' },
+  rescheduled: { label: 'Rescheduled' },
+  done:        { label: 'Done' },
+  cancelled:   { label: 'Cancelled' },
 };
 
 type TypeKey = 'personal' | 'project';

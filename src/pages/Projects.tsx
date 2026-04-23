@@ -117,8 +117,11 @@ const ProjectsPage = () => {
     setFilterSearch('');
   };
 
-  // Super Admin only
-  if (!isSuperAdmin()) {
+  // Allow Super Admin, Admin, FOM, ICT, and Project Managers to view the projects list.
+  const canViewProjects =
+    isSuperAdmin() ||
+    hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'ict', 'ICT', 'projectManager', 'ProjectManager']);
+  if (!canViewProjects) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center space-y-3 max-w-sm">
@@ -126,7 +129,9 @@ const ProjectsPage = () => {
             <FolderKanban className="h-8 w-8 text-muted-foreground" />
           </div>
           <h2 className="text-xl font-semibold">Access Restricted</h2>
-          <p className="text-muted-foreground text-sm">Projects is only accessible to Super Admins.</p>
+          <p className="text-muted-foreground text-sm">
+            Projects is restricted to Admins, FOM, ICT, and Project Managers.
+          </p>
           <button
             onClick={() => navigate('/dashboard')}
             className="text-sm text-primary underline hover:no-underline"

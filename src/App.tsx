@@ -451,6 +451,7 @@ const AppRoutes = () => {
       {/* Redirects */}
       <Route path="/mmp/view/:id" element={<MmpViewRedirect />} />
       <Route path="/projects/:id/team/add" element={<TeamAddRedirect />} />
+      <Route path="/daily-work" element={<Navigate to="/my-tasks" replace />} />
 
       {/* Catch-all route */}
       <Route path="*" element={<NotFound />} />

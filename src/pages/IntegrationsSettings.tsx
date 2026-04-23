@@ -368,9 +368,23 @@ export default function IntegrationsSettings() {
   };
 
   const handleSaveWhatsAppPhone = async () => {
+    const trimmed = whatsappPhone.trim();
+    // E.164-ish validation: optional +, then 8–15 digits. Accepts spaces/dashes which are stripped.
+    if (trimmed) {
+      const digits = trimmed.replace(/[\s\-()]/g, "");
+      const ok = /^\+?[0-9]{8,15}$/.test(digits);
+      if (!ok) {
+        toast({
+          title: "Invalid phone number",
+          description: "Use international format, e.g. +249912345678 (8–15 digits, optional +).",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     setSavingWhatsapp(true);
     try {
-      await upsertIntegration({ whatsapp_phone: whatsappPhone.trim() || null });
+      await upsertIntegration({ whatsapp_phone: trimmed || null });
       toast({ title: "Phone saved", description: "Your WhatsApp number has been updated." });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save phone";

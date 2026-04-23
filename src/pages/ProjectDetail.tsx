@@ -9,6 +9,8 @@ import { Project } from '@/types/project';
 import { useToast } from '@/hooks/toast';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { useUser } from '@/context/user/UserContext';
 
 const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +19,8 @@ const ProjectDetailPage = () => {
   const [project, setProject] = useState<Project | undefined>(undefined);
   const { toast } = useToast();
   const [deleting, setDeleting] = useState(false);
+  const { isSuperAdmin, hasAnyRole } = useAuthorization();
+  const { currentUser } = useUser();
 
   // Effect to fetch projects if not loaded
   useEffect(() => {
@@ -55,6 +59,19 @@ const ProjectDetailPage = () => {
         title: "Invalid Project",
         description: "Missing project ID. Please try again.",
         variant: "destructive",
+      });
+      return;
+    }
+    // Only Super Admin / Admin / FOM, OR the project's own Project Manager may delete.
+    const isPrivileged = isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'fom', 'FOM']);
+    const isPM = !!project?.team?.projectManager &&
+      ((!!currentUser?.id && project.team.projectManager === currentUser.id) ||
+        (!!currentUser?.fullName && project.team.projectManager === currentUser.fullName));
+    if (!isPrivileged && !isPM) {
+      toast({
+        title: 'Permission denied',
+        description: 'Only Super Admins, Admins, FOM, or the project\'s Project Manager can delete this project.',
+        variant: 'destructive',
       });
       return;
     }

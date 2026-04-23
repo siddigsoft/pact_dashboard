@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ApprovalPendingCard } from '@/components/ApprovalPendingCard';
 import { ApprovalHistoryPanel } from '@/components/ApprovalHistoryPanel';
 import { TaskDependenciesView } from '@/components/TaskDependenciesView';
+import { canTaskStart } from '@/services/task-dependencies.service';
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -63,6 +64,35 @@ export default function TaskDetail() {
   const { data: history = [] } = useTaskStatusHistory(id);
   const { data: activity = [] } = useTaskActivity(id);
   const { data: elements = [] } = useTaskElements(id);
+
+  // ---------- Dependency gate (task_dependencies table) ----------
+  // Blocks the Start button when any predecessor task isn't done yet.
+  // Fail-closed: while loading or on error, treat as blocked so the user
+  // cannot bypass via timing or a transient service failure.
+  const depGateQuery = useQuery({
+    queryKey: ['task-can-start', id],
+    queryFn: async () => {
+      if (!id) return { canStart: true, blockingTasks: [] as any[], errored: false };
+      const res = await canTaskStart(id);
+      return {
+        canStart: res.canStart,
+        blockingTasks: res.blockingTasks ?? [],
+        errored: !!res.error,
+      };
+    },
+    enabled: !!id,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const depGate = depGateQuery.data;
+  const depGateLoading = depGateQuery.isLoading || depGateQuery.isFetching;
+  const depGateErrored = depGateQuery.isError || !!depGate?.errored;
+  // True whenever we can't prove the task is unblocked.
+  const depBlocked =
+    depGateLoading ||
+    depGateErrored ||
+    !!(depGate && !depGate.canStart);
 
   // ---------- Mutations ----------
   const addActivity = useAddActivity();
@@ -145,6 +175,22 @@ export default function TaskDetail() {
   // ---------- Start the task ----------
   const startTask = useMutation({
     mutationFn: async (payload: StartTaskPayload) => {
+      // Authoritative re-check at mutation time. Prevents bypass via
+      // stale UI state, race conditions, or a transient gate-query error.
+      if (id) {
+        const recheck = await canTaskStart(id);
+        if (recheck.error) {
+          throw new Error(`Could not verify dependencies: ${recheck.error}. Try again in a moment.`);
+        }
+        if (!recheck.canStart) {
+          const names = (recheck.blockingTasks ?? []).map((t: any) => t.title || 'Untitled').slice(0, 3).join(', ');
+          throw new Error(
+            names
+              ? `Cannot start: predecessor task(s) not done yet — ${names}.`
+              : 'Cannot start: predecessor tasks must be completed first.'
+          );
+        }
+      }
       const now = new Date().toISOString();
       const patch: Record<string, unknown> = {
         status: 'inprogress',
@@ -634,6 +680,35 @@ export default function TaskDetail() {
           });
         }
         const blocked = pending.length > 0;
+
+        // ── Predecessor-task gate (task_dependencies table) — independent of ack gate.
+        // If another task must finish first, block Start regardless of acks.
+        if (depBlocked) {
+          const names = (depGate?.blockingTasks ?? []).map((t: any) => t.title || 'Untitled').slice(0, 3);
+          const more = (depGate?.blockingTasks?.length ?? 0) - names.length;
+          return (
+            <div
+              className="flex flex-col gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200"
+              data-testid="banner-start-blocked-by-deps"
+            >
+              <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
+                <Lock className="w-4 h-4" /> Waiting on predecessor task{(depGate?.blockingTasks?.length ?? 0) > 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-amber-800">
+                This task can't start until: <span className="font-semibold">{names.join(', ')}</span>
+                {more > 0 ? ` and ${more} more` : ''} {(depGate?.blockingTasks?.length ?? 0) > 1 ? 'are' : 'is'} marked done.
+              </p>
+              <button
+                type="button"
+                disabled
+                className="shrink-0 self-start inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-amber-300 text-white text-sm font-semibold cursor-not-allowed"
+                data-testid="btn-open-start-dialog"
+              >
+                <PlayCircle className="w-4 h-4" /> Start the task
+              </button>
+            </div>
+          );
+        }
 
         if (blocked) {
           return (

@@ -9,6 +9,8 @@ import { useProjectsQuery, useInvalidateProjectsQueries, mapDbProjectToProject, 
 import { getFirstStageId } from '@/config/projectFlows';
 import { useUser } from '@/context/user/UserContext';
 import { normalizeRole } from '@/utils/roleMapping';
+import { dispatchNotification } from '@/lib/notify';
+import { logAuditEvent } from '@/utils/audit-logger';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -155,13 +157,51 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       
       await invalidateProjects();
-      
+
+      // ── Audit + notify team (fire-and-forget) ────────────────────────────
+      const teamRecipients = (() => {
+        const ids = new Set<string>();
+        const t = project.team ?? {};
+        if (t.projectManager) ids.add(t.projectManager);
+        (Array.isArray(t.members) ? t.members : []).forEach((m: any) => m && ids.add(m));
+        (Array.isArray((t as any).teamComposition) ? (t as any).teamComposition : []).forEach(
+          (m: any) => m?.userId && ids.add(m.userId)
+        );
+        if (currentUser?.id) ids.delete(currentUser.id);
+        return Array.from(ids);
+      })();
+      logAuditEvent({
+        module: 'projects' as any,
+        action: 'create' as any,
+        entityType: 'project',
+        entityId: createdProject.id,
+        entityName: createdProject.name,
+        description: `Project "${createdProject.name}" created`,
+        severity: 'info',
+      }).catch(() => {});
+      if (teamRecipients.length > 0) {
+        dispatchNotification({
+          event: 'project_created',
+          recipientIds: teamRecipients,
+          titleEn: `New project: ${createdProject.name}`,
+          titleAr: `مشروع جديد: ${createdProject.name}`,
+          messageEn: `${currentUser?.fullName ?? 'A team member'} created the project "${createdProject.name}". You're listed on the team.`,
+          messageAr: `أنشأ ${currentUser?.fullName ?? 'أحد أعضاء الفريق'} مشروع "${createdProject.name}". أنت مدرج ضمن الفريق.`,
+          entityType: 'project',
+          entityId: createdProject.id,
+          actionUrl: `/projects/${createdProject.id}`,
+          priority: 'normal',
+          triggeredBy: currentUser?.id,
+          triggeredByName: currentUser?.fullName ?? undefined,
+        }).catch(() => {});
+      }
+
       toast({
         title: "Success",
         description: "Project created successfully!",
         variant: "success",
       });
-      
+
       return createdProject;
     } catch (err) {
       console.error("Error adding project:", err);
@@ -253,8 +293,29 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             }
 
             // Upsert sub-activities for existing activity
-            if (activity.subActivities && activity.subActivities.length > 0) {
-              for (const subActivity of activity.subActivities) {
+            const incomingSubs = activity.subActivities ?? [];
+
+            // Delete sub-activities that were removed in the UI
+            const { data: existingSubs } = await supabase
+              .from('sub_activities')
+              .select('id')
+              .eq('activity_id', activity.id);
+            const incomingIds = new Set(
+              incomingSubs.filter(s => !s.id.startsWith('new-')).map(s => s.id)
+            );
+            const toDelete = (existingSubs ?? [])
+              .map((s: { id: string }) => s.id)
+              .filter((sid: string) => !incomingIds.has(sid));
+            if (toDelete.length > 0) {
+              const { error: delSubErr } = await supabase
+                .from('sub_activities')
+                .delete()
+                .in('id', toDelete);
+              if (delSubErr) throw new Error(delSubErr.message);
+            }
+
+            if (incomingSubs.length > 0) {
+              for (const subActivity of incomingSubs) {
                 const dbSubActivity = {
                   name: subActivity.name,
                   description: subActivity.description,
@@ -340,6 +401,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const session = await ensureValidSession();
     if (!session.success) return;
     try {
+      // Snapshot project info for audit before delete
+      const snapshot = projects.find(p => p.id === id);
+
       const { error } = await supabase
         .from('projects')
         .delete()
@@ -354,7 +418,45 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (currentProject?.id === id) {
         setCurrentProject(null);
       }
-      
+
+      // Audit + notify team (fire-and-forget)
+      logAuditEvent({
+        module: 'projects' as any,
+        action: 'delete' as any,
+        entityType: 'project',
+        entityId: id,
+        entityName: snapshot?.name,
+        description: `Project "${snapshot?.name ?? id}" deleted`,
+        severity: 'warning',
+        previousState: snapshot ? { name: snapshot.name, status: snapshot.status } : undefined,
+      }).catch(() => {});
+      const recipients = (() => {
+        const ids = new Set<string>();
+        const t: any = snapshot?.team ?? {};
+        if (t.projectManager) ids.add(t.projectManager);
+        (Array.isArray(t.members) ? t.members : []).forEach((m: any) => m && ids.add(m));
+        (Array.isArray(t.teamComposition) ? t.teamComposition : []).forEach(
+          (m: any) => m?.userId && ids.add(m.userId)
+        );
+        if (currentUser?.id) ids.delete(currentUser.id);
+        return Array.from(ids);
+      })();
+      if (recipients.length > 0 && snapshot?.name) {
+        dispatchNotification({
+          event: 'project_deleted',
+          recipientIds: recipients,
+          titleEn: `Project deleted: ${snapshot.name}`,
+          titleAr: `تم حذف مشروع: ${snapshot.name}`,
+          messageEn: `${currentUser?.fullName ?? 'An admin'} deleted the project "${snapshot.name}".`,
+          messageAr: `قام ${currentUser?.fullName ?? 'أحد المسؤولين'} بحذف مشروع "${snapshot.name}".`,
+          entityType: 'project',
+          entityId: id,
+          priority: 'high',
+          triggeredBy: currentUser?.id,
+          triggeredByName: currentUser?.fullName ?? undefined,
+        }).catch(() => {});
+      }
+
       toast({
         title: "Success",
         description: "Project deleted successfully!",
