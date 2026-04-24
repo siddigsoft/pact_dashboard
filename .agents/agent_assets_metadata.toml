@@ -6,3 +6,9 @@ id = "BdDLCYtOFQgcXEkKhpH8y"
 uri = "file://docs/ACCOUNTING_MODULE_MASTER_PLAN.md"
 type = "text"
 title = "PACT Accounting & Finance Module — Master Plan"
+
+[[outputs]]
+id = "g8fuGiCuJree5-8FtEQBF"
+uri = "file://docs/ACCOUNTING_MODULE_MASTER_PLAN_V2.md"
+type = "text"
+title = "Accounting Module Master Plan — Version 2"
