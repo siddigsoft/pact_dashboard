@@ -2601,13 +2601,13 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const StatsCards = () => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-4" data-testid="stats-cards-container">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4" data-testid="stats-cards-container">
       <Card data-testid="card-stats-total">
-        <CardContent className="p-4">
-          <div className="text-2xl font-bold" data-testid="text-stats-total-count">{stats.counts.total}</div>
-          <div className="text-sm text-muted-foreground">Total Requests</div>
+        <CardContent className="p-3">
+          <div className="text-xl font-bold tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-total-count">{stats.counts.total.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Total Requests</div>
           {(stats.counts.rejected > 0 || stats.counts.cancelled > 0) && (
-            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1 flex-wrap">
+            <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1 flex-wrap">
               {stats.counts.rejected > 0 && (
                 <span className="text-red-500 dark:text-red-400">{stats.counts.rejected} rejected</span>
               )}
@@ -2620,49 +2620,49 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         </CardContent>
       </Card>
       <Card data-testid="card-stats-total-requested">
-        <CardContent className="p-4">
-          <div className="text-2xl font-bold text-blue-600" data-testid="text-stats-total-requested">{stats.amounts.totalRequested.toLocaleString()}</div>
-          <div className="text-sm text-muted-foreground">Total Requested (SDG)</div>
+        <CardContent className="p-3">
+          <div className="text-xl font-bold text-blue-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-total-requested">{stats.amounts.totalRequested.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Total Requested (SDG)</div>
         </CardContent>
       </Card>
       <Card data-testid="card-stats-pending">
-        <CardContent className="p-4">
-          <div className="text-2xl font-bold text-yellow-600" data-testid="text-stats-pending-count">{stats.counts.pendingSupervisor + stats.counts.pendingAdmin}</div>
-          <div className="text-sm text-muted-foreground">Pending</div>
-          <div className="text-xs font-medium text-yellow-700 dark:text-yellow-400 mt-0.5" data-testid="text-stats-pending-amount">{stats.amounts.totalPendingAmount.toLocaleString()} SDG</div>
+        <CardContent className="p-3">
+          <div className="text-xl font-bold text-yellow-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-pending-count">{(stats.counts.pendingSupervisor + stats.counts.pendingAdmin).toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Pending</div>
+          <div className="text-[11px] font-medium text-yellow-700 dark:text-yellow-400 mt-0.5 whitespace-nowrap tabular-nums" data-testid="text-stats-pending-amount">{stats.amounts.totalPendingAmount.toLocaleString()} SDG</div>
           {stats.counts.pendingSupervisor > 0 && stats.counts.pendingAdmin > 0 && (
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {stats.counts.pendingSupervisor} supervisor · {stats.counts.pendingAdmin} admin
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              {stats.counts.pendingSupervisor} sup · {stats.counts.pendingAdmin} admin
             </div>
           )}
         </CardContent>
       </Card>
       <Card data-testid="card-stats-approved">
-        <CardContent className="p-4">
-          <div className="text-2xl font-bold text-emerald-600" data-testid="text-stats-approved-amount">{stats.amounts.totalApproved.toLocaleString()}</div>
-          <div className="text-sm text-muted-foreground">Total Approved (SDG)</div>
+        <CardContent className="p-3">
+          <div className="text-xl font-bold text-emerald-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-approved-amount">{stats.amounts.totalApproved.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Total Approved (SDG)</div>
           {stats.counts.approved > 0 && (
-            <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mt-0.5" data-testid="text-stats-approved-count">
-              {stats.counts.approved} {stats.counts.approved === 1 ? 'request' : 'requests'}
+            <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 mt-0.5 tabular-nums" data-testid="text-stats-approved-count">
+              {stats.counts.approved.toLocaleString()} {stats.counts.approved === 1 ? 'request' : 'requests'}
             </div>
           )}
         </CardContent>
       </Card>
       <Card data-testid="card-stats-paid">
-        <CardContent className="p-4">
-          <div className="text-2xl font-bold text-green-600" data-testid="text-stats-paid-amount">{stats.amounts.totalPaid.toLocaleString()}</div>
-          <div className="text-sm text-muted-foreground">Total Paid (SDG)</div>
+        <CardContent className="p-3">
+          <div className="text-xl font-bold text-green-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-paid-amount">{stats.amounts.totalPaid.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Total Paid (SDG)</div>
           {(stats.counts.partiallyPaid + stats.counts.fullyPaid) > 0 && (
-            <div className="text-xs font-medium text-green-700 dark:text-green-400 mt-0.5" data-testid="text-stats-paid-count">
-              {stats.counts.partiallyPaid + stats.counts.fullyPaid} {(stats.counts.partiallyPaid + stats.counts.fullyPaid) === 1 ? 'request' : 'requests'}
+            <div className="text-[11px] font-medium text-green-700 dark:text-green-400 mt-0.5 tabular-nums" data-testid="text-stats-paid-count">
+              {(stats.counts.partiallyPaid + stats.counts.fullyPaid).toLocaleString()} {(stats.counts.partiallyPaid + stats.counts.fullyPaid) === 1 ? 'request' : 'requests'}
             </div>
           )}
         </CardContent>
       </Card>
       <Card data-testid="card-stats-remaining">
-        <CardContent className="p-4">
-          <div className="text-2xl font-bold text-orange-600" data-testid="text-stats-remaining-amount">{stats.amounts.totalRemaining.toLocaleString()}</div>
-          <div className="text-sm text-muted-foreground">Remaining (SDG)</div>
+        <CardContent className="p-3">
+          <div className="text-xl font-bold text-orange-600 tabular-nums tracking-tight whitespace-nowrap" data-testid="text-stats-remaining-amount">{stats.amounts.totalRemaining.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Remaining (SDG)</div>
         </CardContent>
       </Card>
     </div>
