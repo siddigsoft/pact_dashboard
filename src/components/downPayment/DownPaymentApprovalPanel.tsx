@@ -2601,7 +2601,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const StatsCards = () => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4" data-testid="stats-cards-container">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-4" data-testid="stats-cards-container">
       <Card data-testid="card-stats-total">
         <CardContent className="p-4">
           <div className="text-2xl font-bold" data-testid="text-stats-total-count">{stats.counts.total}</div>
@@ -2637,10 +2637,26 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           )}
         </CardContent>
       </Card>
+      <Card data-testid="card-stats-approved">
+        <CardContent className="p-4">
+          <div className="text-2xl font-bold text-emerald-600" data-testid="text-stats-approved-amount">{stats.amounts.totalApproved.toLocaleString()}</div>
+          <div className="text-sm text-muted-foreground">Total Approved (SDG)</div>
+          {stats.counts.approved > 0 && (
+            <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mt-0.5" data-testid="text-stats-approved-count">
+              {stats.counts.approved} {stats.counts.approved === 1 ? 'request' : 'requests'}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <Card data-testid="card-stats-paid">
         <CardContent className="p-4">
           <div className="text-2xl font-bold text-green-600" data-testid="text-stats-paid-amount">{stats.amounts.totalPaid.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">Total Paid (SDG)</div>
+          {(stats.counts.partiallyPaid + stats.counts.fullyPaid) > 0 && (
+            <div className="text-xs font-medium text-green-700 dark:text-green-400 mt-0.5" data-testid="text-stats-paid-count">
+              {stats.counts.partiallyPaid + stats.counts.fullyPaid} {(stats.counts.partiallyPaid + stats.counts.fullyPaid) === 1 ? 'request' : 'requests'}
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card data-testid="card-stats-remaining">
