@@ -12,3 +12,9 @@ id = "g8fuGiCuJree5-8FtEQBF"
 uri = "file://docs/ACCOUNTING_MODULE_MASTER_PLAN_V2.md"
 type = "text"
 title = "Accounting Module Master Plan — Version 2"
+
+[[outputs]]
+id = "rLauCTgASTmvzkKy-rhfS"
+uri = "file://docs/ACCOUNTING_REPORTING_EXTENSION.md"
+type = "text"
+title = "Accounting — Reporting, Charting & Projection Extension"
