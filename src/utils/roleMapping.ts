@@ -20,7 +20,9 @@ export type RoleCode =
   | 'dataTeam'
   | 'dataCollector'
   | 'reviewer'
-  | 'employee';
+  | 'employee'
+  | 'hr'
+  | 'hrManager';
 
 // UI display labels
 export type RoleLabel =
@@ -37,7 +39,9 @@ export type RoleLabel =
   | 'Data Team'
   | 'Data Collector'
   | 'Reviewer'
-  | 'Employee';
+  | 'Employee'
+  | 'HR'
+  | 'HR Manager';
 
 // Role configuration type
 type RoleConfig = {
@@ -119,6 +123,21 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     code: 'employee',
     label: 'Employee',
     legacy: ['Employee', 'employee']
+  },
+  // HR roles — used by the new HR Hub pages (LeaveRequests, PerformanceReviews,
+  // SalaryIncrements, Positions, TrainingCertifications, HierarchyAuditLog).
+  // Without these entries, normalizeRole('hr') returned null and the
+  // hasAnyRole(['super_admin','admin','hr']) checks silently denied access
+  // even to legitimate HR users.
+  hr: {
+    code: 'hr',
+    label: 'HR',
+    legacy: ['HR', 'hr', 'human_resources', 'humanResources', 'Human Resources']
+  },
+  hrManager: {
+    code: 'hrManager',
+    label: 'HR Manager',
+    legacy: ['HRManager', 'hrManager', 'hr_manager', 'HR Manager', 'HR_Manager']
   }
 };
 

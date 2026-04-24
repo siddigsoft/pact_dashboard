@@ -114,6 +114,121 @@ function matchFilter(dueDate: string | null | undefined, status: string, filter:
   return false;
 }
 
+// ── Bulk Acknowledge Banner ─────────────────────────────────────────────────
+// Shown above the personal tasks list. Counts every task where the current user
+// is primary OR a co-assignee but hasn't yet acknowledged. One click stamps
+// `acknowledged_at` on all of them so the user doesn't have to open each task.
+
+interface BulkAcknowledgeBannerProps {
+  tasks: PersonalTask[];
+  currentUserId: string | undefined;
+  currentUserName: string | null;
+  onDone: () => void;
+}
+
+function BulkAcknowledgeBanner({ tasks, currentUserId, currentUserName, onDone }: BulkAcknowledgeBannerProps) {
+  const [acking, setAcking] = useState(false);
+  const { toast } = useToast();
+
+  const pending = useMemo(() => {
+    if (!currentUserId) return [] as Array<{ id: string; title: string; isPrimary: boolean }>;
+    const out: Array<{ id: string; title: string; isPrimary: boolean }> = [];
+    for (const t of tasks) {
+      if (t.status === 'done' || t.status === 'cancelled') continue;
+      const uid = currentUserId;
+      const isPrimary = t.assignedTo === uid || (t.userId === uid && !t.assignedTo);
+      if (isPrimary) {
+        if (!t.acknowledgedAt) out.push({ id: t.id, title: t.title, isPrimary: true });
+        continue;
+      }
+      const myCo = (t.coAssignees ?? []).find(c => c.id === uid);
+      if (myCo && !myCo.acknowledged_at) {
+        out.push({ id: t.id, title: t.title, isPrimary: false });
+      }
+    }
+    return out;
+  }, [tasks, currentUserId]);
+
+  if (pending.length === 0 || !currentUserId) return null;
+
+  const handleAckAll = async () => {
+    setAcking(true);
+    const now = new Date().toISOString();
+    let ok = 0;
+    let failed = 0;
+    for (const p of pending) {
+      try {
+        // Re-fetch the row so we patch the latest co_assignees blob — avoids
+        // clobbering changes made between page-load and bulk click.
+        const { data: row } = await supabase
+          .from('personal_tasks')
+          .select('co_assignees, assigned_to, user_id')
+          .eq('id', p.id)
+          .maybeSingle();
+        if (!row) { failed += 1; continue; }
+        const isPrimary = row.assigned_to === currentUserId || (row.user_id === currentUserId && !row.assigned_to);
+        const patch: Record<string, unknown> = {};
+        if (isPrimary) {
+          patch.acknowledged_at = now;
+          patch.acknowledged_by = currentUserId;
+        } else {
+          const co = Array.isArray(row.co_assignees)
+            ? (row.co_assignees as Array<Record<string, unknown>>)
+            : [];
+          patch.co_assignees = co.map(c =>
+            c?.id === currentUserId ? { ...c, acknowledged_at: now, acknowledged_by: currentUserId } : c,
+          );
+        }
+        const { error } = await supabase.from('personal_tasks').update(patch).eq('id', p.id);
+        if (error) { failed += 1; } else { ok += 1; }
+      } catch {
+        failed += 1;
+      }
+    }
+    setAcking(false);
+    onDone();
+    if (ok > 0) {
+      toast({
+        title: failed === 0 ? `Acknowledged ${ok} task${ok === 1 ? '' : 's'}` : `Acknowledged ${ok}, ${failed} failed`,
+        description: failed === 0 ? `Thanks${currentUserName ? `, ${currentUserName}` : ''}.` : 'Some tasks could not be acknowledged — try again.',
+        variant: failed === 0 ? 'default' : 'destructive',
+      });
+    } else if (failed > 0) {
+      toast({ title: 'Could not acknowledge', description: 'Please try again.', variant: 'destructive' });
+    }
+  };
+
+  const preview = pending.slice(0, 3).map(p => p.title).join(', ');
+  const more = pending.length > 3 ? ` and ${pending.length - 3} more` : '';
+
+  return (
+    <div
+      className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-100"
+      data-testid="banner-bulk-acknowledge"
+    >
+      <Check className="h-4 w-4 mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold">
+          {pending.length} task{pending.length === 1 ? '' : 's'} waiting for your acknowledgement
+        </p>
+        <p className="text-[11px] text-amber-800/90 dark:text-amber-200/80 mt-0.5 truncate">
+          {preview}{more}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleAckAll}
+        disabled={acking}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 disabled:opacity-60 transition-colors shrink-0"
+        data-testid="btn-bulk-acknowledge"
+      >
+        {acking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+        Acknowledge all
+      </button>
+    </div>
+  );
+}
+
 // ── Quick-add bar ───────────────────────────────────────────────────────────
 
 interface QuickAddProps {
@@ -4803,6 +4918,16 @@ export default function MyTasks() {
 
         {/* ── Personal Tasks Tab ── */}
         <TabsContent value="personal" className="space-y-3 mt-0 p-4">
+          {/* Bulk-acknowledge banner — collects every personal task where the
+              current user is primary OR a co-assignee and has not yet acknowledged.
+              Saves opening each task one-by-one when many land in the inbox at once. */}
+          <BulkAcknowledgeBanner
+            tasks={allPersonalTasks}
+            currentUserId={userId}
+            currentUserName={currentUser?.fullName ?? null}
+            onDone={() => qc.invalidateQueries({ queryKey: ['personal_tasks'] })}
+          />
+
           {/* Quick Add */}
           <QuickAddBar onAdd={handleQuickAdd} isCreating={isCreating} />
 
