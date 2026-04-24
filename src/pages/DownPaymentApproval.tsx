@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -424,10 +424,39 @@ export default function DownPaymentApproval() {
     return [...new Set(base.map(r => r.localityName).filter(Boolean))].sort() as string[];
   }, [requests, filters.hubId, filters.stateName]);
   const uniqueMmps = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort() as string[], [requests]);
+  // Cascade Data Collector list against Hub → State → Locality → MMP so the
+  // dropdown only shows collectors who actually appear in the currently
+  // narrowed slice. Mirrors the cascade already used by uniqueLocalities.
   const uniqueRequesters = useMemo(() => {
-    const ids = new Set(requests.map(r => r.requestedBy).filter(Boolean));
-    return users.filter(u => ids.has(u.id)).map(u => ({ id: u.id, name: u.fullName || u.email || 'Unknown' })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [requests, users]);
+    let base = requests;
+    if (filters.hubId) {
+      base = base.filter(r => r.hubName?.toLowerCase() === filters.hubId!.toLowerCase());
+    }
+    if (filters.stateName) {
+      base = base.filter(r => r.stateName?.toLowerCase() === filters.stateName!.toLowerCase());
+    }
+    if (filters.localityName) {
+      base = base.filter(r => r.localityName?.toLowerCase() === filters.localityName!.toLowerCase());
+    }
+    if (filters.mmpName) {
+      base = base.filter(r => r.mmpName?.toLowerCase() === filters.mmpName!.toLowerCase());
+    }
+    const ids = new Set(base.map(r => r.requestedBy).filter(Boolean));
+    return users
+      .filter(u => ids.has(u.id))
+      .map(u => ({ id: u.id, name: u.fullName || u.email || 'Unknown' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [requests, users, filters.hubId, filters.stateName, filters.localityName, filters.mmpName]);
+
+  // If the currently-selected Data Collector falls outside the cascaded list
+  // (e.g. user picked Blue Nile and the previously-chosen collector doesn't
+  // operate there), auto-clear the filter so the table doesn't go silently empty.
+  useEffect(() => {
+    if (!filters.dataCollectorId) return;
+    if (!uniqueRequesters.some(r => r.id === filters.dataCollectorId)) {
+      setFilters(f => ({ ...f, dataCollectorId: undefined }));
+    }
+  }, [uniqueRequesters, filters.dataCollectorId]);
 
   // Filtered requests shared across all analytics tabs
   const filteredRequests = useMemo(() => filterDownPayments(requests, filters), [requests, filters]);
