@@ -2891,21 +2891,67 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
         }
 
         if (newStatus === 'approved' && employeeIds.length > 0) {
-          // Notify each employee that their payslip is ready
+          // Auto-credit each employee's wallet with their net salary. The RPC
+          // is idempotent and concurrency-safe at the DB level (partial unique
+          // index on metadata.payroll_run_item_id). We track success so the
+          // payslip notification doesn't lie to the employee about the credit.
+          let creditOk = false;
+          let creditedCount = 0;
+          if (runId) {
+            try {
+              const { data: creditRes, error: creditErr } = await supabase.rpc(
+                'credit_payroll_run_to_wallets',
+                { p_run_id: runId },
+              );
+              if (creditErr) {
+                console.warn('[PayrollAdmin] wallet auto-credit failed:', creditErr);
+                toast({
+                  title: 'Wallet credit failed',
+                  description: 'Payroll is approved but wallets were not credited. Contact finance to retry.',
+                  variant: 'destructive',
+                });
+              } else if (creditRes) {
+                creditOk = true;
+                creditedCount = (creditRes as any)?.credited ?? 0;
+                const skipped = (creditRes as any)?.skipped ?? 0;
+                if (creditedCount > 0) {
+                  toast({
+                    title: `💰 ${creditedCount} wallet${creditedCount === 1 ? '' : 's'} credited`,
+                    description: skipped > 0 ? `${skipped} already credited (skipped)` : undefined,
+                  });
+                } else if (skipped > 0) {
+                  toast({
+                    title: 'Wallets already credited',
+                    description: `${skipped} payslip${skipped === 1 ? '' : 's'} were credited previously.`,
+                  });
+                }
+              }
+            } catch (creditEx) {
+              console.warn('[PayrollAdmin] wallet auto-credit exception:', creditEx);
+            }
+          }
+
+          // Notify each employee that their payslip is ready. Branch the
+          // wording on whether the wallet was actually credited so we never
+          // tell an employee their wallet is funded when it isn't.
           await dispatchNotification({
             event: 'payroll_slip_ready',
             recipientIds: employeeIds,
             titleEn: 'Your Payslip is Ready',
             titleAr: 'قسيمة راتبك جاهزة',
-            messageEn: `Your payslip for ${periodLabel} has been approved and is now available.`,
-            messageAr: `تمت الموافقة على قسيمة راتبك لفترة ${periodLabel} وأصبحت متاحة الآن.`,
+            messageEn: creditOk
+              ? `Your payslip for ${periodLabel} has been approved and your wallet has been credited.`
+              : `Your payslip for ${periodLabel} has been approved. The wallet credit will be posted shortly by finance.`,
+            messageAr: creditOk
+              ? `تمت الموافقة على قسيمة راتبك لفترة ${periodLabel} وتم إيداع المبلغ في محفظتك.`
+              : `تمت الموافقة على قسيمة راتبك لفترة ${periodLabel}. سيتم إيداع المبلغ في محفظتك قريبًا من قبل المالية.`,
             priority: 'normal',
             entityType: 'payroll_run',
             entityId: runId ?? undefined,
             actionUrl: '/my-payslip',
             sendWhatsApp: true,
             triggeredBy: currentUserId ?? undefined,
-            metadata: { period: periodLabel },
+            metadata: { period: periodLabel, credited: creditOk, count: creditedCount },
           });
         }
 

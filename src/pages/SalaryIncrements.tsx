@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface Increment {
@@ -157,19 +158,20 @@ export default function SalaryIncrements() {
         if (form.user_id && form.user_id !== currentUser?.id) {
           const incTypeLabel = (form.increment_type ?? 'increment').replace(/_/g, ' ');
           const pctText = pct != null ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)` : '';
-          await supabase.from('notifications').insert({
-            recipient_id: form.user_id,
-            event_type: 'salary_increment',
-            entity_type: 'salary_increment',
-            entity_id: inserted?.id,
-            title_en: 'Salary Increment Recorded',
-            message_en: `A ${incTypeLabel}${pctText} has been recorded for you, effective ${form.effective_date}. New salary: ${form.currency} ${parseFloat(form.new_salary).toLocaleString()}.`,
+          await NotificationTriggerService.send({
+            userId: form.user_id,
+            title: 'Salary Increment Recorded',
+            message: `A ${incTypeLabel}${pctText} has been recorded for you, effective ${form.effective_date}. New salary: ${form.currency} ${parseFloat(form.new_salary).toLocaleString()}.`,
+            titleAr: 'تم تسجيل زيادة الراتب',
+            messageAr: `تم تسجيل ${incTypeLabel}${pctText} لك، اعتبارًا من ${form.effective_date}. الراتب الجديد: ${form.currency} ${parseFloat(form.new_salary).toLocaleString()}.`,
+            type: 'success',
+            category: 'financial',
             priority: 'high',
-            status: 'pending',
-            triggered_by: currentUser?.id,
-            triggered_by_name: currentUser?.name ?? 'HR',
-            action_url: '/salary-increments',
-            email_sent: false,
+            link: '/salary-increments',
+            relatedEntityId: inserted?.id,
+            sendEmail: true,
+            emailActionUrl: '/salary-increments',
+            emailActionLabel: 'View Increment Details',
           });
         }
         toast({ title: 'Increment recorded' });

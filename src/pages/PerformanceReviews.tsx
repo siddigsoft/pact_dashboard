@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface Profile { id: string; full_name: string; role?: string; }
 
@@ -112,6 +113,20 @@ export default function PerformanceReviews() {
   });
 
   useEffect(() => { fetchReviews(); fetchProfiles(); }, []);
+
+  // Realtime: refresh when performance_reviews change so admins/HR
+  // see newly submitted reviews appear without manual refresh.
+  useEffect(() => {
+    const channel = supabase
+      .channel('performance-reviews-stream')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'performance_reviews' },
+        () => { fetchReviews(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   async function fetchReviews() {
     setLoading(true);
@@ -206,24 +221,24 @@ export default function PerformanceReviews() {
         toast({ title: submitForReview ? 'Review submitted for approval' : 'Review saved' });
         if (submitForReview) {
           // Notify admins/HR that a review is ready for their action
-          const { data: admins } = await supabase.from('profiles').select('id').in('role', ['super_admin', 'admin', 'hr']);
-          if (admins?.length) {
-            const revieweeName = reviews.find(r => r.id === editing.id)?.reviewee_name ?? 'Staff';
-            await supabase.from('notifications').insert(admins.map((a: any) => ({
-              recipient_id: a.id,
-              event_type: 'review_submitted',
-              entity_type: 'performance_review',
-              entity_id: editing.id,
-              title_en: 'Performance Review Ready',
-              message_en: `A ${payload.review_type ?? 'performance'} review for ${revieweeName} (${payload.review_period}) has been submitted and awaits your approval.`,
-              priority: 'medium',
-              status: 'pending',
-              triggered_by: currentUser?.id,
-              triggered_by_name: currentUser?.name ?? '',
-              action_url: '/performance-reviews',
-              email_sent: false,
-            })));
-          }
+          const revieweeName = reviews.find(r => r.id === editing.id)?.reviewee_name ?? 'Staff';
+          await NotificationTriggerService.sendToRoles(
+            ['super_admin', 'admin', 'hr'],
+            {
+              title: 'Performance Review Ready',
+              message: `A ${payload.review_type ?? 'performance'} review for ${revieweeName} (${payload.review_period}) has been submitted and awaits your approval.`,
+              titleAr: 'مراجعة الأداء جاهزة',
+              messageAr: `تم تقديم مراجعة ${payload.review_type ?? 'الأداء'} لـ ${revieweeName} (${payload.review_period}) وتنتظر موافقتك.`,
+              type: 'info',
+              category: 'approvals',
+              priority: 'high',
+              link: '/performance-reviews',
+              relatedEntityId: editing.id,
+              sendEmail: true,
+              emailActionUrl: '/performance-reviews',
+              emailActionLabel: 'Open Performance Reviews',
+            }
+          );
         }
         setDialogOpen(false);
         fetchReviews();
@@ -234,23 +249,23 @@ export default function PerformanceReviews() {
       else {
         toast({ title: submitForReview ? 'Review submitted for approval' : 'Review created' });
         if (submitForReview && inserted) {
-          const { data: admins } = await supabase.from('profiles').select('id').in('role', ['super_admin', 'admin', 'hr']);
-          if (admins?.length) {
-            await supabase.from('notifications').insert(admins.map((a: any) => ({
-              recipient_id: a.id,
-              event_type: 'review_submitted',
-              entity_type: 'performance_review',
-              entity_id: inserted.id,
-              title_en: 'Performance Review Ready',
-              message_en: `A new ${payload.review_type ?? 'performance'} review (${payload.review_period}) has been submitted and awaits approval.`,
-              priority: 'medium',
-              status: 'pending',
-              triggered_by: currentUser?.id,
-              triggered_by_name: currentUser?.name ?? '',
-              action_url: '/performance-reviews',
-              email_sent: false,
-            })));
-          }
+          await NotificationTriggerService.sendToRoles(
+            ['super_admin', 'admin', 'hr'],
+            {
+              title: 'Performance Review Ready',
+              message: `A new ${payload.review_type ?? 'performance'} review (${payload.review_period}) has been submitted and awaits approval.`,
+              titleAr: 'مراجعة أداء جديدة جاهزة',
+              messageAr: `تم تقديم مراجعة ${payload.review_type ?? 'أداء'} جديدة (${payload.review_period}) وتنتظر الموافقة.`,
+              type: 'info',
+              category: 'approvals',
+              priority: 'high',
+              link: '/performance-reviews',
+              relatedEntityId: inserted.id,
+              sendEmail: true,
+              emailActionUrl: '/performance-reviews',
+              emailActionLabel: 'Open Performance Reviews',
+            }
+          );
         }
         setDialogOpen(false);
         fetchReviews();
@@ -264,19 +279,20 @@ export default function PerformanceReviews() {
     await supabase.from('performance_reviews').update({ status: 'completed', reviewed_at: new Date().toISOString(), reviewer_id: currentUser?.id }).eq('id', id);
     // Notify the reviewee that their review has been completed
     if (rev?.reviewee_id) {
-      await supabase.from('notifications').insert({
-        recipient_id: rev.reviewee_id,
-        event_type: 'review_completed',
-        entity_type: 'performance_review',
-        entity_id: id,
-        title_en: 'Performance Review Completed',
-        message_en: `Your ${rev.review_type ?? 'performance'} review for ${rev.review_period} has been completed. You can now view your results.`,
+      await NotificationTriggerService.send({
+        userId: rev.reviewee_id,
+        title: 'Performance Review Completed',
+        message: `Your ${rev.review_type ?? 'performance'} review for ${rev.review_period} has been completed. You can now view your results.`,
+        titleAr: 'اكتملت مراجعة الأداء',
+        messageAr: `اكتملت مراجعة ${rev.review_type ?? 'الأداء'} الخاصة بك للفترة ${rev.review_period}. يمكنك الآن الاطلاع على النتائج.`,
+        type: 'success',
+        category: 'team',
         priority: 'high',
-        status: 'pending',
-        triggered_by: currentUser?.id,
-        triggered_by_name: currentUser?.name ?? 'Manager',
-        action_url: '/performance-reviews',
-        email_sent: false,
+        link: '/performance-reviews',
+        relatedEntityId: id,
+        sendEmail: true,
+        emailActionUrl: '/performance-reviews',
+        emailActionLabel: 'View My Review',
       });
     }
     toast({ title: 'Review marked completed' });

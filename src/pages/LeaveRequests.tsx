@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { cn } from '@/lib/utils';
 
 interface LeaveRequest {
@@ -145,6 +146,22 @@ export default function LeaveRequests() {
 
   useEffect(() => { load(); }, [currentUser?.id]);
 
+  // Realtime: refresh approval queue when leave_requests change anywhere.
+  // Lets managers/HR see new pending items appear without manual refresh.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const channel = supabase
+      .channel(`leave-requests-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leave_requests' },
+        () => { load(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, isAdmin]);
+
   useEffect(() => {
     if (!currentUser?.id) return;
     setEntitlementLoading(true);
@@ -224,6 +241,44 @@ export default function LeaveRequests() {
       if (inserted?.id) {
         try { await supabase.rpc('build_leave_approver_chain', { p_request_id: inserted.id }); }
         catch (chainErr) { console.warn('[Leave] approver chain build skipped:', chainErr); }
+      }
+      // Notify approvers: line manager (if any) + HR/admin roles. Best-effort.
+      try {
+        const employeeName = currentUser?.name ?? 'A staff member';
+        const leaveLabel = LEAVE_TYPES.find(t => t.value === form.leave_type)?.label ?? form.leave_type;
+        const summary = `${employeeName} submitted ${days} day${days !== 1 ? 's' : ''} of ${leaveLabel} (${form.start_date} → ${form.end_date}).`;
+        const summaryAr = `قدّم/قدّمت ${employeeName} طلب إجازة ${leaveLabel} لمدة ${days} يوم (${form.start_date} إلى ${form.end_date}).`;
+        const notifyOpts = {
+          title: 'New Leave Request Awaiting Approval',
+          message: summary,
+          titleAr: 'طلب إجازة جديد بانتظار الموافقة',
+          messageAr: summaryAr,
+          type: 'info' as const,
+          category: 'approvals' as const,
+          priority: 'high' as const,
+          link: '/leave',
+          relatedEntityId: inserted?.id,
+          sendEmail: true,
+          emailActionUrl: '/leave',
+          emailActionLabel: 'Review Leave Request',
+        };
+        // Notify the line manager directly when one is set
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('reports_to')
+          .eq('id', currentUser?.id ?? '')
+          .maybeSingle();
+        const managerId = (prof as any)?.reports_to as string | null | undefined;
+        if (managerId) {
+          await NotificationTriggerService.send({ userId: managerId, ...notifyOpts });
+        }
+        // Always also notify HR / admins so the request isn't missed if no manager is set
+        await NotificationTriggerService.sendToRoles(
+          ['super_admin', 'admin', 'hr'],
+          notifyOpts,
+        );
+      } catch (notifyErr) {
+        console.warn('[Leave] notify approvers failed (request still saved):', notifyErr);
       }
       toast({ title: 'Leave request submitted', description: `${days} day${days !== 1 ? 's' : ''} of ${LEAVE_TYPES.find(t => t.value === form.leave_type)?.label}` });
       setDialogOpen(false);
@@ -352,6 +407,53 @@ export default function LeaveRequests() {
         title: nextTier ? `Approved — forwarded to ${nextTier === 'hr' ? 'HR' : nextTier}` : `Request ${reviewAction}`,
         description: `${reviewDialog.user_name}'s leave has been ${nextTier ? 'forwarded' : reviewAction}`,
       });
+      // Best-effort notifications: forward to next tier OR notify the employee
+      try {
+        const leaveLabel = LEAVE_TYPES.find(t => t.value === reviewDialog.leave_type)?.label ?? reviewDialog.leave_type;
+        const dateRange = `${reviewDialog.start_date} → ${reviewDialog.end_date}`;
+        if (nextTier) {
+          // Forwarded — notify the next tier (HR for now; future tiers can be added here)
+          const nextRoles = nextTier === 'hr' ? ['super_admin', 'admin', 'hr'] : ['super_admin', 'admin'];
+          await NotificationTriggerService.sendToRoles(nextRoles, {
+            title: 'Leave Request Forwarded for Final Approval',
+            message: `${reviewDialog.user_name}'s ${leaveLabel} request (${dateRange}) was approved by the line manager and now needs HR sign-off.`,
+            titleAr: 'تمت إحالة طلب إجازة للموافقة النهائية',
+            messageAr: `تمت الموافقة على طلب إجازة ${leaveLabel} لـ ${reviewDialog.user_name} (${dateRange}) من المدير المباشر ويحتاج إلى توقيع الموارد البشرية.`,
+            type: 'info',
+            category: 'approvals',
+            priority: 'high',
+            link: '/leave',
+            relatedEntityId: reviewDialog.id,
+            sendEmail: true,
+            emailActionUrl: '/leave',
+            emailActionLabel: 'Review Leave Request',
+          });
+        } else if (reviewDialog.user_id) {
+          // Final decision — notify the employee
+          const isApproved = reviewAction === 'approved';
+          await NotificationTriggerService.send({
+            userId: reviewDialog.user_id,
+            title: isApproved ? 'Leave Request Approved' : 'Leave Request Rejected',
+            message: isApproved
+              ? `Your ${leaveLabel} request (${dateRange}) has been approved.${reviewNotes.trim() ? ` Note: ${reviewNotes.trim()}` : ''}`
+              : `Your ${leaveLabel} request (${dateRange}) was not approved.${reviewNotes.trim() ? ` Reason: ${reviewNotes.trim()}` : ''}`,
+            titleAr: isApproved ? 'تمت الموافقة على طلب الإجازة' : 'تم رفض طلب الإجازة',
+            messageAr: isApproved
+              ? `تمت الموافقة على طلب إجازة ${leaveLabel} (${dateRange}).${reviewNotes.trim() ? ` ملاحظة: ${reviewNotes.trim()}` : ''}`
+              : `لم تتم الموافقة على طلب إجازة ${leaveLabel} (${dateRange}).${reviewNotes.trim() ? ` السبب: ${reviewNotes.trim()}` : ''}`,
+            type: isApproved ? 'success' : 'warning',
+            category: 'team',
+            priority: 'high',
+            link: '/leave',
+            relatedEntityId: reviewDialog.id,
+            sendEmail: true,
+            emailActionUrl: '/leave',
+            emailActionLabel: 'View My Leave',
+          });
+        }
+      } catch (notifyErr) {
+        console.warn('[Leave] notify outcome failed (decision still saved):', notifyErr);
+      }
       setReviewDialog(null);
       setReviewNotes('');
       load();
