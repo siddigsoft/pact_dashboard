@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "BdDLCYtOFQgcXEkKhpH8y"
+uri = "file://docs/ACCOUNTING_MODULE_MASTER_PLAN.md"
+type = "text"
+title = "PACT Accounting & Finance Module — Master Plan"
