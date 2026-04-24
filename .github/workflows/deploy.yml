@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Deploy to VPS via SSH (hardcoded key)
         uses: appleboy/ssh-action@v1.2.0
