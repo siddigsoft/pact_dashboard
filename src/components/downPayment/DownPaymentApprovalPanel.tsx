@@ -80,8 +80,8 @@ import { buildEnhancedPaymentEmailHTML } from '@/services/email-notification.ser
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
-import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { supabase } from '@/integrations/supabase/client';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { EmailCCInput } from '@/components/EmailCCInput';
@@ -459,6 +459,27 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           });
 
       if (success) {
+        // H7 — Notify the requester (bilingual EN/AR) via the central service
+        if (selectedRequest.requestedBy) {
+          try {
+            await NotificationTriggerService.send({
+              userId: selectedRequest.requestedBy,
+              title: useSupervisorPath ? 'Advance approved by supervisor' : 'Advance fully approved',
+              titleAr: useSupervisorPath ? 'تمت موافقة المشرف على السلفة' : 'تمت الموافقة النهائية على السلفة',
+              message: `Your advance request for ${selectedRequest.siteName ?? 'site visit'} (${finalAmount.toLocaleString()} SDG) has been ${useSupervisorPath ? 'approved by your supervisor and is now awaiting finance review.' : 'approved by finance and is ready for payment.'}`,
+              messageAr: `تمت ${useSupervisorPath ? 'موافقة المشرف على' : 'الموافقة النهائية على'} طلب السلفة (${finalAmount.toLocaleString()} جنيه) ${useSupervisorPath ? 'وهو قيد مراجعة المالية الآن.' : 'وهو جاهز للدفع.'}`,
+              type: 'success',
+              category: 'approvals',
+              priority: useSupervisorPath ? 'normal' : 'high',
+              link: '/wallet',
+              relatedEntityId: selectedRequest.id,
+              relatedEntityType: 'downPayment',
+              sendEmail: true,
+              emailActionUrl: '/wallet',
+              emailActionLabel: 'View Wallet',
+            });
+          } catch (e) { console.error('NotificationTriggerService (advance approve) failed', e); }
+        }
         closeDialog();
       }
     } finally {
@@ -471,7 +492,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
     setProcessing(true);
     try {
-      const success = userRole === 'supervisor'
+      const useSupervisorPath = userRole === 'supervisor';
+      const success = useSupervisorPath
         ? await supervisorReject({
             requestId: selectedRequest.id,
             rejectedBy: currentUser.id,
@@ -486,6 +508,25 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           });
 
       if (success) {
+        // H7 — Notify the requester of rejection (bilingual)
+        if (selectedRequest.requestedBy) {
+          try {
+            await NotificationTriggerService.send({
+              userId: selectedRequest.requestedBy,
+              title: useSupervisorPath ? 'Advance rejected by supervisor' : 'Advance rejected by finance',
+              titleAr: useSupervisorPath ? 'تم رفض السلفة من المشرف' : 'تم رفض السلفة من المالية',
+              message: `Your advance request for ${selectedRequest.siteName ?? 'site visit'} was rejected. Reason: ${rejectionReason}`,
+              messageAr: `تم رفض طلب السلفة. السبب: ${rejectionReason}`,
+              type: 'error',
+              category: 'approvals',
+              priority: 'high',
+              link: '/wallet',
+              relatedEntityId: selectedRequest.id,
+              relatedEntityType: 'downPayment',
+              sendEmail: true,
+            });
+          } catch (e) { console.error('NotificationTriggerService (advance reject) failed', e); }
+        }
         closeDialog();
       }
     } finally {

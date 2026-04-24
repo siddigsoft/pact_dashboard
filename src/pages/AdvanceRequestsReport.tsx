@@ -54,6 +54,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { supabase } from '@/integrations/supabase/client';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { generateWriteOffCertificatePdf } from '@/utils/writeOffCertificatePdf';
 import { exportOverviewToFormattedExcel, exportAgingToFormattedExcel, exportGroupedToFormattedExcel } from '@/utils/advanceReportExcelUtils';
@@ -602,6 +603,25 @@ function AdvanceRequestsReportContent() {
         .update({ status: 'cancelled', metadata: updatedMeta })
         .eq('id', req.id);
       if (error) throw error;
+      // H7 — bilingual notification to the requester
+      if (req.requestedBy) {
+        try {
+          await NotificationTriggerService.send({
+            userId: req.requestedBy,
+            title: 'Advance written off',
+            titleAr: 'تم شطب السلفة',
+            message: `Your outstanding advance ${req.id.substring(0, 8).toUpperCase()} has been written off by finance. Reason: ${reason}.`,
+            messageAr: `تم شطب السلفة المستحقة ${req.id.substring(0, 8).toUpperCase()} من قبل المالية. السبب: ${reason}.`,
+            type: 'warning',
+            category: 'financial',
+            priority: 'high',
+            link: '/wallet',
+            relatedEntityId: req.id,
+            relatedEntityType: 'downPayment',
+            sendEmail: true,
+          });
+        } catch (e) { console.error('NotificationTriggerService (write-off) failed', e); }
+      }
       toast({ title: 'Advance Written Off', description: `Advance ${req.id.substring(0, 8).toUpperCase()} has been written off and cancelled.` });
       setWriteOffDialog({ open: false, req: null, reason: '', notes: '', processing: false });
       refreshRequests();
@@ -659,6 +679,25 @@ function AdvanceRequestsReportContent() {
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
       } else {
+        // H7 — bilingual notification to the requester confirming payout
+        if (req.requestedBy) {
+          try {
+            await NotificationTriggerService.send({
+              userId: req.requestedBy,
+              title: 'Advance disbursed',
+              titleAr: 'تم صرف السلفة',
+              message: `Your transport advance of ${(req.approvedAmount || req.requestedAmount).toLocaleString()} ${req.currency || 'SDG'} has been disbursed.`,
+              messageAr: `تم صرف سلفة المواصلات بمبلغ ${(req.approvedAmount || req.requestedAmount).toLocaleString()} ${req.currency || 'جنيه'}.`,
+              type: 'success',
+              category: 'financial',
+              priority: 'high',
+              link: '/wallet',
+              relatedEntityId: req.id,
+              relatedEntityType: 'downPayment',
+              sendEmail: true,
+            });
+          } catch (e) { console.error('NotificationTriggerService (mark-paid) failed', e); }
+        }
         toast({ title: "Marked as Paid / تم التحديد كمدفوع", description: "The advance has been marked as fully paid. / تم تحديد السلفة كمدفوعة بالكامل." });
         setConfirmMarkPaidDialog({ open: false, req: null, notes: '' });
         refreshRequests();

@@ -518,6 +518,19 @@
     if (!isHidden('/hierarchy-audit') && (isSuperAdmin || isAdmin || ['hr','hr_manager'].includes(defaultRole.toLowerCase()))) {
       hrItems.push({ id: 'hierarchy-audit', title: "Hierarchy Audit Log", url: "/hierarchy-audit", icon: ScrollText, priority: 12, isPinned: isPinned('/hierarchy-audit') });
     }
+    // 13–16. HR audit gaps H2-H5 self-service pages
+    if (!isHidden('/my-advances')) {
+      hrItems.push({ id: 'my-advances', title: "My Advances", url: "/my-advances", icon: Wallet, priority: 13, isPinned: isPinned('/my-advances') });
+    }
+    if (!isHidden('/my-expenses')) {
+      hrItems.push({ id: 'my-expenses', title: "My Expenses", url: "/my-expenses", icon: Receipt, priority: 14, isPinned: isPinned('/my-expenses') });
+    }
+    if (!isHidden('/attendance')) {
+      hrItems.push({ id: 'attendance', title: "Attendance", url: "/attendance", icon: Clock, priority: 15, isPinned: isPinned('/attendance') });
+    }
+    if (!isHidden('/offboarding') && (isSuperAdmin || isAdmin || ['hr','hr_manager','financialadmin','financial_admin','finance'].includes(defaultRole.toLowerCase()))) {
+      hrItems.push({ id: 'offboarding', title: "Offboarding", url: "/offboarding", icon: LogOut, priority: 16, isPinned: isPinned('/offboarding') });
+    }
     if (hrItems.length) groups.push({ id: 'hr-people', label: "HR & People", order: 5.6, items: hrItems });
 
     // ── 8. CRM ────────────────────────────────────────────────────────────────

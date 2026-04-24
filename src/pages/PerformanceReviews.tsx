@@ -638,6 +638,44 @@ export default function PerformanceReviews() {
                       <p className="text-sm">{viewing.manager_comments}</p>
                     </div>
                   )}
+
+                  {/* H9 — Convert to Salary Increment shortcut */}
+                  {viewing.status === 'completed' && viewing.overall_rating != null && viewing.overall_rating >= 3 && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 rounded p-3 border border-amber-200 dark:border-amber-800">
+                      <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-2">
+                        Reward strong performance
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Suggested increment based on rating: {(() => {
+                          const r = viewing.overall_rating!;
+                          if (r >= 4.5) return '10%';
+                          if (r >= 4)   return '7%';
+                          if (r >= 3.5) return '5%';
+                          return '3%';
+                        })()}
+                      </p>
+                      <Button
+                        size="sm"
+                        className="bg-amber-600 hover:bg-amber-700 text-white w-full"
+                        data-testid={`button-convert-to-increment-${viewing.id}`}
+                        onClick={() => {
+                          const r = viewing.overall_rating!;
+                          const pct = r >= 4.5 ? 10 : r >= 4 ? 7 : r >= 3.5 ? 5 : 3;
+                          const reason = `Merit increment based on ${viewing.review_period} performance review (rating ${r.toFixed(1)}/5)`;
+                          const params = new URLSearchParams({
+                            prefill: viewing.reviewee_id,
+                            pct: String(pct),
+                            reason,
+                            review_id: viewing.id,
+                          });
+                          window.location.href = `/salary-increments?${params.toString()}`;
+                        }}
+                      >
+                        <TrendingUp className="h-4 w-4 mr-1.5" />
+                        Convert to Salary Increment
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </>
             );

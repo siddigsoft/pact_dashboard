@@ -79,16 +79,107 @@ const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'UGX', 'RWF'];
 const fmt = (n: number, c = 'SDG') =>
   `${c} ${(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
+// ── H10: Statutory deductions (Sudan PIT, Social Insurance, optional Zakat) ──
+// Brackets live in the DB (payroll_statutory_brackets) so finance can adjust
+// without code changes; we cache them at module scope so computePayroll stays
+// synchronous and zero call-site changes are needed. PayrollAdmin's top-level
+// component calls useStatutoryBrackets() to populate the cache.
+interface StatutoryBracket {
+  id?: string; country: string; type: string; label: string; label_ar?: string | null;
+  min_amount: number; max_amount: number | null; rate_percent: number; fixed_amount: number;
+  effective_from?: string; effective_to?: string | null;
+}
+// Sensible defaults for Sudan (kept in sync with the DB seed in
+// `supabase/migrations/20260424_hr_audit_complete.sql` so the page works
+// even before brackets are loaded).
+const SUDAN_DEFAULT_BRACKETS: StatutoryBracket[] = [
+  { country: 'SD', type: 'pit',             label: 'PIT Bracket 1', min_amount: 0,         max_amount: 7500,    rate_percent: 0,  fixed_amount: 0 },
+  { country: 'SD', type: 'pit',             label: 'PIT Bracket 2', min_amount: 7500.01,   max_amount: 30000,   rate_percent: 5,  fixed_amount: 0 },
+  { country: 'SD', type: 'pit',             label: 'PIT Bracket 3', min_amount: 30000.01,  max_amount: 100000,  rate_percent: 10, fixed_amount: 0 },
+  { country: 'SD', type: 'pit',             label: 'PIT Bracket 4', min_amount: 100000.01, max_amount: null,    rate_percent: 15, fixed_amount: 0 },
+  { country: 'SD', type: 'social_employee', label: 'NPF Employee 8%', min_amount: 0, max_amount: null, rate_percent: 8,  fixed_amount: 0 },
+  { country: 'SD', type: 'social_employer', label: 'NPF Employer 17%', min_amount: 0, max_amount: null, rate_percent: 17, fixed_amount: 0 },
+];
+let __statutoryBrackets: StatutoryBracket[] = SUDAN_DEFAULT_BRACKETS;
+let __statutoryCountry: string = 'SD';
+let __statutoryApplyZakat: boolean = false;
+
+export function computeStatutoryDeductions(
+  gross: number,
+  brackets: StatutoryBracket[] = __statutoryBrackets,
+  country: string = __statutoryCountry,
+  applyZakat: boolean = __statutoryApplyZakat,
+): LineItem[] {
+  if (!gross || gross <= 0) return [];
+  const today = new Date().toISOString().slice(0, 10);
+  const active = brackets.filter(b =>
+    b.country === country
+    && (!b.effective_from || b.effective_from <= today)
+    && (!b.effective_to   || b.effective_to   >= today),
+  );
+
+  // Progressive PIT
+  let pit = 0;
+  active.filter(b => b.type === 'pit').sort((a, b) => a.min_amount - b.min_amount).forEach(b => {
+    if (gross > b.min_amount) {
+      const slice = Math.min(gross, b.max_amount ?? gross) - b.min_amount;
+      pit += slice * b.rate_percent / 100 + b.fixed_amount;
+    }
+  });
+
+  // Flat-rate social insurance (employee portion only — employer is a cost, not a deduction)
+  const social = active.filter(b => b.type === 'social_employee')
+    .reduce((s, b) => s + (gross * b.rate_percent / 100 + b.fixed_amount), 0);
+
+  // Optional Zakat 2.5% of (gross - PIT - social)
+  const zakat = applyZakat ? Math.max(0, gross - pit - social) * 0.025 : 0;
+
+  const lines: LineItem[] = [];
+  if (pit > 0)    lines.push({ name: 'Income Tax (PIT)',     amount: Math.round(pit   * 100) / 100, type: 'fixed' });
+  if (social > 0) lines.push({ name: 'Social Insurance (NPF)', amount: Math.round(social * 100) / 100, type: 'fixed' });
+  if (zakat > 0)  lines.push({ name: 'Zakat',                amount: Math.round(zakat * 100) / 100, type: 'fixed' });
+  return lines;
+}
+
 function computePayroll(cfg: SalaryConfig) {
   const base = cfg.base_salary;
   const fixedA = cfg.allowances.filter(a => a.type === 'fixed').reduce((s, a) => s + a.amount, 0);
   const pctA   = cfg.allowances.filter(a => a.type === 'percent').reduce((s, a) => s + base * a.amount / 100, 0);
   const gross  = base + fixedA + pctA;
+
+  // H10: synthesize statutory deductions from DB brackets (cached at module scope).
+  const statutoryLines = computeStatutoryDeductions(gross);
+  const statutorySum = statutoryLines.reduce((s, l) => s + l.amount, 0);
+
   const fixedD = cfg.deductions.filter(d => d.type === 'fixed').reduce((s, d) => s + d.amount, 0);
   const pctD   = cfg.deductions.filter(d => d.type === 'percent').reduce((s, d) => s + gross * d.amount / 100, 0);
-  const deductions = fixedD + pctD;
+  const deductions = fixedD + pctD + statutorySum;
   const net = Math.max(0, gross - deductions);
   return { base, allowTotal: fixedA + pctA, gross, dedTotal: deductions, net };
+}
+
+// Hook used by PayrollAdmin to populate the module-scope brackets cache from
+// the DB. Falls back to SUDAN_DEFAULT_BRACKETS if the table is empty.
+export function useStatutoryBrackets(country: string = 'SD') {
+  return useQuery({
+    queryKey: ['payroll-statutory-brackets', country],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payroll_statutory_brackets')
+        .select('*')
+        .eq('country', country);
+      if (error) {
+        // table may not exist yet on some envs — fall back silently
+        __statutoryBrackets = SUDAN_DEFAULT_BRACKETS;
+        return SUDAN_DEFAULT_BRACKETS;
+      }
+      const rows = (data && data.length > 0 ? data : SUDAN_DEFAULT_BRACKETS) as StatutoryBracket[];
+      __statutoryBrackets = rows;
+      __statutoryCountry = country;
+      return rows;
+    },
+  });
 }
 
 function initials(name: string | null) {
@@ -238,6 +329,9 @@ export default function PayrollAdmin() {
   ]);
 
   const PA_CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
+
+  // H10: load statutory brackets at mount so computePayroll has them
+  useStatutoryBrackets('SD');
 
   const { data: employees = [], isLoading: loadingEmp } = useQuery<EmployeeRow[]>({
     queryKey: ['payroll-admin-employees'],

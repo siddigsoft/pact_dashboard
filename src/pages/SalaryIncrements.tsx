@@ -89,6 +89,31 @@ export default function SalaryIncrements() {
 
   useEffect(() => { fetchAll(); }, []);
 
+  // H9: open the new-increment dialog pre-filled when navigated from a Performance Review.
+  // URL: /salary-increments?prefill=<userId>&pct=<percent>&reason=<text>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prefillUser = params.get('prefill');
+    if (!prefillUser) return;
+    const pct = Number(params.get('pct') || '0');
+    const reason = params.get('reason') || 'Merit increment from performance review';
+    const reviewId = params.get('review_id');
+    setEditing(null);
+    setForm({
+      ...BLANK,
+      user_id: prefillUser,
+      increment_type: 'merit',
+      increment_percent: pct > 0 ? pct : null,
+      reason,
+      notes: reviewId ? `Linked to performance review ${reviewId}` : '',
+    } as any);
+    setDialogOpen(true);
+    // Clean the URL so refreshing doesn't re-open the dialog
+    if (window.history.replaceState) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   async function fetchAll() {
     setLoading(true);
     const [incRes, profRes] = await Promise.all([
