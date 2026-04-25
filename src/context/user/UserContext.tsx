@@ -1337,7 +1337,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // The owner account role can never be changed by anyone (including other super admins).
       // The DB trigger also enforces this, but we block it early in the UI layer too.
       if (isProtectedOwner(user.id)) {
-        const existingUser = users.find(u => u.id === user.id);
+        const existingUser = appUsers.find(u => u.id === user.id);
         if (existingUser && user.role !== existingUser.role) {
           toast({
             title: 'Protected Account',
@@ -1350,7 +1350,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // ── Admin / SuperAdmin role assignment guard ──────────────────────────
       // Only the platform owner can promote users to Admin or SuperAdmin.
-      const existingUser = users.find(u => u.id === user.id);
+      const existingUser = appUsers.find(u => u.id === user.id);
       const isRoleEscalation =
         existingUser &&
         user.role !== existingUser.role &&
