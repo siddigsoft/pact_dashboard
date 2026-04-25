@@ -695,3 +695,290 @@ proves the numbers are right.
 
 *End of v3 addendum. Sign-off needed on the §13 corrections and the §14
 Q-C1…Q-C8 questions before kicking off Phase 1.*
+
+---
+
+# Part D — Version 4 addendum: deeper gap pass
+
+**Status:** Proposed · **Last updated:** 2026-04-25
+**Purpose:** v4 is a second-pass gap review. v2 designed the core; v3 reconciled
+v2 with what already exists in PACT. v4 catches the categories that **neither**
+v2 nor v3 addressed — most of which matter specifically because PACT is a
+**humanitarian field-ops platform**, not a generic ERP.
+
+These are additive findings — they don't change any v2 or v3 decisions, they
+extend them.
+
+---
+
+## 17. The humanitarian / donor compliance gap *(biggest miss)*
+
+v2 and v3 cover **statutory tax** (Sudan, EAC) — but a humanitarian platform
+spends 80%+ of its time answering to **donors**, not tax authorities. None of
+that surface is in the plan today.
+
+| Missing capability | Why it matters | Owns it |
+|---|---|---|
+| **Donor compliance regime registry** — USAID (FAR / AIDAR / 2 CFR 200), EU PRAG, UN OCHA, FCDO, GIZ, Global Fund — each with its own cost-eligibility rules, allowable-cost matrix, indirect-cost cap, and reporting templates | Same expense can be eligible for one donor and ineligible for another; the GL must tag eligibility per donor at posting time | New `acct_donor_regimes` table + per-line tagging |
+| **Cost-share / matching contribution tracking** | Many grants require the org to match X% from non-grant sources; you have to prove it line-by-line | New `cost_share` flag on journal lines + per-grant target |
+| **Indirect Cost Rate (NICRA)** calculation + cap enforcement | USAID and most federal donors cap indirect at a NICRA-approved % of direct; over-cap charges are disallowed | New `indirect_cost_rates` table, allocation engine, cap blocker on posting |
+| **Burn rate per grant** with projected end-date | Grants are time-boxed; finance has to flag under- or over-burn early | Report on top of GL filtered by grant |
+| **Time & effort reporting** for staff funded by multiple grants | Federal donors require employees to certify hours per grant per pay period | New `time_effort_certifications` + monthly cert workflow |
+| **Donor reporting templates** — FFR (SF-425), narrative report, donor-specific Excel formats | Each donor wants the same numbers in a different shape; manual rework today | Template engine that maps GL accounts → donor template cells |
+| **Donor-specific budget vs actual** with re-budgeting workflow | Donors approve a budget; the org must request prior approval for line shifts beyond a threshold | Budget tables already exist in v1; needs a re-budgeting request + approval flow |
+| **Sub-recipient / partner pass-through** sub-ledger | When PACT re-grants to local partners, expenses ride two ledgers and donors audit both | New `acct_sub_recipients` + cascade reporting |
+| **Procurement compliance log** — competitive bid evidence, sole-source justification, vendor vetting | Every donor demands proof that procurement followed rules | Hooks on the procurement cycle (§19) + document storage |
+
+**Recommendation:** add §17 as **Phase 2.5** in the v3 phasing — sits between
+"wire payroll & operational pages to GL" and "reporting layer v1", because the
+reporting layer can't produce donor reports without donor tagging in place.
+
+---
+
+## 18. Sanctions screening & AML gap *(non-negotiable for humanitarian work)*
+
+Operating in Sudan + EAC, the platform pays vendors, partners, and staff who
+**must be screened against international sanctions lists** before any
+disbursement. Failure here is an existential risk (donor clawback, US/UK/EU
+prosecution).
+
+| Missing capability | Notes |
+|---|---|
+| **Sanctions screening at vendor / partner / employee onboarding** | Free OFAC SDN list, EU consolidated list, UN Security Council list — all downloadable. Add a screening RPC that runs on `partners` insert/update and on payee creation. |
+| **Re-screening on a schedule** (lists update frequently) | Nightly job re-runs all active partners against the latest lists. |
+| **Hit-handling workflow** — block payment, escalate, document false-positive resolution | Hits create an `aml_alerts` row + block journal posting until cleared. |
+| **PEP (Politically Exposed Person) flagging** | Free PEP lists exist (e.g. CIA World Factbook leaders). Tag for enhanced due diligence. |
+| **Disbursement threshold escalation** | Payments above a configurable threshold require a second approver + KYC re-verification. |
+| **Audit log of all screening decisions** | Donor auditors will ask. |
+
+**Recommendation:** ship as a small dedicated module in **Phase 1** (before the
+first journal posts), so no payment ever goes out unscreened.
+
+---
+
+## 19. Procurement-to-pay (P2P) cycle gap
+
+v2 lists "procurement webhooks" and v3 mentions a procurement integration, but
+the **actual P2P cycle** isn't in the plan. Without it, donor compliance §17
+can't be evidenced.
+
+Missing:
+
+- **Purchase Requisitions** (`acct_purchase_requisitions`) — requester →
+  budget check → approval chain.
+- **Purchase Orders** (`acct_purchase_orders`) — committed spend (encumbrance)
+  reduces available budget without yet hitting the GL as actual.
+- **Goods Received Notes / Service Acceptance** (`acct_grn`) — physical
+  receipt logged, triggers accrual journal.
+- **3-way match** — PO ↔ GRN ↔ Invoice; mismatches block payment.
+- **Vendor master** — extends `partners` with `is_vendor`, payment terms,
+  tax ID, bank details (encrypted), preferred currency.
+- **Petty cash** — per-branch petty-cash floats with replenishment workflow,
+  daily cash count reconciliation.
+- **Expense-advance settlement** — current `salary_advances` and
+  `down_payment_requests` produce cash-out but never *settle* against actual
+  expenses; need a settlement screen that closes the advance against an
+  expense claim and posts the variance.
+- **Per-diem rates registry** per location + grade — auto-applies to MMP and
+  field-task expenses; donor audits compare actuals to schedule.
+
+---
+
+## 20. Receivables, billing & AR cycle gap
+
+The plan covers AR aging in §6.1 but never the **AR cycle that produces
+those receivables**.
+
+Missing:
+
+- **Invoices** to donors / customers (`acct_invoices`) with bilingual templates,
+  multi-currency, partial payments.
+- **Credit notes & debit notes** with auto-reversal of original GL impact.
+- **Customer / donor statements** — monthly statement of account with aged
+  balances (PDF + email).
+- **Recurring billing** for retainer agreements (currently `retainer_runs` runs
+  payouts but doesn't bill back to donors).
+- **Receipts** — money in, allocated against invoices (full / partial /
+  unidentified).
+- **Bank deposit slips** — reconcile receipts to bank credits.
+
+---
+
+## 21. Year-end, period-close & journal mechanics gap
+
+The plan mentions period close but doesn't cover the mechanics. Without these,
+the first year-end will be a manual nightmare.
+
+| Missing mechanic | Detail |
+|---|---|
+| **Soft-close vs hard-close** | Soft-close = period locked but reopenable by Finance Manager with audit; hard-close = sealed, no reopen even by admin. |
+| **Year-end retained-earnings rollover** | RPC that closes P&L accounts to retained earnings on fiscal-year-end. |
+| **Opening-balance import** for go-live | First-time tenants have books elsewhere; need a one-time signed opening-balance journal that doesn't trip reversal rules. |
+| **Reversal / storno pattern** | Decision: do reversals create a contra-journal (auditable, recommended) or a delete-and-replace? Plan must pick one and enforce it at the RPC. |
+| **Recurring journal templates** | Monthly rent, depreciation, prepayment amortisation — should be definable once and run on a schedule. |
+| **Accruals & deferrals automation** | Month-end accrual journals that auto-reverse on day 1 of next period. |
+| **Adjusting entries period** | Days N..N+5 after period-end where only Finance Manager + Auditor can post adjusting entries. |
+| **Trial Balance lockdown after audit sign-off** | Once external audit signs off a year, no journal can touch any closed period — even reversal must go to current open period. |
+| **Sub-ledger reconciliation jobs** | Daily job that asserts: sum(`wallet_transactions`) == GL `Wallet Liabilities`; sum(`payroll_run_items.net`) == GL `Net Payroll Payable`; mismatches alert finance. |
+
+---
+
+## 22. Segregation of Duties (SoD) gap
+
+v2 mentions roles but never enforces SoD. For a finance system this is the
+single biggest control weakness.
+
+Missing:
+
+- **SoD matrix** — same user cannot:
+  - Post a journal AND approve it.
+  - Create a vendor AND approve a payment to that vendor.
+  - Approve a payroll run AND approve themselves in it.
+  - Initiate a bank transfer AND release it.
+- **DB-level enforcement** via RLS + a `check_sod` trigger on approval RPCs
+  (not just UI hiding).
+- **Maker-checker on configuration** — COA changes, tax-bracket changes,
+  FX-rate manual overrides, and template edits all require a second approver.
+- **2FA enforcement for finance roles** — PACT already has TOTP; just make it
+  *mandatory* for `finance`, `accountant`, `auditor`, `admin`.
+- **Encrypted bank account numbers / IBANs** — column-level encryption + role-
+  scoped decryption.
+- **Rate limiting + IP allow-list** for the new APIs in §2.7 / Phase 5.
+
+---
+
+## 23. Data governance, retention & backup gap
+
+| Missing | Detail |
+|---|---|
+| **Donor retention policy** | Most donors require **7 years** of records post-grant-close. Schema should support legal-hold flags that prevent purge. |
+| **GDPR / data-subject rights vs immutable ledger** | Right-to-erasure conflicts with immutable journals. Resolution pattern: **pseudonymise** PII fields on erasure request, retain ledger numbers. |
+| **PII inventory** for finance tables | Document which columns are PII (names, addresses, bank accounts, salary amounts) — drives masking rules in reports / exports. |
+| **Backup RPO / RTO targets** | Supabase has PITR; document the recovery objective Finance signs off on. |
+| **Disaster-recovery runbook** | One page: how to restore the books to a point in time, who authorises, how to communicate to donors. |
+| **Read-only auditor account** | External auditors get a sandboxed read-only role across a frozen period range — without giving them full RLS bypass. |
+
+---
+
+## 24. UX & accountant productivity gap
+
+A real accountant uses an accounting system 6 hours a day. None of the
+quality-of-life features that decide whether they'll actually adopt the system
+are in the plan today.
+
+- **Bulk CSV / Excel import** for journals, COA, opening balances, vendors —
+  with a dry-run validate-only mode.
+- **Document attachment per journal line** (not per header) — invoice scans,
+  delivery notes, approval emails — stored in Supabase Storage with the same
+  RLS as the journal.
+- **Saved filters & report favourites** per user.
+- **Pinned dashboards** + drag-to-reorder widgets.
+- **Keyboard shortcuts** for accountants (`J` new journal, `R` post & reverse,
+  `T` switch to TB, etc.).
+- **Quick-search by amount range, vendor, reference, date range** across all
+  journals.
+- **Drill-everywhere** — every figure on every report click-throughs to the
+  source journal then to the source document.
+- **Inline edit** on suggested AI-coded journal lines before posting.
+- **Bilingual number formatting** — Arabic-Indic numerals option, locale
+  thousand separators.
+- **Hijri calendar option** alongside Gregorian for date pickers (most
+  Sudan/EAC Muslim staff request this; PACT mobile already shows Hijri).
+- **PDF Arabic font rendering** — jsPDF needs a TTF Arabic font registered
+  centrally (Cairo, Amiri, IBM Plex Sans Arabic) — currently a known PDF gap.
+
+---
+
+## 25. Capture-channel gap *(easy wins for field ops)*
+
+PACT already has WhatsApp + email + OCR + camera. None are wired as
+expense-capture channels in the plan.
+
+- **Email-to-expense** — forward a receipt PDF to a per-user inbox address;
+  OCR runs; draft expense claim appears in the user's queue.
+- **WhatsApp-to-expense** — send a receipt photo to the PACT WhatsApp number;
+  same flow. Reuses Wasender webhook + existing OCR pipeline.
+- **Camera-to-expense from mobile** — Flutter already has camera; add a
+  one-tap "Submit expense" that uploads + OCRs + creates draft.
+- **Per-diem auto-calc on field tasks** — use the per-diem registry from §19;
+  no manual amount entry.
+
+---
+
+## 26. Performance & scale gap
+
+| Missing | Detail |
+|---|---|
+| **Partition `acct_journal_lines` by fiscal period** | Lines table will dominate row count; partitioning keeps queries fast and old periods cheap to archive. |
+| **Indexing strategy doc** | Composite indexes for `(account_id, period_id)`, `(branch_id, period_id)`, `(project_id, period_id)`, `(grant_id, period_id)`, `(idempotency_key)`. |
+| **Materialised views** for TB, P&L, BS — refreshed on journal post via NOTIFY/LISTEN. Enables sub-second report loads. |
+| **Background job framework** | Period close, FX revaluation, year-end rollover, scheduled email reports, sanctions re-screening, recurring journal generation — all need a queue runner. Supabase has `pg_cron` + Edge Functions; document the chosen pattern. |
+| **API pagination + cursor-based listings** for the §2.7 endpoints. |
+| **N+1 query prevention** in report RPCs — single CTE-based queries, not loop-and-fetch. |
+
+---
+
+## 27. New / amended open questions
+
+Adding to v3 §14:
+
+- **Q-D1.** Donor regimes on day one — which donors do we encode in
+  `acct_donor_regimes` first? (USAID? EU? UN OCHA? FCDO? Global Fund?)
+- **Q-D2.** Sanctions list sources — OFAC SDN + EU consolidated + UN
+  consolidated as the baseline. Do we add HMT (UK) and Australia DFAT?
+- **Q-D3.** NICRA approval — is there a current NICRA letter on file, and at
+  what rate? Drives the indirect-cost cap enforcement.
+- **Q-D4.** Cost-share targets — which active grants have matching
+  requirements and at what %?
+- **Q-D5.** Reversal policy — contra-journal (recommended) or
+  delete-and-replace?
+- **Q-D6.** Soft-close window — how many days post-period-end can Finance
+  reopen for adjustments without exec approval?
+- **Q-D7.** Auditor access — read-only DB role, or read-only API token, or
+  both?
+- **Q-D8.** Hijri calendar — show alongside Gregorian everywhere, or only on
+  user-by-user opt-in?
+- **Q-D9.** Per-diem registry source of truth — UN DSA rates, donor-specific
+  rates, or PACT-internal rates?
+- **Q-D10.** PII pseudonymisation rule — which fields are pseudonymised on a
+  GDPR erasure request, and which remain (e.g. amounts, journal numbers)?
+
+---
+
+## 28. v4 impact on the v3 phase plan
+
+Insert these checkpoints into the v3 phasing — no phase is renumbered, only
+expanded:
+
+| Phase | v4 additions |
+|---|---|
+| **Phase 1 — GL foundations** | Add **§18 sanctions screening module**, **§22 SoD matrix + 2FA enforcement**, **§23 PII inventory**, **§26 partitioning + index doc**, **§24 PDF Arabic font registration**. |
+| **Phase 2 — Wire ops to GL** | Add **§19 P2P cycle (PR/PO/GRN/3-way)**, **§19 expense-advance settlement**, **§20 invoices + credit notes**, **§21 sub-ledger reconciliation jobs**. |
+| **Phase 2.5 *(NEW)* — Donor & grant compliance** | **§17 entire section** — donor regime registry, cost-share, NICRA, time & effort, donor reporting templates. Blocks Phase 3 reporting because reports must be donor-aware. |
+| **Phase 3 — Reporting v1** | Add **§22 read-only auditor view**, **§24 saved filters / favourites / drill-everywhere / Hijri**, **§25 capture channels** (email/WhatsApp/camera-to-expense). |
+| **Phase 4 — Multi-entity + FX** | Add **§21 year-end retained-earnings rollover**, **§21 reversal pattern enforcement**, **§21 soft-close vs hard-close**. |
+| **Phase 5 — APIs + webhooks** | Add **§22 rate limit + IP allow-list**, **§23 retention legal-hold flags**. |
+| **Phase 6 — Banking & treasury** | Add **§22 bank account encryption**, **§19 petty cash**. |
+| **Phase 7 — Scenario / forecast / AI** | (no v4 additions) |
+| **Phase 8 — Reporting alerts + scheduled email** | Add **§17 donor reporting templates** delivery via scheduled email; **§22 audit-pack legal-hold export**. |
+| **Phase 9 — Hardening / BI / mobile parity** | Add **§23 DR runbook + RPO/RTO sign-off**, **§26 materialised view refresh strategy**, **§24 keyboard shortcuts**. |
+
+**Net schedule impact:** roughly **+1 phase (Phase 2.5)** and **~3–4 sprints
+distributed** across existing phases. Sanctions screening and SoD enforcement
+are the only items that **must** ship before the first GL journal posts —
+everything else is incremental.
+
+---
+
+## 29. Recommended next decision (after v4 sign-off)
+
+- Sign off **§13 v3 corrections** + **§14 Q-C1…C8** + **§27 Q-D1…D10**.
+- Then the very next concrete deliverable is a single project task:
+  **"Phase 1 GL foundations — schema, posting RPC, sanctions module, SoD
+  matrix"**, scoped to one sprint, with explicit acceptance criteria pulled
+  from §15 Phase 1 + §28 Phase 1 v4 additions.
+
+---
+
+*End of v4 addendum. v2 + v3 + v4 together form the working master plan. No
+further version is planned until the v4 open questions are answered.*
