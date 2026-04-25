@@ -20,6 +20,7 @@
 **Current sprint:** Phase 1 · Sprint 1.3 — ✅ **SIGNED OFF PASS (round 4)**, awaiting pactdb apply
 **Next up:** Phase 1 · Sprint 1.F — accounting frontend pages (`/accounting/coa`, `/accounting/journals`, `/accounting/trial-balance`, `/finance/audit-trail`) + Arabic jsPDF font
 **Prerequisite for next apply:** Sprint 1.1 + 1.2 each clean in pactdb for ≥ 24 h before pasting 1.3
+**Active hot-patch (out-of-band, can apply now):** `personal_tasks_co_assignee_rls_v2` — co-assignees see "Task not found" on `/tasks/:id`; bulletproof EXISTS-form RLS rewrite ready to paste; **independent of accounting sprints**
 
 ---
 
@@ -87,6 +88,9 @@ status is the truth — sign-off only means "cleared to apply".
 | `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` | 1.3 | Migration | ✅ PASS (round 4) | ⏳ pending — after 1.2 + 24 h |
 | `docs/sql/PHASE1_SPRINT1_3_MANUAL_APPLY.md` | 1.3 | Runbook + smoke tests + 20-row results format | ✅ | n/a |
 | `docs/sql/PHASE1_SPRINT1_3_ROLLBACK.sql` | 1.3 | Rollback (registry-driven, real data safe) | ✅ | n/a |
+| `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` | Hot-patch | RLS rewrite (bulletproof EXISTS form) | ✅ | ⏳ pending — apply any time, independent of accounting sprints |
+| `docs/sql/PERSONAL_TASKS_CO_ASSIGNEE_RLS_V2_APPLY.md` | Hot-patch | Runbook + 5 verification steps | ✅ | n/a |
+| `docs/sql/PERSONAL_TASKS_CO_ASSIGNEE_RLS_V2_ROLLBACK.sql` | Hot-patch | Rollback to prior `@>` containment policy | ✅ | n/a |
 
 > When the user applies a file in pactdb, change the column to ✅ + the date
 > they ran it.
@@ -134,6 +138,8 @@ visualiser, both queued for Sprint 1.F).
 | Audit-trail visualiser page | 🟠 Deferred to Sprint 1.F | Agent | Reads `acct_finance_audit_log` |
 | 2FA enforcement on finance roles | 🟠 Manual config | User | Supabase Auth dashboard, not SQL |
 | Production runtime crash on `/dashboard` (`Wallet is not defined`) | ✅ FIXED in code | — | Needs Vercel redeploy to clear |
+| Co-assignees see "Task not found" on `/tasks/:id` (reported 2026-04-25 by Mohamed Yo…) | 🟠 Awaiting user to paste `supabase/migrations/20260425_personal_tasks_co_assignee_rls_v2.sql` in pactdb | User | TaskDetail.tsx fetch is RLS-only; v2 swaps the broken `?` operator (and the type-strict `@>` form) for a bulletproof `EXISTS … (elem->>'id') = auth.uid()::text` wrapped in a `jsonb_typeof='array'` guard so a malformed legacy row can't crash `jsonb_array_elements`. Runbook: `docs/sql/PERSONAL_TASKS_CO_ASSIGNEE_RLS_V2_APPLY.md` |
+| `personal_tasks` DELETE policy admits only the creator, but TaskDetail UI exposes Delete to admins and the primary assignee → silent RLS denial | 🟠 Pre-existing (since at least 20260422 baseline), surfaced during the 2026-04-25 hot-patch architect review — NOT introduced by the hot-patch. Tracked here so the next agent doesn't lose it. Fix requires a separate scoped migration with its own auth review. | Agent (when scheduled) | Two fix options: (a) widen `personal_tasks_delete USING` to admit owners + primary + admins (mirrors UI); or (b) route deletes through a `delete_personal_task` SECURITY DEFINER RPC that re-checks UI rules server-side. Decide before the next sprint touches tasks. |
 
 ---
 
