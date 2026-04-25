@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, differenceInDays, isToday, isPast, isSameDay, addWeeks, subWeeks, addMonths, subMonths } from 'date-fns';
 import { Users, CheckSquare, AlertTriangle, TrendingUp, Calendar, ChevronLeft, ChevronRight, X, Plus, Clock, CheckCircle2, BarChart2, MessageSquare, Bell, Phone, Mail, Filter, Search, RefreshCw, Eye, User, Layers, ChevronDown, ChevronUp, Flag, Briefcase, Send } from 'lucide-react';
@@ -353,7 +353,7 @@ export default function TeamTaskMonitor() {
   const NUDGE_COOLDOWN_MS = 60 * 60 * 1000;
   const lastNudgedRef = useRef<Map<string, number>>(new Map());
 
-  const openNudge = (m: any) => {
+  const openNudge = (m: ReturnType<typeof buildEmployeeMetrics>[number]) => {
     const last = lastNudgedRef.current.get(m.emp.id) ?? 0;
     const elapsed = Date.now() - last;
     if (elapsed < NUDGE_COOLDOWN_MS) {
