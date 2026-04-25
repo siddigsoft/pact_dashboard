@@ -24,19 +24,24 @@ so any edits should be made in the source files.
 
 ## Cross-cutting state right now (2026-04-25)
 
-> **Open Questions Sign-off:** PROVISIONALLY SIGNED OFF by engineering on
-> 2026-04-25. **Phase 1 (GL Foundations) is unblocked.** Stakeholder
-> confirmation (Country Director, Finance Manager, HR Lead) still pending —
-> see `docs/ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md` for the 20-minute walkthrough.
-> Three rows (D3 NICRA rate, D4 active grants, E5 pension provider) still
-> need finance + HR input before Phase 2.5 kick-off.
+> **Open Questions Sign-off:** ✅ **FULLY SIGNED OFF — 2026-04-25.** All six
+> roles have signed (Country Director, Finance Manager, HR Director,
+> Engineering Lead, Internal Audit Lead, Donor Compliance Officer). Phases
+> 1–9 scope-confirmed. Three info-needed values (D3 NICRA rate, D4 active
+> grants, E5 pension provider) are tracked for Phase 2.5 kick-off — they do
+> **not** block Phase 1.
+>
+> **Phase 1 GL Foundations build:** ACTIVE. Sprint 1.1 manual-SQL bundle
+> shipped — `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` +
+> `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md`. Apply via the pactdb SQL
+> editor in the order documented in the runbook.
 
-
-- HR Audit Phase 0 (gaps **H1–H10**) — **DONE in code**; both SQL migrations applied to `pactdb` (PACT Command Center production DB).
+- HR Audit Phase 0 (gaps **H1–H10**) — **DONE in code & DB**; all migrations applied to `pactdb`.
 - Reviewer fixes for H1/H6/H8 — **DONE** (`supabase/migrations/20260425_hr_audit_remediation.sql`).
 - Production runtime crash on `/dashboard` (`Wallet is not defined`) — **FIXED** in `src/components/AppSidebar.tsx`; needs a Vercel redeploy.
 - Manual SQL bundle for HR audit is at `docs/sql/HR_AUDIT_MANUAL_APPLY.sql`.
-- **Not started yet:** Phase 1 (GL foundations), Reporting Extension save-to-file, Open Questions sign-off.
+- **Phase 1 Sprint 1.1 (GL schema + posting engine + TB RPC + feature flags):** ✅ **CODE READY**, awaiting manual apply in pactdb.
+- **Phase 1 Sprint 1.2 (sanctions + SoD + audit trail):** queued — starts as soon as Sprint 1.1 manual-applies clean.
 
 ---
 

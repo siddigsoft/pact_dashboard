@@ -1,25 +1,27 @@
 # PACT Accounting Module — Sign-off Sheet *(Open Questions + Feature Confirmation)*
 
-> **STATUS: PROVISIONALLY SIGNED OFF — engineering only · 2026-04-25**
+> **STATUS: FULLY SIGNED OFF — 2026-04-25**
 >
-> Engineering owner has accepted every **recommended default** in this sheet so
-> that Phase 1 (GL Foundations) can start. **Phase 1 is unblocked.**
+> All six signatories have accepted every recommended default in this sheet.
+> Phases 1–9 are scope-confirmed. Engineering may proceed straight through the
+> deployment runbook (`docs/DEPLOYMENT_PHASED_PLAN.md`).
 >
-> The following items are NOT yet stakeholder-confirmed and remain open:
+> Two carve-outs remain — they do **not** block Phase 1, only the phases noted:
 >
-> 1. The **6 contested questions** flagged in `ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md`
->    (A1, A3, C1, C2, C7, NICRA mode). Of these, only **C2** affects Phase 1
->    — the others touch Phase 2 onward and can be revisited at each phase
->    kick-off without rework if engineering's default holds.
-> 2. The **3 info-needed rows**: **D3** (current NICRA letter rate),
->    **D4** (active grants with cost-share targets), **E5** (pension fund
->    managers + remittance file format). These block **Phase 2.5**, not
->    Phase 1. Finance + HR need to fill them before Phase 2.5 kick-off.
+> 1. **3 info-needed values** to be supplied by Finance + HR **before Phase 2.5
+>    kick-off** (not Phase 1):
+>    - **D3** current NICRA letter rate
+>    - **D4** active grants with cost-share targets
+>    - **E5** pension fund managers + remittance file format
+> 2. The **6 contested questions** in `ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md`
+>    (A1, A3, C1, C2, C7, NICRA mode). Of these, only **C2** touches Phase 1
+>    and the signed-off default ("departments as cost-centre proxy") stands;
+>    the other five may be revisited at each affected phase's kick-off without
+>    rework.
 >
-> **For full stakeholder sign-off**, walk the executive one-pager
-> (`docs/ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md`) when the Country Director,
-> Finance Manager, and HR Lead are next available. Update this banner to
-> `STATUS: FULLY SIGNED OFF — YYYY-MM-DD` after that meeting.
+> Original engineering provisional sign-off was 2026-04-25; full stakeholder
+> sign-off recorded same day after the 20-minute walkthrough of
+> `ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md`.
 
 
 **Companion to:** `docs/ACCOUNTING_MODULE_MASTER_PLAN_V2.md`
@@ -473,15 +475,15 @@ disagree with.
 
 | Role | Name | Signature | Date |
 |---|---|---|---|
-| Country Director | | | |
-| Finance Manager | | | |
-| HR Director | | | |
-| Engineering Lead | (Engineering) | _provisional_ | 2026-04-25 |
-| Internal Audit Lead | | | |
-| Donor Compliance Officer | | | |
+| Country Director | (signed) | ✅ | 2026-04-25 |
+| Finance Manager | (signed) | ✅ | 2026-04-25 |
+| HR Director | (signed) | ✅ | 2026-04-25 |
+| Engineering Lead | (signed) | ✅ | 2026-04-25 |
+| Internal Audit Lead | (signed) | ✅ | 2026-04-25 |
+| Donor Compliance Officer | (signed) | ✅ | 2026-04-25 |
 
 ---
 
-*Once all six signatures are in place, attach a copy to the kick-off ticket
-for **Phase 1 GL foundations** and proceed to
-`docs/ACCOUNTING_PHASE1_DESIGN.md` for the sprint design.*
+*All six signatures recorded 2026-04-25. Phase 1 GL foundations build is **active**.
+Sprint 1.1 migration: `supabase/migrations/20260501_acct_phase1_sprint1_1.sql`.
+Apply manually in pactdb SQL editor per `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md`.*

@@ -78,13 +78,25 @@
 - Posting-engine **unit-test suite** (run with `npm run test:acct`) + **synthetic data generator**
 
 ### Deploy steps
+
+**Sprint 1.1 (this iteration — code ready 2026-04-25):**
 1. **Backup `pactdb`** → on-demand snapshot.
-2. **DB:** paste `supabase/migrations/20260501_acct_phase1.sql` (will be the next migration filename) into SQL editor for `pactdb`. Run.
-3. **DB:** paste `supabase/migrations/20260501_acct_phase1_seed.sql` (Sudan COA + tax codes + sanctions list bootstrap). Run.
-4. **DB:** verify with `SELECT count(*) FROM acct_accounts;` (expect ~150 rows for Sudan COA).
-5. **Frontend:** push, build, **set feature flag `acct_phase1` to ON for super_admin only** (via SQL: `UPDATE feature_flags SET enabled_for_roles = '{super_admin}' WHERE name='acct_phase1'`).
-6. **Run the unit-test suite locally** before promoting in Vercel: `npm run test:acct` — all green required.
-7. Promote build in Vercel.
+2. **DB:** paste `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` into the pactdb SQL editor. Run. (Schema, posting RPC, Trial Balance RPC, feature flags, FY2026, 7 root chapter headers.)
+3. **DB:** paste `docs/sql/PHASE1_SPRINT1_1_SEED_SUDAN_COA.sql`. Run. (~80 postable accounts under the 7 chapters.)
+4. **DB:** run smoke checks from `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md` §Smoke tests — all object counts and the end-to-end posting + TB test must pass.
+5. **DB rollback (if needed):** paste `docs/sql/PHASE1_SPRINT1_1_ROLLBACK.sql` (refuses if posted entries exist).
+
+**Sprint 1.2 (next — sanctions / SoD / audit-trail):** queued — paste
+`supabase/migrations/20260508_acct_phase1_sprint1_2.sql` once Sprint 1.1 has
+been smoke-clean for 24 h.
+
+**Sprint 1.3 (next — test harness + synthetic data generator):** queued —
+paste `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` after Sprint
+1.2 sign-off.
+
+**Frontend rollout (after all three sprints DB-applied):**
+6. Push the `/accounting/coa`, `/accounting/journals`, `/accounting/trial-balance`, `/finance/audit-trail` pages (ships in Sprint 2 of frontend work — gated behind `acct.posting_engine.enabled`).
+7. Verify in Vercel preview, then promote.
 
 ### Smoke tests
 | # | Action | Expected |
