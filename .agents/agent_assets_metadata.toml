@@ -42,3 +42,9 @@ id = "3syuMzCHrz0ESZ3y25vPK"
 uri = "file://docs/ACCOUNTING_PHASE1_DESIGN.md"
 type = "text"
 title = "Phase 1 Sprint Design Doc"
+
+[[outputs]]
+id = "3TGnZIdyTSmq4WhDE3ZS5"
+uri = "file://docs/PLANNING_INDEX.md"
+type = "text"
+title = "PACT Planning Master Index (all 7 docs in one file)"
