@@ -155,7 +155,11 @@ function computePayroll(cfg: SalaryConfig) {
   const pctD   = cfg.deductions.filter(d => d.type === 'percent').reduce((s, d) => s + gross * d.amount / 100, 0);
   const deductions = fixedD + pctD + statutorySum;
   const net = Math.max(0, gross - deductions);
-  return { base, allowTotal: fixedA + pctA, gross, dedTotal: deductions, net };
+  // H10: combinedDeductions is what gets persisted to payroll_run_items.deductions_snapshot
+  // — the bracket-by-bracket breakdown is the bridge from payroll → GL in Phase 1
+  // (per docs/ACCOUNTING_MODULE_MASTER_PLAN_V2.md §6 Phase 0 exit criteria).
+  const combinedDeductions: LineItem[] = [...cfg.deductions, ...statutoryLines];
+  return { base, allowTotal: fixedA + pctA, gross, dedTotal: deductions, net, statutoryLines, combinedDeductions };
 }
 
 // Hook used by PayrollAdmin to populate the module-scope brackets cache from
@@ -1146,7 +1150,7 @@ function PayrollBreakdownReport({ runs, employees }: { runs: PayrollRun[]; emplo
           net_salary: calc.net, task_rewards: 0, retainer_amount: 0,
           currency: emp.salary_config!.currency,
           allowances_snapshot: emp.salary_config!.allowances,
-          deductions_snapshot: emp.salary_config!.deductions,
+          deductions_snapshot: calc.combinedDeductions,
         };
       });
   }, [employees]);
@@ -2895,7 +2899,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
         net_salary: calc.net + rewards + hourlyPay, task_rewards: rewards, retainer_amount: 0,
         currency: emp.salary_config!.currency,
         allowances_snapshot: emp.salary_config!.allowances,
-        deductions_snapshot: emp.salary_config!.deductions,
+        deductions_snapshot: calc.combinedDeductions,
         adjustments: hourlyAdjustment,
       };
     }));
@@ -3718,7 +3722,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
           retainer_amount: 0,
           currency: emp.salary_config!.currency,
           allowances_snapshot: emp.salary_config!.allowances,
-          deductions_snapshot: emp.salary_config!.deductions,
+          deductions_snapshot: calc.combinedDeductions,
           adjustments,
         };
       }));

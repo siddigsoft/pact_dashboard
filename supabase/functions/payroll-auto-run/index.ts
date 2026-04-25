@@ -43,6 +43,20 @@ interface SalaryConfig {
   deductions: Array<{ name: string; type: 'fixed' | 'percent'; amount: number }>;
 }
 
+// H10: statutory bracket row (mirrors payroll_statutory_brackets schema).
+interface StatutoryBracket {
+  country: string;
+  type: 'pit' | 'social_employee' | 'social_employer' | 'zakat';
+  min_amount: number;
+  max_amount: number | null;
+  rate_percent: number;
+  fixed_amount: number;
+  effective_from?: string | null;
+  effective_to?: string | null;
+}
+
+interface DeductionLine { name: string; amount: number; type: 'fixed' | 'percent'; }
+
 interface Profile {
   id: string;
   full_name: string | null;
@@ -67,22 +81,72 @@ function periodLabel(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-// Compute salary components from config
-function computePayroll(cfg: SalaryConfig): {
+// H10: statutory deductions (PIT progressive + social-insurance employee + optional Zakat).
+// Mirrors src/pages/PayrollAdmin.tsx::computeStatutoryDeductions so payroll_run_items
+// produced by the cron carry the same bracket-by-bracket snapshot shape that powers
+// the Phase 1 GL bridge (per docs/ACCOUNTING_MODULE_MASTER_PLAN_V2.md §6 Phase 0).
+function computeStatutoryDeductions(
+  gross: number,
+  brackets: StatutoryBracket[],
+  country: string,
+  applyZakat: boolean,
+): DeductionLine[] {
+  if (!gross || gross <= 0) return []
+  const today = new Date().toISOString().slice(0, 10)
+  const active = brackets.filter(b =>
+    b.country === country
+    && (!b.effective_from || b.effective_from <= today)
+    && (!b.effective_to   || b.effective_to   >= today)
+  )
+
+  let pit = 0
+  active.filter(b => b.type === 'pit').sort((a, b) => a.min_amount - b.min_amount).forEach(b => {
+    if (gross > b.min_amount) {
+      const slice = Math.min(gross, b.max_amount ?? gross) - b.min_amount
+      pit += slice * b.rate_percent / 100 + b.fixed_amount
+    }
+  })
+
+  const social = active.filter(b => b.type === 'social_employee')
+    .reduce((s, b) => s + (gross * b.rate_percent / 100 + b.fixed_amount), 0)
+
+  const zakat = applyZakat ? Math.max(0, gross - pit - social) * 0.025 : 0
+
+  const lines: DeductionLine[] = []
+  if (pit    > 0) lines.push({ name: 'Income Tax (PIT)',     amount: Math.round(pit    * 100) / 100, type: 'fixed' })
+  if (social > 0) lines.push({ name: 'Social Insurance (NPF)', amount: Math.round(social * 100) / 100, type: 'fixed' })
+  if (zakat  > 0) lines.push({ name: 'Zakat',                amount: Math.round(zakat  * 100) / 100, type: 'fixed' })
+  return lines
+}
+
+// Compute salary components from config (H10: includes statutory deductions).
+function computePayroll(
+  cfg: SalaryConfig,
+  brackets: StatutoryBracket[],
+  country: string,
+  applyZakat: boolean,
+): {
   base: number; allowTotal: number; gross: number; dedTotal: number; net: number;
+  statutoryLines: DeductionLine[]; combinedDeductions: DeductionLine[];
 } {
   const base = Number(cfg.base_salary ?? 0)
   const allowances = cfg.allowances ?? []
-  const deductions = cfg.deductions ?? []
+  const manualDeductions = cfg.deductions ?? []
 
   const allowTotal = allowances.reduce((s, a) => {
     return s + (a.type === 'percent' ? (a.amount / 100) * base : a.amount)
   }, 0)
   const gross = base + allowTotal
-  const dedTotal = deductions.reduce((s, d) => {
+
+  const statutoryLines = computeStatutoryDeductions(gross, brackets, country, applyZakat)
+  const statutorySum = statutoryLines.reduce((s, l) => s + l.amount, 0)
+
+  const manualDed = manualDeductions.reduce((s, d) => {
     return s + (d.type === 'percent' ? (d.amount / 100) * gross : d.amount)
   }, 0)
-  return { base, allowTotal, gross, dedTotal, net: gross - dedTotal }
+  const dedTotal = manualDed + statutorySum
+  const combinedDeductions: DeductionLine[] = [...manualDeductions, ...statutoryLines]
+  return { base, allowTotal, gross, dedTotal, net: gross - dedTotal, statutoryLines, combinedDeductions }
 }
 
 serve(async (req) => {
@@ -267,8 +331,30 @@ serve(async (req) => {
     // 11. Build and insert run items (salary + retainer placeholder + task rewards + hourly pay)
     await supabase.from('payroll_run_items').delete().eq('run_id', runId)
 
+    // H10: load statutory brackets + Zakat opt-in once for the whole run, fall back to empty
+    // (no statutory deductions) on table absence — never block payroll.
+    const country = 'SD'
+    let brackets: StatutoryBracket[] = []
+    let applyZakat = false
+    try {
+      const { data: bRows } = await supabase
+        .from('payroll_statutory_brackets')
+        .select('*')
+        .eq('country', country)
+      brackets = (bRows ?? []) as StatutoryBracket[]
+      const { data: zCfg } = await supabase
+        .from('payroll_settings')
+        .select('setting_value')
+        .eq('setting_key', 'apply_zakat')
+        .maybeSingle()
+      applyZakat = Boolean((zCfg?.setting_value as { enabled?: boolean } | null)?.enabled)
+    } catch (e) {
+      console.warn('[payroll-auto-run] Could not load statutory brackets — proceeding with manual deductions only:', (e as Error).message)
+    }
+
     const items = configs.map(config => {
-      const { base, allowTotal, gross, dedTotal, net } = computePayroll(config)
+      const { base, allowTotal, gross, dedTotal, net, combinedDeductions } =
+        computePayroll(config, brackets, country, applyZakat)
       const userId = config.user_id
       const profile = profileMap.get(userId)
 
@@ -295,7 +381,7 @@ serve(async (req) => {
         retainer_amount: 0,
         currency: config.currency ?? 'SDG',
         allowances_snapshot: config.allowances,
-        deductions_snapshot: config.deductions,
+        deductions_snapshot: combinedDeductions,
         adjustments,
       }
     })
