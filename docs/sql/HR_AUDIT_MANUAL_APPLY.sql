@@ -1,20 +1,23 @@
 -- ============================================================================
--- PACT HR Audit — Manual SQL bundle
+-- PACT HR Audit — Manual SQL bundle  (rev 2 · 2026-04-25)
 -- ----------------------------------------------------------------------------
 -- Paste this whole file into the Supabase SQL editor and click "Run".
 -- Safe to re-run: every statement is idempotent (CREATE … IF NOT EXISTS,
 -- DROP POLICY IF EXISTS … CREATE POLICY, CREATE OR REPLACE FUNCTION).
 --
--- Requires these tables to already exist:
---   profiles, employee_salary_config, salary_increments, leave_entitlements,
---   leave_requests, performance_reviews, hierarchy_audit_log, audit_logs,
---   notifications.
+-- REV 2 — 2026-04-25
+--   · calculate_payroll_statutory now uses scalar  v := (SELECT …)  assignment
+--     instead of  SELECT … INTO v  …  to avoid Postgres' SELECT-INTO parser
+--     ambiguity that produced  ERROR 42P01  relation "v_social_employee"
+--     does not exist  on some Supabase project parsers.
+--   · STABLE removed from calculate_payroll_statutory (defensive — also avoids
+--     the same validator path).
 --
 -- This bundle = supabase/migrations/20260424_hr_audit_complete.sql
 --             + supabase/migrations/20260425_hr_audit_remediation.sql
 --
 -- Status:
---   ▸ pactdb (PACT Command Center production)  — already applied 2026-04-25
+--   ▸ pactdb (PACT Command Center production)  — applied 2026-04-25
 --   ▸ Run only on databases that still need it.
 --
 -- DO NOT run on the PACT-SuperApp (agriculture) database — that app does
@@ -209,7 +212,6 @@ WHERE NOT EXISTS (SELECT 1 FROM public.payroll_statutory_brackets WHERE country=
 CREATE OR REPLACE FUNCTION public.calculate_payroll_statutory(p_gross numeric, p_country text DEFAULT 'SD', p_apply_zakat boolean DEFAULT false)
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -240,16 +242,22 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Flat rate social insurance
-  SELECT COALESCE(SUM(p_gross * rate_percent / 100.0 + fixed_amount),0) INTO v_social_employee
-  FROM public.payroll_statutory_brackets
-  WHERE country = p_country AND type = 'social_employee'
-    AND effective_from <= v_today AND (effective_to IS NULL OR effective_to >= v_today);
+  -- Flat rate social insurance (scalar assignment to avoid SELECT INTO parser ambiguity)
+  v_social_employee := COALESCE((
+    SELECT SUM(p_gross * rate_percent / 100.0 + fixed_amount)
+    FROM public.payroll_statutory_brackets
+    WHERE country = p_country AND type = 'social_employee'
+      AND effective_from <= v_today
+      AND (effective_to IS NULL OR effective_to >= v_today)
+  ), 0);
 
-  SELECT COALESCE(SUM(p_gross * rate_percent / 100.0 + fixed_amount),0) INTO v_social_employer
-  FROM public.payroll_statutory_brackets
-  WHERE country = p_country AND type = 'social_employer'
-    AND effective_from <= v_today AND (effective_to IS NULL OR effective_to >= v_today);
+  v_social_employer := COALESCE((
+    SELECT SUM(p_gross * rate_percent / 100.0 + fixed_amount)
+    FROM public.payroll_statutory_brackets
+    WHERE country = p_country AND type = 'social_employer'
+      AND effective_from <= v_today
+      AND (effective_to IS NULL OR effective_to >= v_today)
+  ), 0);
 
   -- Optional Zakat (2.5% of net-of-statutory salary)
   IF p_apply_zakat THEN
