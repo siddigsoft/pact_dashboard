@@ -208,6 +208,13 @@ export async function getTaskDependencies(
 
 /**
  * Get blocking tasks (that must be completed before this task can complete)
+ *
+ * IMPORTANT: this MUST NOT use a PostgREST embed of the form
+ * `personal_tasks:parent_task_id(...)`. `task_dependencies` has TWO foreign
+ * keys to `personal_tasks` (`parent_task_id` AND `dependent_task_id`), so
+ * PostgREST returns "more than one relationship was found" — which then
+ * propagates as `error` and trips the fail-closed dep-gate in TaskDetail
+ * ("Couldn't verify dependencies"). We do two cheap queries instead.
  */
 export async function getBlockingTasks(
   taskId: string
@@ -216,29 +223,39 @@ export async function getBlockingTasks(
   error: string | null;
 }> {
   try {
-    const { data, error } = await supabase
+    const { data: deps, error: depsError } = await supabase
       .from('task_dependencies')
-      .select(
-        `
-        id,
-        dependency_type,
-        lead_time_days,
-        parent_task_id,
-        personal_tasks:parent_task_id(id, title, status, due_date, priority)
-      `
-      )
+      .select('id, dependency_type, lead_time_days, parent_task_id')
       .eq('dependent_task_id', taskId)
       .in('dependency_type', ['blocks', 'blocked_by']);
 
-    if (error) return { blockingTasks: [], error: error.message };
+    if (depsError) return { blockingTasks: [], error: depsError.message };
+    if (!deps || deps.length === 0) return { blockingTasks: [], error: null };
 
-    const blockingTasks = (data || [])
-      .filter((d: any) => d.personal_tasks)
-      .map((d: any) => ({
-        ...d.personal_tasks,
-        dependencyId: d.id,
-        leadTimeDays: d.lead_time_days,
-      }));
+    const parentIds = Array.from(
+      new Set(deps.map((d: any) => d.parent_task_id).filter(Boolean))
+    );
+    if (parentIds.length === 0) return { blockingTasks: [], error: null };
+
+    const { data: parents, error: parentsError } = await supabase
+      .from('personal_tasks')
+      .select('id, title, status, due_date, priority')
+      .in('id', parentIds);
+
+    if (parentsError) return { blockingTasks: [], error: parentsError.message };
+
+    const parentMap = new Map((parents || []).map((p: any) => [p.id, p]));
+    const blockingTasks = deps
+      .map((d: any) => {
+        const p = parentMap.get(d.parent_task_id);
+        if (!p) return null; // parent invisible to RLS — skip silently
+        return {
+          ...p,
+          dependencyId: d.id,
+          leadTimeDays: d.lead_time_days,
+        };
+      })
+      .filter(Boolean);
 
     return { blockingTasks, error: null };
   } catch (err) {
@@ -249,6 +266,10 @@ export async function getBlockingTasks(
 
 /**
  * Get dependent tasks (that depend on this task)
+ *
+ * Same FK-ambiguity caveat as `getBlockingTasks` — do NOT reintroduce a
+ * `personal_tasks:dependent_task_id(...)` embed, it will fail with
+ * "more than one relationship was found".
  */
 export async function getDependentTasks(
   taskId: string
@@ -257,29 +278,39 @@ export async function getDependentTasks(
   error: string | null;
 }> {
   try {
-    const { data, error } = await supabase
+    const { data: deps, error: depsError } = await supabase
       .from('task_dependencies')
-      .select(
-        `
-        id,
-        dependency_type,
-        lead_time_days,
-        dependent_task_id,
-        personal_tasks:dependent_task_id(id, title, status, due_date, priority)
-      `
-      )
+      .select('id, dependency_type, lead_time_days, dependent_task_id')
       .eq('parent_task_id', taskId)
       .in('dependency_type', ['blocks', 'blocked_by']);
 
-    if (error) return { dependentTasks: [], error: error.message };
+    if (depsError) return { dependentTasks: [], error: depsError.message };
+    if (!deps || deps.length === 0) return { dependentTasks: [], error: null };
 
-    const dependentTasks = (data || [])
-      .filter((d: any) => d.personal_tasks)
-      .map((d: any) => ({
-        ...d.personal_tasks,
-        dependencyId: d.id,
-        leadTimeDays: d.lead_time_days,
-      }));
+    const childIds = Array.from(
+      new Set(deps.map((d: any) => d.dependent_task_id).filter(Boolean))
+    );
+    if (childIds.length === 0) return { dependentTasks: [], error: null };
+
+    const { data: children, error: childrenError } = await supabase
+      .from('personal_tasks')
+      .select('id, title, status, due_date, priority')
+      .in('id', childIds);
+
+    if (childrenError) return { dependentTasks: [], error: childrenError.message };
+
+    const childMap = new Map((children || []).map((c: any) => [c.id, c]));
+    const dependentTasks = deps
+      .map((d: any) => {
+        const c = childMap.get(d.dependent_task_id);
+        if (!c) return null;
+        return {
+          ...c,
+          dependencyId: d.id,
+          leadTimeDays: d.lead_time_days,
+        };
+      })
+      .filter(Boolean);
 
     return { dependentTasks, error: null };
   } catch (err) {
@@ -388,13 +419,15 @@ export async function buildDependencyGraph(
   error: string | null;
 }> {
   try {
-    let query = supabase.from('task_dependencies').select(
-      `
-      *,
-      parent_tasks:parent_task_id(id, title, priority, status, due_date),
-      dependent_tasks:dependent_task_id(id, title, priority, status, due_date)
-    `
-    );
+    // Step 1: pull dependency edges WITHOUT any PostgREST embed.
+    // Same FK-ambiguity hazard as getBlockingTasks/getDependentTasks: an embed
+    // like `parent_tasks:parent_task_id(...)` collapses to an alias and leaves
+    // the FK ambiguous (two FKs from this table point at personal_tasks).
+    let query = supabase
+      .from('task_dependencies')
+      .select(
+        'id, dependency_type, lead_time_days, parent_task_id, dependent_task_id, is_critical, description, created_by, created_at'
+      );
 
     if (taskIds && taskIds.length > 0) {
       query = query.or(
@@ -402,25 +435,44 @@ export async function buildDependencyGraph(
       );
     }
 
-    const { data, error } = await query;
+    const { data: deps, error: depsError } = await query;
+    if (depsError) return { graph: null, error: depsError.message };
 
-    if (error) return { graph: null, error: error.message };
+    const allTaskIds = Array.from(
+      new Set(
+        (deps || [])
+          .flatMap((d: any) => [d.parent_task_id, d.dependent_task_id])
+          .filter(Boolean)
+      )
+    );
+
+    // Step 2: hydrate task metadata in a single follow-up query.
+    let taskMetaMap = new Map<string, any>();
+    if (allTaskIds.length > 0) {
+      const { data: tasks, error: tasksError } = await supabase
+        .from('personal_tasks')
+        .select('id, title, priority, status, due_date')
+        .in('id', allTaskIds);
+      if (tasksError) return { graph: null, error: tasksError.message };
+      taskMetaMap = new Map((tasks || []).map((t: any) => [t.id, t]));
+    }
 
     const nodes = new Map<string, DependencyNode>();
     const edges: Array<{ from: string; to: string; type: string }> = [];
 
-    // Build nodes and edges
-    (data || []).forEach((dep: any) => {
+    (deps || []).forEach((dep: any) => {
       const parentId = dep.parent_task_id;
       const dependentId = dep.dependent_task_id;
+      const parentMeta = taskMetaMap.get(parentId);
+      const dependentMeta = taskMetaMap.get(dependentId);
 
       if (!nodes.has(parentId)) {
         nodes.set(parentId, {
           taskId: parentId,
-          taskName: dep.parent_tasks?.title,
-          priority: dep.parent_tasks?.priority,
-          status: dep.parent_tasks?.status,
-          dueDate: dep.parent_tasks?.due_date,
+          taskName: parentMeta?.title,
+          priority: parentMeta?.priority,
+          status: parentMeta?.status,
+          dueDate: parentMeta?.due_date,
           dependencies: [],
           dependents: [],
           isBlocking: true,
@@ -431,10 +483,10 @@ export async function buildDependencyGraph(
       if (!nodes.has(dependentId)) {
         nodes.set(dependentId, {
           taskId: dependentId,
-          taskName: dep.dependent_tasks?.title,
-          priority: dep.dependent_tasks?.priority,
-          status: dep.dependent_tasks?.status,
-          dueDate: dep.dependent_tasks?.due_date,
+          taskName: dependentMeta?.title,
+          priority: dependentMeta?.priority,
+          status: dependentMeta?.status,
+          dueDate: dependentMeta?.due_date,
           dependencies: [],
           dependents: [],
           isBlocking: false,
@@ -442,10 +494,8 @@ export async function buildDependencyGraph(
         });
       }
 
-      // Update relationships
       const parentNode = nodes.get(parentId)!;
       const dependentNode = nodes.get(dependentId)!;
-
       parentNode.dependents.push(dependentId);
       dependentNode.dependencies.push(parentId);
 
