@@ -18,3 +18,9 @@ id = "rLauCTgASTmvzkKy-rhfS"
 uri = "file://docs/ACCOUNTING_REPORTING_EXTENSION.md"
 type = "text"
 title = "Accounting — Reporting, Charting & Projection Extension"
+
+[[outputs]]
+id = "kpVRnzfW7aGMjCTlkVH_i"
+uri = "file://docs/BLOCK_EDITOR_PLAN.md"
+type = "text"
+title = "PACT Notion-Style Block Editor — Saved Plan"
