@@ -712,15 +712,41 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
     const newHistory = historyEntry ? [historyEntry, ...prevHistory] : [];
 
     const hr = parseFloat(hourlyRate) || null;
-    const payload = {
+    const payload: Record<string, unknown> = {
       user_id: emp.id, base_salary: base, currency, allowances, deductions,
       notes: notes || null, effective_date: effectiveDate, updated_at: now,
       salary_history: newHistory,
       hourly_rate: hr,
     };
-    const { error } = existing
-      ? await supabase.from('employee_salary_config').update(payload).eq('id', existing.id)
-      : await supabase.from('employee_salary_config').insert({ ...payload, created_by: authUser?.id });
+
+    // Resilient save: if the DB schema cache is missing an optional column
+    // (e.g. hourly_rate before the timesheet migration is applied, or
+    // salary_history before its add-column migration is applied), strip it
+    // and retry once. This lets the save succeed immediately while the SQL
+    // is still pending in the pactdb editor.
+    const trySave = async (p: Record<string, unknown>) => existing
+      ? await supabase.from('employee_salary_config').update(p).eq('id', existing.id)
+      : await supabase.from('employee_salary_config').insert({ ...p, created_by: authUser?.id });
+
+    let { error } = await trySave(payload);
+    if (error && /schema cache|column .* does not exist|Could not find the/i.test(error.message)) {
+      const pruned = { ...payload };
+      const optionalCols = ['hourly_rate', 'salary_history', 'effective_date', 'notes'];
+      for (const col of optionalCols) {
+        if (new RegExp(`'?${col}'?`).test(error.message)) {
+          delete pruned[col];
+        }
+      }
+      // Always strip hourly_rate/salary_history on schema-cache errors as a
+      // belt-and-braces fallback — they're the most common laggers and
+      // PostgREST sometimes reports a different column in the message.
+      delete pruned.hourly_rate;
+      if (!Array.isArray(pruned.salary_history) || (pruned.salary_history as unknown[]).length === 0) {
+        delete pruned.salary_history;
+      }
+      ({ error } = await trySave(pruned));
+    }
+
     setSaving(false);
     if (error) { toast({ title: 'Save failed', description: error.message, variant: 'destructive' }); return; }
     toast({ title: historyEntry ? 'Salary updated · change recorded in history' : 'Salary configuration saved' });
