@@ -1,42 +1,52 @@
 -- ============================================================================
--- PACT HR Audit — Hotfix patch  (2026-04-25)
+-- PACT HR Audit — Hotfix patch  (rev 2 · 2026-04-25)
 -- ----------------------------------------------------------------------------
--- Symptom you hit:
+-- Symptoms this patch resolves (one cause, several variables):
 --   ERROR 42P01:  relation "v_social_employee" does not exist
+--   ERROR 42P01:  relation "v_social_employer" does not exist
+--   ERROR 42P01:  relation "v_caller_role"     does not exist
+--   ERROR 42P01:  relation "v_opening"         does not exist
+--   ERROR 42P01:  relation "v_count"           does not exist
+--   ERROR 42P01:  relation "v_inserted"        does not exist
 --
 -- Root cause:
---   The original calculate_payroll_statutory() used
---     SELECT COALESCE(SUM(...),0) INTO v_social_employee FROM ...;
---   Some Supabase project parsers misread the  INTO v_social_employee  bit
---   as the SQL-standard  SELECT … INTO new_table  (CTAS-style) instead of
---   the plpgsql  INTO variable  form, then complained the relation didn't
---   exist. Same problem for v_social_employer.
+--   The original functions used  SELECT … INTO v_var FROM …  Some Supabase
+--   project parsers misread that as the SQL-standard SELECT-INTO (CTAS) and
+--   went looking for a table named v_var.
 --
--- Fix:
---   Drops the old function (if any), drops any stray relations the bad parse
---   may have created, then recreates the function using unambiguous scalar
---   assignment   v := (SELECT … FROM …)   form. No data loss — the function
---   is pure compute, and the brackets table is untouched.
+-- Fix (no data change):
+--   Drop and recreate the affected functions using either
+--     · scalar       v := (SELECT … FROM …)              assignment, or
+--     · GET DIAGNOSTICS v = ROW_COUNT     after an INSERT.
+--   No tables are touched.
 --
 -- How to use:
---   1. Open the Supabase SQL editor for  pactdb  (or whichever DB hit the
---      error).
+--   1. Open the Supabase SQL editor for  pactdb  (or whichever DB hit it).
 --   2. Paste this whole file.  Click Run.
---   3. Then re-run  docs/sql/HR_AUDIT_MANUAL_APPLY.sql  if you want to make
---      sure everything else from the bundle is in place. Both files are
---      idempotent.
+--   3. (Optional) Re-paste docs/sql/HR_AUDIT_MANUAL_APPLY.sql to confirm
+--      everything else is in place — it's idempotent.
 -- ============================================================================
 
--- 1. Clean up any stray relations a previous failed run might have produced.
+-- 0. Clean up any stray relations that an earlier failed run might have made.
 DROP TABLE IF EXISTS public.v_social_employee;
 DROP TABLE IF EXISTS public.v_social_employer;
+DROP TABLE IF EXISTS public.v_caller_role;
+DROP TABLE IF EXISTS public.v_opening;
+DROP TABLE IF EXISTS public.v_count;
+DROP TABLE IF EXISTS public.v_inserted;
 DROP VIEW  IF EXISTS public.v_social_employee;
 DROP VIEW  IF EXISTS public.v_social_employer;
+DROP VIEW  IF EXISTS public.v_caller_role;
+DROP VIEW  IF EXISTS public.v_opening;
+DROP VIEW  IF EXISTS public.v_count;
+DROP VIEW  IF EXISTS public.v_inserted;
 
--- 2. Drop the old function so the recreate is clean (signature must match).
+
+-- ============================================================================
+-- 1. calculate_payroll_statutory — H10 (PIT, social insurance, optional Zakat)
+-- ============================================================================
 DROP FUNCTION IF EXISTS public.calculate_payroll_statutory(numeric, text, boolean);
 
--- 3. Recreate with safe scalar assignment.
 CREATE OR REPLACE FUNCTION public.calculate_payroll_statutory(
   p_gross        numeric,
   p_country      text DEFAULT 'SD',
@@ -63,10 +73,8 @@ BEGIN
     );
   END IF;
 
-  -- Progressive PIT
   FOR v_bracket IN
-    SELECT *
-    FROM public.payroll_statutory_brackets
+    SELECT * FROM public.payroll_statutory_brackets
     WHERE country = p_country AND type = 'pit'
       AND effective_from <= v_today
       AND (effective_to IS NULL OR effective_to >= v_today)
@@ -81,7 +89,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Flat-rate social insurance — scalar assignment (no SELECT INTO)
   v_social_employee := COALESCE((
     SELECT SUM(p_gross * rate_percent / 100.0 + fixed_amount)
     FROM public.payroll_statutory_brackets
@@ -98,16 +105,15 @@ BEGIN
       AND (effective_to IS NULL OR effective_to >= v_today)
   ), 0);
 
-  -- Optional Zakat (2.5% of net-of-statutory salary)
   IF p_apply_zakat THEN
     v_zakat := GREATEST(0, p_gross - v_pit - v_social_employee) * 0.025;
   END IF;
 
   RETURN jsonb_build_object(
-    'pit',             ROUND(v_pit,             2),
+    'pit',             ROUND(v_pit, 2),
     'social_employee', ROUND(v_social_employee, 2),
     'social_employer', ROUND(v_social_employer, 2),
-    'zakat',           ROUND(v_zakat,           2),
+    'zakat',           ROUND(v_zakat, 2),
     'total_employee',  ROUND(v_pit + v_social_employee + v_zakat, 2),
     'total_employer',  ROUND(v_social_employer, 2),
     'country',         p_country
@@ -121,6 +127,115 @@ GRANT EXECUTE ON FUNCTION public.calculate_payroll_statutory(numeric, text, bool
 COMMENT ON FUNCTION public.calculate_payroll_statutory(numeric, text, boolean) IS
   'H10 (rev2): PIT (progressive) + social-insurance (employee+employer) + optional Zakat. Uses scalar assignment to avoid SELECT-INTO parser ambiguity.';
 
--- 4. Quick smoke test — should return non-null jsonb with all keys.
-SELECT public.calculate_payroll_statutory(50000, 'SD', false)  AS without_zakat,
-       public.calculate_payroll_statutory(50000, 'SD', true)   AS with_zakat;
+
+-- ============================================================================
+-- 2. accrue_eosb_for_period — H8 (race-safe monthly EOSB accrual)
+-- ============================================================================
+DROP FUNCTION IF EXISTS public.accrue_eosb_for_period(text);
+
+CREATE OR REPLACE FUNCTION public.accrue_eosb_for_period(p_period text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_processed     int := 0;
+  v_skipped       int := 0;
+  v_emp           record;
+  v_opening       numeric;
+  v_accrual       numeric;
+  v_caller_role   text;
+  v_inserted_rows int;
+BEGIN
+  v_caller_role := (SELECT role FROM public.profiles WHERE id = auth.uid());
+  IF v_caller_role IS NULL OR lower(v_caller_role) NOT IN ('super_admin','superadmin','admin','finance','hr') THEN
+    RAISE EXCEPTION 'Unauthorized: only HR / finance / admin may accrue EOSB' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_period !~ '^[0-9]{4}-[0-9]{2}$' THEN
+    RAISE EXCEPTION 'period must be YYYY-MM (got %)', p_period;
+  END IF;
+
+  FOR v_emp IN
+    SELECT p.id AS user_id,
+           p.contract_start_date,
+           esc.base_salary,
+           COALESCE(esc.currency, 'SDG') AS currency
+    FROM public.profiles p
+    LEFT JOIN public.employee_salary_config esc ON esc.user_id = p.id
+    WHERE p.status = 'active'
+      AND COALESCE(esc.base_salary, 0) > 0
+      AND p.contract_start_date IS NOT NULL
+  LOOP
+    v_opening := COALESCE((
+      SELECT closing_balance FROM public.eosb_accruals
+      WHERE user_id = v_emp.user_id
+      ORDER BY period DESC
+      LIMIT 1
+    ), 0);
+    v_accrual := ROUND(v_emp.base_salary / 12.0, 2);
+
+    INSERT INTO public.eosb_accruals
+      (user_id, period, opening_balance, accrued_amount, closing_balance,
+       base_salary, currency, created_by)
+    VALUES
+      (v_emp.user_id, p_period, v_opening, v_accrual, v_opening + v_accrual,
+       v_emp.base_salary, v_emp.currency, auth.uid())
+    ON CONFLICT (user_id, period) DO NOTHING;
+
+    GET DIAGNOSTICS v_inserted_rows = ROW_COUNT;
+
+    IF v_inserted_rows > 0 THEN
+      v_processed := v_processed + 1;
+    ELSE
+      v_skipped := v_skipped + 1;
+    END IF;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'period',    p_period,
+    'processed', v_processed,
+    'skipped',   v_skipped,
+    'status',    'ok'
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.accrue_eosb_for_period(text) TO authenticated;
+
+COMMENT ON FUNCTION public.accrue_eosb_for_period(text) IS
+  'H8 (rev2 race-safe): one EOSB row per active employee per period. Idempotent via ON CONFLICT (user_id, period). Uses GET DIAGNOSTICS instead of SELECT-INTO.';
+
+
+-- ============================================================================
+-- 3. next_expense_claim_number — sequential EXP-YYYY-NNNNN id generator
+-- ============================================================================
+DROP FUNCTION IF EXISTS public.next_expense_claim_number();
+
+CREATE OR REPLACE FUNCTION public.next_expense_claim_number()
+RETURNS text
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_year  text := to_char(now(), 'YYYY');
+  v_count int;
+BEGIN
+  v_count := (
+    SELECT COUNT(*) + 1 FROM public.expense_claims
+    WHERE claim_number LIKE 'EXP-' || v_year || '-%'
+  );
+  RETURN 'EXP-' || v_year || '-' || lpad(v_count::text, 5, '0');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.next_expense_claim_number() TO authenticated;
+
+
+-- ============================================================================
+-- 4. Smoke tests — should each return a sensible result, not an error
+-- ============================================================================
+SELECT public.calculate_payroll_statutory(50000, 'SD', false) AS without_zakat,
+       public.calculate_payroll_statutory(50000, 'SD', true)  AS with_zakat;
+
+SELECT public.next_expense_claim_number() AS next_claim_no;

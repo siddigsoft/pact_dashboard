@@ -1,17 +1,18 @@
 -- ============================================================================
--- PACT HR Audit — Manual SQL bundle  (rev 2 · 2026-04-25)
+-- PACT HR Audit — Manual SQL bundle  (rev 3 · 2026-04-25)
 -- ----------------------------------------------------------------------------
 -- Paste this whole file into the Supabase SQL editor and click "Run".
 -- Safe to re-run: every statement is idempotent (CREATE … IF NOT EXISTS,
 -- DROP POLICY IF EXISTS … CREATE POLICY, CREATE OR REPLACE FUNCTION).
 --
--- REV 2 — 2026-04-25
---   · calculate_payroll_statutory now uses scalar  v := (SELECT …)  assignment
---     instead of  SELECT … INTO v  …  to avoid Postgres' SELECT-INTO parser
---     ambiguity that produced  ERROR 42P01  relation "v_social_employee"
---     does not exist  on some Supabase project parsers.
---   · STABLE removed from calculate_payroll_statutory (defensive — also avoids
---     the same validator path).
+-- REV 3 — 2026-04-25
+--   Eliminated every  SELECT … INTO v_var FROM …  pattern across both
+--   migrations. Some Supabase project parsers misread that form as the
+--   SQL-standard SELECT-INTO (CTAS) and complained the local variable
+--   "did not exist as a relation". All such sites now use either:
+--     · scalar  v := (SELECT … FROM …)  assignment, or
+--     · GET DIAGNOSTICS v = ROW_COUNT  after an INSERT.
+--   STABLE was also removed from calculate_payroll_statutory defensively.
 --
 -- This bundle = supabase/migrations/20260424_hr_audit_complete.sql
 --             + supabase/migrations/20260425_hr_audit_remediation.sql
@@ -326,7 +327,7 @@ DECLARE
   v_accrual   numeric;
   v_caller_role text;
 BEGIN
-  SELECT role INTO v_caller_role FROM public.profiles WHERE id = auth.uid();
+  v_caller_role := (SELECT role FROM public.profiles WHERE id = auth.uid());
   IF v_caller_role IS NULL OR lower(v_caller_role) NOT IN ('super_admin','superadmin','admin','finance','hr') THEN
     RAISE EXCEPTION 'Unauthorized: only HR / finance / admin may accrue EOSB' USING ERRCODE = '42501';
   END IF;
@@ -348,9 +349,11 @@ BEGIN
       v_skipped := v_skipped + 1;
       CONTINUE;
     END IF;
-    SELECT COALESCE(closing_balance,0) INTO v_opening
-    FROM public.eosb_accruals WHERE user_id = v_emp.user_id ORDER BY period DESC LIMIT 1;
-    v_opening := COALESCE(v_opening, 0);
+    v_opening := COALESCE((
+      SELECT closing_balance FROM public.eosb_accruals
+      WHERE user_id = v_emp.user_id
+      ORDER BY period DESC LIMIT 1
+    ), 0);
     v_accrual := ROUND(v_emp.base_salary / 12.0, 2);
 
     INSERT INTO public.eosb_accruals (user_id, period, opening_balance, accrued_amount, closing_balance, base_salary, currency, created_by)
@@ -609,8 +612,10 @@ DECLARE
   v_year text := to_char(now(),'YYYY');
   v_count int;
 BEGIN
-  SELECT COUNT(*)+1 INTO v_count FROM public.expense_claims
-   WHERE claim_number LIKE 'EXP-' || v_year || '-%';
+  v_count := (
+    SELECT COUNT(*) + 1 FROM public.expense_claims
+    WHERE claim_number LIKE 'EXP-' || v_year || '-%'
+  );
   RETURN 'EXP-' || v_year || '-' || lpad(v_count::text, 5, '0');
 END;
 $$;
@@ -711,15 +716,15 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_processed   int := 0;
-  v_skipped     int := 0;
-  v_emp         record;
-  v_opening     numeric;
-  v_accrual     numeric;
-  v_caller_role text;
-  v_inserted    boolean;
+  v_processed     int := 0;
+  v_skipped       int := 0;
+  v_emp           record;
+  v_opening       numeric;
+  v_accrual       numeric;
+  v_caller_role   text;
+  v_inserted_rows int;
 BEGIN
-  SELECT role INTO v_caller_role FROM public.profiles WHERE id = auth.uid();
+  v_caller_role := (SELECT role FROM public.profiles WHERE id = auth.uid());
   IF v_caller_role IS NULL OR lower(v_caller_role) NOT IN ('super_admin','superadmin','admin','finance','hr') THEN
     RAISE EXCEPTION 'Unauthorized: only HR / finance / admin may accrue EOSB' USING ERRCODE = '42501';
   END IF;
@@ -736,28 +741,27 @@ BEGIN
       AND COALESCE(esc.base_salary, 0) > 0
       AND p.contract_start_date IS NOT NULL
   LOOP
-    SELECT COALESCE(closing_balance, 0) INTO v_opening
-    FROM public.eosb_accruals
-    WHERE user_id = v_emp.user_id
-    ORDER BY period DESC
-    LIMIT 1;
-    v_opening := COALESCE(v_opening, 0);
+    v_opening := COALESCE((
+      SELECT closing_balance FROM public.eosb_accruals
+      WHERE user_id = v_emp.user_id
+      ORDER BY period DESC
+      LIMIT 1
+    ), 0);
     v_accrual := ROUND(v_emp.base_salary / 12.0, 2);
 
     -- Race-safe insert: relies on UNIQUE (user_id, period) from 20260424 migration.
-    -- ON CONFLICT DO NOTHING returns no rows; we use a returning-clause check to
-    -- distinguish processed vs skipped without a separate SELECT.
-    WITH ins AS (
-      INSERT INTO public.eosb_accruals
-        (user_id, period, opening_balance, accrued_amount, closing_balance, base_salary, currency, created_by)
-      VALUES
-        (v_emp.user_id, p_period, v_opening, v_accrual, v_opening + v_accrual, v_emp.base_salary, v_emp.currency, auth.uid())
-      ON CONFLICT (user_id, period) DO NOTHING
-      RETURNING 1
-    )
-    SELECT EXISTS(SELECT 1 FROM ins) INTO v_inserted;
+    -- ON CONFLICT DO NOTHING leaves ROW_COUNT at 0 when the row already exists,
+    -- so GET DIAGNOSTICS distinguishes processed vs skipped without any
+    -- SELECT-INTO syntax (which trips some Supabase parsers).
+    INSERT INTO public.eosb_accruals
+      (user_id, period, opening_balance, accrued_amount, closing_balance, base_salary, currency, created_by)
+    VALUES
+      (v_emp.user_id, p_period, v_opening, v_accrual, v_opening + v_accrual, v_emp.base_salary, v_emp.currency, auth.uid())
+    ON CONFLICT (user_id, period) DO NOTHING;
 
-    IF v_inserted THEN
+    GET DIAGNOSTICS v_inserted_rows = ROW_COUNT;
+
+    IF v_inserted_rows > 0 THEN
       v_processed := v_processed + 1;
     ELSE
       v_skipped := v_skipped + 1;

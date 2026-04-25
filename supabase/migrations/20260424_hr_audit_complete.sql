@@ -295,7 +295,7 @@ DECLARE
   v_accrual   numeric;
   v_caller_role text;
 BEGIN
-  SELECT role INTO v_caller_role FROM public.profiles WHERE id = auth.uid();
+  v_caller_role := (SELECT role FROM public.profiles WHERE id = auth.uid());
   IF v_caller_role IS NULL OR lower(v_caller_role) NOT IN ('super_admin','superadmin','admin','finance','hr') THEN
     RAISE EXCEPTION 'Unauthorized: only HR / finance / admin may accrue EOSB' USING ERRCODE = '42501';
   END IF;
@@ -317,9 +317,11 @@ BEGIN
       v_skipped := v_skipped + 1;
       CONTINUE;
     END IF;
-    SELECT COALESCE(closing_balance,0) INTO v_opening
-    FROM public.eosb_accruals WHERE user_id = v_emp.user_id ORDER BY period DESC LIMIT 1;
-    v_opening := COALESCE(v_opening, 0);
+    v_opening := COALESCE((
+      SELECT closing_balance FROM public.eosb_accruals
+      WHERE user_id = v_emp.user_id
+      ORDER BY period DESC LIMIT 1
+    ), 0);
     v_accrual := ROUND(v_emp.base_salary / 12.0, 2);
 
     INSERT INTO public.eosb_accruals (user_id, period, opening_balance, accrued_amount, closing_balance, base_salary, currency, created_by)
@@ -578,8 +580,10 @@ DECLARE
   v_year text := to_char(now(),'YYYY');
   v_count int;
 BEGIN
-  SELECT COUNT(*)+1 INTO v_count FROM public.expense_claims
-   WHERE claim_number LIKE 'EXP-' || v_year || '-%';
+  v_count := (
+    SELECT COUNT(*) + 1 FROM public.expense_claims
+    WHERE claim_number LIKE 'EXP-' || v_year || '-%'
+  );
   RETURN 'EXP-' || v_year || '-' || lpad(v_count::text, 5, '0');
 END;
 $$;

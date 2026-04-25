@@ -57,15 +57,15 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_processed   int := 0;
-  v_skipped     int := 0;
-  v_emp         record;
-  v_opening     numeric;
-  v_accrual     numeric;
-  v_caller_role text;
-  v_inserted    boolean;
+  v_processed     int := 0;
+  v_skipped       int := 0;
+  v_emp           record;
+  v_opening       numeric;
+  v_accrual       numeric;
+  v_caller_role   text;
+  v_inserted_rows int;
 BEGIN
-  SELECT role INTO v_caller_role FROM public.profiles WHERE id = auth.uid();
+  v_caller_role := (SELECT role FROM public.profiles WHERE id = auth.uid());
   IF v_caller_role IS NULL OR lower(v_caller_role) NOT IN ('super_admin','superadmin','admin','finance','hr') THEN
     RAISE EXCEPTION 'Unauthorized: only HR / finance / admin may accrue EOSB' USING ERRCODE = '42501';
   END IF;
@@ -82,28 +82,27 @@ BEGIN
       AND COALESCE(esc.base_salary, 0) > 0
       AND p.contract_start_date IS NOT NULL
   LOOP
-    SELECT COALESCE(closing_balance, 0) INTO v_opening
-    FROM public.eosb_accruals
-    WHERE user_id = v_emp.user_id
-    ORDER BY period DESC
-    LIMIT 1;
-    v_opening := COALESCE(v_opening, 0);
+    v_opening := COALESCE((
+      SELECT closing_balance FROM public.eosb_accruals
+      WHERE user_id = v_emp.user_id
+      ORDER BY period DESC
+      LIMIT 1
+    ), 0);
     v_accrual := ROUND(v_emp.base_salary / 12.0, 2);
 
     -- Race-safe insert: relies on UNIQUE (user_id, period) from 20260424 migration.
-    -- ON CONFLICT DO NOTHING returns no rows; we use a returning-clause check to
-    -- distinguish processed vs skipped without a separate SELECT.
-    WITH ins AS (
-      INSERT INTO public.eosb_accruals
-        (user_id, period, opening_balance, accrued_amount, closing_balance, base_salary, currency, created_by)
-      VALUES
-        (v_emp.user_id, p_period, v_opening, v_accrual, v_opening + v_accrual, v_emp.base_salary, v_emp.currency, auth.uid())
-      ON CONFLICT (user_id, period) DO NOTHING
-      RETURNING 1
-    )
-    SELECT EXISTS(SELECT 1 FROM ins) INTO v_inserted;
+    -- ON CONFLICT DO NOTHING leaves ROW_COUNT at 0 when the row already exists,
+    -- so GET DIAGNOSTICS distinguishes processed vs skipped without any
+    -- SELECT-INTO syntax (which trips some Supabase parsers).
+    INSERT INTO public.eosb_accruals
+      (user_id, period, opening_balance, accrued_amount, closing_balance, base_salary, currency, created_by)
+    VALUES
+      (v_emp.user_id, p_period, v_opening, v_accrual, v_opening + v_accrual, v_emp.base_salary, v_emp.currency, auth.uid())
+    ON CONFLICT (user_id, period) DO NOTHING;
 
-    IF v_inserted THEN
+    GET DIAGNOSTICS v_inserted_rows = ROW_COUNT;
+
+    IF v_inserted_rows > 0 THEN
       v_processed := v_processed + 1;
     ELSE
       v_skipped := v_skipped + 1;
