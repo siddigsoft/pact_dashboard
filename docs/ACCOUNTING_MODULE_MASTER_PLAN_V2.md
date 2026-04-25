@@ -24,6 +24,7 @@ during a particular pass it's stated here as the decision, not as "v3 says…".
 6. Phased rollout
 7. Open questions still pending sign-off
 8. Out of scope
+9. Companion documents
 
 ---
 
@@ -74,18 +75,18 @@ The codebase already contains a lot of finance plumbing the plan reuses:
 | **3-tier approval engine** | `src/services/approval-workflows.service.ts` (+ `approval_workflows`, `task_approvals`, `task_approval_records`) | Reused for every accounting approval; no new framework. |
 | **Notifications service** | `NotificationTriggerService` → in-app + email (IONOS SMTP) + WhatsApp (Wasender) + push (FCM). **No SMS today.** | Reused for accounting notifications + threshold alerts. |
 | **AI / OCR** | `scan-transaction` edge function (Gemini 2.0 Flash → Groq fallback), `TransactionScanner.tsx` | Feeds AI-suggested journal lines for accountant review. |
-| **Pseudo-ledger** | `wallets` + `wallet_transactions` | **Stays** as a subordinate sub-ledger reconciling daily to a `Wallet Liabilities` GL account. Not absorbed. |
-| **Consolidated financial view** | `ConsolidatedFinancialTab.tsx` | Same UI; data source switches to GL once Phase 1 ships. |
-| **Reconciliation dashboard** | `ReconciliationDashboard.tsx` | Same UI; gets a real GL behind it. |
+| **Pseudo-ledger** | `wallets` + `wallet_transactions` (`supabase/migrations/create_wallet_tables.sql`) | **Stays** as a subordinate sub-ledger reconciling daily to a `Wallet Liabilities` GL account. Not absorbed. |
+| **Consolidated financial view** | `FinancialOperations.tsx` *(current best-guess; finance to confirm exact page; no `ConsolidatedFinancialTab.tsx` exists)* | Same UI; data source switches to GL once Phase 1 ships. |
+| **Reconciliation dashboard** | `ReconciliationDashboard.tsx` (route `/reconciliation-dashboard`) | Same UI; gets a real GL behind it. |
 | **Existing partial finance features** | Cash-flow forecaster, duplicate-payment detector, period-close, budget-vs-actual (per `replit.md`) | Extended, not reintroduced. |
 | **Recharts** | `src/components/ui/chart.tsx` | Chart engine for the new reporting layer. |
-| **Webhooks pattern** | `moda-webhook`, `whatsapp-webhook`, `google-calendar-oauth` edge functions | Cloned for bank-feed / payroll / procurement webhooks. |
-| **Hubs + Departments** | `hubs`, `departments` tables | Used as **branch / cost-center proxies** in Phases 1–3; real `branches` and (optionally) `cost_centers` arrive in Phase 4. |
-| **CRM Partners** | `partners` table | Extended with `is_vendor`, `is_customer`, `is_donor` flags. No parallel tables. |
-| **Existing report pages** | `/reports/advance-requests`, `/cost-submission-reports`, `/wallet-reports`, `/project-analytics`, `/reconciliation`, `/salary-retainer-report`, `/notification-analytics` | **Deep-linked** from the new `/reports/*` index pages. Not replaced. |
-| **Audit infrastructure** | `hierarchy_audit_log` + per-table audit triggers | Layer the audit-trail visualiser on top, no new audit table. |
+| **Edge Functions infrastructure** | 34 functions including `moda-webhook`, `whatsapp-webhook`, `google-calendar-oauth`, `payroll-auto-run`, `dispatch-notification`, `escalation-check`, `daily-digest-cron`, `subscription-renewal-check`, `contract-expiry-check`, `monitoring-flag-no-response`, `task-daily-digest`, `task-dependency-reminder-cron`, `send-email`, `send-fcm-push`, `send-whatsapp` | Cloned for bank-feed / payroll / procurement / e-filing webhooks. **Cron + Edge Function pattern already battle-tested** — Phase 1 reuses, no new framework. |
+| **Hubs + Departments** | `hubs`, `departments` tables (migrations `001_hub_operations_tables.sql`, `20260331_departments_and_employment_records.sql`) | Used as **branch / cost-center proxies** in Phases 1–3; real `branches` and (optionally) `cost_centers` arrive in Phase 4. |
+| **CRM Partners** | `partners` table | **Will be extended in Phase 2** with `is_vendor`, `is_customer`, `is_donor` flags (not present today). No parallel tables. |
+| **Existing report pages** | `/advance-requests-report`, `/cost-submission/reports`, `/wallet-reports`, `/reconciliation-dashboard`, `/salary-retainer-report`, `/notification-analytics` (verified in `App.tsx`); `/project-analytics` *to be confirmed* | **Deep-linked** from the new `/reports/*` index pages. Not replaced. |
+| **Audit infrastructure** | `hierarchy_audit_log` (migration `20260426_hierarchy_audit_log.sql`) + per-table audit triggers | Layer the audit-trail visualiser on top, no new audit table. |
 | **Permissions** | Resource-action permission model | Add only `accountant` + `auditor`; map everything else to existing roles (`super_admin`, `admin`, `hr`, `finance`, hub-manager). |
-| **`acct_*` tables** | Defined in v1 master plan, partially scaffolded | Phase 1 finalises them. |
+| **`acct_*` tables** | Named in v1 master plan; **not yet created** (greenfield — `rg "acct_accounts\|acct_journal\|acct_funds" --type sql` returns zero hits) | Phase 1 introduces them from scratch. |
 
 What does **not** exist anywhere yet:
 
@@ -140,6 +141,11 @@ What does **not** exist anywhere yet:
 - **Background jobs** via `pg_cron` + Edge Functions: period close, FX
   revaluation, year-end rollover, scheduled email reports, sanctions
   re-screening, recurring journal generation, sub-ledger reconciliation.
+  **Pattern proven by existing `payroll-auto-run`, `daily-digest-cron`,
+  `escalation-check`, `subscription-renewal-check`, `contract-expiry-check`,
+  `monitoring-flag-no-response`, `task-daily-digest`,
+  `task-dependency-reminder-cron` Edge Functions** — reuse the cron
+  registration pattern; no new framework.
 - **Offline behaviour** — journal-bearing actions taken offline (cash
   advances, expense claims) queue with idempotency keys; conflict resolution
   is last-writer-wins on header, immutable lines.
@@ -166,7 +172,10 @@ What does **not** exist anywhere yet:
   start; FX gain/loss accounts auto-posted.
 - **Multi-entity** — `branches` (legal entities) introduced in Phase 4;
   intercompany clearing accounts per branch + reciprocal-entry RPC; group-
-  level consolidation RPC.
+  level consolidation RPC. **Migration sequence:** Phase 1 uses `hubs` /
+  `departments` as branch / cost-center proxies; Phase 4 introduces real
+  `branches` + (optionally) `cost_centers` tables and migrates existing
+  `acct_*` rows.
 - **Posting controls** — debit = credit per entry; period must be open;
   account must be active; `idempotency_key` unique; sanctions block; SoD
   check.
@@ -395,6 +404,11 @@ Five top-level routes plus deep-links to existing PACT report pages:
 | `/reports/scenario` | Budget vs Actual vs Forecast, best/worst case, sensitivity (FX / tax / payroll) | Finance, Country Director |
 | `/reports/forecast` | Predictive cash flow by project / branch / cost-center, variance trends | Finance, Treasury |
 
+**Deep-link targets (verified paths in `src/App.tsx`):**
+`/advance-requests-report`, `/cost-submission/reports`, `/wallet-reports`,
+`/reconciliation-dashboard`, `/salary-retainer-report`,
+`/notification-analytics`. `/project-analytics` to be confirmed.
+
 Plus:
 
 - **Donor-specific reports** — FFR (SF-425), EU PRAG narrative, UN OCHA,
@@ -412,7 +426,10 @@ Plus:
 ### 4.14 AI & analytics
 
 - **AI journal coding suggestions** — proposes COA accounts for a
-  transaction; reuses existing Gemini / Groq stack.
+  transaction; reuses existing Gemini / Groq stack. Lives behind admin auth
+  at `/admin/transaction-scanner`. **SoD treatment:** an accountant can
+  accept / reject a suggestion, but only an admin can change the underlying
+  scanner configuration — keeps the AI suggestion path traceable.
 - **Anomaly detection** — unusual amount / frequency / vendor.
 - **Single chat interface** for accountants and report queries (no second
   chat UI).
@@ -693,7 +710,9 @@ later phases never block earlier ones.
   revaluation visible; lease commencement auto-creates ROU + liability.
 
 ### Phase 5 — Public APIs + webhooks *(1–2 sprints)*
-- Enable `pg_graphql`; expose `/graphql/v1`.
+- Enable `pg_graphql` extension via migration
+  (`CREATE EXTENSION IF NOT EXISTS pg_graphql;`); expose `/graphql/v1`;
+  verify introspection responds with API-key scope.
 - Versioned REST `/api/v1/...`.
 - OAuth2 / JWT scopes; published OpenAPI.
 - Outbound webhooks: `journal.posted`, `period.closed`,
@@ -861,6 +880,26 @@ above.
 - **SSO (SAML / Azure AD) for external auditors** — read-only auditor
   account in §4.13 / §5.2 covers the current need.
 - **SFTP batch-file exchange** — only if a specific bank or donor requires it.
+
+---
+
+## 9. Companion documents
+
+This master plan is the contract. Three companion documents extend it and
+**must be read together** before kicking off Phase 1:
+
+| Document | Purpose |
+|---|---|
+| `docs/ACCOUNTING_OPEN_QUESTIONS_SIGNOFF.md` | One-pager sign-off sheet. Confirms every open question (§7) **and every feature in §4 / §5 / §6** as in-scope. Signed by Country Director, Finance Manager, HR Director, Engineering Lead, Internal Audit Lead, Donor Compliance Officer. |
+| `docs/ACCOUNTING_REALITY_CHECK_DELTA.md` | Audit of §2 against the live codebase. 11 items confirmed accurate; 8 patches applied to this master plan in this revision; 6 absent items confirmed. Net impact: **Phase 1 starts on firmer ground than first stated.** |
+| `docs/ACCOUNTING_PHASE1_DESIGN.md` | The build-ready sprint design for Phase 1. Includes full DDL drafts, RPC signatures, RLS matrix, 28-test acceptance suite, synthetic data generator spec, feature-flag bootstrap, audit-trail visualiser spec, notification triggers, risks + mitigations, Definition of Done. |
+
+**Reading order for sign-off:**
+1. This master plan (you are here).
+2. `ACCOUNTING_REALITY_CHECK_DELTA.md` — confirm §2 corrections accepted.
+3. `ACCOUNTING_OPEN_QUESTIONS_SIGNOFF.md` — circulate for tick / override.
+4. `ACCOUNTING_PHASE1_DESIGN.md` — engineering picks this up day one of
+   the kick-off sprint.
 
 ---
 
