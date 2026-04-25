@@ -77,6 +77,41 @@ const STALL_DAYS = 14;
 const BRAND = '#0F2041';
 const BRAND2 = '#1D3461';
 
+const SITE_VERIFIED_STATUSES = new Set(['verified', 'approved', 'approved and costed', 'costed', 'dispatched', 'completed']);
+const SITE_IN_PROGRESS_STATUSES = new Set(['in_progress', 'inprogress', 'accepted', 'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators']);
+const SITE_RETURNED_STATUSES = new Set(['returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom']);
+const SITE_REJECTED_STATUSES = new Set(['rejected']);
+const SITE_PENDING_STATUSES = new Set(['pending', 'assigned', 'open', 'available', 'unassigned', 'scheduled', 'visit_scheduled']);
+
+type SiteStatusBucket = 'verified' | 'inProgress' | 'returned' | 'rejected' | 'pending' | 'other';
+function classifySiteEntryStatus(raw: string | null | undefined): SiteStatusBucket {
+  const s = (raw ?? '').toString().toLowerCase().trim();
+  if (!s) return 'pending';
+  if (SITE_VERIFIED_STATUSES.has(s)) return 'verified';
+  if (SITE_IN_PROGRESS_STATUSES.has(s)) return 'inProgress';
+  if (SITE_RETURNED_STATUSES.has(s)) return 'returned';
+  if (SITE_REJECTED_STATUSES.has(s)) return 'rejected';
+  if (SITE_PENDING_STATUSES.has(s)) return 'pending';
+  return 'other';
+}
+
+const ROLE_CANONICAL_LABELS: Record<string, string> = {
+  datacollector: 'Data Collector',
+  data_collector: 'Data Collector',
+  data_team: 'Data Team',
+  superadmin: 'Super Admin',
+  super_admin: 'Super Admin',
+  fom: 'FOM',
+};
+function normalizeRoleKey(raw: string | null | undefined): string {
+  return (raw ?? '').toString().toLowerCase().replace(/[\s\-]+/g, '_').replace(/__+/g, '_').trim();
+}
+function prettyRoleLabel(key: string): string {
+  if (ROLE_CANONICAL_LABELS[key]) return ROLE_CANONICAL_LABELS[key];
+  const collapsed = key.replace(/_/g, ' ').trim();
+  return collapsed.replace(/\b\w/g, c => c.toUpperCase());
+}
+
 const TYPE_LABELS: Record<string, string> = {
   tpm: 'TPM', baseline_survey: 'Baseline Survey', endline_survey: 'Endline Survey',
   assessment: 'Assessment', evaluation: 'Evaluation', research: 'Research',
@@ -823,12 +858,19 @@ export default function PortfolioDashboard() {
     const portfolioBurn = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
     const overdueMilestones = enriched.reduce((s, p) => s + p.overdueMilestones, 0);
 
-    // MMP
+    // MMP — uses canonical classifier so 'Approved', 'Dispatched', 'verified', 'costed', etc. all count as completed visits
     const mmps = d?.mmps ?? [];
-    const activeMMPs = mmps.filter(m => m.status === 'approved' || m.status === 'verified').length;
+    const activeMMPs = mmps.filter(m => {
+      const s = (m.status ?? '').toString().toLowerCase().trim();
+      return s === 'approved' || s === 'verified';
+    }).length;
     const siteEntries = d?.siteEntries ?? [];
-    const completedSites = siteEntries.filter(e => e.status === 'completed').length;
-    const coveragePct = siteEntries.length > 0 ? Math.round((completedSites / siteEntries.length) * 100) : 0;
+    const completedSites = siteEntries.filter(e => classifySiteEntryStatus(e.status) === 'verified').length;
+    const coveragePct = siteEntries.length > 0
+      ? (completedSites / siteEntries.length >= 0.01
+          ? Math.round((completedSites / siteEntries.length) * 100)
+          : Math.round((completedSites / siteEntries.length) * 1000) / 10)
+      : 0;
 
     // Financial approvals pending
     const pendingCosts = (d?.costSubs ?? []).filter(c => c.status === 'pending').length;
@@ -861,14 +903,25 @@ export default function PortfolioDashboard() {
   const mmpStats = useMemo(() => {
     const mmps = d?.mmps ?? [];
     const byStatus = { pending: 0, verified: 0, approved: 0, rejected: 0, archived: 0 };
-    mmps.forEach(m => { if (m.status in byStatus) (byStatus as any)[m.status]++; });
+    mmps.forEach(m => {
+      const s = (m.status ?? '').toString().toLowerCase().trim();
+      if (s in byStatus) (byStatus as any)[s]++;
+    });
     const totalPlanned = mmps.reduce((s, m) => s + (m.entries ?? 0), 0);
     const totalProcessed = mmps.reduce((s, m) => s + (m.processed_entries ?? 0), 0);
     const siteEntries = d?.siteEntries ?? [];
-    const completedSites = siteEntries.filter(e => e.status === 'completed').length;
-    const inProgressSites = siteEntries.filter(e => e.status === 'inProgress' || e.status === 'in_progress').length;
-    const pendingSites = siteEntries.filter(e => e.status === 'pending' || e.status === 'assigned').length;
-    return { byStatus, totalPlanned, totalProcessed, completedSites, inProgressSites, pendingSites, totalEntries: siteEntries.length };
+    const buckets = { verified: 0, inProgress: 0, returned: 0, rejected: 0, pending: 0, other: 0 };
+    siteEntries.forEach(e => { buckets[classifySiteEntryStatus(e.status)]++; });
+    return {
+      byStatus, totalPlanned, totalProcessed,
+      completedSites: buckets.verified,
+      inProgressSites: buckets.inProgress,
+      pendingSites: buckets.pending,
+      returnedSites: buckets.returned,
+      rejectedSites: buckets.rejected,
+      otherSites: buckets.other,
+      totalEntries: siteEntries.length,
+    };
   }, [d]);
 
   const equipStats = useMemo(() => {
@@ -932,7 +985,12 @@ export default function PortfolioDashboard() {
     const leaves = d?.leaves ?? [];
 
     const byRole: Record<string, number> = {};
-    profiles.forEach(p => { if (p.role) byRole[p.role] = (byRole[p.role] ?? 0) + 1; });
+    profiles.forEach(p => {
+      if (!p.role) return;
+      const key = normalizeRoleKey(p.role);
+      if (!key) return;
+      byRole[key] = (byRole[key] ?? 0) + 1;
+    });
 
     const byEmployment: Record<string, number> = {};
     profiles.forEach(p => { const k = p.employment_type ?? 'unknown'; byEmployment[k] = (byEmployment[k] ?? 0) + 1; });
@@ -954,7 +1012,7 @@ export default function PortfolioDashboard() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
       .map(([role, count], i) => ({
-        name: role.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim(),
+        name: prettyRoleLabel(role),
         value: count,
         color: ['#0F2041','#1D3461','#4f86c6','#34d399','#f59e0b','#a78bfa','#f87171','#38bdf8'][i % 8],
       }));
@@ -2642,15 +2700,24 @@ export default function PortfolioDashboard() {
               <SectionCard icon={MapPin} title="Site Visit Coverage">
                 <div className="mb-3">
                   <div className="flex items-end gap-2 mb-1">
-                    <span className="text-3xl font-bold text-[#1D3461]">{kpis.coveragePct}%</span>
+                    <span className="text-3xl font-bold text-[#1D3461]" data-testid="text-coverage-pct">{kpis.coveragePct}%</span>
                     <span className="text-sm text-muted-foreground mb-1">overall coverage</span>
                   </div>
-                  <Progress value={kpis.coveragePct} className="h-3 rounded-full" />
+                  <Progress value={Math.min(100, Math.max(0, kpis.coveragePct))} className="h-3 rounded-full" />
                 </div>
                 <StatRow label="Total Planned Sites" value={mmpStats.totalEntries.toLocaleString()} />
-                <StatRow label="Completed" value={mmpStats.completedSites.toLocaleString()} color="text-emerald-600" />
+                <StatRow label="Completed / Verified" value={mmpStats.completedSites.toLocaleString()} color="text-emerald-600" />
                 <StatRow label="In Progress" value={mmpStats.inProgressSites.toLocaleString()} color="text-blue-600" />
                 <StatRow label="Pending / Assigned" value={mmpStats.pendingSites.toLocaleString()} color="text-amber-600" />
+                {mmpStats.returnedSites > 0 && (
+                  <StatRow label="Returned / Recalled" value={mmpStats.returnedSites.toLocaleString()} color="text-orange-600" />
+                )}
+                {mmpStats.rejectedSites > 0 && (
+                  <StatRow label="Rejected" value={mmpStats.rejectedSites.toLocaleString()} color="text-red-600" />
+                )}
+                {mmpStats.otherSites > 0 && (
+                  <StatRow label="Other / Uncategorized" value={mmpStats.otherSites.toLocaleString()} color="text-slate-500" />
+                )}
               </SectionCard>
 
               {/* Equipment */}
@@ -2668,10 +2735,10 @@ export default function PortfolioDashboard() {
               <SectionCard icon={Users} title="Field Staff — Role Distribution" action={() => navigate('/admin/staff-profiles')} actionLabel="Staff Directory">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2 mt-2">
                   {Object.entries(peopleStats.byRole).sort((a, b) => b[1] - a[1]).map(([role, count]) => (
-                    <div key={role} className="bg-muted/30 rounded-xl p-3 text-center border">
-                      <p className="text-xl font-bold text-[#1D3461]">{count}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight capitalize">
-                        {role.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim()}
+                    <div key={role} className="bg-muted/30 rounded-xl p-3 text-center border" data-testid={`card-role-${role}`}>
+                      <p className="text-xl font-bold text-[#1D3461]" data-testid={`text-role-count-${role}`}>{count}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        {prettyRoleLabel(role)}
                       </p>
                     </div>
                   ))}
