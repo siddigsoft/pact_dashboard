@@ -54,6 +54,8 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/context/user/UserContext';
 import { DailyBriefing } from '@/components/tasks/DailyBriefing';
 import { PriorityMatrix } from '@/components/tasks/PriorityMatrix';
+import { RewardDeductionsEditor, RewardBreakdownDisplay } from '@/components/tasks/RewardDeductionsEditor';
+import type { RewardDeduction } from '@/utils/rewardCalc';
 import {
   usePersonalTasks, useAssignedProjectTasks, useUpdateProjectTaskStatus, useCreatedByMeTasks,
   materialiseDailyTasks,
@@ -677,6 +679,7 @@ function TaskDetailSheet({
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardCurrency, setRewardCurrency] = useState('USD');
+  const [rewardDeductions, setRewardDeductions] = useState<RewardDeduction[]>([]);
   const [dirty, setDirty] = useState(false);
   const [coAssignees, setCoAssignees] = useState<TaskAssignee[]>([]);
   const [coUserSearch, setCoUserSearch] = useState('');
@@ -726,6 +729,7 @@ function TaskDetailSheet({
       setCategory(task.category ?? '');
       setRewardAmount(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
       setRewardCurrency(task.completionRewardCurrency ?? 'USD');
+      setRewardDeductions(task.rewardDeductions ?? []);
       setCoAssignees(task.coAssignees ?? []);
       setDependencies(task.dependencies ?? []);
       setTools(task.tools ?? '');
@@ -759,6 +763,7 @@ function TaskDetailSheet({
       category: category.trim() || 'personal',
       completionRewardAmount: reward,
       completionRewardCurrency: currency,
+      rewardDeductions: canEditReward ? rewardDeductions : task.rewardDeductions,
       coAssignees,
       dependencies,
       tools: tools.trim() || null,
@@ -1493,11 +1498,27 @@ function TaskDetailSheet({
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="mt-3 text-left">
+                        <RewardDeductionsEditor
+                          grossAmount={rewardAmount}
+                          currency={rewardCurrency}
+                          deductions={rewardDeductions}
+                          onChange={d => { setRewardDeductions(d); markDirty(); }}
+                        />
+                      </div>
                     </>
                   ) : (
                     <>
                       <p className="text-3xl font-bold text-emerald-600 mt-1">{task.completionRewardCurrency} {task.completionRewardAmount?.toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground mt-2">Credited to your wallet when task is marked done.</p>
+                      <div className="mt-3 text-left">
+                        <RewardBreakdownDisplay
+                          grossAmount={task.completionRewardAmount}
+                          currency={task.completionRewardCurrency ?? 'USD'}
+                          deductions={task.rewardDeductions}
+                          label="Reward breakdown"
+                        />
+                      </div>
                     </>
                   )}
                 </div>
@@ -1816,6 +1837,7 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin, isMa
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [rewardAmount, setRewardAmount] = useState(task?.completionRewardAmount ? String(task.completionRewardAmount) : '');
   const [rewardCurrency, setRewardCurrency] = useState(task?.completionRewardCurrency ?? 'USD');
+  const [rewardDeductions, setRewardDeductions] = useState<RewardDeduction[]>(task?.rewardDeductions ?? []);
 
   if (!task) return null;
 
@@ -1833,6 +1855,7 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin, isMa
       notes: notes.trim() || null,
       completionRewardAmount: reward,
       completionRewardCurrency: currency,
+      rewardDeductions: canEditReward ? rewardDeductions : task.rewardDeductions,
     });
     onClose();
   };
@@ -1915,13 +1938,25 @@ function EditPersonalTaskDialog({ task, onClose, onSave, isSaving, isAdmin, isMa
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-[10px] text-muted-foreground">Credited to wallet when task is marked done.</p>
+              <p className="text-[10px] text-muted-foreground">Gross reward — net (after deductions) is credited to wallet when task is marked done.</p>
+              <RewardDeductionsEditor
+                grossAmount={rewardAmount}
+                currency={rewardCurrency}
+                deductions={rewardDeductions}
+                onChange={setRewardDeductions}
+                compact
+              />
             </div>
           ) : task.completionRewardAmount ? (
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Completion Reward</Label>
               <p className="text-sm font-medium text-emerald-600">{task.completionRewardCurrency} {task.completionRewardAmount.toFixed(2)}</p>
               <p className="text-[10px] text-muted-foreground">Reward set by admin. Credited to wallet on completion.</p>
+              <RewardBreakdownDisplay
+                grossAmount={task.completionRewardAmount}
+                currency={task.completionRewardCurrency ?? 'USD'}
+                deductions={task.rewardDeductions}
+              />
             </div>
           ) : null}
         </div>
@@ -1963,6 +1998,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [rewardAmount, setRewardAmount] = useState('');
   const [rewardCurrency, setRewardCurrency] = useState('USD');
+  const [rewardDeductions, setRewardDeductions] = useState<RewardDeduction[]>([]);
   const [taskType, setTaskType] = useState<TaskType | null>(null);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [depType, setDepType]               = useState<DependencyType>('custom');
@@ -2067,7 +2103,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
     setTitle(''); setDescription(''); setPriority('medium');
     setDueDate(''); setNotes(''); setAssignMode('self');
     setSelectedUsers([]); setUserSearch(''); setSelectedDeptId('');
-    setRewardAmount(''); setRewardCurrency('USD');
+    setRewardAmount(''); setRewardCurrency('USD'); setRewardDeductions([]);
     setDependencies([]); setDepType('custom'); setDepText(''); setDepDate('');
     setDepUserSearch(''); setDepSelectedUser(null); setDepDeptId(''); setDepDuplicate(false);
     setDialogAttachments([]);
@@ -2162,6 +2198,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
           targetDepartmentId: selectedDeptId,
           completionRewardAmount: reward,
           completionRewardCurrency: reward ? rewardCurrency : null,
+          rewardDeductions: reward ? rewardDeductions : null,
           dependencies: dependencies.length > 0 ? dependencies : undefined,
           attachments: dialogAttachments.length > 0 ? dialogAttachments : undefined,
         });
@@ -2179,6 +2216,7 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
         coAssignees: coAssignees.length > 0 ? coAssignees : [],
         completionRewardAmount: reward,
         completionRewardCurrency: reward ? rewardCurrency : null,
+        rewardDeductions: reward ? rewardDeductions : null,
         dependencies: dependencies.length > 0 ? dependencies : undefined,
         attachments: dialogAttachments.length > 0 ? dialogAttachments : undefined,
       });
@@ -2461,6 +2499,13 @@ function NewTaskDialog({ open, onClose, onCreate, isCreating, isAdmin, isSuperAd
                   data-testid="input-reward-currency"
                 />
               </div>
+              <RewardDeductionsEditor
+                grossAmount={rewardAmount}
+                currency={rewardCurrency}
+                deductions={rewardDeductions}
+                onChange={setRewardDeductions}
+                compact
+              />
             </div>
           )}
 

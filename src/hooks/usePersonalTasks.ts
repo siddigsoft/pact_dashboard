@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-fns';
+import type { RewardDeduction } from '@/utils/rewardCalc';
 
 /** Detect Postgres "undefined_column" / PostgREST schema-cache misses so we can
  *  retry inserts/updates without optional columns when migrations are pending. */
@@ -86,6 +87,7 @@ export interface PersonalTask {
   targetDepartmentId: string | null;
   completionRewardAmount: number | null;
   completionRewardCurrency: string;
+  rewardDeductions: RewardDeduction[];
   rewardSetBy: string | null;
   recurrence: string;
   templateId: string | null;
@@ -155,6 +157,7 @@ export interface CreatePersonalTask {
   targetDepartmentId?: string | null;
   completionRewardAmount?: number | null;
   completionRewardCurrency?: string | null;
+  rewardDeductions?: RewardDeduction[] | null;
   recurrence?: string;
   templateId?: string | null;
   dailyTaskDate?: string | null;
@@ -197,6 +200,7 @@ export interface DailyTaskDefinition {
   recurrenceMonthlyDay: number | null;
   rewardAmount: number | null;
   rewardCurrency: string;
+  rewardDeductions: RewardDeduction[];
   active: boolean;
   proofRequired: boolean;
   createdBy: string | null;
@@ -271,6 +275,7 @@ function mapRow(r: Record<string, unknown>): PersonalTask {
     targetDepartmentId: (r.target_department_id as string) ?? null,
     completionRewardAmount: (r.completion_reward_amount as number) ?? null,
     completionRewardCurrency: (r.completion_reward_currency as string) ?? 'USD',
+    rewardDeductions: Array.isArray(r.reward_deductions) ? (r.reward_deductions as RewardDeduction[]) : [],
     rewardSetBy: (r.reward_set_by as string) ?? null,
     recurrence: (r.recurrence as string) ?? 'none',
     templateId: (r.template_id as string) ?? null,
@@ -321,6 +326,7 @@ function mapDefRow(r: Record<string, unknown>): DailyTaskDefinition {
     recurrenceMonthlyDay: (r.recurrence_monthly_day as number) ?? null,
     rewardAmount: (r.reward_amount as number) ?? null,
     rewardCurrency: (r.reward_currency as string) ?? 'USD',
+    rewardDeductions: Array.isArray(r.reward_deductions) ? (r.reward_deductions as RewardDeduction[]) : [],
     active: Boolean(r.active),
     proofRequired: Boolean(r.proof_required),
     createdBy: (r.created_by as string) ?? null,
@@ -653,6 +659,7 @@ export function usePersonalTasks(userId: string | undefined) {
         target_department_id: task.targetDepartmentId ?? null,
         completion_reward_amount: task.completionRewardAmount ?? null,
         completion_reward_currency: task.completionRewardCurrency ?? 'USD',
+        reward_deductions: task.rewardDeductions ?? [],
         recurrence: task.recurrence ?? 'none',
         recurrence_days: task.recurrenceDays ?? [],
         recurrence_monthly_day: task.recurrenceMonthlyDay ?? null,
@@ -693,7 +700,7 @@ export function usePersonalTasks(userId: string | undefined) {
 
       if (isMissingCol(error)) {
         const fallback = { ...insertPayload };
-        for (const k of ['start_date', 'hours_per_day']) delete fallback[k];
+        for (const k of ['start_date', 'hours_per_day', 'reward_deductions']) delete fallback[k];
         const retry = await supabase.from('personal_tasks').insert(fallback).select('id').single();
         data = retry.data;
         error = retry.error;
@@ -928,6 +935,7 @@ export function usePersonalTasks(userId: string | undefined) {
       if (updates.notes !== undefined)       patch.notes = updates.notes;
       if (updates.completionRewardAmount !== undefined) patch.completion_reward_amount = updates.completionRewardAmount;
       if (updates.completionRewardCurrency !== undefined) patch.completion_reward_currency = updates.completionRewardCurrency;
+      if (updates.rewardDeductions !== undefined) patch.reward_deductions = updates.rewardDeductions ?? [];
       if (updates.coAssignees !== undefined)     patch.co_assignees = updates.coAssignees;
       if (updates.dependencies !== undefined)    patch.dependencies = updates.dependencies;
       if (updates.tools !== undefined || updates.taskType !== undefined || updates.attachments !== undefined) {
@@ -1030,6 +1038,7 @@ export function usePersonalTasks(userId: string | undefined) {
           'start_estimated_days', 'start_requirements', 'start_dependencies',
           'output_text',
           'start_date', 'hours_per_day',
+          'reward_deductions',
         ]) {
           delete (fallback as Record<string, unknown>)[k];
         }

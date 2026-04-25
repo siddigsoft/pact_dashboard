@@ -26,6 +26,8 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, subDays } from 'date-fns';
+import { RewardDeductionsEditor, RewardBreakdownDisplay } from '@/components/tasks/RewardDeductionsEditor';
+import { computeRewardBreakdown, type RewardDeduction } from '@/utils/rewardCalc';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -183,6 +185,7 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
   const [rolesRaw, setRolesRaw] = useState((initial?.roleTargets ?? []).join(', '));
   const [rewardAmount, setRewardAmount] = useState(initial?.rewardAmount?.toString() ?? '');
   const [rewardCurrency, setRewardCurrency] = useState(initial?.rewardCurrency ?? 'USD');
+  const [rewardDeductions, setRewardDeductions] = useState<RewardDeduction[]>(initial?.rewardDeductions ?? []);
   const [active, setActive] = useState(initial?.active ?? true);
   const [taskType, setTaskType] = useState<'project' | 'day_to_day' | 'general' | null>(initial?.taskType ?? null);
 
@@ -206,6 +209,7 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
       roleTargets: rolesRaw.split(',').map(r => r.trim()).filter(Boolean),
       rewardAmount: rewardAmount ? parseFloat(rewardAmount) : null,
       rewardCurrency: rewardCurrency || 'USD',
+      rewardDeductions: rewardAmount ? rewardDeductions : [],
       active,
       proofRequired: false,
       taskType: taskType,
@@ -331,13 +335,21 @@ function DefForm({ initial, onClose, onSave, isSaving, departments }: DefFormPro
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Completion Reward</Label>
-          <Input type="number" min="0" step="0.01" value={rewardAmount} onChange={e => setRewardAmount(e.target.value)} placeholder="0.00" />
+          <Input type="number" min="0" step="0.01" value={rewardAmount} onChange={e => setRewardAmount(e.target.value)} placeholder="0.00" data-testid="input-template-reward" />
         </div>
         <div className="space-y-1">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Currency</Label>
           <Input value={rewardCurrency} onChange={e => setRewardCurrency(e.target.value)} placeholder="USD" />
         </div>
       </div>
+      <RewardDeductionsEditor
+        grossAmount={rewardAmount}
+        currency={rewardCurrency || 'USD'}
+        deductions={rewardDeductions}
+        onChange={setRewardDeductions}
+        compact
+      />
+      <p className="text-[10px] text-muted-foreground -mt-1">Deductions snapshot to each materialised daily task on creation, so changes here only affect future days.</p>
       <div className="flex items-center gap-2">
         <Switch checked={active} onCheckedChange={setActive} id="def-active" />
         <Label htmlFor="def-active" className="text-sm cursor-pointer">Active (materialise tasks for eligible users)</Label>
@@ -392,6 +404,7 @@ function DailyTemplatesPanel() {
         role_targets: rest.roleTargets,
         reward_amount: rest.rewardAmount,
         reward_currency: rest.rewardCurrency,
+        reward_deductions: rest.rewardDeductions ?? [],
         active: rest.active,
         proof_required: rest.proofRequired ?? false,
         task_type: rest.taskType ?? null,
@@ -1076,6 +1089,8 @@ interface RewardApproval {
   task_title: string | null;
   user_id: string;
   user_name: string | null;
+  /** Gross amount stored on the approval row. The snapshot trigger does not modify this column —
+   *  it remains the authoritative gross. Net = reward_amount − reward_deductions_total. */
   reward_amount: number;
   reward_currency: string;
   status: string;
@@ -1083,6 +1098,11 @@ interface RewardApproval {
   reviewed_at: string | null;
   reviewer_notes: string | null;
   created_at: string;
+  /** Snapshot columns added by 20260425_task_reward_deductions.sql.
+   *  Populated by snapshot_reward_deductions_on_approval BEFORE INSERT trigger. */
+  reward_deductions_snapshot?: RewardDeduction[] | null;
+  reward_deductions_total?: number | null;
+  reward_net?: number | null;
 }
 
 function RewardApprovalsPanel() {
@@ -1181,7 +1201,18 @@ function RewardApprovalsPanel() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">Staff: {a.user_name || a.user_id}</p>
-                    <p className="text-sm font-bold text-emerald-600 mt-1">{a.reward_currency} {a.reward_amount.toFixed(2)}</p>
+                    {(a.reward_deductions_snapshot && a.reward_deductions_snapshot.length > 0) ? (
+                      <div className="mt-1.5 max-w-md">
+                        <RewardBreakdownDisplay
+                          grossAmount={a.reward_amount}
+                          currency={a.reward_currency}
+                          deductions={a.reward_deductions_snapshot}
+                          label="To credit on approval"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm font-bold text-emerald-600 mt-1">{a.reward_currency} {(a.reward_net ?? a.reward_amount).toFixed(2)}</p>
+                    )}
                     <p className="text-[11px] text-muted-foreground/60 mt-0.5">{format(new Date(a.created_at), 'dd MMM yyyy HH:mm')}</p>
                   </div>
                   {a.status === 'pending' && (

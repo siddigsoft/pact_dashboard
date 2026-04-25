@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, PlayCircle, Plus, X, Clock, Calendar, ListChecks, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RewardBreakdownDisplay } from '@/components/tasks/RewardDeductionsEditor';
+import type { RewardDeduction } from '@/utils/rewardCalc';
 
 export interface StartDependency {
   label: string;
@@ -34,6 +36,11 @@ interface Props {
   /** Existing task dependencies (task→task / user / dept) used to prefill the list. */
   prefillDependencies?: Array<{ label: string; type?: string; userId?: string; userName?: string; deptId?: string; deptName?: string }>;
   defaultEstimatedHours?: number | null;
+  /** Reward this task carries — shown to the assignee on acknowledgement so they
+   *  see exactly what gross / deductions / net they are accepting. */
+  rewardAmount?: number | null;
+  rewardCurrency?: string | null;
+  rewardDeductions?: RewardDeduction[] | null;
   isPending?: boolean;
   onConfirm: (payload: StartTaskPayload) => Promise<void> | void;
 }
@@ -44,6 +51,9 @@ export function StartTaskDialog({
   taskTitle,
   prefillDependencies = [],
   defaultEstimatedHours,
+  rewardAmount,
+  rewardCurrency,
+  rewardDeductions,
   isPending,
   onConfirm,
 }: Props) {
@@ -109,6 +119,16 @@ export function StartTaskDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-1">
+          {/* Reward breakdown — surfaces gross / deductions / net at acknowledgement */}
+          {rewardAmount && rewardAmount > 0 && (
+            <RewardBreakdownDisplay
+              grossAmount={rewardAmount}
+              currency={rewardCurrency ?? 'USD'}
+              deductions={rewardDeductions ?? []}
+              label="Reward you'll receive on completion"
+            />
+          )}
+
           {/* Hours + Days */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

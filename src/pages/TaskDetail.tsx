@@ -1811,6 +1811,9 @@ export default function TaskDetail() {
         prefillDependencies={Array.isArray(task.dependencies)
           ? (task.dependencies as Array<{ label: string; type?: string; userId?: string; userName?: string; deptId?: string; deptName?: string }>)
           : []}
+        rewardAmount={(task.completion_reward_amount as number | null) ?? null}
+        rewardCurrency={(task.completion_reward_currency as string | null) ?? 'USD'}
+        rewardDeductions={Array.isArray(task.reward_deductions) ? (task.reward_deductions as Array<{ name: string; type: 'fixed' | 'percent'; amount: number }>) : []}
         isPending={startTask.isPending}
         onConfirm={(payload) => startTask.mutateAsync(payload)}
       />

@@ -48,6 +48,8 @@ import {
 } from '@/hooks/usePersonalTasks';
 import { TaskRichEditor } from '@/components/tasks/TaskRichEditor';
 import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
+import { RewardDeductionsEditor, RewardBreakdownDisplay } from '@/components/tasks/RewardDeductionsEditor';
+import type { RewardDeduction } from '@/utils/rewardCalc';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -170,6 +172,7 @@ interface QuickAddDialogProps {
     targetDeptId?: string | null;
     coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
+    rewardDeductions?: RewardDeduction[] | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean; id?: string }>;
     planningQuadrant?: QuadrantKey | null;
     recurrence?: string;
@@ -213,6 +216,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
   const [dueDate, setDueDate]       = useState('');
   const [notes, setNotes]           = useState('');
   const [reward, setReward]         = useState('');
+  const [rewardDeductions, setRewardDeductions] = useState<RewardDeduction[]>([]);
   const [depTab, setDepTab]         = useState<DepTab>('custom');
   const [depInput, setDepInput]     = useState('');
   const [depDateInput, setDepDateInput] = useState('');
@@ -370,7 +374,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
   const reset = () => {
     setTitle(''); setDescription(''); setTaskTypeKey(initialTaskTypeKey); setProjectId('');
     setPriority('medium'); setDueDate(''); setNotes('');
-    setReward(''); setDepInput(''); setDepDateInput(''); setDeps([]);
+    setReward(''); setRewardDeductions([]); setDepInput(''); setDepDateInput(''); setDeps([]);
     setUserSearch(''); setAttachments([]);
     setAssignTab('myself'); setAssignedUser(null); setAssignedDept(null); setAssignSearch('');
     setCoAssignees([]); setCoSearch('');
@@ -468,6 +472,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
         targetDeptId:       assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
         coAssignees:        coAssignees.map(c => ({ id: c.id, name: c.full_name, hours: c.hours ?? null })),
         rewardAmount,
+        rewardDeductions: rewardAmount ? rewardDeductions : null,
         structuredDeps,
         planningQuadrant,
         recurrence: recurrenceOn ? recurrence : 'none',
@@ -1101,6 +1106,15 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
                     USD
                   </div>
                 </div>
+                <div className="mt-2">
+                  <RewardDeductionsEditor
+                    grossAmount={reward}
+                    currency="USD"
+                    deductions={rewardDeductions}
+                    onChange={setRewardDeductions}
+                    compact
+                  />
+                </div>
               </div>
             )}
 
@@ -1368,6 +1382,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [editHoursPerDay, setEditHoursPerDay] = useState('');
   const [notes, setNotes]           = useState('');
   const [reward, setReward]         = useState('');
+  const [rewardDeductions, setRewardDeductions] = useState<RewardDeduction[]>([]);
   const [planningQuadrant, setPlanningQuadrant] = useState<QuadrantKey | null>(null);
 
   // Permission: who can manually override actual_hours
@@ -1473,6 +1488,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       setDescription(task.description ?? '');
       setNotes(task.notes ?? '');
       setReward(task.completionRewardAmount ? String(task.completionRewardAmount) : '');
+      setRewardDeductions(task.rewardDeductions ?? []);
       setPlanningQuadrant(task.planningQuadrant ?? null);
       // Time tracking
       setEditEstimatedHours(task.estimatedHours != null ? String(task.estimatedHours) : '');
@@ -1556,6 +1572,7 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       taskType: typeMap[taskTypeKey],
       completionRewardAmount: reward ? parseFloat(reward) : null,
       completionRewardCurrency: reward ? 'USD' : null,
+      rewardDeductions: reward ? rewardDeductions : null,
       assignedTo: assignTab === 'someone' ? (assignedUser?.id ?? null) : null,
       assignedToName: assignTab === 'someone' ? (assignedUser?.full_name ?? null) : null,
       targetDepartmentId: assignTab === 'dept' ? (assignedDept?.id ?? null) : null,
@@ -2042,6 +2059,15 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                 <input type="number" min="0" step="0.01" placeholder="0.00" value={reward} onChange={e => setReward(e.target.value)}
                   className="flex-1 h-10 px-3.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
                 <div className="h-10 px-4 rounded-xl border border-slate-200 bg-slate-50 flex items-center text-sm font-semibold text-slate-500">USD</div>
+              </div>
+              <div className="mt-2">
+                <RewardDeductionsEditor
+                  grossAmount={reward}
+                  currency="USD"
+                  deductions={rewardDeductions}
+                  onChange={setRewardDeductions}
+                  compact
+                />
               </div>
             </div>
 
@@ -4554,6 +4580,7 @@ export default function MyTasksV2() {
     targetDeptId?: string | null;
     coAssignees?: Array<{ id: string; name: string; hours?: number | null }>;
     rewardAmount?: number | null;
+    rewardDeductions?: RewardDeduction[] | null;
     structuredDeps?: Array<{ type: string; label: string; requiresAck: boolean; id?: string }>;
     planningQuadrant?: QuadrantKey | null;
     recurrence?: string;
@@ -4579,6 +4606,7 @@ export default function MyTasksV2() {
         coAssignees: data.coAssignees ?? [],
         completionRewardAmount: data.rewardAmount ?? null,
         completionRewardCurrency: data.rewardAmount ? 'USD' : null,
+        rewardDeductions: data.rewardDeductions ?? null,
         dependencies: data.structuredDeps?.length
           ? data.structuredDeps.map(d => ({
               label: d.label,
