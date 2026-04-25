@@ -982,3 +982,343 @@ everything else is incremental.
 
 *End of v4 addendum. v2 + v3 + v4 together form the working master plan. No
 further version is planned until the v4 open questions are answered.*
+
+---
+
+# Part E — Version 5 addendum: nonprofit, humanitarian-ops & implementation gaps
+
+**Status:** Proposed · **Last updated:** 2026-04-25
+**Purpose:** v5 is a third-pass gap review covering categories that v2 / v3 / v4
+**still** miss. The biggest are nonprofit-specific (PACT is a humanitarian org,
+not a for-profit company — the previous plan used a corporate accounting model
+throughout) plus humanitarian-ops specifics (commodities, in-kind donations,
+emergency response) and implementation hygiene (parallel-run, training,
+testing).
+
+These are additive — no v2 / v3 / v4 decisions change.
+
+---
+
+## 30. Fund accounting *(THE biggest model miss)*
+
+v2 / v3 / v4 designed a **corporate accounting** system: P&L, Balance Sheet,
+Cash Flow. Real nonprofits run on **fund accounting** instead. Without this,
+the module cannot produce the audit-grade financials donors actually expect.
+
+| Missing concept | What it is | What changes |
+|---|---|---|
+| **Net Asset classification** | Funds split into **with donor restrictions** vs **without donor restrictions** (US GAAP / FASB ASU 2016-14 model, equivalent under IFRS for nonprofits) | New `acct_funds` table with `restriction_type` enum; every journal line tags a fund |
+| **Statement of Activities** | The nonprofit equivalent of a P&L — revenue + expenses split by fund class, plus "net assets released from restrictions" line | New report; replaces P&L for nonprofit views (P&L stays for any commercial sub-entity) |
+| **Statement of Financial Position** | Same as Balance Sheet but with three-column net asset breakdown | Replaces standard BS view |
+| **Statement of Functional Expenses** | Expenses split by **function** (Program services / Management & General / Fundraising) AND by **natural category** | New report + "function" tag on every expense journal line |
+| **Statement of Cash Flows — direct method** | Donors prefer direct over indirect | Add direct-method generator |
+| **Net assets released from restrictions** | When a restricted grant's deliverable completes, $X "releases" from restricted to unrestricted — auto-journal | New release RPC + scheduling rule per grant |
+| **Pledges receivable** | Donor commits to pay but hasn't paid yet — recognised as revenue at present value, with allowance for uncollectible pledges | New `acct_pledges` table + amortisation schedule |
+| **Conditional vs unconditional contributions** | ASU 2018-08 — conditional contributions aren't recognised until conditions are met | Per-grant condition tracker |
+| **Quasi-endowments / board-designated funds** | Sub-classification within unrestricted | Sub-types in `acct_funds` |
+
+**Why it matters:** every USAID, EU, UN, FCDO and Charity Commission audit
+expects these specific reports. Producing them by hand from a corporate P&L
+is the #1 cause of audit findings.
+
+---
+
+## 31. Inventory, commodities & gifts-in-kind *(humanitarian-ops core)*
+
+PACT distributes **food, NFIs (non-food items), medical supplies, cash
+vouchers** in the field. None of that touches the plan today — it's all
+treated as a black box outside accounting. For humanitarian audits this is
+a critical gap.
+
+| Missing capability | Notes |
+|---|---|
+| **Inventory module** with warehouses, stock cards, reorder levels | Across hub warehouses + sub-warehouses |
+| **Commodity tracking** to **Sphere Standards** | Per-commodity unit (kg, blanket, dose), per-beneficiary distribution log |
+| **Costing methods** | FIFO / weighted-average per warehouse; per-commodity write-down policy |
+| **Gifts-in-Kind (GIK) valuation** | Donated goods recorded at fair value at receipt date — produces both a non-cash revenue and an inventory asset |
+| **Donated services** (volunteer time) | Recognised when they create or enhance non-financial assets, OR require specialised skills — donor-specific policy |
+| **Distribution → expense recognition** | When a beneficiary receives a kit, inventory expense posts automatically with beneficiary count + GPS location |
+| **Stock counts & shrinkage write-offs** | Cycle counts + investigation workflow before write-off journal posts |
+| **Pre-positioned stock for emergency response** | Pre-allocated to emergency funds; released on activation |
+| **Beneficiary registry linkage** | Per-distribution journal carries beneficiary-list reference for donor audit |
+| **Vouchers / cash-transfer-programming (CTP)** | E-vouchers, mobile-money cash transfers tracked separately from operational disbursements |
+
+---
+
+## 32. Lease accounting (IFRS 16) & capital projects
+
+Every humanitarian org **leases offices, warehouses, vehicles**. Under IFRS
+16 / ASC 842 these are no longer simple rent expenses — they are **right-of-use
+assets** + **lease liabilities** with monthly amortisation and interest.
+v2 / v3 / v4 don't mention lease accounting at all.
+
+- **Lease register** (`acct_leases`) — start, end, payment schedule, discount
+  rate, escalation clause.
+- **ROU asset + lease liability** auto-generated on lease commencement.
+- **Monthly amortisation + interest journal** auto-posted.
+- **Modification handling** (lease extension, partial termination,
+  reassessment).
+- **Short-term lease & low-value lease elections** (under-12-months exemption).
+- **Capital projects / Construction-in-Progress (CIP / WIP)** —
+  `acct_capital_projects` accumulates costs; on completion, transfers to
+  fixed asset.
+- **Capitalisation policy threshold** (e.g. anything ≥ $1,000 capitalised) —
+  configurable per branch.
+- **Asset impairment testing** + **disposal / write-off workflow**.
+- **Insurance register** linked to assets.
+
+---
+
+## 33. Multi-signatory cash & treasury controls
+
+Every NGO bank account has **multiple signatories with combination rules**
+("any two of A, B, C" or "A plus any of B/C/D"). v2/v3/v4 don't model this.
+
+- **Multi-signatory bank-account configuration** with combination rules.
+- **Cheque register & numbering** with sequence integrity check.
+- **Cheque void / stop-payment workflow** with audit reason.
+- **Bank guarantee & letter-of-credit register** (off-balance-sheet).
+- **Bulk-disbursement file generation**: M-Pesa B2C bulk format, NACHA (US),
+  SEPA / EBA (EU), local bank batch formats.
+- **Failed-payment retry workflow** with reason code mapping.
+- **Refund processing** with original-transaction linkage.
+- **Petty-cash custodian rotation** + handover sign-off + count log.
+- **Daily cash position projection** (multi-bank, multi-currency, 30-day
+  forecast).
+- **Cash-pooling across branches** — sweep idle balances to HQ overnight.
+
+---
+
+## 34. HR financial extensions
+
+v2 / v3 / v4 cover statutory deductions but miss the **non-statutory** payroll
+components that hit the GL just as often.
+
+- **Pension / provident fund management** — employer + employee contributions,
+  fund manager remittance file.
+- **Loan management beyond advances** — housing loan, vehicle loan, salary loan
+  with interest, amortisation schedule, payroll deduction schedule, early
+  settlement.
+- **Garnishments / court-orders** — third-party deductions with priority
+  ordering.
+- **Severance & gratuity accruals** — separate from EOSB if local law requires.
+- **Multi-currency payroll** for expat / cross-border staff — pays in one
+  currency, costs in another.
+- **Tax equalisation** for expat staff — hypothetical home-country tax vs
+  actual host-country tax.
+- **Per-diem reconciliation** — actual spend vs per-diem schedule, with
+  refund-of-excess workflow.
+- **Volunteer / consultant honoraria** — separate workflow from payroll, often
+  WHT-exempt or different rate.
+
+---
+
+## 35. Internal audit, risk & whistleblower
+
+v4 §22 covered SoD enforcement. v5 adds the broader internal-control framework
+that donors expect.
+
+- **Internal Audit module** — separate from external audit; audit plan, sample
+  selection, finding tracker, management response.
+- **Risk register** tied to financial controls — likelihood × impact, mitigation,
+  ownership, periodic review.
+- **COSO / ICFR self-assessment** — annual control attestation per process
+  owner.
+- **Whistleblower / fraud-reporting channel** — anonymous submission, triage
+  workflow, investigation tracker.
+- **Audit committee dashboard** — open findings, prior-year remediation
+  status, control breaches.
+- **Management letter tracking** — every external-audit recommendation tracked
+  to closure.
+
+---
+
+## 36. Government e-filing & mobile-money depth
+
+v3 / v4 mention statutory tax. v5 adds the **transmission layer** — actually
+filing those returns electronically and reconciling the ack files.
+
+- **Sudan**: ZRA e-filing (when live), HAC/NGO commission reports, customs
+  duty-exemption tracking for humanitarian goods.
+- **Kenya**: iTax integration (PAYE, VAT, WHT, NHIF, NSSF), eTIMS e-invoicing.
+- **Uganda**: URA EFRIS e-invoicing; PAYE/NSSF returns.
+- **Tanzania**: TRA VFD e-invoicing.
+- **Rwanda**: RRA EBM e-invoicing.
+- **Ethiopia**: eTax + WHT certificates.
+- **Mobile money bulk disbursement files** with reconciliation of provider
+  responses (success / pending / failed) back into payment table.
+- **Charge-back / dispute handling** for mobile-money + card payments.
+- **Visa / work-permit financial sponsorship** tracking for expat staff.
+
+---
+
+## 37. ESG / SDG / impact tagging
+
+Donors increasingly require impact-aligned reporting alongside financials.
+
+- **SDG tagging** (1–17) on every expense journal line.
+- **Beneficiary count per dollar** spent — cost-effectiveness metric.
+- **Carbon footprint of operations** — flights, vehicle fuel, generator
+  diesel auto-tracked from purchases.
+- **Gender-responsive budgeting** flags on expense lines.
+- **Localisation index** — % of spend through local partners (Grand Bargain
+  commitment).
+
+---
+
+## 38. Crisis & emergency-mode workflows
+
+PACT operates in active conflict zones. Standard approval chains break in
+sudden-onset emergencies.
+
+- **Emergency cash-advance fast-track** — single-approver bypass with full
+  audit + post-event reconciliation.
+- **Pre-positioned funds release** triggered by an "emergency activation" event
+  (admin-only, time-boxed).
+- **Crisis-mode approval bypass** — temporarily lowers approval-tier count;
+  every bypass logged + auto-reviewed within N days.
+- **Quick-fund codes** for new emergencies — pre-approved COA template +
+  default dimensions seeded in one click.
+- **Conflict-zone payment mode** — cash-only, witnessed disbursement with
+  photo + GPS + biometric on the recipient.
+
+---
+
+## 39. Localisation beyond EN / AR
+
+| Locale gap | Why it matters |
+|---|---|
+| **French** | Francophone Africa partners, EU donor reports |
+| **Swahili** | Kenya / Tanzania / Uganda field staff |
+| **Arabic numerals** (Western) **vs Arabic-Indic** (٠١٢٣) toggle | Sudan staff often prefer Indic; donor reports require Western |
+| **Hijri fiscal-year option** for Sudan-only entities | Already raised in v4 §24; v5 firms it as a per-branch setting |
+| **Locale-specific currency formatting** — `1,234.56` vs `1.234,56` vs `1’234.56` | Per-user preference, not just per-locale |
+| **PDF rendering for French diacritics + Swahili** | Same jsPDF font registration issue as Arabic |
+| **Right-to-left layout per page** — even when global locale is EN, an embedded Arabic narrative block needs RTL inside an LTR page |
+
+---
+
+## 40. Implementation hygiene *(usually skipped — fatal if it is)*
+
+These aren't features — they're delivery-quality work that most plans omit and
+then regret.
+
+- **Parallel-run period** — minimum 2 fiscal periods where the new GL runs
+  alongside the legacy system; daily reconciliation; cut-over only when
+  variance is < 0.01% for 30 consecutive days.
+- **Opening-balance cut-over playbook** — a written sequence of sign-offs
+  + frozen cut-off date + rollback plan if reconciliation fails.
+- **Synthetic data generator** for non-production environments (no real PII /
+  donor data leaks into staging / dev).
+- **Posting-engine unit-test suite** — every account combination, every tax
+  bracket, every FX scenario asserted; runs in CI on every migration.
+- **Reconciliation regression tests** — daily reconciliation jobs are
+  themselves tested with synthetic break scenarios.
+- **End-to-end period-close test** — once per release: run a synthetic month
+  from journal entry through close, audit pack, donor reports.
+- **Change-management plan** — communications, role-mapping, training cycle,
+  certification.
+- **In-app help / contextual tooltips** strategy with bilingual content.
+- **Video walkthrough library** — short clips per page, hosted on Supabase
+  Storage, EN + AR.
+- **User certification programme** — accountants must pass a basic
+  competency check before write access to GL.
+- **Public transparency dashboard** (optional per donor) — anonymised totals
+  by sector + location + SDG.
+- **Performance monitoring** — p50 / p95 latency on report endpoints,
+  alerting at thresholds.
+- **Feature flags** for every new finance feature so they can be enabled
+  per branch + rolled back instantly.
+
+---
+
+## 41. New open questions added in v5
+
+Adding to v3 §14 + v4 §27:
+
+- **Q-E1.** Fund accounting model — adopt **US GAAP nonprofit** (with /
+  without donor restrictions), or **IFRS for nonprofits** (similar but
+  different terminology), or **dual-render** (one set of books, two report
+  layouts)? Recommendation: dual-render.
+- **Q-E2.** Inventory / commodities scope on day one — full module, or
+  defer to a later phase? If included, which warehouses are live first?
+- **Q-E3.** IFRS 16 lease accounting — confirm IFRS 16 (recommended) vs
+  US ASC 842; confirm discount-rate source.
+- **Q-E4.** Mobile-money bulk-disbursement files — which providers' formats
+  ship in v1 (M-Pesa B2C bulk + which others)?
+- **Q-E5.** Pension / provident fund — which fund managers + remittance file
+  formats?
+- **Q-E6.** Crisis-mode bypass policy — who can activate, for how long,
+  with what audit window?
+- **Q-E7.** SDG tagging — mandatory on every line, or opt-in per project?
+- **Q-E8.** Parallel-run length — confirm 2 fiscal periods recommendation.
+- **Q-E9.** Localisation languages on day one — EN + AR only, or add FR /
+  SW immediately?
+- **Q-E10.** Public transparency dashboard — opt-in per donor / branch, or
+  off until explicitly enabled?
+
+---
+
+## 42. v5 impact on the v3 + v4 phase plan
+
+No phase renumbered. v5 inserts items into existing phases:
+
+| Phase | v5 additions |
+|---|---|
+| **Phase 0** | (no change) |
+| **Phase 1 — GL foundations** | **§30 fund + restriction model in COA from day one** (cheap to add now, expensive to retrofit), **§40 posting-engine test suite + synthetic data generator + feature-flag framework**. |
+| **Phase 2 — Wire ops to GL** | **§34 pension + loan management** in payroll; **§33 cheque register + multi-signatory** for bank disbursements; **§38 crisis-mode bypass** scaffolding. |
+| **Phase 2.5 — Donor & grant compliance** | **§30 Statement of Activities + Functional Expenses + Pledges**, **§37 SDG tagging**, **§31 GIK & in-kind donation valuation**. |
+| **Phase 3 — Reporting v1** | **§30 nonprofit financial statements** (replaces standard P&L / BS for nonprofit views), **§39 FR / SW localisation if Q-E9 says yes**. |
+| **Phase 4 — Multi-entity + FX** | **§32 lease accounting + capital projects**, **§33 cash-pooling**, **§31 inter-warehouse transfers**. |
+| **Phase 5 — APIs + webhooks** | **§35 internal audit module APIs**, **§40 public transparency dashboard endpoint**. |
+| **Phase 6 — Banking & treasury** | **§33 bulk-disbursement file generators**, **§36 government e-filing connectors**, **§31 e-vouchers / CTP integration**. |
+| **Phase 7 — Scenario / forecast / AI** | **§35 risk register + COSO self-assessment**. |
+| **Phase 8 — Reporting alerts + scheduled email** | **§30 conditional-contribution recognition triggers**, **§35 audit committee dashboard**. |
+| **Phase 9 — Hardening / BI / mobile parity** | **§40 parallel-run playbook + cut-over runbook + user certification programme + performance monitoring**, **§37 carbon footprint + Grand Bargain localisation index**. |
+
+**Net schedule impact:** ~+2 sprints distributed. **Phase 2.5 grows the most**
+(donor compliance + nonprofit financial statements + GIK + SDG). The
+**fund-restriction model in §30 is the most urgent** — it must land in
+**Phase 1** because every journal posted afterwards inherits a fund tag, and
+retrofitting that across years of postings is cripplingly expensive.
+
+---
+
+## 43. Updated recommended start
+
+After signing off all open questions (v3 Q-C1…C8, v4 Q-D1…D10, v5
+Q-E1…E10), the very first project task becomes:
+
+**"Phase 1 GL foundations — schema (with fund-restriction model) +
+posting RPC + sanctions module + SoD matrix + posting-engine test suite +
+feature-flag framework"**
+
+scoped to one sprint, with explicit acceptance criteria from §15 Phase 1 +
+§28 Phase 1 v4 additions + §42 Phase 1 v5 additions.
+
+---
+
+## 44. What to look at next *(optional later passes)*
+
+If a v6 review is ever wanted, these are the areas still uncovered:
+
+- **Investment management** (term deposits, money-market, FX hedging).
+- **Transfer pricing documentation** for intercompany flows.
+- **Country-by-country reporting** (BEPS) for multi-entity.
+- **Deferred-tax assets / liabilities** + **tax provision** under IAS 12.
+- **Earned Value Management (EVM)** for grant-funded projects.
+- **Carry-forward funds** between fiscal years.
+- **Multi-year grant amortisation** (advance-grant deferred-revenue
+  accounting).
+- **Single Audit / Schedule of Expenditures of Federal Awards (SEFA)**
+  generation.
+- **Form 990 / Charity Commission annual return** auto-generation.
+- **Donor portal data feeds** (USAID DEC, EU INFOREURO, UN partner portal).
+- **SSO for external auditors** (SAML, Azure AD).
+- **SFTP for batch-file exchange** with banks / donors / govt.
+
+---
+
+*End of v5 addendum. v2 + v3 + v4 + v5 together form the working master plan.
+v6 is **not** planned unless §44 items are explicitly requested.*
