@@ -46,13 +46,26 @@ interface SalaryConfig {
   salary_history: SalaryHistoryEntry[];
   hourly_rate: number | null;
 }
+interface RetainerInfo {
+  classification_id: string | null;
+  classification_level: string | null;
+  amount_cents: number;
+  currency: string;
+  frequency: string;
+  is_active: boolean;
+  effective_from: string | null;
+  effective_to: string | null;
+}
 interface EmployeeRow {
   id: string; full_name: string | null; role: string | null;
   department_name: string | null; department_id: string | null; email: string | null;
   employment_type: string | null; contract_start_date: string | null; contract_end_date: string | null;
   contract_type: string | null;
+  is_employee: boolean | null;
   salary_config: SalaryConfig | null;
+  retainer: RetainerInfo | null;
 }
+interface DeptOption { id: string; name: string; }
 interface Adjustment { name: string; amount: number; type: 'bonus' | 'deduction'; }
 interface RunItem {
   id: string; run_id: string; user_id: string; user_name: string; department_name: string;
@@ -337,31 +350,71 @@ export default function PayrollAdmin() {
   // H10: load statutory brackets at mount so computePayroll has them
   useStatutoryBrackets('SD');
 
+  // Departments are loaded once at root so the salary edit dialog can offer
+  // an inline profile re-assignment without a second round-trip.
+  const { data: departments = [] } = useQuery<DeptOption[]>({
+    queryKey: ['payroll-admin-departments'],
+    ...PA_CACHE,
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return ((data ?? []) as Array<{ id: string; name: string }>).map(d => ({ id: d.id, name: d.name }));
+    },
+  });
+
   const { data: employees = [], isLoading: loadingEmp } = useQuery<EmployeeRow[]>({
     queryKey: ['payroll-admin-employees'],
     ...PA_CACHE,
     queryFn: async () => {
-      const [{ data: profs }, { data: depts }, { data: configs }] = await Promise.all([
+      // Retainer info comes from the `current_user_classifications` view which
+      // already filters by effective dates server-side. The view isn't in the
+      // generated types so we cast `as any` (see RetainerManagement.tsx for the
+      // same pattern). Tolerate the view being absent — non-retainer employees
+      // simply won't have retainer data.
+      const [{ data: profs }, { data: depts }, { data: configs }, retainersResp] = await Promise.all([
         supabase.from('profiles').select('id, full_name, role, email, department_id, employment_type, contract_start_date, contract_end_date, contract_type, is_employee').order('full_name'),
         supabase.from('departments').select('id, name'),
         supabase.from('employee_salary_config').select('*'),
+        supabase
+          .from('current_user_classifications' as any)
+          .select('id, user_id, classification_level, retainer_amount_cents, retainer_currency, retainer_frequency, is_active, effective_from, effective_to')
+          .then(r => r, () => ({ data: [] as any[] })),
       ]);
       const deptMap: Record<string, string> = {};
       (depts ?? []).forEach((d: any) => { deptMap[d.id] = d.name; });
       const cfgMap: Record<string, SalaryConfig> = {};
       (configs ?? []).forEach((c: any) => { cfgMap[c.user_id] = { ...c, allowances: Array.isArray(c.allowances) ? c.allowances : [], deductions: Array.isArray(c.deductions) ? c.deductions : [] }; });
+      const retainerMap: Record<string, RetainerInfo> = {};
+      ((retainersResp?.data ?? []) as any[]).forEach((r: any) => {
+        retainerMap[r.user_id] = {
+          classification_id: r.id ?? null,
+          classification_level: r.classification_level ?? null,
+          amount_cents: Number(r.retainer_amount_cents ?? 0),
+          currency: r.retainer_currency ?? 'SDG',
+          frequency: r.retainer_frequency ?? 'monthly',
+          is_active: !!r.is_active,
+          effective_from: r.effective_from ?? null,
+          effective_to: r.effective_to ?? null,
+        };
+      });
       return (profs ?? [])
+        // Show every employee record. Retainer-contract employees were
+        // previously hidden — they now appear in the same list with a Retainer
+        // badge so HR can manage salary, retainer, and contract details from
+        // one screen.
         .filter((p: any) => p.is_employee === true)
-        .filter((p: any) => !p.contract_type || p.contract_type !== 'retainer')
         .map((p: any) => ({
           id: p.id, full_name: p.full_name, role: p.role, email: p.email,
-          department_id: p.department_id, department_name: deptMap[p.department_id] ?? null,
+          department_id: p.department_id ?? null,
+          department_name: departments.find(d => d.id === p.department_id)?.name ?? null,
           employment_type: p.employment_type, contract_start_date: p.contract_start_date,
           contract_end_date: p.contract_end_date ?? null,
           contract_type: p.contract_type ?? null,
+          is_employee: p.is_employee ?? null,
           salary_config: cfgMap[p.id] ?? null,
+          retainer: retainerMap[p.id] ?? null,
         }));
     },
+    enabled: true,
   });
 
   const { data: runs = [], isLoading: loadingRuns } = useQuery<PayrollRun[]>({
@@ -427,7 +480,7 @@ export default function PayrollAdmin() {
           </TabsList>
 
           <TabsContent value="salaries" className="mt-0">
-            <SalarySetupTab employees={employees} loading={loadingEmp} />
+            <SalarySetupTab employees={employees} loading={loadingEmp} departments={departments} />
           </TabsContent>
           <TabsContent value="run" className="mt-0">
             <RunPayrollTab employees={employees} runs={runs} currentUserId={currentUser?.id ?? ''} currentUserRole={currentUser?.role ?? ''} />
@@ -476,7 +529,7 @@ function onboardingScore(emp: EmployeeRow): { score: number; items: { label: str
   return { score: items.filter(i => i.done).length, items };
 }
 
-function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; loading: boolean }) {
+function SalarySetupTab({ employees, loading, departments }: { employees: EmployeeRow[]; loading: boolean; departments: DeptOption[] }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'configured' | 'missing' | 'incomplete-onboarding'>('configured');
   const [editEmp, setEditEmp] = useState<EmployeeRow | null>(null);
@@ -563,12 +616,25 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
                       </div>
                     </td>
                     <td className="px-3 py-3.5 hidden md:table-cell">
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize">
-                        {emp.employment_type?.replace(/_/g, ' ') ?? '—'}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize" data-testid={`text-emptype-${emp.id}`}>
+                          {emp.employment_type?.replace(/_/g, ' ') ?? '—'}
+                        </span>
+                        {(emp.contract_type === 'retainer' || emp.retainer?.is_active) && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40" data-testid={`badge-retainer-${emp.id}`}>
+                            Retainer
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3.5 text-sm text-muted-foreground">{emp.department_name ?? <span className="opacity-30">—</span>}</td>
-                    <td className="px-3 py-3.5 text-right font-medium text-sm">{calc ? fmt(calc.base, cur) : <span className="text-muted-foreground/30">—</span>}</td>
+                    <td className="px-3 py-3.5 text-right font-medium text-sm">
+                      {calc
+                        ? fmt(calc.base, cur)
+                        : emp.retainer?.is_active && emp.retainer.amount_cents > 0
+                          ? <span className="text-violet-600" data-testid={`text-retainer-${emp.id}`}>{fmt(emp.retainer.amount_cents / 100, emp.retainer.currency)}<span className="text-[10px] text-muted-foreground ml-1">/{emp.retainer.frequency.slice(0,1)}</span></span>
+                          : <span className="text-muted-foreground/30">—</span>}
+                    </td>
                     <td className="px-3 py-3.5 text-right font-semibold text-emerald-600 text-sm">{calc ? fmt(calc.gross, cur) : <span className="text-muted-foreground/30">—</span>}</td>
                     <td className="px-3 py-3.5 text-right font-bold text-blue-600 text-sm">{calc ? fmt(calc.net, cur) : <span className="text-muted-foreground/30">—</span>}</td>
                     <td className="px-3 py-3.5 text-center">
@@ -627,7 +693,7 @@ function SalarySetupTab({ employees, loading }: { employees: EmployeeRow[]; load
         </div>
       </Card>
 
-      {editEmp && <SalaryEditDialog emp={editEmp} onClose={() => setEditEmp(null)} />}
+      {editEmp && <SalaryEditDialog emp={editEmp} departments={departments} onClose={() => setEditEmp(null)} />}
     </div>
   );
 }
@@ -650,10 +716,11 @@ const DEDUCTION_PRESETS: LineItem[] = [
 ];
 
 // ── Salary Edit Dialog ────────────────────────────────────────────────────────
-function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => void }) {
+function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; departments: DeptOption[]; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const existing = emp.salary_config;
+  const existingRetainer = emp.retainer;
 
   const [baseSalary, setBaseSalary]   = useState(String(existing?.base_salary ?? ''));
   const [currency, setCurrency]       = useState(existing?.currency ?? 'SDG');
@@ -663,6 +730,24 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
   const [notes, setNotes]             = useState(existing?.notes ?? '');
   const [hourlyRate, setHourlyRate]   = useState(String(existing?.hourly_rate ?? ''));
   const [saving, setSaving]           = useState(false);
+
+  // Profile fields — editable inline so HR doesn't need to bounce to the Users
+  // page just to change a department or contract type before configuring pay.
+  const [pDeptId, setPDeptId]                 = useState<string>(emp.department_id ?? '__none');
+  const [pEmploymentType, setPEmploymentType] = useState<string>(emp.employment_type ?? '__none');
+  const [pContractType, setPContractType]     = useState<string>(emp.contract_type ?? '__none');
+  const [pContractStart, setPContractStart]   = useState<string>(emp.contract_start_date ?? '');
+  const [pContractEnd, setPContractEnd]       = useState<string>(emp.contract_end_date ?? '');
+  const [pIsEmployee, setPIsEmployee]         = useState<boolean>(emp.is_employee !== false);
+
+  // Retainer fields. amount is stored in cents server-side but typed in major
+  // currency units in the form for usability.
+  const [rAmount, setRAmount]         = useState(String(existingRetainer ? existingRetainer.amount_cents / 100 : ''));
+  const [rCurrency, setRCurrency]     = useState(existingRetainer?.currency ?? 'SDG');
+  const [rFrequency, setRFrequency]   = useState(existingRetainer?.frequency ?? 'monthly');
+  const [rActive, setRActive]         = useState<boolean>(existingRetainer?.is_active ?? false);
+  const [rEffFrom, setREffFrom]       = useState<string>(existingRetainer?.effective_from ?? format(new Date(), 'yyyy-MM-dd'));
+  const [rEffTo, setREffTo]           = useState<string>(existingRetainer?.effective_to ?? '');
 
   const base = parseFloat(baseSalary) || 0;
 
@@ -693,65 +778,153 @@ function SalaryEditDialog({ emp, onClose }: { emp: EmployeeRow; onClose: () => v
   const removeLine = (list: LineItem[], setList: (l: LineItem[]) => void, idx: number) =>
     setList(list.filter((_, i) => i !== idx));
 
+  // Detect whether each section actually changed so we can skip no-op writes
+  // and tell the user precisely what was updated.
+  const profileChanged =
+    (pDeptId === '__none' ? null : pDeptId) !== (emp.department_id ?? null) ||
+    (pEmploymentType === '__none' ? null : pEmploymentType) !== (emp.employment_type ?? null) ||
+    (pContractType === '__none' ? null : pContractType) !== (emp.contract_type ?? null) ||
+    (pContractStart || null) !== (emp.contract_start_date ?? null) ||
+    (pContractEnd || null) !== (emp.contract_end_date ?? null) ||
+    pIsEmployee !== (emp.is_employee !== false);
+
+  const rAmountCents = Math.round((parseFloat(rAmount) || 0) * 100);
+  const retainerChanged =
+    rAmountCents !== (existingRetainer?.amount_cents ?? 0) ||
+    rCurrency !== (existingRetainer?.currency ?? 'SDG') ||
+    rFrequency !== (existingRetainer?.frequency ?? 'monthly') ||
+    rActive !== (existingRetainer?.is_active ?? false) ||
+    (rEffFrom || null) !== (existingRetainer?.effective_from ?? null) ||
+    (rEffTo || null) !== (existingRetainer?.effective_to ?? null);
+
+  const salaryChanged =
+    !!existing && (
+      base !== existing.base_salary ||
+      currency !== existing.currency ||
+      JSON.stringify(allowances) !== JSON.stringify(existing.allowances) ||
+      JSON.stringify(deductions) !== JSON.stringify(existing.deductions) ||
+      effectiveDate !== existing.effective_date ||
+      (notes || null) !== (existing.notes ?? null) ||
+      (parseFloat(hourlyRate) || null) !== (existing.hourly_rate ?? null)
+    );
+  const salaryNew = !existing && base > 0;
+  const willSaveSalary = salaryNew || salaryChanged;
+
   const save = async () => {
-    if (!base || base <= 0) { toast({ title: 'Enter a valid base salary', variant: 'destructive' }); return; }
+    if (!profileChanged && !willSaveSalary && !retainerChanged) {
+      toast({ title: 'Nothing to save', description: 'No changes detected.' });
+      return;
+    }
+    if (willSaveSalary && (!base || base <= 0)) {
+      toast({ title: 'Enter a valid base salary', description: 'Or clear all salary fields to save profile/retainer only.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     const { data: { user: authUser } } = await supabase.auth.getUser();
     const now = new Date().toISOString();
+    const successes: string[] = [];
+    const failures: string[] = [];
 
-    // If editing an existing config, append a history entry with the OLD values
-    const historyEntry: SalaryHistoryEntry | null = existing ? {
-      changed_at: now, changed_by: authUser?.id ?? null,
-      old_base: existing.base_salary, new_base: base,
-      old_currency: existing.currency, new_currency: currency,
-      old_allowances: existing.allowances, old_deductions: existing.deductions,
-      note: notes || null,
-    } : null;
+    // ── 1. Profile write ────────────────────────────────────────────────────
+    if (profileChanged) {
+      const profilePayload: Record<string, unknown> = {
+        department_id: pDeptId === '__none' ? null : pDeptId,
+        employment_type: pEmploymentType === '__none' ? null : pEmploymentType,
+        contract_type: pContractType === '__none' ? null : pContractType,
+        contract_start_date: pContractStart || null,
+        contract_end_date: pContractEnd || null,
+        is_employee: pIsEmployee,
+      };
+      const { error: profileErr } = await supabase.from('profiles').update(profilePayload).eq('id', emp.id);
+      if (profileErr) failures.push(`profile (${profileErr.message})`);
+      else successes.push('profile');
+    }
 
-    const prevHistory: SalaryHistoryEntry[] = Array.isArray(existing?.salary_history) ? existing!.salary_history : [];
-    const newHistory = historyEntry ? [historyEntry, ...prevHistory] : [];
-
-    const hr = parseFloat(hourlyRate) || null;
-    const payload: Record<string, unknown> = {
-      user_id: emp.id, base_salary: base, currency, allowances, deductions,
-      notes: notes || null, effective_date: effectiveDate, updated_at: now,
-      salary_history: newHistory,
-      hourly_rate: hr,
-    };
-
-    // Resilient save: if the DB schema cache is missing an optional column
-    // (e.g. hourly_rate before the timesheet migration is applied, or
-    // salary_history before its add-column migration is applied), strip it
-    // and retry once. This lets the save succeed immediately while the SQL
-    // is still pending in the pactdb editor.
-    const trySave = async (p: Record<string, unknown>) => existing
-      ? await supabase.from('employee_salary_config').update(p).eq('id', existing.id)
-      : await supabase.from('employee_salary_config').insert({ ...p, created_by: authUser?.id });
-
-    let { error } = await trySave(payload);
-    if (error && /schema cache|column .* does not exist|Could not find the/i.test(error.message)) {
-      const pruned = { ...payload };
-      const optionalCols = ['hourly_rate', 'salary_history', 'effective_date', 'notes'];
-      for (const col of optionalCols) {
-        if (new RegExp(`'?${col}'?`).test(error.message)) {
-          delete pruned[col];
+    // ── 2. Salary write ─────────────────────────────────────────────────────
+    if (willSaveSalary) {
+      const historyEntry: SalaryHistoryEntry | null = existing ? {
+        changed_at: now, changed_by: authUser?.id ?? null,
+        old_base: existing.base_salary, new_base: base,
+        old_currency: existing.currency, new_currency: currency,
+        old_allowances: existing.allowances, old_deductions: existing.deductions,
+        note: notes || null,
+      } : null;
+      const prevHistory: SalaryHistoryEntry[] = Array.isArray(existing?.salary_history) ? existing!.salary_history : [];
+      const newHistory = historyEntry ? [historyEntry, ...prevHistory] : [];
+      const hr = parseFloat(hourlyRate) || null;
+      const salaryPayload: Record<string, unknown> = {
+        user_id: emp.id, base_salary: base, currency, allowances, deductions,
+        notes: notes || null, effective_date: effectiveDate, updated_at: now,
+        salary_history: newHistory, hourly_rate: hr,
+      };
+      const trySave = async (p: Record<string, unknown>) => existing
+        ? await supabase.from('employee_salary_config').update(p).eq('id', existing.id)
+        : await supabase.from('employee_salary_config').insert({ ...p, created_by: authUser?.id });
+      let { error: salErr } = await trySave(salaryPayload);
+      if (salErr && /schema cache|column .* does not exist|Could not find the/i.test(salErr.message)) {
+        // Strip optional columns that the schema cache hasn't picked up yet
+        // (most commonly hourly_rate / salary_history while a migration is
+        // pending in pactdb), and retry once.
+        const pruned = { ...salaryPayload };
+        delete pruned.hourly_rate;
+        if (!Array.isArray(pruned.salary_history) || (pruned.salary_history as unknown[]).length === 0) {
+          delete pruned.salary_history;
         }
+        ({ error: salErr } = await trySave(pruned));
       }
-      // Always strip hourly_rate/salary_history on schema-cache errors as a
-      // belt-and-braces fallback — they're the most common laggers and
-      // PostgREST sometimes reports a different column in the message.
-      delete pruned.hourly_rate;
-      if (!Array.isArray(pruned.salary_history) || (pruned.salary_history as unknown[]).length === 0) {
-        delete pruned.salary_history;
+      if (salErr) failures.push(`salary (${salErr.message})`);
+      else successes.push(historyEntry ? 'salary (history recorded)' : 'salary');
+    }
+
+    // ── 3. Retainer write ───────────────────────────────────────────────────
+    // user_classifications keeps a history per user — we close the prior
+    // active row by setting effective_to and is_active=false, then insert a
+    // fresh row reflecting the new values. This mirrors RetainerManagement.
+    if (retainerChanged) {
+      try {
+        if (existingRetainer?.classification_id) {
+          const closeAt = (rEffFrom || format(new Date(), 'yyyy-MM-dd'));
+          await (supabase as any).from('user_classifications').update({
+            effective_to: closeAt,
+            is_active: false,
+            updated_at: now,
+          }).eq('id', existingRetainer.classification_id);
+        }
+        const insertPayload: Record<string, unknown> = {
+          user_id: emp.id,
+          classification_level: existingRetainer?.classification_level ?? 'standard',
+          retainer_amount_cents: rAmountCents,
+          retainer_currency: rCurrency,
+          retainer_frequency: rFrequency,
+          is_active: rActive,
+          effective_from: rEffFrom || format(new Date(), 'yyyy-MM-dd'),
+          effective_to: rEffTo || null,
+          created_by: authUser?.id ?? null,
+        };
+        const { error: retErr } = await (supabase as any).from('user_classifications').insert(insertPayload);
+        if (retErr) failures.push(`retainer (${retErr.message})`);
+        else successes.push('retainer');
+      } catch (e: any) {
+        failures.push(`retainer (${e?.message ?? 'unknown error'})`);
       }
-      ({ error } = await trySave(pruned));
     }
 
     setSaving(false);
-    if (error) { toast({ title: 'Save failed', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: historyEntry ? 'Salary updated · change recorded in history' : 'Salary configuration saved' });
-    qc.invalidateQueries({ queryKey: ['payroll-admin-employees'] });
-    onClose();
+
+    if (failures.length === 0) {
+      toast({ title: `Saved: ${successes.join(' · ')}` });
+      qc.invalidateQueries({ queryKey: ['payroll-admin-employees'] });
+      onClose();
+    } else if (successes.length > 0) {
+      toast({
+        title: `Partial save — ${successes.join(' · ')} OK`,
+        description: `Failed: ${failures.join(' · ')}`,
+        variant: 'destructive',
+      });
+      qc.invalidateQueries({ queryKey: ['payroll-admin-employees'] });
+    } else {
+      toast({ title: 'Save failed', description: failures.join(' · '), variant: 'destructive' });
+    }
   };
 
   // Visual bar widths (cap allowances bar at gross, show deductions as portion of gross)
