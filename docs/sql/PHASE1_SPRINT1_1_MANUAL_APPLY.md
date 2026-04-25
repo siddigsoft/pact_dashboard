@@ -191,7 +191,16 @@ If any smoke test fails, capture the exact error message and decide:
 
 ## Sign-off log
 
-Fill in after each environment apply:
+### Code-review sign-off
+
+| Stage | Result | Reviewer | Date | Notes |
+|---|---|---|---|---|
+| Architect review — round 1 | FAIL (3 must-fix) | architect_1 | 2026-04-25 | Authz hole, idempotency race, missing posting-date guard |
+| Patches applied | — | engineering | 2026-04-25 | Role-gate + ON CONFLICT + period-range guard |
+| Architect review — round 2 | ✅ **PASS** | architect_1 | 2026-04-25 | "No remaining Sprint 1.1 shipping blocker." Concurrency smoke added per advisory. |
+| **Sprint 1.1 sign-off** | ✅ **PASS — cleared to apply to pactdb** | engineering | 2026-04-25 | Migration + seed + rollback + runbook all shipped |
+
+### Apply log (fill in after each environment apply)
 
 | Environment | Applied at | Applied by | Smoke result | Notes |
 |---|---|---|---|---|
