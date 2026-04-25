@@ -3,6 +3,11 @@
 ## Overview
 PACT Command Center is a centralized platform designed to streamline humanitarian and development field operations, focusing on Monthly Monitoring Plans (MMPs) and site visits. Its primary goal is to enhance efficiency, transparency, and accountability through robust tools for planning, coordination, execution, and monitoring. Key capabilities include multi-tier user management, real-time collaboration, advanced financial tracking, comprehensive reporting, and a mobile-responsive Mission Control Dashboard with full offline functionality. The project aims to significantly improve humanitarian aid delivery by optimizing field operations.
 
+## Live Status — read this first
+- **`docs/STATUS_DASHBOARD.md`** is the always-current scorecard of the Accounting Module rebuild: phase % done, every sprint, every SQL file with sign-off and pactdb apply status, the 10 Phase-1 acceptance criteria, and the open/blocked register. **Update it whenever a sprint ships, a file is applied, or a criterion flips green.**
+- Deep-archive planning lives in `docs/PLANNING_INDEX.md` (3 000+ lines).
+- **Standing rule:** all accounting/HR SQL is applied **manually** by the user in the pactdb Supabase SQL editor. NO Drizzle, NO `db:push`, NO Replit auto-push for this codebase. Agent writes SQL files + runbooks; user pastes them.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 

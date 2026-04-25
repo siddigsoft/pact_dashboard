@@ -36,6 +36,8 @@ so any edits should be made in the source files.
 > `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md`. Apply via the pactdb SQL
 > editor in the order documented in the runbook.
 
+> 📊 **For the 60-second status read, see `docs/STATUS_DASHBOARD.md`.** This file is the deep archive; the dashboard is the always-current scorecard.
+
 - HR Audit Phase 0 (gaps **H1–H10**) — **DONE in code & DB**; all migrations applied to `pactdb`.
 - Reviewer fixes for H1/H6/H8 — **DONE** (`supabase/migrations/20260425_hr_audit_remediation.sql`).
 - Production runtime crash on `/dashboard` (`Wallet is not defined`) — **FIXED** in `src/components/AppSidebar.tsx`; needs a Vercel redeploy.
