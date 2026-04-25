@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -957,6 +958,169 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
         </div>
 
         <div className="px-6 py-5 space-y-5">
+
+          {/* ── Profile section ────────────────────────────────────────────── */}
+          {/* Lets HR fix department, employment type, contract dates, and the
+              "Is employee?" flag without bouncing to the Users page first. */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <SectionLabel icon={<UserCheck className="h-3.5 w-3.5 text-slate-500" />} label="Profile" />
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground">Is employee?</span>
+                <Switch
+                  checked={pIsEmployee}
+                  onCheckedChange={setPIsEmployee}
+                  data-testid="switch-is-employee"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-muted-foreground">Department</label>
+                <Select value={pDeptId} onValueChange={setPDeptId}>
+                  <SelectTrigger className="h-9 text-sm mt-1" data-testid="select-profile-department">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">— None —</SelectItem>
+                    {departments.map(d => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Employment type</label>
+                <Select value={pEmploymentType} onValueChange={setPEmploymentType}>
+                  <SelectTrigger className="h-9 text-sm mt-1" data-testid="select-profile-employment-type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">— Not set —</SelectItem>
+                    <SelectItem value="full_time">Full time</SelectItem>
+                    <SelectItem value="part_time">Part time</SelectItem>
+                    <SelectItem value="contractor">Contractor</SelectItem>
+                    <SelectItem value="intern">Intern</SelectItem>
+                    <SelectItem value="volunteer">Volunteer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Contract type</label>
+                <Select value={pContractType} onValueChange={setPContractType}>
+                  <SelectTrigger className="h-9 text-sm mt-1" data-testid="select-profile-contract-type">
+                    <SelectValue placeholder="Select contract" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">— Not set —</SelectItem>
+                    <SelectItem value="permanent">Permanent</SelectItem>
+                    <SelectItem value="fixed_term">Fixed term</SelectItem>
+                    <SelectItem value="retainer">Retainer</SelectItem>
+                    <SelectItem value="probation">Probation</SelectItem>
+                    <SelectItem value="casual">Casual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] text-muted-foreground">Start date</label>
+                  <Input
+                    type="date"
+                    value={pContractStart}
+                    onChange={e => setPContractStart(e.target.value)}
+                    className="h-9 text-sm mt-1"
+                    data-testid="input-profile-contract-start"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-muted-foreground">End date</label>
+                  <Input
+                    type="date"
+                    value={pContractEnd}
+                    onChange={e => setPContractEnd(e.target.value)}
+                    className="h-9 text-sm mt-1"
+                    data-testid="input-profile-contract-end"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Retainer section ───────────────────────────────────────────── */}
+          {/* For contractors paid a fixed retainer instead of (or alongside)
+              a base salary. Writes to user_classifications via the same
+              close-prior-then-insert pattern as RetainerManagement. */}
+          <div className="rounded-2xl border border-violet-200 dark:border-violet-800/40 bg-violet-50/40 dark:bg-violet-900/10 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <SectionLabel icon={<Wallet className="h-3.5 w-3.5 text-violet-500" />} label="Retainer" />
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground">Active</span>
+                <Switch
+                  checked={rActive}
+                  onCheckedChange={setRActive}
+                  data-testid="switch-retainer-active"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground -mt-1">
+              Use this for contractors paid a fixed amount per period instead of (or in addition to) a salary.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-1">
+                <label className="text-[11px] text-muted-foreground">Amount</label>
+                <Input
+                  type="number"
+                  value={rAmount}
+                  onChange={e => setRAmount(e.target.value)}
+                  placeholder="0"
+                  className="h-9 text-sm mt-1"
+                  data-testid="input-retainer-amount"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Currency</label>
+                <Select value={rCurrency} onValueChange={setRCurrency}>
+                  <SelectTrigger className="h-9 text-sm mt-1" data-testid="select-retainer-currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Frequency</label>
+                <Select value={rFrequency} onValueChange={setRFrequency}>
+                  <SelectTrigger className="h-9 text-sm mt-1" data-testid="select-retainer-frequency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Effective from</label>
+                <Input
+                  type="date"
+                  value={rEffFrom}
+                  onChange={e => setREffFrom(e.target.value)}
+                  className="h-9 text-sm mt-1"
+                  data-testid="input-retainer-eff-from"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-[11px] text-muted-foreground">Effective to (optional)</label>
+                <Input
+                  type="date"
+                  value={rEffTo}
+                  onChange={e => setREffTo(e.target.value)}
+                  className="h-9 text-sm mt-1"
+                  data-testid="input-retainer-eff-to"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* Base salary + currency + effective date */}
           <div className="grid grid-cols-5 gap-3">

@@ -170,36 +170,57 @@ export default function Timesheet() {
    * Fetch the weekly parent timesheet for the current user and selected week.
    * Returns null when none exists yet (employee hasn't started logging).
    */
-  const { data: weeklyTimesheet, isLoading: loadingWeek } = useQuery<WeeklyTimesheet | null>({
+  const { data: weeklyTimesheet, isLoading: loadingWeek, error: weeklyError } = useQuery<WeeklyTimesheet | null>({
     queryKey: ['ts-weekly', userId, wStartStr],
     enabled: !!userId,
     ...CACHE,
+    retry: false,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('timesheets')
         .select('*')
         .eq('user_id', userId)
         .eq('week_start', wStartStr)
         .maybeSingle();
+      if (error) throw error;
       return (data as WeeklyTimesheet | null) ?? null;
     },
   });
+
+  // Detect "table missing" responses from PostgREST (PGRST205) or raw Postgres
+  // (42P01) on EITHER timesheet table. Catching both means we still warn when
+  // only one of the two tables made it into pactdb (partial-apply drift).
+  // Restricted to messages that name a timesheet table so unrelated errors
+  // (network blips, RLS denials, etc.) don't trigger the banner.
+  const setupRequired = useMemo(() => {
+    const looksMissing = (err: unknown) => {
+      if (!err) return false;
+      const msg = (err as any)?.message ?? '';
+      const code = (err as any)?.code ?? '';
+      const isMissingCode = code === 'PGRST205' || code === '42P01';
+      const isMissingMsg = /relation .*timesheet.* does not exist|Could not find the table .*timesheet/i.test(msg);
+      return isMissingCode || isMissingMsg;
+    };
+    return looksMissing(weeklyError) || looksMissing(entriesError);
+  }, [weeklyError, entriesError]);
 
   /**
    * Fetch per-day entries for the current week's timesheet parent.
    * Empty when no parent exists yet.
    */
-  const { data: weekEntries = [], isLoading: loadingEntries } = useQuery<TimesheetEntry[]>({
+  const { data: weekEntries = [], isLoading: loadingEntries, error: entriesError } = useQuery<TimesheetEntry[]>({
     queryKey: ['ts-entries', weeklyTimesheet?.id ?? 'none'],
     enabled: !!weeklyTimesheet?.id,
     ...CACHE,
+    retry: false,
     queryFn: async () => {
       if (!weeklyTimesheet?.id) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('timesheet_entries')
         .select('*')
         .eq('timesheet_id', weeklyTimesheet.id)
         .order('date');
+      if (error) throw error;
       return (data ?? []) as TimesheetEntry[];
     },
   });
@@ -677,6 +698,28 @@ export default function Timesheet() {
           </p>
         </div>
       </div>
+
+      {/* Setup-required banner — shown when the timesheet tables haven't been
+          applied to pactdb yet. Without this, the page would silently look
+          empty and users wouldn't know whether to log hours or fix setup. */}
+      {setupRequired && (
+        <div
+          className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-4 flex items-start gap-3"
+          data-testid="banner-timesheet-setup-required"
+        >
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+              Setup required — Timesheet tables aren't available yet
+            </p>
+            <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+              The page is trying to read from the <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 font-mono">timesheets</code> and <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 font-mono">timesheet_entries</code> tables, but they haven't been created in pactdb yet. Ask an admin to follow the runbook at
+              {' '}<code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 font-mono">docs/runbooks/2026-04-25_apply_timesheet_module.md</code>
+              {' '}and the page will start working as soon as it's applied.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={v => { setActiveTab(v as typeof activeTab); setSearch(''); }}>
