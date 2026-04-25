@@ -390,6 +390,9 @@ declare
   v_entry_id      uuid;
   v_entry_id2     uuid;
   v_idem_key      text;
+  v_idem_count    int;
+  v_flag_orig     boolean;
+  v_jwt_orig      text;
   v_dummy         numeric;
   v_run_tag       text := substr(replace(gen_random_uuid()::text,'-',''),1,8);
   v_tb_dr         numeric := 0;
@@ -494,9 +497,15 @@ begin
     end if;
   end;
 
-  -- T03: POSTING_ENGINE_DISABLED with master switch off
+  -- T03: POSTING_ENGINE_DISABLED with master switch off.
+  -- Hardened: capture original BEFORE the mutation; ensure restore runs even
+  -- if the test body raises an unexpected error. We also catch outer errors
+  -- so a failure in T03 cannot taint T04+.
+  v_flag_orig := (select is_enabled from public.feature_flags
+                   where key = 'acct.posting_engine.enabled');
   begin
-    update public.feature_flags set is_enabled = false where key = 'acct.posting_engine.enabled';
+    update public.feature_flags set is_enabled = false
+     where key = 'acct.posting_engine.enabled';
     begin
       perform public.acct_post_journal(
         jsonb_build_object(
@@ -514,10 +523,17 @@ begin
         return query select 'T03'::text, 'engine-disabled'::text, 'FAIL'::text, ('wrong error: '||sqlerrm)::text;
       end if;
     end;
-    update public.feature_flags set is_enabled = true where key = 'acct.posting_engine.enabled';
+  exception when others then
+    return query select 'T03'::text, 'engine-disabled'::text, 'FAIL'::text, ('outer error: '||sqlerrm)::text;
   end;
+  -- Always restore (runs whether the inner block succeeded, the test asserted,
+  -- or the outer exception handler fired):
+  update public.feature_flags set is_enabled = coalesce(v_flag_orig, true)
+   where key = 'acct.posting_engine.enabled';
 
-  -- T04: AUTHORIZATION_FAILED with non-finance role
+  -- T04: AUTHORIZATION_FAILED with non-finance role.
+  -- Hardened: capture original JWT BEFORE the mutation; restore unconditionally.
+  v_jwt_orig := current_setting('request.jwt.claim.sub', true);
   begin
     perform set_config('request.jwt.claim.sub', p_non_finance_user_id::text, true);
     begin
@@ -537,8 +553,13 @@ begin
         return query select 'T04'::text, 'authorization-failed'::text, 'FAIL'::text, ('wrong error: '||sqlerrm)::text;
       end if;
     end;
-    perform set_config('request.jwt.claim.sub', p_finance_user_id::text, true);
+  exception when others then
+    return query select 'T04'::text, 'authorization-failed'::text, 'FAIL'::text, ('outer error: '||sqlerrm)::text;
   end;
+  -- Always restore JWT to the finance user for T05+:
+  perform set_config('request.jwt.claim.sub',
+                     coalesce(nullif(v_jwt_orig, ''), p_finance_user_id::text),
+                     true);
 
   -- T05: PERIOD_NOT_FOUND
   begin
@@ -801,11 +822,19 @@ begin
           jsonb_build_object('account_id',v_acc_revenue,'fund_id',v_fund_a,'function','none','debit_credit','CR','functional_amount',999,'original_amount',999,'original_currency','SDG','functional_currency','SDG')
         )
       ), v_idem_key);
-    if v_entry_id = v_entry_id2 then
-      return query select 'T17'::text, 'idempotency-replay'::text, 'PASS'::text, ('same entry='||v_entry_id::text)::text;
+    select count(*) into v_idem_count
+      from public.acct_journal_entries
+     where idempotency_key = v_idem_key;
+    if v_entry_id = v_entry_id2 and v_idem_count = 1 then
+      return query select 'T17'::text, 'idempotency-replay'::text, 'PASS'::text,
+        ('same entry='||v_entry_id::text||' rows='||v_idem_count::text)::text;
+    elsif v_entry_id = v_entry_id2 and v_idem_count <> 1 then
+      return query select 'T17'::text, 'idempotency-replay'::text, 'FAIL'::text,
+        ('id matched but row count='||v_idem_count::text||' (expected 1)')::text;
     else
       return query select 'T17'::text, 'idempotency-replay'::text, 'FAIL'::text,
-        ('different entries returned: '||v_entry_id::text||' vs '||v_entry_id2::text)::text;
+        ('different entries returned: '||v_entry_id::text||' vs '||v_entry_id2::text||
+         ' rows='||v_idem_count::text)::text;
     end if;
   exception when others then
     return query select 'T17'::text, 'idempotency-replay'::text, 'FAIL'::text, sqlerrm::text;

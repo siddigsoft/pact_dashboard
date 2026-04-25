@@ -17,7 +17,7 @@
 > them.
 
 **Last updated:** 2026-04-25
-**Current sprint:** Phase 1 · Sprint 1.3 (built, awaiting code review then pactdb apply)
+**Current sprint:** Phase 1 · Sprint 1.3 — ✅ **SIGNED OFF PASS (round 4)**, awaiting pactdb apply
 **Next up:** Phase 1 · Sprint 1.F — accounting frontend pages (`/accounting/coa`, `/accounting/journals`, `/accounting/trial-balance`, `/finance/audit-trail`) + Arabic jsPDF font
 **Prerequisite for next apply:** Sprint 1.1 + 1.2 each clean in pactdb for ≥ 24 h before pasting 1.3
 
@@ -57,7 +57,7 @@ Legend: ✅ DONE · 🟢 SIGNED OFF · 🟡 IN PROGRESS · 🟠 BLOCKED · ⚪ Q
 |---|---|---|---|---|---|
 | 1.1 | GL schema + posting engine + TB RPC + feature flags + Sudan COA seed | 🟢 SIGNED OFF — PASS | 2026-04-25 (round 2) | _pending_ | Migration: `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` · Runbook: `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE1_SPRINT1_1_ROLLBACK.sql` · Seed: `docs/sql/PHASE1_SPRINT1_1_SEED_SUDAN_COA.sql` |
 | 1.2 | Sanctions + SoD foundation + finance audit triggers | 🟢 SIGNED OFF — PASS | 2026-04-25 (round 2) | _pending — must wait ≥ 24 h after 1.1 is clean_ | Migration: `supabase/migrations/20260508_acct_phase1_sprint1_2.sql` · Runbook: `docs/sql/PHASE1_SPRINT1_2_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE1_SPRINT1_2_ROLLBACK.sql` |
-| 1.3 | Posting-engine unit-test suite (20 tests, ~95% branch coverage) + synthetic data generator with reset registry | 🟢 BUILT — code review pending | — | _pending — must wait ≥ 24 h after 1.2 is clean_ | Migration: `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` · Runbook: `docs/sql/PHASE1_SPRINT1_3_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE1_SPRINT1_3_ROLLBACK.sql` |
+| 1.3 | Posting-engine unit-test suite (20 tests, ~95% branch coverage) + synthetic data generator with reset registry | 🟢 SIGNED OFF — PASS | 2026-04-25 (round 4) | _pending — must wait ≥ 24 h after 1.2 is clean_ | Migration: `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` · Runbook: `docs/sql/PHASE1_SPRINT1_3_MANUAL_APPLY.md` · Rollback: `docs/sql/PHASE1_SPRINT1_3_ROLLBACK.sql` |
 | 1.F | Phase 1 frontend: `/accounting/coa`, `/accounting/journals`, `/accounting/trial-balance`, `/finance/audit-trail` + Arabic jsPDF font | ⚪ QUEUED — next | — | — | — |
 
 ### Phases 2–10
@@ -84,7 +84,7 @@ status is the truth — sign-off only means "cleared to apply".
 | `supabase/migrations/20260508_acct_phase1_sprint1_2.sql` | 1.2 | Migration | ✅ PASS | ⏳ pending — after 1.1 + 24 h |
 | `docs/sql/PHASE1_SPRINT1_2_MANUAL_APPLY.md` | 1.2 | Runbook + smoke tests | ✅ | n/a |
 | `docs/sql/PHASE1_SPRINT1_2_ROLLBACK.sql` | 1.2 | Rollback | ✅ | n/a |
-| `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` | 1.3 | Migration | ⏳ code review pending | ⏳ pending — after 1.2 + 24 h |
+| `supabase/migrations/20260515_acct_phase1_sprint1_3.sql` | 1.3 | Migration | ✅ PASS (round 4) | ⏳ pending — after 1.2 + 24 h |
 | `docs/sql/PHASE1_SPRINT1_3_MANUAL_APPLY.md` | 1.3 | Runbook + smoke tests + 20-row results format | ✅ | n/a |
 | `docs/sql/PHASE1_SPRINT1_3_ROLLBACK.sql` | 1.3 | Rollback (registry-driven, real data safe) | ✅ | n/a |
 
@@ -126,9 +126,9 @@ visualiser, both queued for Sprint 1.F).
 |---|---|---|---|
 | Apply Sprint 1.1 to pactdb | ⏳ Awaiting user | User | Paste `supabase/migrations/20260501_acct_phase1_sprint1_1.sql` then run smoke tests in runbook |
 | Apply Sprint 1.2 to pactdb | ⏳ Awaiting Sprint 1.1 + 24 h soak | User | Same workflow |
-| Apply Sprint 1.3 to pactdb | ⏳ Awaiting Sprint 1.2 + 24 h soak | User | Test suite is read-only (caller wraps in BEGIN/ROLLBACK); seed function is super_admin only and refuses to run if `acct.parallel_run.enabled` is true |
-| Sprint 1.3 architect review | ⏳ Pending | Agent | About to run |
-| Sprint 1.F build (frontend) | ⚪ Queued | Agent | Closes criteria #9 + #10 |
+| Apply Sprint 1.3 to pactdb | ⏳ Awaiting Sprint 1.2 + 24 h soak | User | Test suite is read-only (caller wraps in BEGIN/ROLLBACK; sequence advances on every test by design); seed function is super_admin only and refuses to run if `acct.parallel_run.enabled` is true |
+| Sprint 1.3 architect review | ✅ PASS (round 4 — 2026-04-25) | Agent | Round 1 BLOCKER (sanctions schema mismatch) + 5 secondary findings all patched and re-verified |
+| Sprint 1.F build (frontend) | ⚪ Queued — next | Agent | Closes criteria #9 + #10 |
 | Posting-path SoD enforcement (criterion #4) | 🟠 Deferred to Phase 2 | Agent | Phase 2 ships journal draft/approve UI which will pass real `entry_id` to `acct_check_sod` |
 | Arabic jsPDF font registration | 🟠 Deferred to Sprint 1.F | Agent | Frontend sprint |
 | Audit-trail visualiser page | 🟠 Deferred to Sprint 1.F | Agent | Reads `acct_finance_audit_log` |
