@@ -41,7 +41,8 @@ so any edits should be made in the source files.
 - Production runtime crash on `/dashboard` (`Wallet is not defined`) — **FIXED** in `src/components/AppSidebar.tsx`; needs a Vercel redeploy.
 - Manual SQL bundle for HR audit is at `docs/sql/HR_AUDIT_MANUAL_APPLY.sql`.
 - **Phase 1 Sprint 1.1 (GL schema + posting engine + TB RPC + feature flags):** ✅ **SIGNED OFF — PASS (2026-04-25).** Architect review cleared (round 2 PASS after authz / idempotency / posting-date patches). Cleared to apply to pactdb. Sign-off log: `docs/sql/PHASE1_SPRINT1_1_MANUAL_APPLY.md` §Sign-off log.
-- **Phase 1 Sprint 1.2 (sanctions + SoD + audit trail):** queued — starts as soon as Sprint 1.1 manual-applies clean in pactdb.
+- **Phase 1 Sprint 1.2 (sanctions + SoD foundation + finance audit triggers):** ✅ **SIGNED OFF — PASS (2026-04-25).** Architect round 1 FAIL → 4 patches → round 2 PASS. Ships: sanctions block in posting RPC + acct_aml_alerts, acct_check_sod RPC + 4 seed rules + violations log, generic acct_finance_audit_log + triggers on funds/accounts/periods/feature_flags. **Posting-path SoD enforcement is explicitly Phase 2** (no draft/approve split in Sprint 1.1). Files: `supabase/migrations/20260508_acct_phase1_sprint1_2.sql`, `docs/sql/PHASE1_SPRINT1_2_MANUAL_APPLY.md`, `docs/sql/PHASE1_SPRINT1_2_ROLLBACK.sql`. Cleared to apply to pactdb after Sprint 1.1 has been clean for ≥ 24 h.
+- **Phase 1 Sprint 1.3 (posting-engine unit-test suite + synthetic data generator):** queued — starts after Sprint 1.2 applies clean in pactdb.
 
 ---
 
