@@ -1,15 +1,25 @@
 # PACT Accounting Module — Sign-off Sheet *(Open Questions + Feature Confirmation)*
 
-> **STATUS: PRE-FILLED DRAFT — 2026-04-25.** All recommended defaults already ticked.
-> Reviewers only need to **(a)** override anything they disagree with by ticking the
-> **Override** column and writing the change in the margin, **(b)** fill in the three
-> rows marked _info needed_ (**D3 NICRA rate**, **D4 active grants**, **E5 pension**),
-> and **(c)** sign Part V. Everything else is accept-as-default.
-
-> **The six rows most worth a real conversation** (the rest are usually obvious):
-> **A1** day-one branches · **A3** mobile-money priority · **C1** wallets vs GL ·
-> **C2** departments-as-cost-center · **C7** period-close authority · **D-NICRA cap mode**.
-> See `docs/ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md` for the one-page version.
+> **STATUS: PROVISIONALLY SIGNED OFF — engineering only · 2026-04-25**
+>
+> Engineering owner has accepted every **recommended default** in this sheet so
+> that Phase 1 (GL Foundations) can start. **Phase 1 is unblocked.**
+>
+> The following items are NOT yet stakeholder-confirmed and remain open:
+>
+> 1. The **6 contested questions** flagged in `ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md`
+>    (A1, A3, C1, C2, C7, NICRA mode). Of these, only **C2** affects Phase 1
+>    — the others touch Phase 2 onward and can be revisited at each phase
+>    kick-off without rework if engineering's default holds.
+> 2. The **3 info-needed rows**: **D3** (current NICRA letter rate),
+>    **D4** (active grants with cost-share targets), **E5** (pension fund
+>    managers + remittance file format). These block **Phase 2.5**, not
+>    Phase 1. Finance + HR need to fill them before Phase 2.5 kick-off.
+>
+> **For full stakeholder sign-off**, walk the executive one-pager
+> (`docs/ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md`) when the Country Director,
+> Finance Manager, and HR Lead are next available. Update this banner to
+> `STATUS: FULLY SIGNED OFF — YYYY-MM-DD` after that meeting.
 
 
 **Companion to:** `docs/ACCOUNTING_MODULE_MASTER_PLAN_V2.md`
@@ -466,7 +476,7 @@ disagree with.
 | Country Director | | | |
 | Finance Manager | | | |
 | HR Director | | | |
-| Engineering Lead | | | |
+| Engineering Lead | (Engineering) | _provisional_ | 2026-04-25 |
 | Internal Audit Lead | | | |
 | Donor Compliance Officer | | | |
 

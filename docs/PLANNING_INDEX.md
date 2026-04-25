@@ -24,6 +24,14 @@ so any edits should be made in the source files.
 
 ## Cross-cutting state right now (2026-04-25)
 
+> **Open Questions Sign-off:** PROVISIONALLY SIGNED OFF by engineering on
+> 2026-04-25. **Phase 1 (GL Foundations) is unblocked.** Stakeholder
+> confirmation (Country Director, Finance Manager, HR Lead) still pending —
+> see `docs/ACCOUNTING_SIGNOFF_EXEC_SUMMARY.md` for the 20-minute walkthrough.
+> Three rows (D3 NICRA rate, D4 active grants, E5 pension provider) still
+> need finance + HR input before Phase 2.5 kick-off.
+
+
 - HR Audit Phase 0 (gaps **H1–H10**) — **DONE in code**; both SQL migrations applied to `pactdb` (PACT Command Center production DB).
 - Reviewer fixes for H1/H6/H8 — **DONE** (`supabase/migrations/20260425_hr_audit_remediation.sql`).
 - Production runtime crash on `/dashboard` (`Wallet is not defined`) — **FIXED** in `src/components/AppSidebar.tsx`; needs a Vercel redeploy.
