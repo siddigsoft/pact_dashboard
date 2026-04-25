@@ -850,15 +850,19 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests, getProfileName]);
 
   const byHub = useMemo(() => {
-    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests, sites: Set<string> }> = {};
     filteredRequests.forEach(req => {
       const hubKey = req.hubId || 'unknown';
       if (!grouped[hubKey]) {
-        grouped[hubKey] = { id: hubKey, name: req.hubName || 'Unknown Hub', requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
+        grouped[hubKey] = { id: hubKey, name: req.hubName || 'Unknown Hub', requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [], sites: new Set() };
       }
       grouped[hubKey].requests++;
       grouped[hubKey].totalRequested += req.requestedAmount;
       grouped[hubKey].items.push(req);
+      // Count missing site names as a single "Unknown Site" bucket per hub so
+      // the hub-level distinct-sites denominator stays consistent with the
+      // per-site rows shown in the "By Site" tab.
+      grouped[hubKey].sites.add(req.siteName || 'Unknown Site');
       if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
         grouped[hubKey].totalApproved += req.requestedAmount;
       }
@@ -866,7 +870,67 @@ function AdvanceRequestsReportContent() {
         grouped[hubKey].pending++;
       }
     });
-    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+    return Object.values(grouped)
+      .map(h => ({
+        ...h,
+        sitesCount: h.sites.size,
+        avgPerSite: h.sites.size > 0 ? Math.round(h.totalRequested / h.sites.size) : 0,
+      }))
+      .sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests]);
+
+  // Per-site aggregation — used by the new "By Site" tab and the "Avg per Site"
+  // column on the Hub summary. Groups by siteName + hub + locality so two
+  // distinct real sites that happen to share a name in different hubs/localities
+  // remain separate rows. The display column still shows just siteName.
+  const bySite = useMemo(() => {
+    const grouped: Record<string, {
+      id: string,
+      name: string,
+      hubName: string,
+      localityName: string,
+      stateName: string,
+      requests: number,
+      totalRequested: number,
+      totalApproved: number,
+      pending: number,
+      items: typeof filteredRequests,
+    }> = {};
+    filteredRequests.forEach(req => {
+      const siteName = req.siteName || 'Unknown Site';
+      const hubName = req.hubName || 'N/A';
+      const localityName = req.localityName || 'N/A';
+      const siteKey = `${siteName}|${hubName}|${localityName}`;
+      if (!grouped[siteKey]) {
+        grouped[siteKey] = {
+          id: siteKey,
+          name: siteName,
+          hubName,
+          localityName,
+          stateName: req.stateName || 'N/A',
+          requests: 0,
+          totalRequested: 0,
+          totalApproved: 0,
+          pending: 0,
+          items: [],
+        };
+      }
+      grouped[siteKey].requests++;
+      grouped[siteKey].totalRequested += req.requestedAmount;
+      grouped[siteKey].items.push(req);
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[siteKey].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[siteKey].pending++;
+      }
+    });
+    return Object.values(grouped)
+      .map(s => ({
+        ...s,
+        avgPerRequest: s.requests > 0 ? Math.round(s.totalRequested / s.requests) : 0,
+      }))
+      .sort((a, b) => b.totalRequested - a.totalRequested);
   }, [filteredRequests]);
 
   const statusLabels: Record<string, string> = {
@@ -1233,6 +1297,61 @@ function AdvanceRequestsReportContent() {
       `advance_by_hub_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
       (req) => req.hubName || 'N/A'
     ).catch(() => {});
+  };
+
+  // Export By Site
+  const exportSiteToExcel = () => {
+    exportGroupedToFormattedExcel(
+      'Site',
+      bySite.map(s => ({ name: s.name, requests: s.requests, totalRequested: s.totalRequested, totalApproved: s.totalApproved, pending: s.pending })),
+      filteredRequests,
+      getProfileName,
+      `advance_by_site_${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      (req) => req.siteName || 'Unknown Site'
+    ).catch(() => {});
+  };
+
+  const exportSiteToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Transportation Advance Cost — Summary by Site');
+    const siteTotals = bySite.reduce((acc, s) => ({
+      requests: acc.requests + s.requests,
+      totalRequested: acc.totalRequested + s.totalRequested,
+      totalApproved: acc.totalApproved + s.totalApproved,
+      pending: acc.pending + s.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
+    const overallAvgPerRequest = siteTotals.requests > 0
+      ? Math.round(siteTotals.totalRequested / siteTotals.requests)
+      : 0;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Site', 'Hub', 'Locality', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Avg / Req (SDG)', 'Pending']],
+      body: bySite.map(s => [
+        s.name.substring(0, 22),
+        s.hubName.substring(0, 14),
+        s.localityName.substring(0, 14),
+        s.requests,
+        s.totalRequested.toLocaleString(),
+        s.totalApproved.toLocaleString(),
+        s.avgPerRequest.toLocaleString(),
+        s.pending,
+      ]),
+      foot: [[
+        'SUBTOTAL',
+        '',
+        '',
+        siteTotals.requests.toString(),
+        siteTotals.totalRequested.toLocaleString(),
+        siteTotals.totalApproved.toLocaleString(),
+        overallAvgPerRequest.toLocaleString(),
+        siteTotals.pending.toString(),
+      ]],
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+    });
+    doc.save(`advance_by_site_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
   const exportHubToPDF = () => {
@@ -2038,6 +2157,10 @@ function AdvanceRequestsReportContent() {
             <Building2 className="h-4 w-4" />
             By Hub
           </TabsTrigger>
+          <TabsTrigger value="bySite" className="gap-1" data-testid="tab-by-site">
+            <MapPin className="h-4 w-4" />
+            By Site
+          </TabsTrigger>
           <TabsTrigger value="byState" className="gap-1" data-testid="tab-by-state">
             <MapPin className="h-4 w-4" />
             By State
@@ -2721,8 +2844,10 @@ function AdvanceRequestsReportContent() {
                       <TableRow>
                         <TableHead>Hub</TableHead>
                         <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Sites</TableHead>
                         <TableHead className="text-right">Total Requested (SDG)</TableHead>
                         <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Avg per Site (SDG)</TableHead>
                         <TableHead className="text-right">Pending</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2731,8 +2856,10 @@ function AdvanceRequestsReportContent() {
                         <TableRow key={idx} data-testid={`row-hub-${idx}`}>
                           <TableCell className="font-medium">{hub.name}</TableCell>
                           <TableCell className="text-right">{hub.requests}</TableCell>
+                          <TableCell className="text-right" data-testid={`text-hub-sites-${idx}`}>{hub.sitesCount}</TableCell>
                           <TableCell className="text-right font-mono">{hub.totalRequested.toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{hub.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-blue-600" data-testid={`text-hub-avg-per-site-${idx}`}>{hub.avgPerSite.toLocaleString()}</TableCell>
                           <TableCell className="text-right">
                             {hub.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{hub.pending}</Badge>}
                           </TableCell>
@@ -2740,13 +2867,22 @@ function AdvanceRequestsReportContent() {
                       ))}
                     </TableBody>
                     <tfoot>
-                      <TableRow className="bg-muted/50 font-bold border-t-2">
-                        <TableCell className="font-bold">Subtotal</TableCell>
-                        <TableCell className="text-right font-bold">{byHub.reduce((sum, h) => sum + h.requests, 0)}</TableCell>
-                        <TableCell className="text-right font-mono font-bold">{byHub.reduce((sum, h) => sum + h.totalRequested, 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-mono font-bold text-green-600">{byHub.reduce((sum, h) => sum + h.totalApproved, 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right font-bold">{byHub.reduce((sum, h) => sum + h.pending, 0)}</TableCell>
-                      </TableRow>
+                      {(() => {
+                        const totalSites = byHub.reduce((sum, h) => sum + h.sitesCount, 0);
+                        const totalRequested = byHub.reduce((sum, h) => sum + h.totalRequested, 0);
+                        const overallAvgPerSite = totalSites > 0 ? Math.round(totalRequested / totalSites) : 0;
+                        return (
+                          <TableRow className="bg-muted/50 font-bold border-t-2">
+                            <TableCell className="font-bold">Subtotal</TableCell>
+                            <TableCell className="text-right font-bold">{byHub.reduce((sum, h) => sum + h.requests, 0)}</TableCell>
+                            <TableCell className="text-right font-bold">{totalSites}</TableCell>
+                            <TableCell className="text-right font-mono font-bold">{totalRequested.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono font-bold text-green-600">{byHub.reduce((sum, h) => sum + h.totalApproved, 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono font-bold text-blue-600" data-testid="text-hub-overall-avg-per-site">{overallAvgPerSite.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-bold">{byHub.reduce((sum, h) => sum + h.pending, 0)}</TableCell>
+                          </TableRow>
+                        );
+                      })()}
                     </tfoot>
                   </Table>
                 </div>
@@ -2813,6 +2949,93 @@ function AdvanceRequestsReportContent() {
               </div>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="bySite" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportSiteToPDF} data-testid="button-site-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportSiteToExcel} data-testid="button-site-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Summary by Site
+              </CardTitle>
+              <CardDescription>
+                Total transportation advance cost per site, with the average per request — sorted by highest spend.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : bySite.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Site</TableHead>
+                        <TableHead>Hub</TableHead>
+                        <TableHead>Locality</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Avg per Request (SDG)</TableHead>
+                        <TableHead className="text-right">Pending</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {bySite.map((site, idx) => (
+                        <TableRow key={idx} data-testid={`row-site-${idx}`}>
+                          <TableCell className="font-medium max-w-[220px] truncate" title={site.name} data-testid={`text-site-name-${idx}`}>{site.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{site.hubName}</TableCell>
+                          <TableCell className="text-muted-foreground">{site.localityName}</TableCell>
+                          <TableCell className="text-right" data-testid={`text-site-requests-${idx}`}>{site.requests}</TableCell>
+                          <TableCell className="text-right font-mono" data-testid={`text-site-total-requested-${idx}`}>{site.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600" data-testid={`text-site-total-approved-${idx}`}>{site.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-blue-600" data-testid={`text-site-avg-per-request-${idx}`}>{site.avgPerRequest.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            {site.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{site.pending}</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <tfoot>
+                      {(() => {
+                        const totalRequests = bySite.reduce((sum, s) => sum + s.requests, 0);
+                        const totalRequested = bySite.reduce((sum, s) => sum + s.totalRequested, 0);
+                        const totalApproved = bySite.reduce((sum, s) => sum + s.totalApproved, 0);
+                        const totalPending = bySite.reduce((sum, s) => sum + s.pending, 0);
+                        const overallAvg = totalRequests > 0 ? Math.round(totalRequested / totalRequests) : 0;
+                        return (
+                          <TableRow className="bg-muted/50 font-bold border-t-2">
+                            <TableCell className="font-bold">Subtotal ({bySite.length} sites)</TableCell>
+                            <TableCell />
+                            <TableCell />
+                            <TableCell className="text-right font-bold">{totalRequests}</TableCell>
+                            <TableCell className="text-right font-mono font-bold">{totalRequested.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono font-bold text-green-600">{totalApproved.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono font-bold text-blue-600" data-testid="text-site-overall-avg-per-request">{overallAvg.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-bold">{totalPending}</TableCell>
+                          </TableRow>
+                        );
+                      })()}
+                    </tfoot>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="byStatus" className="space-y-4">
