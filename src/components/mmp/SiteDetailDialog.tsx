@@ -136,15 +136,6 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
-    // Task #59: surface the trigger-stamped completed_at as the stable
-    // "first completed" timestamp. Falls back to updated_at only for legacy
-    // terminal-state rows whose completed_at was never backfilled.
-    // Uses the shared terminal-completion predicates from
-    // src/utils/siteCompletionStatus.ts so this dialog stays aligned with
-    // PortfolioDashboard (raw form) and MonthlyComparisonCard (app form).
-    // `status` here is already mapped to the SiteVisit app-layer status, but
-    // the raw mmp_site_entries.status may also be present on `site`, so we
-    // accept either form.
     const isTerminalForCompletion =
       isTerminalCompletionAppStatus(status) ||
       isTerminalCompletionRawStatus(site.status);
@@ -1132,10 +1123,6 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                   </div>
                 )}
                 {row.updatedAt && (() => {
-                  // Task #59: hide "Last Edited" when it duplicates Completed On
-                  // (within 60 s) — happens when a site is finished and never
-                  // touched again. Otherwise we'd show two near-identical
-                  // timestamps and reviewers can't tell them apart.
                   if (row.completedAt) {
                     const diffMs = Math.abs(new Date(row.updatedAt).getTime() - new Date(row.completedAt).getTime());
                     if (diffMs < 60_000) return null;

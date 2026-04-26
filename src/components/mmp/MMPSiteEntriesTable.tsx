@@ -221,12 +221,7 @@ const MMPSiteEntriesTable = ({
     const rejectedBy = site.rejected_by || ad['rejected_by'] || undefined;
     const rejectedAt = site.rejected_at || (ad['rejected_at'] ? new Date(ad['rejected_at']).toISOString() : undefined) || undefined;
     
-    // Completion information - for completed sites, the person who completed is typically the one who accepted/claimed.
-    // Task #59: terminal-status detection uses the shared
-    // `isTerminalCompletionRawStatus` helper from
-    // `src/utils/siteCompletionStatus.ts` so this surface stays aligned with
-    // the dialog, PortfolioDashboard, MonthlyComparisonCard and the adapter
-    // (covers `completed` AND `verified`, not just `completed`).
+    // Completion information - for completed sites, the person who completed is typically the one who accepted/claimed
     const isSiteTerminalCompletion = isTerminalCompletionRawStatus(status);
     const completedBy = site.completed_by || ad['completed_by'] || ad['Completed By'] || 
       (isSiteTerminalCompletion ? (site.accepted_by || site.acceptedBy || ad['accepted_by'] || ad['Accepted By']) : undefined) || undefined;
@@ -855,11 +850,6 @@ const MMPSiteEntriesTable = ({
                                 >
                                   {displayStatus || 'Pending'}
                                 </Badge>
-                                {/* Task #59: surface "Completed on" whenever a real
-                                    completedAt exists, regardless of whether
-                                    completedByName resolves. The "By: NAME" line
-                                    falls back gracefully — completed sites prefer
-                                    completedByName, others use acceptedByName. */}
                                 {(() => {
                                   const hasCompletedTime = !!row.completedAt;
                                   const hasCompletedName = row.completedByName && row.completedByName !== '—';
