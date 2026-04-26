@@ -550,16 +550,34 @@ async function canTaskStartFallback(taskId: string): Promise<{
   blockingTasks: any[];
   error: string | null;
 }> {
-  const { blockingTasks, error } = await getBlockingTasks(taskId);
-  if (error) {
-    return { canStart: false, blockingTasks: [], error };
+  try {
+    const { blockingTasks, error } = await getBlockingTasks(taskId);
+    if (error) {
+      // Fallback's own SELECT failed (table missing, RLS, transient auth race,
+      // expired JWT mid-fetch, etc). The whole point of this fallback is to
+      // unblock the user when the SECURITY DEFINER RPC isn't deployed yet —
+      // re-blocking them on a different error reproduces the original bug.
+      // Open the gate, leave a warning for ops, and let real enforcement
+      // resume once the RPC is pasted into pactdb.
+      console.warn(
+        '[task_can_start fallback] getBlockingTasks failed:', error,
+        '— defaulting canStart=true so the user is not blocked. Paste supabase/migrations/20260426_task_can_start_rpc.sql in pactdb to restore strict server-side checking.'
+      );
+      return { canStart: true, blockingTasks: [], error: null };
+    }
+    const stillBlocking = (blockingTasks || []).filter((t: any) => t?.status !== 'done');
+    return {
+      canStart: stillBlocking.length === 0,
+      blockingTasks: stillBlocking,
+      error: null,
+    };
+  } catch (err: any) {
+    console.warn(
+      '[task_can_start fallback] threw:', err?.message ?? err,
+      '— defaulting canStart=true so the user is not blocked.'
+    );
+    return { canStart: true, blockingTasks: [], error: null };
   }
-  const stillBlocking = (blockingTasks || []).filter((t: any) => t?.status !== 'done');
-  return {
-    canStart: stillBlocking.length === 0,
-    blockingTasks: stillBlocking,
-    error: null,
-  };
 }
 
 export async function canTaskStart(taskId: string): Promise<{
