@@ -90,19 +90,20 @@ Paste the pre-flight query again — it should now return both `timesheets` and
 
 ## Troubleshooting
 
-If the SQL editor shows `column "week_start" does not exist` or any error
-mentioning a column on the *old* `timesheets` table, you're running an
-out-of-date copy of the script. Re-copy the **current** contents of
-`supabase/migrations/20260409_timesheet_module.sql` from the repo and try
-again — the in-repo version derives `week_start` from the daily `date`
-column instead of trying to read it directly, so this error can't happen
-with the current file.
+**Any "column X does not exist" error from inside the DO block** means you're
+pasting an older copy of the script. The in-repo version (current as of
+2026-04-26) is bullet-proof against missing columns on the OLD flat
+`timesheets` table — before doing any back-fill it runs a series of
+`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` calls that add NULL placeholder
+columns for every field the back-fills read (`submitted_at`, `approved_by`,
+`approved_at`, `reject_comment`, `task_type`, `start_time`, `end_time`,
+`break_minutes`, `description`, `is_billable`, `hours`, `status`,
+`created_at`, `updated_at`). Re-copy the file from the repo and re-paste.
 
-If the entries back-fill complains about a missing column on the old table
-(e.g. `task_type`, `start_time`, `break_minutes`, `is_billable`,
-`description`), it means your old flat-model `timesheets` table is even
-flatter than expected. Tell me which columns it actually has and I'll
-adjust the back-fill SELECT to skip the missing ones.
+**If the entries back-fill inserts 0 rows** that's expected when the old
+table never tracked daily hours (the `WHERE t.date IS NOT NULL AND
+t.hours IS NOT NULL` filter excludes rows with no usable data). The
+weekly parents still come over, and you can start logging entries fresh.
 
 ## Roll-back (only if something goes badly wrong)
 

@@ -20,6 +20,30 @@ BEGIN
       AND column_name = 'date'
   ) THEN
 
+    -- Patch the OLD flat table with NULL placeholder columns for anything
+    -- the back-fill SELECTs read. We're going to DROP this table at the end
+    -- anyway, so adding nullable columns is harmless. This avoids
+    -- "column X does not exist" errors when the daily-row model never had
+    -- weekly metadata like submitted_at / approved_by / approved_at, or
+    -- entry-level columns like task_type / start_time / break_minutes.
+    -- ADD COLUMN IF NOT EXISTS is idempotent — safe to run on partial state.
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS submitted_at   timestamptz;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS approved_by    uuid;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS approved_at    timestamptz;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS reject_comment text;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS status         text;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS created_at     timestamptz DEFAULT now();
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS updated_at     timestamptz DEFAULT now();
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS project_id     uuid;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS task_id        uuid;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS task_type      text;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS start_time     time;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS end_time       time;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS break_minutes  integer;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS description    text;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS is_billable    boolean;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS hours          numeric(5,2);
+
     -- Create the entries table first (no FK yet) so we can move data
     CREATE TABLE IF NOT EXISTS timesheet_entries_new (
       id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
