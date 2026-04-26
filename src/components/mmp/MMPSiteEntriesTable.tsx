@@ -855,7 +855,12 @@ const MMPSiteEntriesTable = ({
                                       By: {row.completedByName}
                                     </span>
                                     {row.completedAt && (
-                                      <span className="text-xs text-muted-foreground" data-testid="text-completed-at">
+                                      <span
+                                        className="text-xs text-muted-foreground"
+                                        data-testid="text-completed-at"
+                                        title="First time this site reached a completed state (does not change on later edits)"
+                                      >
+                                        Completed on{' '}
                                         {new Date(row.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
                                         {new Date(row.completedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                                       </span>

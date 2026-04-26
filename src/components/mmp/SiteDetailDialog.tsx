@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SiteAuditTrail } from '@/components/mmp/SiteAuditTrail';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 import { parseBoolean } from '@/utils/siteNormalization';
+import { isTerminalCompletionAppStatus, isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -135,6 +136,25 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
+    // Task #59: surface the trigger-stamped completed_at as the stable
+    // "first completed" timestamp. Falls back to updated_at only for legacy
+    // terminal-state rows whose completed_at was never backfilled.
+    // Uses the shared terminal-completion predicates from
+    // src/utils/siteCompletionStatus.ts so this dialog stays aligned with
+    // PortfolioDashboard (raw form) and MonthlyComparisonCard (app form).
+    // `status` here is already mapped to the SiteVisit app-layer status, but
+    // the raw mmp_site_entries.status may also be present on `site`, so we
+    // accept either form.
+    const isTerminalForCompletion =
+      isTerminalCompletionAppStatus(status) ||
+      isTerminalCompletionRawStatus(site.status);
+    const isLegacyFallbackCompleted = isTerminalForCompletion && !site.completed_at && !ad['completed_at'] && !ad['Completed At'];
+    const completedAt = site.completed_at
+      || ad['completed_at']
+      || (ad['Completed At'] ? new Date(ad['Completed At']).toISOString() : undefined)
+      || (isTerminalForCompletion ? updatedAt : undefined)
+      || undefined;
+
     // Extract GPS coordinates from registry lookup
     // Priority: 1. registry_site_id column, 2. registry_linkage (new format), 3. registry_gps (legacy format)
     const registryLinkage = ad.registry_linkage || null;
@@ -219,7 +239,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
-      createdAt, updatedAt,
+      createdAt, updatedAt, completedAt, isLegacyFallbackCompleted,
       // GPS and Registry Matching
       registryGpsLatitude, registryGpsLongitude, gpsAccuracyMeters,
       registrySiteId, registrySiteCode,
@@ -1093,12 +1113,41 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{new Date(row.createdAt).toLocaleString()}</p>
                   </div>
                 )}
-                {row.updatedAt && (
-                  <div>
-                    <Label className="text-xs font-medium text-gray-600">Updated At</Label>
-                    <p className="font-medium text-gray-900 mt-1">{new Date(row.updatedAt).toLocaleString()}</p>
+                {row.completedAt && (
+                  <div data-testid="block-completed-on">
+                    <Label className="text-xs font-medium text-gray-600">Completed On</Label>
+                    <p className="font-medium text-gray-900 mt-1">
+                      {new Date(row.completedAt).toLocaleString()}
+                      {row.isLegacyFallbackCompleted && (
+                        <span className="text-[11px] text-amber-600 dark:text-amber-400 font-normal ml-1" data-testid="badge-legacy-completion">
+                          (legacy record)
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      {row.isLegacyFallbackCompleted
+                        ? 'Approximate — derived from last edit because this row pre-dates the completion timestamp'
+                        : 'First time this site reached a completed state'}
+                    </p>
                   </div>
                 )}
+                {row.updatedAt && (() => {
+                  // Task #59: hide "Last Edited" when it duplicates Completed On
+                  // (within 60 s) — happens when a site is finished and never
+                  // touched again. Otherwise we'd show two near-identical
+                  // timestamps and reviewers can't tell them apart.
+                  if (row.completedAt) {
+                    const diffMs = Math.abs(new Date(row.updatedAt).getTime() - new Date(row.completedAt).getTime());
+                    if (diffMs < 60_000) return null;
+                  }
+                  return (
+                    <div data-testid="block-last-edited">
+                      <Label className="text-xs font-medium text-gray-600">Last Edited</Label>
+                      <p className="font-medium text-gray-900 mt-1">{new Date(row.updatedAt).toLocaleString()}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">Bumps on every edit (notes, fees, status)</p>
+                    </div>
+                  );
+                })()}
                 {row.verificationNotes && (
                   <div className="sm:col-span-2">
                     <Label className="text-xs font-medium text-gray-600">Verification Notes</Label>
