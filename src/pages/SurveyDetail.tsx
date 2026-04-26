@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import {
@@ -98,9 +99,10 @@ export default function SurveyDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { currentUser, hasRole } = useUser();
+  const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
 
-  const isAdmin = hasRole('admin') || hasRole('super_admin');
+  const isAdmin = isSuperAdmin || hasRole('admin') || hasRole('super_admin');
   const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
 
   const [tab, setTab] = useState<'builder' | 'responses' | 'analytics'>('builder');
