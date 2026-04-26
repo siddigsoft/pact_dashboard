@@ -357,22 +357,70 @@ interface TaskFormProps {
   allTasks: FieldTask[];
   /** Existing typed dependency rows where this task is the successor */
   existingTypedDeps?: TaskDependency[];
+  /** All typed deps for the project (used for cycle detection & predecessor filtering) */
+  allTypedDeps?: TaskDependency[];
 }
 
-function getReachableViaDeps(taskId: string, allTasks: FieldTask[]): Set<string> {
+function getReachableViaDeps(
+  taskId: string,
+  allTasks: FieldTask[],
+  typedDeps: TaskDependency[] = [],
+): Set<string> {
   const visited = new Set<string>();
   const queue = [taskId];
   while (queue.length > 0) {
     const curr = queue.shift()!;
     if (visited.has(curr)) continue;
     visited.add(curr);
+    // UNION semantics during the migration window: walk BOTH typed-dep
+    // predecessors AND the legacy uuid[] for this node, deduped. This way
+    // an edge that exists only in one source still blocks the cycle, even
+    // if the two sources transiently disagree.
+    const next = new Set<string>();
+    typedDeps
+      .filter(d => d.successorId === curr)
+      .forEach(d => next.add(d.predecessorId));
     const t = allTasks.find(x => x.id === curr);
-    if (t) t.dependencies.forEach(d => { if (!visited.has(d)) queue.push(d); });
+    if (t) t.dependencies.forEach(d => next.add(d));
+    next.forEach(id => { if (!visited.has(id)) queue.push(id); });
   }
   return visited;
 }
 
-function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = [] }: TaskFormProps) {
+/**
+ * Returns prerequisite + blocking tasks for a given task using UNION
+ * semantics across the typed `project_field_task_dependencies` table and
+ * the legacy `project_field_tasks.dependencies` uuid[] column. During the
+ * migration window the two sources may transiently disagree (e.g. typed
+ * write succeeded but legacy write failed, or vice versa); union ensures
+ * the UI never silently hides an edge that exists in either store.
+ */
+function getDepRelations(
+  taskId: string,
+  allTasks: FieldTask[],
+  typedDeps: TaskDependency[] = [],
+): { depTasks: FieldTask[]; blockingTasks: FieldTask[] } {
+  const t = allTasks.find(x => x.id === taskId);
+
+  const predIds = new Set<string>(t?.dependencies ?? []);
+  typedDeps
+    .filter(d => d.successorId === taskId)
+    .forEach(d => predIds.add(d.predecessorId));
+
+  const succIds = new Set<string>(
+    allTasks.filter(x => x.dependencies.includes(taskId)).map(x => x.id),
+  );
+  typedDeps
+    .filter(d => d.predecessorId === taskId)
+    .forEach(d => succIds.add(d.successorId));
+
+  return {
+    depTasks: allTasks.filter(x => predIds.has(x.id)),
+    blockingTasks: allTasks.filter(x => succIds.has(x.id)),
+  };
+}
+
+function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = [], allTypedDeps = [] }: TaskFormProps) {
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
   const [priority,      setPriority]      = useState<FieldTaskPriority>(initial?.priority ?? 'medium');
@@ -434,10 +482,10 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
     if (!initial?.id) return allTasks.filter(t => t.id !== initial?.id);
     return allTasks.filter(t => {
       if (t.id === initial.id) return false;
-      if (getReachableViaDeps(t.id, allTasks).has(initial.id)) return false;
+      if (getReachableViaDeps(t.id, allTasks, allTypedDeps).has(initial.id)) return false;
       return true;
     });
-  }, [allTasks, initial?.id]);
+  }, [allTasks, initial?.id, allTypedDeps]);
 
   const toggleDep = (id: string) => {
     setDeps(prev => {
@@ -911,8 +959,8 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
     ? (customEntries.find(e => e.id === linkedStage.id)?.customLabel || linkedStage.label)
     : null;
 
-  const depTasks = allTasks.filter(t => task.dependencies.includes(t.id));
-  const blockingTasks = allTasks.filter(t => t.dependencies.includes(task.id));
+  // Read prereq + blocking from typed dependency table when present, else legacy.
+  const { depTasks, blockingTasks } = getDepRelations(task.id, allTasks, typedDeps);
 
   const hoursUsedPct = task.estimatedHours && task.actualHours
     ? Math.min(100, (task.actualHours / task.estimatedHours) * 100) : null;
@@ -940,9 +988,9 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
             <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', sCfg.color)}>{sCfg.label}</span>
             <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', pCfg.color)}>{pCfg.label}</span>
             {overdue && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Overdue</span>}
-            {task.dependencies.length > 0 && (
+            {depTasks.length > 0 && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                Depends on {task.dependencies.length}
+                Depends on {depTasks.length}
               </span>
             )}
             {blockingTasks.length > 0 && (
@@ -1396,14 +1444,16 @@ interface TaskCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onStatusChange: (s: FieldTaskStatus) => void;
+  typedDeps?: TaskDependency[];
 }
 
-function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange }: TaskCardProps) {
+function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange, typedDeps = [] }: TaskCardProps) {
   const overdue = isOverdue(task.dueDate, task.status);
   const sCfg = STATUS_CFG[task.status];
   const pCfg = PRIORITY_CFG[task.priority];
-  const depCount = task.dependencies.length;
-  const blockingCount = allTasks.filter(t => t.dependencies.includes(task.id)).length;
+  const { depTasks: _dt, blockingTasks: _bt } = getDepRelations(task.id, allTasks, typedDeps);
+  const depCount = _dt.length;
+  const blockingCount = _bt.length;
   const hasHours = task.estimatedHours || task.actualHours;
   const hasCost  = task.estimatedCost  || task.actualCost;
 
@@ -1516,9 +1566,10 @@ function TaskCard({ task, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusC
 
 // ── Views ──────────────────────────────────────────────────────────────────
 
-function ListView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange, bulkMode = false, selectedIds, onToggleSelect }: {
+function ListView({ tasks, allTasks, typedDeps = [], canEdit, onOpen, onEdit, onDelete, onStatusChange, bulkMode = false, selectedIds, onToggleSelect }: {
   tasks: FieldTask[];
   allTasks: FieldTask[];
+  typedDeps?: TaskDependency[];
   canEdit: boolean;
   onOpen: (t: FieldTask) => void;
   onEdit: (t: FieldTask) => void;
@@ -1551,7 +1602,7 @@ function ListView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatus
             </button>
           )}
           <div className={cn('flex-1 min-w-0', bulkMode && selectedIds?.has(t.id) && 'ring-2 ring-[#1D3461]/30 rounded-lg')}>
-            <TaskCard task={t} allTasks={allTasks} canEdit={canEdit && !bulkMode}
+            <TaskCard task={t} allTasks={allTasks} typedDeps={typedDeps} canEdit={canEdit && !bulkMode}
               onOpen={() => onOpen(t)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)}
               onStatusChange={s => onStatusChange(t, s)} />
           </div>
@@ -1561,9 +1612,10 @@ function ListView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatus
   );
 }
 
-function BoardView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange }: {
+function BoardView({ tasks, allTasks, typedDeps = [], canEdit, onOpen, onEdit, onDelete, onStatusChange }: {
   tasks: FieldTask[];
   allTasks: FieldTask[];
+  typedDeps?: TaskDependency[];
   canEdit: boolean;
   onOpen: (t: FieldTask) => void;
   onEdit: (t: FieldTask) => void;
@@ -1619,7 +1671,7 @@ function BoardView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatu
                   onDragEnd={handleDragEnd}
                   className={cn('transition-opacity', draggingId === t.id && 'opacity-40')}
                 >
-                  <TaskCard task={t} allTasks={allTasks} canEdit={canEdit}
+                  <TaskCard task={t} allTasks={allTasks} typedDeps={typedDeps} canEdit={canEdit}
                     onOpen={() => onOpen(t)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)}
                     onStatusChange={s => onStatusChange(t, s)} />
                 </div>
@@ -1637,9 +1689,10 @@ function BoardView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatu
   );
 }
 
-function TimelineView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onStatusChange }: {
+function TimelineView({ tasks, allTasks, typedDeps = [], canEdit, onOpen, onEdit, onDelete, onStatusChange }: {
   tasks: FieldTask[];
   allTasks: FieldTask[];
+  typedDeps?: TaskDependency[];
   canEdit: boolean;
   onOpen: (t: FieldTask) => void;
   onEdit: (t: FieldTask) => void;
@@ -1691,7 +1744,7 @@ function TimelineView({ tasks, allTasks, canEdit, onOpen, onEdit, onDelete, onSt
           </div>
           <div className="space-y-2 pl-5">
             {wTasks.map(t => (
-              <TaskCard key={t.id} task={t} allTasks={allTasks} canEdit={canEdit}
+              <TaskCard key={t.id} task={t} allTasks={allTasks} typedDeps={typedDeps} canEdit={canEdit}
                 onOpen={() => onOpen(t)} onEdit={() => onEdit(t)} onDelete={() => onDelete(t)}
                 onStatusChange={s => onStatusChange(t, s)} />
             ))}
@@ -1727,19 +1780,19 @@ const GANTT_STATUS_COLORS: Record<FieldTaskStatus, string> = {
   cancelled:  'bg-slate-300',
 };
 
-function GanttView({ tasks, onOpen }: {
+/**
+ * Gantt-style timeline with FS / SS / FF / SF connectors and lag offsets.
+ * Reads dependencies from the typed `project_field_task_dependencies` table
+ * (passed in as `typedDeps`); legacy uuid[] dependencies are not rendered as
+ * edges since they have no type/lag information.
+ */
+function GanttView({ tasks, typedDeps = [], onOpen }: {
   tasks: FieldTask[];
+  typedDeps?: TaskDependency[];
   onOpen: (t: FieldTask) => void;
 }) {
   const dated = tasks.filter(t => t.startDate || t.dueDate);
-  const undated = tasks.filter(t => !t.startDate && !t.dueDate);
 
-  if (dated.length === 0 && undated.length === 0) return (
-    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
-      <GanttChartSquare className="h-8 w-8 opacity-30" />
-      <p className="text-sm">No tasks match your filters</p>
-    </div>
-  );
   if (dated.length === 0) return (
     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
       <GanttChartSquare className="h-8 w-8 opacity-30" />
@@ -1747,100 +1800,250 @@ function GanttView({ tasks, onOpen }: {
     </div>
   );
 
+  const DAY_PX = 24;
+  const ROW_H  = 32;
+  const BAR_H  = 18;
+  const BAR_PAD_Y = (ROW_H - BAR_H) / 2;
+  const LABEL_W = 176;
+  const HEADER_H = 24;
+
   const allDates = dated.flatMap(t => [t.startDate, t.dueDate].filter(Boolean) as string[]);
   const minDate = new Date(allDates.reduce((a, b) => a < b ? a : b));
   const maxDate = new Date(allDates.reduce((a, b) => a > b ? a : b));
   const totalDays = Math.max(1, Math.ceil((maxDate.getTime() - minDate.getTime()) / 86400000)) + 2;
-
-  const getOffset = (dateStr: string) =>
-    Math.max(0, Math.ceil((new Date(dateStr).getTime() - minDate.getTime()) / 86400000));
-  const getWidth = (start: string, end: string) =>
-    Math.max(1, Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000));
 
   const sorted = [...dated].sort((a, b) => {
     const da = a.startDate || a.dueDate || '';
     const db = b.startDate || b.dueDate || '';
     return da.localeCompare(db);
   });
+  const rowIndex = new Map(sorted.map((t, i) => [t.id, i]));
 
-  const monthTicks: { label: string; pct: number }[] = [];
-  const d = new Date(minDate);
-  d.setDate(1);
-  while (d <= maxDate) {
-    const offset = Math.ceil((d.getTime() - minDate.getTime()) / 86400000);
-    monthTicks.push({ label: format(d, 'MMM d'), pct: (offset / totalDays) * 100 });
-    d.setMonth(d.getMonth() + 1);
+  const chartWidth  = totalDays * DAY_PX;
+  const chartHeight = sorted.length * ROW_H;
+
+  const dayOffset = (dateStr: string) =>
+    Math.max(0, Math.ceil((new Date(dateStr).getTime() - minDate.getTime()) / 86400000));
+
+  const taskGeom = (t: FieldTask) => {
+    const start = t.startDate || t.dueDate!;
+    const end   = t.dueDate   || t.startDate!;
+    const startOff = dayOffset(start);
+    const widthDays = start === end
+      ? 1
+      : Math.max(1, Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000));
+    return { startOff, endOff: startOff + widthDays, widthDays };
+  };
+
+  // Month / week header ticks
+  const monthTicks: { label: string; x: number }[] = [];
+  const cursor = new Date(minDate);
+  cursor.setDate(1);
+  while (cursor <= maxDate) {
+    const offset = Math.ceil((cursor.getTime() - minDate.getTime()) / 86400000);
+    monthTicks.push({ label: format(cursor, 'MMM d'), x: offset * DAY_PX });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  const todayOff = Math.ceil((Date.now() - minDate.getTime()) / 86400000);
+  const todayX   = todayOff >= 0 && todayOff <= totalDays ? todayOff * DAY_PX : null;
+
+  const depColor: Record<DepType, string> = {
+    FS: '#3b82f6', // blue
+    SS: '#10b981', // green
+    FF: '#f59e0b', // amber
+    SF: '#ef4444', // red
+  };
+
+  // Build connector segments from typed deps
+  type ConnSeg = {
+    id: string;
+    depType: DepType;
+    lagDays: number;
+    sx: number; sy: number;
+    tx: number; ty: number;
+    label: string;
+  };
+  const connectors: ConnSeg[] = [];
+  for (const dep of typedDeps) {
+    const predIdx = rowIndex.get(dep.predecessorId);
+    const succIdx = rowIndex.get(dep.successorId);
+    if (predIdx === undefined || succIdx === undefined) continue;
+    const pg = taskGeom(sorted[predIdx]);
+    const sg = taskGeom(sorted[succIdx]);
+    // anchor in DAYS from project start:
+    //  FS: pred.end   -> succ.start
+    //  SS: pred.start -> succ.start
+    //  FF: pred.end   -> succ.end
+    //  SF: pred.start -> succ.end
+    const predAnchorDay = (dep.depType === 'SS' || dep.depType === 'SF') ? pg.startOff : pg.endOff;
+    const succAnchorDay = (dep.depType === 'FF' || dep.depType === 'SF') ? sg.endOff   : sg.startOff;
+    const sx = predAnchorDay * DAY_PX + dep.lagDays * DAY_PX;
+    const sy = predIdx * ROW_H + ROW_H / 2;
+    const tx = succAnchorDay * DAY_PX;
+    const ty = succIdx * ROW_H + ROW_H / 2;
+    const label = `${dep.depType}${dep.lagDays !== 0 ? ` ${dep.lagDays > 0 ? '+' : ''}${dep.lagDays}d` : ''}`;
+    connectors.push({ id: dep.id, depType: dep.depType, lagDays: dep.lagDays, sx, sy, tx, ty, label });
   }
 
   return (
-    <div className="space-y-2 overflow-x-auto">
-      {/* Month header */}
-      <div className="relative h-5 ml-44 mr-2">
-        {monthTicks.map(tick => (
-          <span
-            key={tick.label}
-            className="absolute text-[9px] text-muted-foreground transform -translate-x-1/2"
-            style={{ left: `${tick.pct}%` }}
-          >{tick.label}</span>
-        ))}
-      </div>
-      <div className="relative ml-44 mr-2 h-px bg-border mb-1" />
-
-      {/* Today line */}
-      {(() => {
-        const todayOffset = Math.ceil((Date.now() - minDate.getTime()) / 86400000);
-        const todayPct = (todayOffset / totalDays) * 100;
-        if (todayPct < 0 || todayPct > 100) return null;
-        return (
-          <div
-            className="absolute top-5 bottom-0 w-px bg-red-500/60 z-10 pointer-events-none ml-44"
-            style={{ left: `calc(${todayPct}% + 11rem)` }}
-            title="Today"
-          />
-        );
-      })()}
-
-      {/* Task rows */}
-      <div className="space-y-1.5">
-        {sorted.map(t => {
-          const start = t.startDate || t.dueDate!;
-          const end   = t.dueDate   || t.startDate!;
-          const startOff = getOffset(start);
-          const widthDays = start === end ? 1 : getWidth(start, end);
-          const leftPct  = (startOff / totalDays) * 100;
-          const widthPct = Math.max(0.5, (widthDays / totalDays) * 100);
-          const barColor = GANTT_STATUS_COLORS[t.status];
-          const overdue  = isOverdue(t.dueDate, t.status);
-          return (
-            <div key={t.id} className="flex items-center gap-2 group cursor-pointer" onClick={() => onOpen(t)}>
-              {/* Label */}
-              <div className="w-44 flex-shrink-0 pr-2">
-                <p className={cn('text-xs font-medium truncate leading-tight', t.status === 'done' && 'line-through text-muted-foreground')}>{t.title}</p>
-                <p className="text-[9px] text-muted-foreground">{STATUS_CFG[t.status].label}{overdue ? ' · Overdue' : ''}</p>
+    <div className="space-y-2 overflow-x-auto" data-testid="gantt-view">
+      <div className="flex items-stretch" style={{ minWidth: LABEL_W + chartWidth + 16 }}>
+        {/* Label column */}
+        <div className="flex-shrink-0 sticky left-0 bg-background z-20" style={{ width: LABEL_W }}>
+          <div style={{ height: HEADER_H }} />
+          {sorted.map(t => {
+            const overdue = isOverdue(t.dueDate, t.status);
+            return (
+              <div
+                key={t.id}
+                style={{ height: ROW_H }}
+                className="pr-2 flex flex-col justify-center cursor-pointer hover:bg-muted/40 rounded-l border-b border-border/40"
+                onClick={() => onOpen(t)}
+                data-testid={`gantt-label-${t.id}`}
+              >
+                <p className={cn('text-xs font-medium truncate leading-tight', t.status === 'done' && 'line-through text-muted-foreground')}>
+                  {t.title}
+                </p>
+                <p className="text-[9px] text-muted-foreground">
+                  {STATUS_CFG[t.status].label}{overdue ? ' · Overdue' : ''}
+                </p>
               </div>
-              {/* Bar track */}
-              <div className="flex-1 relative h-6 min-w-[200px]">
-                <div className="absolute inset-y-0 rounded-full" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
-                  <div className={cn('h-full rounded-full opacity-90 group-hover:opacity-100 transition-opacity flex items-center px-2', barColor)}>
-                    {widthPct > 8 && (
+            );
+          })}
+        </div>
+
+        {/* Chart column */}
+        <div className="relative" style={{ width: chartWidth, height: HEADER_H + chartHeight }}>
+          {/* Header */}
+          <div style={{ height: HEADER_H }} className="relative border-b">
+            {monthTicks.map(tick => (
+              <span
+                key={tick.label}
+                className="absolute text-[9px] text-muted-foreground top-1"
+                style={{ left: tick.x, transform: 'translateX(-50%)' }}
+              >{tick.label}</span>
+            ))}
+          </div>
+
+          {/* Today line */}
+          {todayX !== null && (
+            <div
+              className="absolute w-px bg-red-500/60 pointer-events-none z-10"
+              style={{ left: todayX, top: HEADER_H, height: chartHeight }}
+              title="Today"
+            />
+          )}
+
+          {/* Row backgrounds + bars */}
+          <div className="absolute" style={{ top: HEADER_H, left: 0, width: chartWidth, height: chartHeight }}>
+            {sorted.map((t, i) => {
+              const g = taskGeom(t);
+              const barColor = GANTT_STATUS_COLORS[t.status];
+              return (
+                <div
+                  key={t.id}
+                  className="relative border-b border-border/40"
+                  style={{ height: ROW_H }}
+                >
+                  {i % 2 === 1 && <div className="absolute inset-0 bg-muted/15 pointer-events-none" />}
+                  <div
+                    className={cn('absolute rounded-md flex items-center px-2 cursor-pointer hover:opacity-100 opacity-90 shadow-sm', barColor)}
+                    style={{
+                      left:  g.startOff * DAY_PX,
+                      width: g.widthDays * DAY_PX,
+                      top:   BAR_PAD_Y,
+                      height: BAR_H,
+                    }}
+                    onClick={() => onOpen(t)}
+                    data-testid={`gantt-bar-${t.id}`}
+                    title={t.title}
+                  >
+                    {g.widthDays * DAY_PX > 60 && (
                       <span className="text-[9px] text-white font-medium truncate">
                         {t.assignedToName || ''}
                       </span>
                     )}
                   </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+
+          {/* SVG overlay for typed dependency connectors */}
+          {connectors.length > 0 && (
+            <svg
+              className="absolute pointer-events-none"
+              style={{ left: 0, top: HEADER_H, width: chartWidth, height: chartHeight }}
+              width={chartWidth}
+              height={chartHeight}
+            >
+              <defs>
+                {(['FS','SS','FF','SF'] as DepType[]).map(dt => (
+                  <marker
+                    key={dt}
+                    id={`gantt-arrow-${dt}`}
+                    viewBox="0 0 8 8"
+                    refX="7"
+                    refY="4"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M 0 0 L 8 4 L 0 8 z" fill={depColor[dt]} />
+                  </marker>
+                ))}
+              </defs>
+              {connectors.map(c => {
+                // Orthogonal elbow polyline from (sx,sy) to (tx,ty)
+                const goingRight = c.tx >= c.sx;
+                const elbowX = goingRight
+                  ? Math.max(c.sx + 6, (c.sx + c.tx) / 2)
+                  : c.sx + 6;
+                const points = goingRight
+                  ? `${c.sx},${c.sy} ${elbowX},${c.sy} ${elbowX},${c.ty} ${c.tx},${c.ty}`
+                  : `${c.sx},${c.sy} ${c.sx + 6},${c.sy} ${c.sx + 6},${(c.sy + c.ty)/2} ${c.tx - 10},${(c.sy + c.ty)/2} ${c.tx - 10},${c.ty} ${c.tx},${c.ty}`;
+                const labelX = goingRight ? elbowX + 2 : c.sx + 8;
+                const labelY = (c.sy + c.ty) / 2 - 2;
+                return (
+                  <g key={c.id} data-testid={`gantt-edge-${c.id}`}>
+                    <polyline
+                      points={points}
+                      fill="none"
+                      stroke={depColor[c.depType]}
+                      strokeWidth={1.4}
+                      markerEnd={`url(#gantt-arrow-${c.depType})`}
+                      opacity={0.9}
+                    />
+                    <text
+                      x={labelX}
+                      y={labelY}
+                      fontSize={9}
+                      fill={depColor[c.depType]}
+                      fontWeight={600}
+                      data-testid={`gantt-edge-label-${c.id}`}
+                    >{c.label}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          )}
+        </div>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 pt-2 border-t mt-3">
+      <div className="flex items-center gap-4 pt-2 border-t mt-3 flex-wrap">
         {STATUS_ORDER.map(s => (
           <div key={s} className="flex items-center gap-1.5">
             <div className={cn('h-2.5 w-2.5 rounded-full', GANTT_STATUS_COLORS[s])} />
             <span className="text-[10px] text-muted-foreground">{STATUS_CFG[s].label}</span>
+          </div>
+        ))}
+        <div className="h-3 w-px bg-border mx-1" />
+        {(['FS','SS','FF','SF'] as DepType[]).map(dt => (
+          <div key={dt} className="flex items-center gap-1.5" title={depTypeLabel(dt)}>
+            <div style={{ width: 14, height: 2, background: depColor[dt] }} />
+            <span className="text-[10px] text-muted-foreground">{dt}</span>
           </div>
         ))}
         <div className="flex items-center gap-1.5 ml-auto">
@@ -1976,10 +2179,10 @@ export function ProjectFieldTasksPanel({
     try {
       const existing = predecessorsOf(taskId);
       const desired = new Map(edges.map(e => [e.predecessorId, e]));
-      // Delete edges no longer present
+      // Delete edges no longer present (RPC keys on (predecessorId, successorId))
       for (const ex of existing) {
         if (!desired.has(ex.predecessorId)) {
-          await deleteDependency(ex.id);
+          await deleteDependency({ predecessorId: ex.predecessorId, successorId: taskId });
         }
       }
       // Upsert all desired edges (covers new + updated type/lag)
@@ -2419,24 +2622,24 @@ export function ProjectFieldTasksPanel({
 
       {/* ── View ── */}
       {viewMode === 'list' && (
-        <ListView tasks={filtered} allTasks={tasks} canEdit={canEdit}
+        <ListView tasks={filtered} allTasks={tasks} typedDeps={typedDepsAll} canEdit={canEdit}
           bulkMode={bulkMode} selectedIds={selectedIds} onToggleSelect={toggleSelect}
           onOpen={t => { if (!bulkMode) setDetailTask(t); else toggleSelect(t.id); }}
           onEdit={t => { setEditTask(t); setDetailTask(null); }}
           onDelete={t => handleDelete(t)} onStatusChange={(t, s) => handleStatusChange(t, s)} />
       )}
       {viewMode === 'board' && (
-        <BoardView tasks={filtered} allTasks={tasks} canEdit={canEdit}
+        <BoardView tasks={filtered} allTasks={tasks} typedDeps={typedDepsAll} canEdit={canEdit}
           onOpen={t => setDetailTask(t)} onEdit={t => { setEditTask(t); setDetailTask(null); }}
           onDelete={t => handleDelete(t)} onStatusChange={(t, s) => handleStatusChange(t, s)} />
       )}
       {viewMode === 'timeline' && (
-        <TimelineView tasks={filtered} allTasks={tasks} canEdit={canEdit}
+        <TimelineView tasks={filtered} allTasks={tasks} typedDeps={typedDepsAll} canEdit={canEdit}
           onOpen={t => setDetailTask(t)} onEdit={t => { setEditTask(t); setDetailTask(null); }}
           onDelete={t => handleDelete(t)} onStatusChange={(t, s) => handleStatusChange(t, s)} />
       )}
       {viewMode === 'gantt' && (
-        <GanttView tasks={filtered} onOpen={t => setDetailTask(t)} />
+        <GanttView tasks={filtered} typedDeps={typedDepsAll} onOpen={t => setDetailTask(t)} />
       )}
 
       {/* ── Dialogs ── */}
@@ -2448,6 +2651,7 @@ export function ProjectFieldTasksPanel({
         allStages={allStages}
         customEntries={customEntries}
         allTasks={tasks}
+        allTypedDeps={typedDepsAll}
       />
       <TaskFormDialog
         open={!!editTask}
@@ -2459,6 +2663,7 @@ export function ProjectFieldTasksPanel({
         customEntries={customEntries}
         allTasks={tasks}
         existingTypedDeps={editTask ? predecessorsOf(editTask.id) : []}
+        allTypedDeps={typedDepsAll}
       />
       <TaskDetailDialog
         task={detailTask}

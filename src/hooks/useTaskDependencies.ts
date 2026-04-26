@@ -92,29 +92,27 @@ export function useTaskDependencies(projectId: string) {
 
   const upsertMutation = useMutation({
     mutationFn: async (input: UpsertDependencyInput) => {
-      const payload = {
-        ...(input.id ? { id: input.id } : {}),
-        project_id: input.projectId,
-        predecessor_id: input.predecessorId,
-        successor_id: input.successorId,
-        dep_type: input.depType ?? 'FS',
-        lag_days: input.lagDays ?? 0,
-        notes: input.notes ?? null,
-      };
-      const { error } = await supabase
-        .from('project_field_task_dependencies')
-        .upsert(payload, { onConflict: 'predecessor_id,successor_id' });
+      // Routed through SECURITY DEFINER RPC — direct table writes are denied
+      // by the pftd_no_direct_writes policy. The RPC enforces that the caller
+      // can UPDATE the successor task.
+      const { error } = await supabase.rpc('upsert_project_field_task_dep', {
+        p_predecessor_id: input.predecessorId,
+        p_successor_id:   input.successorId,
+        p_dep_type:       input.depType ?? 'FS',
+        p_lag_days:       input.lagDays ?? 0,
+        p_notes:          input.notes ?? null,
+      });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('project_field_task_dependencies')
-        .delete()
-        .eq('id', id);
+    mutationFn: async (input: { predecessorId: string; successorId: string }) => {
+      const { error } = await supabase.rpc('delete_project_field_task_dep', {
+        p_predecessor_id: input.predecessorId,
+        p_successor_id:   input.successorId,
+      });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
@@ -131,7 +129,8 @@ export function useTaskDependencies(projectId: string) {
     dependencies: query.data ?? [],
     isLoading: query.isLoading,
     upsertDependency: (input: UpsertDependencyInput) => upsertMutation.mutateAsync(input),
-    deleteDependency: (id: string) => deleteMutation.mutateAsync(id),
+    deleteDependency: (input: { predecessorId: string; successorId: string }) =>
+      deleteMutation.mutateAsync(input),
     isMutating: upsertMutation.isPending || deleteMutation.isPending,
     predecessorsOf,
     successorsOf,
