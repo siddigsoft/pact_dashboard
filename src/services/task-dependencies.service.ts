@@ -545,6 +545,30 @@ function isMissingRpcError(err: { code?: string; message?: string } | null | und
     || m.includes('does not exist');
 }
 
+/**
+ * Detects the auth-missing error raised by `task_can_start` when
+ * `auth.uid()` returns NULL inside the SECURITY DEFINER body
+ * (`RAISE EXCEPTION 'not authenticated' USING ERRCODE = '28000'`).
+ *
+ * Also covers JWT-expired variants surfaced by PostgREST itself when the
+ * client's access token expired between page load and RPC call but the
+ * Supabase auto-refresh hasn't completed yet — that race used to leave the
+ * dep-gate amber-banner-locked forever, with the user's only recourse being
+ * a hard refresh. We now refresh the session and retry once, and if that
+ * still fails we open the gate via the same client-side fallback we use
+ * when the RPC itself is missing — matching the existing
+ * "don't lock the user out for a transient" philosophy.
+ */
+function isAuthMissingError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  if (err.code === '28000' || err.code === 'PGRST301' || err.code === 'PGRST303') return true;
+  const m = (err.message ?? '').toLowerCase();
+  return m.includes('not authenticated')
+    || m.includes('jwt expired')
+    || m.includes('jwt is missing')
+    || m.includes('invalid jwt');
+}
+
 async function canTaskStartFallback(taskId: string): Promise<{
   canStart: boolean;
   blockingTasks: any[];
@@ -595,6 +619,34 @@ export async function canTaskStart(taskId: string): Promise<{
         console.warn('[task_can_start] RPC not present in pactdb — falling back to client-side check. Paste supabase/migrations/20260426_task_can_start_rpc.sql to enable the SECURITY DEFINER path.');
         return await canTaskStartFallback(taskId);
       }
+      // Auth-missing: most often a stale-JWT race (the client's token
+      // expired between page load and RPC call, but auto-refresh has not
+      // completed yet). Force a session refresh, retry the RPC once, and
+      // only fall back if the retry still fails. This unblocks the common
+      // transient case without permanently locking the Start button behind
+      // the amber "Couldn't verify dependencies / not authenticated" banner.
+      if (isAuthMissingError(error)) {
+        console.warn('[task_can_start] auth missing — refreshing session and retrying once.');
+        try {
+          await supabase.auth.refreshSession();
+        } catch (refreshErr) {
+          console.warn('[task_can_start] refreshSession failed:', refreshErr);
+        }
+        const retry = await supabase.rpc('task_can_start' as any, {
+          p_task_id: taskId,
+        } as any);
+        if (!retry.error) {
+          const rPayload = (retry.data ?? {}) as { can_start?: boolean; blocking?: any[] };
+          const rBlocking = Array.isArray(rPayload.blocking) ? rPayload.blocking : [];
+          return {
+            canStart: rPayload.can_start === true && rBlocking.length === 0,
+            blockingTasks: rBlocking,
+            error: null,
+          };
+        }
+        console.warn('[task_can_start] retry after refresh still failed:', retry.error, '— falling back to client-side check (which opens the gate when its own reads also fail).');
+        return await canTaskStartFallback(taskId);
+      }
       console.error('[task_can_start] RPC error:', error);
       return {
         canStart: false,
@@ -615,6 +667,11 @@ export async function canTaskStart(taskId: string): Promise<{
   } catch (err: any) {
     if (isMissingRpcError(err)) {
       console.warn('[task_can_start] RPC missing — falling back to client-side check.');
+      try { return await canTaskStartFallback(taskId); } catch { /* fall through */ }
+    }
+    if (isAuthMissingError(err)) {
+      console.warn('[task_can_start] auth-missing thrown — refreshing session and falling back to client-side check.');
+      try { await supabase.auth.refreshSession(); } catch { /* ignore */ }
       try { return await canTaskStartFallback(taskId); } catch { /* fall through */ }
     }
     console.error('Error checking if task can start:', err);
