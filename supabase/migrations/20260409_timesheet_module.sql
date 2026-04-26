@@ -3,11 +3,11 @@
 -- Also adds hourly_rate to employee_salary_config and creates payroll_settings.
 --
 -- SAFETY NOTE: If a prior flat-model `timesheets` table exists (per-day rows with
--- date/hours/status columns), this migration drops and recreates it as the new
--- weekly-parent model. Existing draft/pending rows are migrated into the new model
+-- a `date` column), this migration drops and recreates it as the new
+-- weekly-parent model. Existing rows are migrated into the new model
 -- (one parent per user+week_start grouping, entries backfilled from the old rows).
 --
--- If `timesheets` doesn't exist yet, the CREATE TABLE runs cleanly.
+-- If `timesheets` doesn't exist yet, the CREATE TABLE branch runs cleanly.
 
 -- ── 0. Detect & migrate pre-existing flat timesheets table ─────────────────────
 DO $$
@@ -54,13 +54,20 @@ BEGIN
       UNIQUE (user_id, week_start)
     );
 
-    -- Backfill weekly parents from the old flat rows
-    -- Group old rows by (user_id, week_start) and compute week-level status
-    INSERT INTO timesheets_new (user_id, week_start, status, submitted_at, approved_by, approved_at, reject_comment, created_at, updated_at)
+    -- Backfill weekly parents from the old flat rows.
+    -- Group by (user_id, Monday-of-week) and pick the most-advanced status.
+    -- NOTE: We deliberately do NOT reference the old table's `week_start`
+    -- column here — the old flat-model table doesn't have one. PostgreSQL
+    -- can't short-circuit COALESCE at parse time, so referencing a
+    -- non-existent column anywhere in the expression makes the whole
+    -- statement fail with "column week_start does not exist".
+    INSERT INTO timesheets_new (
+      user_id, week_start, status, submitted_at, approved_by, approved_at,
+      reject_comment, created_at, updated_at
+    )
     SELECT
       user_id,
-      COALESCE(week_start::date, date_trunc('week', date::date)::date) AS week_start,
-      -- Use the most advanced status in the group as the week status
+      date_trunc('week', date::date)::date AS week_start,
       CASE
         WHEN bool_or(status = 'approved')  THEN 'approved'
         WHEN bool_or(status = 'rejected')  THEN 'rejected'
@@ -68,18 +75,21 @@ BEGIN
         WHEN bool_or(status = 'pending')   THEN 'pending'
         ELSE 'draft'
       END AS status,
-      MAX(submitted_at)  AS submitted_at,
+      MAX(submitted_at)            AS submitted_at,
       MAX(approved_by::text)::uuid AS approved_by,
-      MAX(approved_at)   AS approved_at,
-      MAX(reject_comment) AS reject_comment,
-      MIN(created_at)    AS created_at,
-      MAX(updated_at)    AS updated_at
+      MAX(approved_at)             AS approved_at,
+      MAX(reject_comment)          AS reject_comment,
+      MIN(created_at)              AS created_at,
+      MAX(updated_at)              AS updated_at
     FROM timesheets
     WHERE user_id IS NOT NULL
-    GROUP BY user_id, COALESCE(week_start::date, date_trunc('week', date::date)::date)
+      AND date IS NOT NULL
+    GROUP BY user_id, date_trunc('week', date::date)::date
     ON CONFLICT (user_id, week_start) DO NOTHING;
 
-    -- Backfill entries from old flat rows
+    -- Backfill entries from old flat rows.
+    -- Same fix on the JOIN — we derive week_start from `date`, not from a
+    -- (non-existent) `week_start` column on the old table.
     INSERT INTO timesheet_entries_new (
       timesheet_id, project_id, task_id, task_type, date,
       start_time, end_time, break_minutes, hours, description, is_billable,
@@ -102,7 +112,7 @@ BEGIN
     FROM timesheets t
     JOIN timesheets_new tn
       ON tn.user_id = t.user_id
-      AND tn.week_start = COALESCE(t.week_start::date, date_trunc('week', t.date::date)::date)
+     AND tn.week_start = date_trunc('week', t.date::date)::date
     WHERE t.date IS NOT NULL AND t.hours IS NOT NULL;
 
     -- Replace old flat table with new weekly-parent table
@@ -200,14 +210,11 @@ ALTER TABLE payroll_settings ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
   CREATE POLICY "timesheets_select" ON timesheets
     FOR SELECT USING (
-      -- Employee seeing their own timesheet
       auth.uid() = user_id
-      -- Full visibility: super_admin / finance roles (needed for payroll)
       OR EXISTS (
         SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN ('super_admin','SuperAdmin','finance','Finance','financialAdmin','FinancialAdmin')
       )
-      -- Supervisor/admin/FOM: only see direct reports' timesheets
       OR (
         EXISTS (
           SELECT 1 FROM profiles p WHERE p.id = auth.uid()
@@ -226,18 +233,14 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- timesheets_update:
---   Employee: own rows ONLY when current status is draft or revision (cannot edit after submission)
---             WITH CHECK prevents transitioning to privileged statuses (approved, etc.)
---   Supervisor/admin/FOM: direct reports' rows, any status (for approve/reject/revision)
---   Finance/FinancialAdmin/SuperAdmin: all rows (payroll processing)
+--   Employee: own rows ONLY when current status is draft or revision
+--   Supervisor/admin/FOM: direct reports' rows, any status
+--   Finance/FinancialAdmin/SuperAdmin: all rows
 DO $$ BEGIN
   CREATE POLICY "timesheets_update" ON timesheets
     FOR UPDATE
-    -- USING: which existing rows the caller is allowed to touch
     USING (
-      -- Employee: own timesheet AND current status must be editable
       (auth.uid() = user_id AND status IN ('draft', 'revision'))
-      -- Supervisor/admin/FOM: only direct reports (any status)
       OR (
         EXISTS (
           SELECT 1 FROM profiles p WHERE p.id = auth.uid()
@@ -247,17 +250,13 @@ DO $$ BEGIN
           SELECT 1 FROM profiles dr WHERE dr.id = user_id AND dr.reports_to = auth.uid()
         )
       )
-      -- Finance / FinancialAdmin / SuperAdmin: unrestricted
       OR EXISTS (
         SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN ('super_admin','SuperAdmin','finance','Finance','financialAdmin','FinancialAdmin')
       )
     )
-    -- WITH CHECK: prevent employees from writing privileged status values or usurping approval fields
     WITH CHECK (
-      -- Employee can only write draft, pending, or revision — cannot self-approve or self-reject
       (auth.uid() = user_id AND status IN ('draft', 'pending', 'revision'))
-      -- Supervisors/finance/super_admin may write any status (approvals, rejections)
       OR EXISTS (
         SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN (
@@ -269,18 +268,14 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ── timesheet_entries RLS ─────────────────────────────────────────────────────
--- Read: own entries, or scoped by direct-report relationship for supervisors
 DO $$ BEGIN
   CREATE POLICY "timesheet_entries_select" ON timesheet_entries
     FOR SELECT USING (
-      -- Employee seeing their own entries
       EXISTS (SELECT 1 FROM timesheets t WHERE t.id = timesheet_id AND t.user_id = auth.uid())
-      -- Full visibility: finance/financialAdmin/super_admin (for payroll)
       OR EXISTS (
         SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN ('super_admin','SuperAdmin','finance','Finance','financialAdmin','FinancialAdmin')
       )
-      -- Supervisor/FOM/admin: only direct reports' entries
       OR (
         EXISTS (
           SELECT 1 FROM profiles p WHERE p.id = auth.uid()
@@ -302,22 +297,15 @@ DO $$ BEGIN
     );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- timesheet_entries_update:
---   Employee: own entries ONLY when parent timesheet status is draft or revision
---             (cannot alter hours after submission/approval — protects payroll integrity)
---   Supervisor/admin/FOM: direct reports' entries only
---   Finance/FinancialAdmin/SuperAdmin: unrestricted
 DO $$ BEGIN
   CREATE POLICY "timesheet_entries_update" ON timesheet_entries
     FOR UPDATE
     USING (
-      -- Employee: own entries AND parent timesheet must be in an editable state
       EXISTS (
         SELECT 1 FROM timesheets t
         WHERE t.id = timesheet_id AND t.user_id = auth.uid()
         AND t.status IN ('draft', 'revision')
       )
-      -- Supervisor/admin/FOM: direct reports only (any status — e.g., correcting a data entry error)
       OR (
         EXISTS (
           SELECT 1 FROM profiles p WHERE p.id = auth.uid()
@@ -329,7 +317,6 @@ DO $$ BEGIN
           WHERE t.id = timesheet_id AND dr.reports_to = auth.uid()
         )
       )
-      -- Finance / FinancialAdmin / SuperAdmin: unrestricted
       OR EXISTS (
         SELECT 1 FROM profiles p WHERE p.id = auth.uid()
         AND p.role IN ('super_admin','SuperAdmin','finance','Finance','financialAdmin','FinancialAdmin')
@@ -344,8 +331,7 @@ DO $$ BEGIN
     );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- payroll_settings: FinancialAdmin and above ONLY (task spec requirement)
--- Generic admin role intentionally excluded
+-- payroll_settings: FinancialAdmin and above ONLY
 DO $$ BEGIN
   CREATE POLICY "payroll_settings_select" ON payroll_settings
     FOR SELECT USING (

@@ -32,10 +32,11 @@ disappears and the page works normally.
 - RLS policies so users can only see/edit their own timesheets, supervisors
   can see direct reports, and admins can see everything
 
-## Pre-flight check (1 query)
+## Pre-flight check (2 queries)
 
-Paste this in the pactdb SQL editor first to confirm the tables really aren't
-there yet:
+Paste these in the pactdb SQL editor first.
+
+**(a) Are the new tables already there?**
 
 ```sql
 SELECT table_name
@@ -44,9 +45,26 @@ WHERE table_schema = 'public'
   AND table_name IN ('timesheets', 'timesheet_entries');
 ```
 
-- Returns **0 rows** → tables are missing, continue with the steps below.
+- Returns **0 rows** → tables are missing, continue.
 - Returns **2 rows** → tables already exist; the banner shouldn't be showing.
-  Skip to the verification step at the bottom and report back what you see.
+  Skip to the verification step at the bottom and report what you see.
+
+**(b) Is there a leftover OLD flat-model `timesheets` table to migrate from?**
+
+```sql
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'timesheets'
+  AND column_name = 'date';
+```
+
+- Returns **0 rows** → no old table; the script will run the clean-install
+  branch and just create both tables fresh.
+- Returns **1 row** → old daily-row table exists; the script will rename it,
+  back-fill weekly parents from the daily rows (Monday-of-week grouping),
+  back-fill per-day entries, then drop the old table. No manual fix-ups
+  needed — the script handles both cases automatically.
 
 ## Apply the migration
 
@@ -69,6 +87,22 @@ Paste the pre-flight query again — it should now return both `timesheets` and
 3. The "My Week" tab shows a fresh empty week (Mon–Sun) you can log into.
 4. Saving a row creates a `timesheets` parent and a `timesheet_entries` child
    in pactdb.
+
+## Troubleshooting
+
+If the SQL editor shows `column "week_start" does not exist` or any error
+mentioning a column on the *old* `timesheets` table, you're running an
+out-of-date copy of the script. Re-copy the **current** contents of
+`supabase/migrations/20260409_timesheet_module.sql` from the repo and try
+again — the in-repo version derives `week_start` from the daily `date`
+column instead of trying to read it directly, so this error can't happen
+with the current file.
+
+If the entries back-fill complains about a missing column on the old table
+(e.g. `task_type`, `start_time`, `break_minutes`, `is_billable`,
+`description`), it means your old flat-model `timesheets` table is even
+flatter than expected. Tell me which columns it actually has and I'll
+adjust the back-fill SELECT to skip the missing ones.
 
 ## Roll-back (only if something goes badly wrong)
 
