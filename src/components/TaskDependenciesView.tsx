@@ -36,11 +36,16 @@ interface PickerTask {
 interface TaskDependenciesViewProps {
   taskId: string;
   readonly?: boolean;
+  /** When true, suppress the inner "Dependencies" h3 + Add button so the
+   * card can be embedded inside an outer titled container (e.g. a tab).
+   * The Add button is re-exposed inline next to the empty state. */
+  hideHeader?: boolean;
 }
 
 export const TaskDependenciesView: React.FC<TaskDependenciesViewProps> = ({
   taskId,
   readonly = false,
+  hideHeader = false,
 }) => {
   const [blockingTasks, setBlockingTasks] = useState<TaskLink[]>([]);
   const [dependentTasks, setDependentTasks] = useState<TaskLink[]>([]);
@@ -177,17 +182,29 @@ export const TaskDependenciesView: React.FC<TaskDependenciesViewProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Header with Add button */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-          <Link2 className="h-4 w-4" /> Dependencies
-        </h3>
-        {!readonly && (
-          <Button size="sm" variant="outline" onClick={openAddDialog} data-testid="button-add-dependency">
+      {/* Header with Add button — hidden when embedded in a tabbed container
+          that already provides its own title and add affordance. */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <Link2 className="h-4 w-4" /> Dependencies
+          </h3>
+          {!readonly && (
+            <Button size="sm" variant="outline" onClick={openAddDialog} data-testid="button-add-dependency">
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Dependency
+            </Button>
+          )}
+        </div>
+      )}
+      {/* When the outer header is hidden but there ARE existing rows below,
+          surface a compact Add button so the action is still reachable. */}
+      {hideHeader && !readonly && (blockingTasks.length > 0 || dependentTasks.length > 0) && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" onClick={openAddDialog} data-testid="button-add-dependency-compact">
             <Plus className="h-3.5 w-3.5 mr-1" /> Add Dependency
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Start Status Alert */}
       {!canStart && blockingTasks.length > 0 && (

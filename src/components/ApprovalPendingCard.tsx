@@ -21,9 +21,12 @@ interface ApprovalRecord {
 
 interface ApprovalPendingCardProps {
   onApprovalComplete?: () => void;
+  /** When true, suppress the inner "Pending Approvals" h3 + badge so the
+   * card can be embedded inside an outer titled container (e.g. a tab). */
+  hideHeader?: boolean;
 }
 
-export const ApprovalPendingCard: React.FC<ApprovalPendingCardProps> = ({ onApprovalComplete }) => {
+export const ApprovalPendingCard: React.FC<ApprovalPendingCardProps> = ({ onApprovalComplete, hideHeader = false }) => {
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApproval, setSelectedApproval] = useState<string | null>(null);
@@ -79,12 +82,14 @@ export const ApprovalPendingCard: React.FC<ApprovalPendingCardProps> = ({ onAppr
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Pending Approvals</h3>
-        <span className="bg-red-100 text-red-800 text-sm font-medium px-3 py-1 rounded-full">
-          {pendingApprovals.length} pending
-        </span>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Pending Approvals</h3>
+          <span className="bg-red-100 text-red-800 text-sm font-medium px-3 py-1 rounded-full">
+            {pendingApprovals.length} pending
+          </span>
+        </div>
+      )}
 
       {pendingApprovals.length === 0 ? (
         <div className="text-center py-8 text-gray-500">

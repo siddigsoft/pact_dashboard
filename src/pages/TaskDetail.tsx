@@ -11,6 +11,7 @@ import {
 import { StartTaskDialog, type StartTaskPayload } from '@/components/tasks/StartTaskDialog';
 import { TaskOpenPrompt } from '@/components/tasks/TaskOpenPrompt';
 import { TaskWorkSessionCard } from '@/components/tasks/TaskWorkSessionCard';
+import { TaskInsightsTabs } from '@/components/tasks/TaskInsightsTabs';
 import {
   useTaskWorkSession,
   shouldShowOpenPrompt,
@@ -1751,6 +1752,46 @@ export default function TaskDetail() {
             )}
           </div>
 
+          {/* Consolidated insights tabs — surfaces actionable Approvals,
+              structural Dependencies, and the Status Timeline near the top
+              of the right column instead of stacking three separate cards
+              at the bottom of the page. */}
+          <TaskInsightsTabs
+            taskId={id!}
+            historyCount={history.length}
+            onApprovalComplete={() => {
+              qc.invalidateQueries({ queryKey: ['task-detail', id] });
+              toast({ title: 'Approval processed', description: 'Task approval status updated.' });
+            }}
+            historyChildren={
+              history.length === 0 ? (
+                <div className="text-center py-6 text-slate-500" data-testid="empty-status-timeline">
+                  <History className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                  <p className="text-sm font-medium text-slate-700">No status changes yet</p>
+                  <p className="text-xs text-slate-400 mt-0.5">As the task moves through stages, the history will appear here.</p>
+                </div>
+              ) : (
+                <ol className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {history.map(h => (
+                    <li key={h.id} className="flex items-start gap-2 text-xs" data-testid={`hist-${h.id}`}>
+                      <div className={cn('w-2 h-2 rounded-full mt-1.5 shrink-0', STATUS_COLORS[h.to_status as PersonalTaskStatus]?.split(' ')[0] ?? 'bg-slate-300')} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-700">
+                          {h.from_status ? `${STATUS_LABELS[h.from_status as PersonalTaskStatus] ?? h.from_status} → ` : ''}
+                          {STATUS_LABELS[h.to_status as PersonalTaskStatus] ?? h.to_status}
+                        </p>
+                        <p className="text-slate-400 text-[10px]">
+                          {h.changed_by_name ?? 'Someone'} • {format(parseISO(h.created_at), 'PP p')}
+                        </p>
+                        {h.reason && <p className="text-slate-500 italic mt-0.5">"{h.reason}"</p>}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )
+            }
+          />
+
           {/* Assignee's Start Commitment — visible to creator + everyone after Start */}
           {task.started_at && (() => {
             const deps: StartDependencyRecord[] = Array.isArray(task.start_dependencies)
@@ -2022,44 +2063,10 @@ export default function TaskDetail() {
             currentUserId={currentUser?.id}
           />
 
-          {/* Status timeline */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5" /> Status Timeline
-            </h3>
-            {history.length === 0 ? (
-              <p className="text-xs text-slate-400">No status changes yet.</p>
-            ) : (
-              <ol className="space-y-2">
-                {history.map(h => (
-                  <li key={h.id} className="flex items-start gap-2 text-xs" data-testid={`hist-${h.id}`}>
-                    <div className={cn('w-2 h-2 rounded-full mt-1.5 shrink-0', STATUS_COLORS[h.to_status as PersonalTaskStatus]?.split(' ')[0] ?? 'bg-slate-300')} />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-700">
-                        {h.from_status ? `${STATUS_LABELS[h.from_status as PersonalTaskStatus] ?? h.from_status} → ` : ''}
-                        {STATUS_LABELS[h.to_status as PersonalTaskStatus] ?? h.to_status}
-                      </p>
-                      <p className="text-slate-400 text-[10px]">
-                        {h.changed_by_name ?? 'Someone'} • {format(parseISO(h.created_at), 'PP p')}
-                      </p>
-                      {h.reason && <p className="text-slate-500 italic mt-0.5">"{h.reason}"</p>}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-
-          {/* Approvals Section */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4">
-            <ApprovalPendingCard onApprovalComplete={() => {
-              qc.invalidateQueries({ queryKey: ['task-detail', id] });
-              toast({ title: 'Approval processed', description: 'Task approval status updated.' });
-            }} />
-          </div>
-
-          {/* Task Dependencies Section */}
-          <TaskDependenciesView taskId={id!} />
+          {/* Status Timeline + Pending Approvals + Dependencies were moved
+              into the consolidated <TaskInsightsTabs> card at the top of
+              this column. Only the historical Approval History panel
+              remains here as a reference log. */}
 
           {/* Approval History Section */}
           <ApprovalHistoryPanel taskId={id!} />
