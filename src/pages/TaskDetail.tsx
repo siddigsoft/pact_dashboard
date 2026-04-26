@@ -6,7 +6,7 @@ import { useUser } from '@/context/user/UserContext';
 import {
   ArrowLeft, Calendar, Clock, User as UserIcon, Users, Tag, MessageSquare, FileText,
   MessageCircle, ListChecks, Plus, X, Check, Trash2, Send, History, Loader2,
-  PlayCircle, Lock, ShieldCheck, Target, CheckCircle2, Minus,
+  PlayCircle, Pause, Play, Lock, ShieldCheck, Target, CheckCircle2, Minus,
 } from 'lucide-react';
 import { StartTaskDialog, type StartTaskPayload } from '@/components/tasks/StartTaskDialog';
 import { TaskOpenPrompt } from '@/components/tasks/TaskOpenPrompt';
@@ -17,6 +17,7 @@ import {
   useTaskWorkSession,
   shouldShowOpenPrompt,
   markOpenPromptShown,
+  formatElapsed,
 } from '@/hooks/useTaskWorkSession';
 import type { StartDependencyRecord } from '@/hooks/usePersonalTasks';
 import { useTaskNotifications } from '@/hooks/useTaskNotifications';
@@ -979,6 +980,67 @@ export default function TaskDetail() {
           </button>
         )}
       </div>
+
+      {/* ── Session Quick Bar — always-visible strip for participants on started tasks ── */}
+      {sessionEnabled && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-50 border border-indigo-100" data-testid="bar-session-quick">
+          {/* Timer */}
+          <div className="flex items-center gap-1.5 text-indigo-700 min-w-[96px]">
+            <Clock className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-sm font-mono font-semibold tabular-nums">
+              {formatElapsed(session.elapsedSec)}
+            </span>
+            {session.isRunning && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Session running" />
+            )}
+          </div>
+
+          {/* Resume / Pause */}
+          <button
+            type="button"
+            onClick={session.isRunning ? session.pause : session.start}
+            data-testid="btn-quickbar-timer-toggle"
+            className={cn(
+              'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
+              session.isRunning
+                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700',
+            )}
+          >
+            {session.isRunning
+              ? <><Pause className="w-3 h-3" />Pause</>
+              : <><Play className="w-3 h-3" />Resume</>}
+          </button>
+
+          <div className="flex-1" />
+
+          {/* Jump to Hours */}
+          <button
+            type="button"
+            onClick={() => {
+              hoursCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              window.setTimeout(() => ownHoursInputRef.current?.focus(), 300);
+            }}
+            data-testid="btn-quickbar-log-hours"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-100 transition-colors"
+          >
+            <Clock className="w-3 h-3" />Log Hours
+          </button>
+
+          {/* Jump to Output */}
+          <button
+            type="button"
+            onClick={() => {
+              outputCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              window.setTimeout(() => outputTextareaRef.current?.focus(), 300);
+            }}
+            data-testid="btn-quickbar-add-output"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-100 transition-colors"
+          >
+            <FileText className="w-3 h-3" />Add Output
+          </button>
+        </div>
+      )}
 
       {/* ── Acknowledge banner — per user. Primary uses task.acknowledged_at;
           each co-assignee uses their own slot in co_assignees. ── */}

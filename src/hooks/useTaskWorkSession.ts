@@ -38,14 +38,14 @@ function clearStored(taskId: string, userId: string) {
 
 export function shouldShowOpenPrompt(taskId: string, userId: string): boolean {
   try {
-    return sessionStorage.getItem(PROMPT_KEY(taskId, userId)) !== '1';
+    return localStorage.getItem(PROMPT_KEY(taskId, userId)) !== '1';
   } catch {
     return false;
   }
 }
 
 export function markOpenPromptShown(taskId: string, userId: string) {
-  try { sessionStorage.setItem(PROMPT_KEY(taskId, userId), '1'); } catch { /* */ }
+  try { localStorage.setItem(PROMPT_KEY(taskId, userId), '1'); } catch { /* */ }
 }
 
 export type TaskWorkSession = {
