@@ -58,7 +58,37 @@ interface EmployeeProfile {
   last_activity: string | null; device_info: string | null; app_version: string | null;
   department_id: string | null;
   contract_type: 'salary' | 'retainer' | 'both' | null;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  employment_type: string | null;
   is_employee: boolean;
+}
+
+/* ── Profile completeness helpers ───────────────────────── */
+function completenessItems(p: EmployeeProfile): { label: string; ok: boolean }[] {
+  return [
+    { label: 'Role assigned',        ok: !!p.role },
+    { label: 'Department assigned',  ok: !!p.department_id },
+    { label: 'Bank account',         ok: !!(p.bank_account?.accountNumber || p.bank_account?.accountName) },
+    { label: 'Contract type',        ok: !!p.contract_type },
+    { label: 'Contract start date',  ok: !!p.contract_start_date },
+    { label: 'Contract end date',    ok: !!p.contract_end_date },
+    { label: 'Hub assigned',         ok: !!p.hub_id },
+    { label: 'Phone number',         ok: !!p.phone },
+  ];
+}
+function getCompleteness(p: EmployeeProfile): number {
+  const items = completenessItems(p);
+  return Math.round((items.filter(i => i.ok).length / items.length) * 100);
+}
+
+/* ── Contract expiry helpers ─────────────────────────────── */
+function daysUntilExpiry(endDate: string | null): number | null {
+  if (!endDate) return null;
+  try {
+    const ms = new Date(endDate).getTime() - Date.now();
+    return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  } catch { return null; }
 }
 
 type ContractType = 'salary' | 'retainer' | 'both';
@@ -233,6 +263,36 @@ function EmployeeDetail({
   const [editingContract, setEditingContract] = useState(false);
   const [contractDraft, setContractDraft]     = useState<string>(profile.contract_type || 'salary');
   const [savingContract, setSavingContract]   = useState(false);
+
+  /* ── Inline contract dates edit ── */
+  const [editingDates, setEditingDates]       = useState(false);
+  const [startDraft, setStartDraft]           = useState(profile.contract_start_date?.slice(0, 10) || '');
+  const [endDraft, setEndDraft]               = useState(profile.contract_end_date?.slice(0, 10) || '');
+  const [savingDates, setSavingDates]         = useState(false);
+
+  const saveDates = async () => {
+    setSavingDates(true);
+    const { error } = await supabase.from('profiles').update({
+      contract_start_date: startDraft || null,
+      contract_end_date:   endDraft   || null,
+    }).eq('id', profile.id);
+    if (error) {
+      toast({ title: 'Failed to update contract dates', description: error.message, variant: 'destructive' });
+    } else {
+      onRoleDeptChange(profile.id, {});
+      setEditingDates(false);
+      toast({ title: 'Contract dates updated', description: profile.full_name || '' });
+    }
+    setSavingDates(false);
+  };
+
+  const expiryDays  = daysUntilExpiry(profile.contract_end_date);
+  const expiryAlert = expiryDays !== null && expiryDays <= 90
+    ? expiryDays <= 0    ? { label: 'Expired',          cls: 'text-red-700 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' }
+    : expiryDays <= 30   ? { label: `${expiryDays}d left`, cls: 'text-red-700 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' }
+    : expiryDays <= 60   ? { label: `${expiryDays}d left`, cls: 'text-amber-700 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' }
+    : { label: `${expiryDays}d left`,  cls: 'text-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800' }
+    : null;
 
   const saveContract = async () => {
     setSavingContract(true);
@@ -577,6 +637,71 @@ function EmployeeDetail({
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* ── Contract Dates ── */}
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                <FileText className="h-3 w-3" />Contract Period
+              </p>
+              <div className="flex items-center gap-2">
+                {expiryAlert && (
+                  <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${expiryAlert.cls}`}>
+                    <AlertCircle className="h-3 w-3" />{expiryAlert.label}
+                  </span>
+                )}
+                {canEdit && !editingDates && (
+                  <button type="button" onClick={() => setEditingDates(true)}
+                    className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5 hover:bg-muted"
+                    title="Edit contract dates">
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            {editingDates ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">Start Date</p>
+                    <input type="date" value={startDraft} onChange={e => setStartDraft(e.target.value)}
+                      className="w-full text-xs border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      data-testid="input-contract-start" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1">End Date</p>
+                    <input type="date" value={endDraft} onChange={e => setEndDraft(e.target.value)}
+                      className="w-full text-xs border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      data-testid="input-contract-end" />
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={saveDates} disabled={savingDates}
+                    className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold bg-[#0F2041] text-white rounded-md px-2 py-1.5 hover:bg-[#1D3461] disabled:opacity-60 transition-colors"
+                    data-testid="button-save-dates">
+                    {savingDates ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    {savingDates ? 'Saving…' : 'Save'}
+                  </button>
+                  <button type="button" onClick={() => setEditingDates(false)} disabled={savingDates}
+                    className="flex items-center justify-center gap-1 text-[10px] font-semibold border rounded-md px-2 py-1.5 hover:bg-muted transition-colors disabled:opacity-60">
+                    <XCircle className="h-3 w-3" />Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {([
+                  ['Start Date', profile.contract_start_date ? format(new Date(profile.contract_start_date), 'dd MMM yyyy') : '—'],
+                  ['End Date',   profile.contract_end_date   ? format(new Date(profile.contract_end_date),   'dd MMM yyyy') : '—'],
+                ] as [string, string][]).map(([label, val]) => (
+                  <div key={label} className="rounded-md bg-muted/50 p-2.5">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+                    <p className={`text-sm font-medium ${val === '—' ? 'text-muted-foreground' : ''}`}>{val}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── Bank Account ── */}
@@ -929,6 +1054,67 @@ function BulkContractDialog({
   );
 }
 
+/* ─── Bulk Role + Department Dialog ─────────────────────── */
+function BulkRoleDeptDialog({
+  count, roles, departments, onConfirm, onClose, saving,
+}: { count: number; roles: string[]; departments: { id: string; name: string }[]; onConfirm: (role: string | null, deptId: string | null) => void; onClose: () => void; saving: boolean }) {
+  const [roleDraft, setRoleDraft]   = useState<string>('__keep__');
+  const [deptDraft, setDeptDraft]   = useState<string>('__keep__');
+  const canApply = roleDraft !== '__keep__' || deptDraft !== '__keep__';
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            Bulk Assign Role & Department
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              {count} employee{count !== 1 ? 's' : ''} will be updated
+            </p>
+            <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-0.5">Applies to all currently-filtered employees</p>
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Set role to:</p>
+              <select value={roleDraft} onChange={e => setRoleDraft(e.target.value)}
+                className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring">
+                <option value="__keep__">— Keep existing role —</option>
+                {roles.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Set department to:</p>
+              <select value={deptDraft} onChange={e => setDeptDraft(e.target.value)}
+                className="w-full text-sm border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring">
+                <option value="__keep__">— Keep existing department —</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          </div>
+          {!canApply && (
+            <p className="text-xs text-muted-foreground text-center">Select at least one field to update</p>
+          )}
+          <div className="flex gap-2 pt-1">
+            <Button
+              className="flex-1 bg-[#0F2041] hover:bg-[#1D3461] text-white"
+              onClick={() => onConfirm(roleDraft === '__keep__' ? null : roleDraft, deptDraft === '__keep__' ? null : deptDraft)}
+              disabled={saving || !canApply}
+            >
+              {saving ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+              {saving ? 'Updating…' : `Apply to ${count} employee${count !== 1 ? 's' : ''}`}
+            </Button>
+            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Financial Summary Card ─────────────────────────────── */
 interface FinRow { total: number; approved: number; amountSDG: number }
 interface FinMonth { current: FinRow; prev: FinRow }
@@ -1080,8 +1266,9 @@ export default function Employees() {
   const [selected, setSelected] = useState<EmployeeProfile | null>(null);
 
   /* ── Bulk contract assign ── */
-  const [showBulkDialog, setShowBulkDialog] = useState(false);
-  const [bulkSaving, setBulkSaving]         = useState(false);
+  const [showBulkDialog, setShowBulkDialog]     = useState(false);
+  const [bulkSaving, setBulkSaving]             = useState(false);
+  const [bulkRoleSaving, setBulkRoleSaving]     = useState(false);
 
   const handleUpdate = useCallback((id: string, newType: ContractType) => {
     setProfiles(prev => prev.map(p => p.id === id ? { ...p, contract_type: newType } : p));
@@ -1111,6 +1298,25 @@ export default function Employees() {
       setShowBulkDialog(false);
     }
     setBulkSaving(false);
+  };
+
+  const handleBulkRoleDept = async (role: string | null, deptId: string | null) => {
+    setBulkRoleSaving(true);
+    const ids = filtered.map(p => p.id);
+    const updates: Record<string, unknown> = {};
+    if (role)   updates.role          = role;
+    if (deptId) updates.department_id = deptId;
+    const { error } = await (supabase as any).from('profiles').update(updates).in('id', ids);
+    if (error) {
+      toast({ title: 'Bulk update failed', description: error.message, variant: 'destructive' });
+    } else {
+      setProfiles(prev => prev.map(p => ids.includes(p.id) ? { ...p, ...updates } : p));
+      setSelected(prev => prev && ids.includes(prev.id) ? { ...prev, ...updates } : prev);
+      const parts = [role && `Role → ${role}`, deptId && `Dept set`].filter(Boolean).join(', ');
+      toast({ title: `${ids.length} employee${ids.length !== 1 ? 's' : ''} updated`, description: parts });
+      setShowBulkRoleDialog(false);
+    }
+    setBulkRoleSaving(false);
   };
 
   /* ── Financial summary state ── */
@@ -1158,8 +1364,10 @@ export default function Employees() {
   const [stateFilter, setStateFilter]     = useState('all');
   const [localityFilter, setLocalFilter]  = useState('all');
   const [roleFilter, setRoleFilter]       = useState('all');
-  const [bankFilter, setBankFilter]       = useState('all');
-  const [contractFilter, setContractFilter] = useState('all');
+  const [bankFilter, setBankFilter]           = useState('all');
+  const [contractFilter, setContractFilter]   = useState('all');
+  const [completenessFilter, setCompletenessFilter] = useState<'all' | 'incomplete' | 'complete'>('all');
+  const [showBulkRoleDialog, setShowBulkRoleDialog] = useState(false);
   const [deptFilter, setDeptFilter]       = useState('all');
   const [showUnregistered, setShowUnregistered] = useState(false);
   const [viewMode, setViewMode]           = useState<'cards' | 'table'>('table');
@@ -1180,7 +1388,7 @@ export default function Employees() {
         (supabase as any).from('departments').select('id, name').order('name'),
         (supabase as any)
           .from('profiles')
-          .select('id, full_name, email, phone, role, employee_id, is_employee, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type')
+          .select('id, full_name, email, phone, role, employee_id, is_employee, hub_id, state_id, locality_id, availability, status, updated_at, created_at, bank_account, last_activity, device_info, app_version, department_id, contract_type, contract_start_date, contract_end_date, employment_type')
           .order('full_name'),
       ]);
       if (hubsRes.data?.length) setDbHubs(hubsRes.data);
@@ -1252,10 +1460,12 @@ export default function Employees() {
       if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (contractFilter !== 'all' && (p.contract_type || 'salary') !== contractFilter) return false;
+      if (completenessFilter === 'incomplete' && getCompleteness(p) >= 100) return false;
+      if (completenessFilter === 'complete'   && getCompleteness(p) <  100) return false;
       if (deptFilter !== 'all' && p.department_id !== deptFilter) return false;
       return true;
     });
-  }, [enriched, search, hubFilter, stateFilter, localityFilter, roleFilter, bankFilter, contractFilter, deptFilter, showUnregistered]);
+  }, [enriched, search, hubFilter, stateFilter, localityFilter, roleFilter, bankFilter, contractFilter, completenessFilter, deptFilter, showUnregistered]);
 
   const unregisteredCount = useMemo(
     () => enriched.filter(p => !p.is_employee).length,
@@ -1274,6 +1484,9 @@ export default function Employees() {
     both:        registeredEmployees.filter(p => p.contract_type === 'both').length,
     withBank:    registeredEmployees.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
     missingBank: registeredEmployees.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+    expiredContracts: registeredEmployees.filter(p => { const d = daysUntilExpiry(p.contract_end_date); return d !== null && d <= 0; }).length,
+    expiringContracts: registeredEmployees.filter(p => { const d = daysUntilExpiry(p.contract_end_date); return d !== null && d > 0 && d <= 30; }).length,
+    incompleteProfiles: registeredEmployees.filter(p => getCompleteness(p) < 100).length,
   }), [registeredEmployees]);
 
   /* ── Stat Card ── */
@@ -1299,9 +1512,9 @@ export default function Employees() {
 
   const clearFilters = () => {
     setSearch(''); setHubFilter('all'); setStateFilter('all'); setLocalFilter('all');
-    setRoleFilter('all'); setBankFilter('all'); setContractFilter('all'); setDeptFilter('all');
+    setRoleFilter('all'); setBankFilter('all'); setContractFilter('all'); setDeptFilter('all'); setCompletenessFilter('all');
   };
-  const hasFilters = !!(search || hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all' || contractFilter !== 'all' || deptFilter !== 'all');
+  const hasFilters = !!(search || hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || roleFilter !== 'all' || bankFilter !== 'all' || contractFilter !== 'all' || deptFilter !== 'all' || completenessFilter !== 'all');
 
   /* ── Filter Bar ── */
   const FilterBar = (
@@ -1410,17 +1623,30 @@ export default function Employees() {
             <Badge variant="secondary" className="text-xs font-medium">{filtered.length} of {enriched.length}</Badge>
           )}
           {canEdit && !loading && filtered.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowBulkDialog(true)}
-              className="h-8 text-xs gap-1.5 border-dashed"
-              data-testid="button-bulk-contract"
-            >
-              <Pencil className="h-3 w-3" />
-              Bulk Assign
-              {filtered.length < enriched.length && <span className="font-bold text-[#0F2041]">({filtered.length})</span>}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowBulkDialog(true)}
+                className="h-8 text-xs gap-1.5 border-dashed"
+                data-testid="button-bulk-contract"
+              >
+                <Pencil className="h-3 w-3" />
+                Bulk Contract
+                {filtered.length < enriched.length && <span className="font-bold text-[#0F2041]">({filtered.length})</span>}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowBulkRoleDialog(true)}
+                className="h-8 text-xs gap-1.5 border-dashed"
+                data-testid="button-bulk-role-dept"
+              >
+                <Users className="h-3 w-3" />
+                Bulk Role/Dept
+                {filtered.length < enriched.length && <span className="font-bold text-[#0F2041]">({filtered.length})</span>}
+              </Button>
+            </>
           )}
           <div className="flex border rounded-md overflow-hidden">
             <button type="button" onClick={() => setViewMode('table')}
@@ -1495,6 +1721,50 @@ export default function Employees() {
             accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
             onClick={() => { setBankFilter('missing'); setActiveTab('bank_accounts'); }} />
         </div>
+
+        {/* ── Contract Expiry / Completeness Alerts Banner ── */}
+        {!loading && (stats.expiredContracts > 0 || stats.expiringContracts > 0 || stats.incompleteProfiles > 0) && (
+          <div className="flex flex-wrap gap-2 px-1 pb-1">
+            {stats.expiredContracts > 0 && (
+              <button
+                type="button"
+                onClick={() => { setCompletenessFilter('all'); }}
+                className="flex items-center gap-1.5 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                data-testid="banner-expired-contracts"
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                <span className="font-bold">{stats.expiredContracts}</span> expired contract{stats.expiredContracts !== 1 ? 's' : ''}
+              </button>
+            )}
+            {stats.expiringContracts > 0 && (
+              <button
+                type="button"
+                onClick={() => { setCompletenessFilter('all'); }}
+                className="flex items-center gap-1.5 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                data-testid="banner-expiring-contracts"
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                <span className="font-bold">{stats.expiringContracts}</span> contract{stats.expiringContracts !== 1 ? 's' : ''} expiring within 30 days
+              </button>
+            )}
+            {stats.incompleteProfiles > 0 && (
+              <button
+                type="button"
+                onClick={() => setCompletenessFilter('incomplete')}
+                className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  completenessFilter === 'incomplete'
+                    ? 'border-orange-400 bg-orange-500 text-white'
+                    : 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/30'
+                }`}
+                data-testid="banner-incomplete-profiles"
+              >
+                <UserX className="h-3.5 w-3.5" />
+                <span className="font-bold">{stats.incompleteProfiles}</span> incomplete profile{stats.incompleteProfiles !== 1 ? 's' : ''}
+                {completenessFilter === 'incomplete' && <XCircle className="h-3 w-3 ml-1" />}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* ── Tabs ── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -1607,6 +1877,7 @@ export default function Employees() {
                         <TableHead>Hub</TableHead>
                         <TableHead>State</TableHead>
                         <TableHead>Bank Account</TableHead>
+                        <TableHead>Profile</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Last Active</TableHead>
                         <TableHead className="w-24 text-right">Actions</TableHead>
@@ -1638,6 +1909,25 @@ export default function Employees() {
                               {hasBank
                                 ? <span className="text-xs font-mono font-medium">{maskAcc(p.bank_account?.accountNumber)}</span>
                                 : <span className="text-xs text-red-500 font-medium">Missing</span>}
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const pct = getCompleteness(p);
+                                const missing = completenessItems(p).filter(i => !i.ok).map(i => i.label);
+                                const color = pct === 100 ? 'text-green-600 dark:text-green-400' : pct >= 75 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+                                return (
+                                  <div className="flex items-center gap-1.5 group relative" title={missing.length ? `Missing: ${missing.join(', ')}` : 'Profile complete'}>
+                                    <div className="w-6 h-6 shrink-0 relative">
+                                      <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-muted-foreground/20" />
+                                        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5"
+                                          className={color} strokeDasharray={`${pct * 0.565} 56.5`} strokeLinecap="round" />
+                                      </svg>
+                                    </div>
+                                    <span className={`text-[11px] font-semibold ${color}`}>{pct}%</span>
+                                  </div>
+                                );
+                              })()}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
@@ -1795,6 +2085,18 @@ export default function Employees() {
           onConfirm={handleBulkAssign}
           onClose={() => setShowBulkDialog(false)}
           saving={bulkSaving}
+        />
+      )}
+
+      {/* ── Bulk Role & Dept Dialog ── */}
+      {showBulkRoleDialog && (
+        <BulkRoleDeptDialog
+          count={filtered.length}
+          roles={ROLE_OPTIONS.map(([k]) => k)}
+          departments={departments}
+          onConfirm={handleBulkRoleDept}
+          onClose={() => setShowBulkRoleDialog(false)}
+          saving={bulkRoleSaving}
         />
       )}
     </div>

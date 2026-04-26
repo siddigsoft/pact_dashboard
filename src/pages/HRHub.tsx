@@ -23,9 +23,10 @@ const PerformancePanel  = lazy(() => import('./PerformanceReviews'));
 const SalaryIncrPanel   = lazy(() => import('./SalaryIncrements'));
 const TrainingPanel     = lazy(() => import('@/components/hr/TrainingCertifications'));
 
-type HRTab = 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments' | 'training';
+type HRTab = 'overview' | 'payroll' | 'retainer' | 'payroll-admin' | 'hr-tools' | 'timesheet' | 'performance' | 'salary-increments' | 'training';
 
 const ALL_TABS: { id: HRTab; label: string; icon: typeof Banknote; accent: string; bg: string; adminOnly: boolean }[] = [
+  { id: 'overview',          label: 'HR Overview',         icon: BarChart2,  accent: '#6366f1', bg: 'rgba(99,102,241,0.12)',  adminOnly: true  },
   { id: 'payroll',           label: 'My Payroll',          icon: Banknote,   accent: '#D97706', bg: 'rgba(217,119,6,0.12)',   adminOnly: false },
   { id: 'payroll-admin',     label: 'Payroll Admin',        icon: Settings2,  accent: '#67e8f9', bg: 'rgba(103,232,249,0.12)', adminOnly: true  },
   { id: 'retainer',          label: 'Retainer',             icon: FileText,   accent: '#a78bfa', bg: 'rgba(167,139,250,0.12)', adminOnly: true  },
@@ -61,18 +62,19 @@ export default function HRHub() {
   const visibleTabs = ALL_TABS.filter(t => !t.adminOnly || isAdmin);
 
   const requestedTab = params.get('tab') as HRTab | null;
+  const defaultTab: HRTab = isAdmin ? 'overview' : 'payroll';
   const tab: HRTab = (() => {
-    const t = requestedTab ?? 'payroll';
+    const t = requestedTab ?? defaultTab;
     // If non-admin requests an admin-only tab, fall back to payroll
     const found = visibleTabs.find(vt => vt.id === t);
-    return found ? t : 'payroll';
+    return found ? t : defaultTab;
   })();
 
   const setTab = (t: HRTab) => setParams({ tab: t }, { replace: true });
 
   // Redirect if URL has an unauthorised tab
   useEffect(() => {
-    if (requestedTab && tab !== requestedTab) setParams({ tab: 'payroll' }, { replace: true });
+    if (requestedTab && tab !== requestedTab) setParams({ tab: defaultTab }, { replace: true });
   }, [requestedTab, tab]);
 
   const activeTab = visibleTabs.find(t => t.id === tab) ?? visibleTabs[0];
@@ -173,6 +175,7 @@ export default function HRHub() {
           </Suspense>
         )}
         {tab === 'hr-tools' && isAdmin && <HRToolsPanel />}
+        {tab === 'overview' && isAdmin && <HROverviewPanel />}
       </div>
     </div>
   );
@@ -334,6 +337,164 @@ function LeaveEntitlementsPanel() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ── HR Overview Panel ──────────────────────────────────────────────────────────
+function HROverviewPanel() {
+  const { data: profiles = [], isLoading } = useQuery({
+    queryKey: ['hr-overview-profiles'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, role, department_id, contract_type, bank_account, contract_end_date, is_employee, hub_id')
+        .eq('is_employee', true);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['hr-overview-depts'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('departments').select('id, name').order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const stats = useMemo(() => {
+    const total = profiles.length;
+    const contractCounts: Record<string, number> = {};
+    const roleCounts: Record<string, number> = {};
+    let missingBank = 0;
+    let expiring30 = 0;
+    let expired = 0;
+    let incompleteCount = 0;
+    const deptCounts: Record<string, number> = {};
+    const now = Date.now();
+    for (const p of profiles) {
+      const ct = p.contract_type ?? 'salary';
+      contractCounts[ct] = (contractCounts[ct] ?? 0) + 1;
+      const role = (p as any).role ?? 'Unassigned';
+      roleCounts[role] = (roleCounts[role] ?? 0) + 1;
+      const ba = p.bank_account as any;
+      if (!(ba?.accountNumber || ba?.accountName)) missingBank++;
+      if (p.contract_end_date) {
+        const days = Math.ceil((new Date(p.contract_end_date).getTime() - now) / 86400000);
+        if (days <= 0) expired++;
+        else if (days <= 30) expiring30++;
+      }
+      const deptId = (p as any).department_id ?? '__none__';
+      deptCounts[deptId] = (deptCounts[deptId] ?? 0) + 1;
+      // incomplete if missing role or department
+      if (!(p as any).role || !(p as any).department_id) incompleteCount++;
+    }
+    return { total, contractCounts, roleCounts, missingBank, expiring30, expired, incompleteCount, deptCounts };
+  }, [profiles]);
+
+  const contractChartData = Object.entries(stats.contractCounts).map(([k, v]) => ({
+    name: k === 'both' ? 'Salary + Retainer' : k === 'salary' ? 'Salary' : 'Retainer-Only',
+    value: v,
+    fill: k === 'salary' ? '#3b82f6' : k === 'retainer' ? '#8b5cf6' : '#14b8a6',
+  }));
+
+  const roleChartData = Object.entries(stats.roleCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, count]) => ({ name, count }));
+
+  const deptChartData = departments
+    .map(d => ({ name: d.name, count: stats.deptCounts[d.id] ?? 0 }))
+    .filter(d => d.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  const Kpi = ({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color?: string }) => (
+    <div className="rounded-xl border bg-card p-4 space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`text-3xl font-bold ${color ?? 'text-foreground'}`}>{isLoading ? '—' : value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* KPI Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <Kpi label="Total Employees" value={stats.total} />
+        <Kpi label="Missing Bank Account" value={stats.missingBank} color={stats.missingBank > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
+        <Kpi label="Expired Contracts" value={stats.expired} color={stats.expired > 0 ? 'text-red-600 dark:text-red-400' : undefined} />
+        <Kpi label="Expiring (30 days)" value={stats.expiring30} color={stats.expiring30 > 0 ? 'text-amber-600 dark:text-amber-400' : undefined} />
+        <Kpi label="Incomplete Profiles" value={stats.incompleteCount} sub="Missing role or dept" color={stats.incompleteCount > 0 ? 'text-orange-600 dark:text-orange-400' : undefined} />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Contract Type split */}
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Contract Type Split</p>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {isLoading ? <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading…</div> : (
+              <div className="space-y-2">
+                {contractChartData.map(d => (
+                  <div key={d.name} className="space-y-0.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-medium">{d.name}</span>
+                      <span className="text-muted-foreground">{d.value}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${stats.total ? (d.value / stats.total * 100) : 0}%`, backgroundColor: d.fill }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Role Breakdown */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Role Distribution (Top 10)</p>
+          </CardHeader>
+          <CardContent className="px-2 pb-4">
+            {isLoading ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading…</div> : (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={roleChartData} layout="vertical" margin={{ left: 8, right: 24, top: 0, bottom: 0 }}>
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="count" fill="#1D3461" radius={[0, 3, 3, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Department Distribution */}
+      {deptChartData.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Department Headcount</p>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {isLoading ? <div className="h-20 flex items-center justify-center text-sm text-muted-foreground">Loading…</div> : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {deptChartData.map(d => (
+                  <div key={d.name} className="rounded-lg border bg-muted/30 p-3 text-center">
+                    <p className="text-xl font-bold text-foreground">{d.count}</p>
+                    <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{d.name}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 

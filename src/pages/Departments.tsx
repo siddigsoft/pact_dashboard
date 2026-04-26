@@ -59,6 +59,7 @@ interface Profile {
   reports_to: string | null;
   avatar_url?: string | null;
   classification_level?: string | null;
+  contract_type?: string | null;
 }
 
 const DEPT_COLORS = [
@@ -552,6 +553,42 @@ function DeptOrgNode({
               )}
             </div>
           )}
+          {/* Row 2b: Contract type + role breakdown mini-bars */}
+          {members.length > 0 && (() => {
+            const ctMap: Record<string, number> = {};
+            for (const m of members) { const k = m.contract_type ?? 'salary'; ctMap[k] = (ctMap[k] ?? 0) + 1; }
+            const ctBars = [
+              { key: 'salary',   label: 'Salary',      color: '#3b82f6' },
+              { key: 'retainer', label: 'Retainer',    color: '#8b5cf6' },
+              { key: 'both',     label: 'Sal+Ret',     color: '#14b8a6' },
+            ].filter(b => ctMap[b.key]);
+            const topRoles = Object.entries(
+              members.reduce((acc, m) => { const r = m.role ?? 'unassigned'; acc[r] = (acc[r] ?? 0) + 1; return acc; }, {} as Record<string, number>)
+            ).sort((a, b) => b[1] - a[1]).slice(0, 3);
+            return (
+              <div className="flex flex-wrap items-center gap-3 text-[10px]">
+                {ctBars.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    {ctBars.map(b => (
+                      <span key={b.key} className="flex items-center gap-0.5 font-medium" style={{ color: b.color }}>
+                        <span className="inline-block w-2 h-2 rounded-sm" style={{ background: b.color }} />
+                        {ctMap[b.key]} {b.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {topRoles.length > 0 && (
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    {topRoles.map(([role, count]) => (
+                      <span key={role} className="px-1 py-0.5 rounded bg-black/5 dark:bg-white/5 capitalize">
+                        {count} {role.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {/* Row 3: Expanded member list */}
           {showMembers && members.length > 0 && (
             <div className="border-t pt-2 space-y-1 max-h-36 overflow-y-auto" style={{ borderColor: accentColor + "30" }}>
@@ -2547,7 +2584,7 @@ export default function Departments() {
           .order("name"),
         supabase
           .from("profiles")
-          .select("id, full_name, email, role, department_id, reports_to, avatar_url")
+          .select("id, full_name, email, role, department_id, reports_to, avatar_url, contract_type")
           .order("full_name"),
         supabase
           .from("user_classifications")
