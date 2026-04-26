@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface FiscalYear { id: string; code: string }
+interface Country { id: string; code: string; name_en: string; flag_emoji: string | null; currency_code: string }
 interface Entry {
   id: string;
   entry_no: number;
@@ -79,7 +80,8 @@ export default function AccountingJournals() {
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [accountsMap, setAccountsMap] = useState<Record<string, { code: string; name_en: string; name_ar: string }>>({});
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [accountsMap, setAccountsMap] = useState<Record<string, { code: string; name_en: string; name_ar: string; country_id: string | null; is_postable: boolean }>>({});
   const [fundsMap, setFundsMap] = useState<Record<string, { code: string; name_en: string }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +104,7 @@ export default function AccountingJournals() {
   const [newDescAr, setNewDescAr]       = useState('');
   const [newLines, setNewLines]         = useState<NewLine[]>([BLANK_LINE(), BLANK_LINE()]);
   const [submitting, setSubmitting]     = useState(false);
+  const [newCountryId, setNewCountryId] = useState<string>('all');
 
   const openNewEntry = () => {
     const firstOpen = periods.find(p => p.status === 'open');
@@ -109,6 +112,7 @@ export default function AccountingJournals() {
     setNewDate(new Date().toISOString().slice(0, 10));
     setNewDescEn('');
     setNewDescAr('');
+    setNewCountryId('all');
     setNewLines([BLANK_LINE(), BLANK_LINE()]);
     setNewOpen(true);
   };
@@ -123,6 +127,16 @@ export default function AccountingJournals() {
   const newLineCrTotal = newLines.reduce((s, l) => l.debit_credit === 'CR' ? s + (Number(l.amount) || 0) : s, 0);
   const newBalanced    = Math.abs(newLineDrTotal - newLineCrTotal) < 0.005;
 
+  const selectedCountry = countries.find(c => c.id === newCountryId);
+  const dialogCurrency  = selectedCountry?.currency_code ?? 'USD';
+
+  const filteredAccountsForDialog = useMemo(() =>
+    Object.entries(accountsMap).filter(([, a]) =>
+      a.is_postable && (newCountryId === 'all' || a.country_id === newCountryId)
+    ),
+    [accountsMap, newCountryId],
+  );
+
   const submitEntry = async () => {
     if (!newPeriodId) { toast({ title: 'Select a period', variant: 'destructive' }); return; }
     if (!newDescEn.trim()) { toast({ title: 'English description is required', variant: 'destructive' }); return; }
@@ -134,6 +148,7 @@ export default function AccountingJournals() {
       if (!l.amount || Number(l.amount) <= 0) { toast({ title: `Line ${i + 1}: enter a positive amount`, variant: 'destructive' }); return; }
     }
     setSubmitting(true);
+    const funcCcy = selectedCountry?.currency_code ?? 'USD';
     const payload = {
       period_id:      newPeriodId,
       posting_date:   newDate,
@@ -147,8 +162,8 @@ export default function AccountingJournals() {
         debit_credit:        l.debit_credit,
         functional_amount:   Number(l.amount),
         original_amount:     Number(l.amount),
-        original_currency:   l.currency,
-        functional_currency: 'SDG',
+        original_currency:   l.currency || funcCcy,
+        functional_currency: funcCcy,
         description:         l.description || null,
         line_no:             idx + 1,
       })),
@@ -171,20 +186,22 @@ export default function AccountingJournals() {
   const loadAll = async () => {
     setLoading(true);
     setError(null);
-    const [yres, pres, eres, ares, fres] = await Promise.all([
+    const [yres, pres, eres, ares, fres, cres] = await Promise.all([
       supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
       supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
       supabase.from('acct_journal_entries').select('id, entry_no, period_id, posting_date, description_en, description_ar, source_type, source_id, status, branch_id, idempotency_key, posted_at, posted_by, created_at, created_by, reversed_by_entry_id').order('posting_date', { ascending: false }).order('entry_no', { ascending: false }).limit(2000),
-      supabase.from('acct_accounts').select('id, code, name_en, name_ar'),
+      supabase.from('acct_accounts').select('id, code, name_en, name_ar, country_id, is_postable').order('code'),
       supabase.from('acct_funds').select('id, code, name_en'),
+      supabase.from('countries').select('id, code, name_en, flag_emoji, currency_code').eq('is_active', true).order('name_en'),
     ]);
     const firstErr = [yres.error, pres.error, eres.error, ares.error, fres.error].find(Boolean);
     if (firstErr) setError(firstErr.message);
     setYears((yres.data ?? []) as FiscalYear[]);
     setPeriods((pres.data ?? []) as Period[]);
     setEntries((eres.data ?? []) as Entry[]);
+    setCountries((cres.data ?? []) as Country[]);
     const am: typeof accountsMap = {};
-    for (const a of (ares.data ?? [])) am[a.id] = { code: a.code, name_en: a.name_en, name_ar: a.name_ar };
+    for (const a of (ares.data ?? [])) am[a.id] = { code: a.code, name_en: a.name_en, name_ar: a.name_ar, country_id: a.country_id ?? null, is_postable: a.is_postable ?? true };
     setAccountsMap(am);
     const fm: typeof fundsMap = {};
     for (const f of (fres.data ?? [])) fm[f.id] = { code: f.code, name_en: f.name_en };
@@ -426,6 +443,31 @@ export default function AccountingJournals() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* Country selector */}
+            <div className="space-y-1">
+              <Label>Country / COA Scope</Label>
+              <Select value={newCountryId} onValueChange={id => {
+                setNewCountryId(id);
+                const ccy = countries.find(c => c.id === id)?.currency_code ?? 'USD';
+                setNewLines([{ ...BLANK_LINE(), currency: ccy }, { ...BLANK_LINE(), currency: ccy }]);
+              }}>
+                <SelectTrigger data-testid="select-new-country"><SelectValue placeholder="All countries" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">🌐 All countries</SelectItem>
+                  {countries.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.flag_emoji ?? ''} {c.name_en} ({c.currency_code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {newCountryId !== 'all' && (
+                <p className="text-[11px] text-muted-foreground">
+                  Showing {filteredAccountsForDialog.length} postable accounts · functional currency: <strong>{dialogCurrency}</strong>
+                </p>
+              )}
+            </div>
+
             {/* Header row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="space-y-1 sm:col-span-2">
@@ -504,9 +546,12 @@ export default function AccountingJournals() {
                             <SelectValue placeholder="Select…" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(accountsMap).map(([id, a]) => (
+                            {filteredAccountsForDialog.map(([id, a]) => (
                               <SelectItem key={id} value={id}>{a.code} — {a.name_en}</SelectItem>
                             ))}
+                            {filteredAccountsForDialog.length === 0 && (
+                              <div className="px-2 py-4 text-xs text-muted-foreground text-center">No postable accounts found.<br/>Apply the COA migration for this country.</div>
+                            )}
                           </SelectContent>
                         </Select>
                       </td>

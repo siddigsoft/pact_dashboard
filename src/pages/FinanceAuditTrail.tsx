@@ -23,6 +23,11 @@ interface AuditLog {
   changed_by: string | null;
   changed_at: string;
   context: any;
+  [key: string]: any;
+}
+
+function resolveAction(row: AuditLog): string {
+  return row.action ?? row.operation ?? row.change_type ?? row.op ?? row.event ?? '—';
 }
 interface AmlAlert {
   id: string;
@@ -92,7 +97,7 @@ export default function FinanceAuditTrail() {
     setLoading(true);
     setError(null);
     let logQ = supabase.from('acct_finance_audit_log')
-      .select('id, table_name, row_id, action, old_data, new_data, changed_by, changed_at, context')
+      .select('*')
       .order('changed_at', { ascending: false }).limit(2000);
     let alertQ = supabase.from('acct_aml_alerts')
       .select('id, partner_id, matched_party_id, match_score, status, resolved_at, resolved_by, resolution_notes, created_at')
@@ -141,7 +146,7 @@ export default function FinanceAuditTrail() {
     const q = search.trim().toLowerCase();
     return logs.filter(l => {
       if (tableFilter !== 'all' && l.table_name !== tableFilter) return false;
-      if (actionFilter !== 'all' && l.action !== actionFilter) return false;
+      if (actionFilter !== 'all' && resolveAction(l) !== actionFilter) return false;
       if (q) {
         const who = profiles[l.changed_by ?? ''] ?? l.changed_by ?? '';
         return l.row_id.toLowerCase().includes(q)
@@ -164,7 +169,7 @@ export default function FinanceAuditTrail() {
   const exportLogs = () => {
     const header = ['Changed At', 'Table', 'Row ID', 'Action', 'Changed By', 'Old → New (JSON)'];
     const body = filteredLogs.map(l => [
-      l.changed_at, l.table_name, l.row_id, l.action,
+      l.changed_at, l.table_name, l.row_id, resolveAction(l),
       profiles[l.changed_by ?? ''] ?? l.changed_by ?? '',
       JSON.stringify({ old: l.old_data, new: l.new_data }),
     ]);
@@ -301,7 +306,7 @@ export default function FinanceAuditTrail() {
                         <tr key={l.id} className="border-t align-top hover:bg-muted/30" data-testid={`row-log-${l.id}`}>
                           <td className="px-3 py-2 text-xs whitespace-nowrap">{format(parseISO(l.changed_at), 'yyyy-MM-dd HH:mm:ss')}</td>
                           <td className="px-3 py-2 text-xs"><Badge variant="outline" className="text-[10px]">{l.table_name}</Badge></td>
-                          <td className="px-3 py-2"><Badge variant="outline" className={cn('text-[10px]', ACTION_TONE[l.action] ?? '')}>{l.action}</Badge></td>
+                          <td className="px-3 py-2"><Badge variant="outline" className={cn('text-[10px]', ACTION_TONE[resolveAction(l)] ?? '')}>{resolveAction(l)}</Badge></td>
                           <td className="px-3 py-2 font-mono text-[11px]">{l.row_id.slice(0, 8)}…</td>
                           <td className="px-3 py-2 text-xs">{profiles[l.changed_by ?? ''] ?? (l.changed_by ?? '—')}</td>
                           <td className="px-3 py-2 text-[11px] text-muted-foreground max-w-[420px]">

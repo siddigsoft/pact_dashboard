@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface FiscalYear { id: string; code: string }
 interface Fund { id: string; code: string; name_en: string; name_ar: string }
+interface Country { id: string; code: string; name_en: string; flag_emoji: string | null; currency_code: string }
 interface TbRow {
   account_id: string;
   account_code: string;
@@ -27,7 +28,7 @@ interface TbRow {
   credit_total: number;
   net_balance: number;
 }
-interface AccountMeta { id: string; account_type: string; subtype: string }
+interface AccountMeta { id: string; account_type: string; subtype: string; country_id: string | null }
 
 export default function AccountingTrialBalance() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
@@ -36,9 +37,11 @@ export default function AccountingTrialBalance() {
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [funds, setFunds] = useState<Fund[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
   const [accountsMeta, setAccountsMeta] = useState<Record<string, AccountMeta>>({});
   const [periodId, setPeriodId] = useState<string>('');
   const [fundId, setFundId] = useState<string>('all');
+  const [countryFilter, setCountryFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
 
   const [tb, setTb] = useState<TbRow[]>([]);
@@ -50,11 +53,12 @@ export default function AccountingTrialBalance() {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      const [yres, pres, fres, ares] = await Promise.all([
+      const [yres, pres, fres, ares, cres] = await Promise.all([
         supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
         supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
         supabase.from('acct_funds').select('id, code, name_en, name_ar').eq('is_active', true).order('code'),
-        supabase.from('acct_accounts').select('id, account_type, subtype'),
+        supabase.from('acct_accounts').select('id, account_type, subtype, country_id'),
+        supabase.from('countries').select('id, code, name_en, flag_emoji, currency_code').eq('is_active', true).order('name_en'),
       ]);
       if (cancel) return;
       const firstErr = [yres.error, pres.error, fres.error, ares.error].find(Boolean);
@@ -62,8 +66,9 @@ export default function AccountingTrialBalance() {
       setYears((yres.data ?? []) as FiscalYear[]);
       setPeriods((pres.data ?? []) as Period[]);
       setFunds((fres.data ?? []) as Fund[]);
+      setCountries((cres.data ?? []) as Country[]);
       const am: Record<string, AccountMeta> = {};
-      for (const a of (ares.data ?? [])) am[a.id] = a as AccountMeta;
+      for (const a of (ares.data ?? [])) am[a.id] = { ...a, country_id: a.country_id ?? null } as AccountMeta;
       setAccountsMeta(am);
       const firstOpen = (pres.data ?? []).find((p: any) => p.status === 'open' || p.status === 'soft_closed');
       if (firstOpen) setPeriodId(firstOpen.id);
@@ -90,13 +95,19 @@ export default function AccountingTrialBalance() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tb;
-    return tb.filter(r =>
-      r.account_code.toLowerCase().includes(q)
-      || (r.account_name_en ?? '').toLowerCase().includes(q)
-      || (r.account_name_ar ?? '').toLowerCase().includes(q)
-    );
-  }, [tb, search]);
+    return tb.filter(r => {
+      if (countryFilter !== 'all') {
+        const meta = accountsMeta[r.account_id];
+        if (meta?.country_id !== countryFilter) return false;
+      }
+      if (q) {
+        return r.account_code.toLowerCase().includes(q)
+          || (r.account_name_en ?? '').toLowerCase().includes(q)
+          || (r.account_name_ar ?? '').toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [tb, search, countryFilter, accountsMeta]);
 
   const totals = useMemo(() => {
     let dr = 0, cr = 0;
@@ -222,7 +233,7 @@ export default function AccountingTrialBalance() {
 
       <Card>
         <CardContent className="p-3">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Select value={periodId} onValueChange={setPeriodId} disabled={bootstrap}>
               <SelectTrigger data-testid="select-period"><SelectValue placeholder={bootstrap ? 'Loading…' : 'Select period'} /></SelectTrigger>
               <SelectContent>
@@ -238,7 +249,16 @@ export default function AccountingTrialBalance() {
                 {funds.map(f => <SelectItem key={f.id} value={f.id}>{f.code} — {f.name_en}</SelectItem>)}
               </SelectContent>
             </Select>
-            <div className="relative sm:col-span-2">
+            <Select value={countryFilter} onValueChange={setCountryFilter}>
+              <SelectTrigger data-testid="select-country"><SelectValue placeholder="Country" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">🌐 All countries</SelectItem>
+                {countries.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative">
               <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Filter rows by code or name…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8" data-testid="input-search" />
             </div>
