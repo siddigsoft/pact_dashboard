@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronDown, ChevronRight, RotateCcw, Save, Workflow } from 'lucide-react';
-import PageInfoBanner from '@/components/common/PageInfoBanner';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface OverrideRow {
   id?: string;
@@ -346,7 +346,6 @@ export default function AdminProjectFlowStages() {
   return (
     <div className="container mx-auto space-y-4 p-4 md:p-6">
       <PageInfoBanner
-        pageKey="admin_project_flow_stages"
         title="Project Flow Stages"
         description="Override the hard-coded labels, descriptions, key outputs, durations or visibility for any stage of any project type. Anything you leave blank falls back to the built-in default. Changes apply immediately to all matching projects."
       />
