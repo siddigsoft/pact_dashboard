@@ -17,7 +17,7 @@ export function mapProjectToDbProject(project: Project): Record<string, any> {
     client_type: project.clientType ?? 'internal',
     client_name: project.clientName ?? null,
     partner_id: project.partnerId ?? null,
-    crm_opportunity_id: project.crmOpportunityId ?? null,
+    ...(project.crmOpportunityId ? { crm_opportunity_id: project.crmOpportunityId } : {}),
     ...formattedDates,
     budget: project.budget ? {
       ...project.budget,
