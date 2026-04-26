@@ -259,7 +259,16 @@ export default function TaskDetail() {
         patch.acknowledged_by = uid;
       } else {
         // Co-assignee path: stamp the matching slot inside co_assignees.
-        const co = (task?.co_assignees as Array<Record<string, unknown>> | undefined) ?? [];
+        // Re-fetch the LATEST co_assignees right before the write so two
+        // co-assignees acknowledging concurrently don't overwrite each other
+        // (the cached `task.co_assignees` may be stale for the other slot).
+        const { data: fresh, error: reErr } = await supabase
+          .from('personal_tasks')
+          .select('co_assignees')
+          .eq('id', id!)
+          .maybeSingle();
+        if (reErr) throw reErr;
+        const co = (fresh?.co_assignees as Array<Record<string, unknown>> | undefined) ?? [];
         patch.co_assignees = co.map(c =>
           c?.id === uid ? { ...c, acknowledged_at: now, acknowledged_by: uid } : c,
         );
@@ -307,6 +316,41 @@ export default function TaskDetail() {
               ? `Cannot start: predecessor task(s) not done yet — ${names}.`
               : 'Cannot start: predecessor tasks must be completed first.'
           );
+        }
+
+        // Server-truth ack-gate re-check. The UI banner blocks Start until
+        // every other participant has acknowledged the task, but a stale tab
+        // could fire startTask after someone else un-acked or a co-assignee
+        // was added. Mirror the UI logic here so a multi-participant task
+        // cannot start until everyone (besides the actor) has acked.
+        const { data: fresh, error: freshErr } = await supabase
+          .from('personal_tasks')
+          .select('assigned_to, acknowledged_at, co_assignees')
+          .eq('id', id)
+          .maybeSingle();
+        if (freshErr) {
+          throw new Error(`Could not verify acknowledgments: ${freshErr.message}. Try again in a moment.`);
+        }
+        if (fresh) {
+          const uid = currentUser?.id;
+          const cos = (fresh.co_assignees as Array<{ id: string; name?: string; acknowledged_at?: string | null }> | undefined) ?? [];
+          const totalParticipants = (fresh.assigned_to ? 1 : 0) + cos.length;
+          if (totalParticipants > 1) {
+            const pending: string[] = [];
+            if (fresh.assigned_to && fresh.assigned_to !== uid && !fresh.acknowledged_at) {
+              pending.push('primary assignee');
+            }
+            cos.forEach(c => {
+              if (c?.id && c.id !== uid && !c.acknowledged_at) pending.push(c.name || 'a co-assignee');
+            });
+            if (pending.length > 0) {
+              const head = pending.slice(0, 3).join(', ');
+              const more = pending.length > 3 ? `, +${pending.length - 3} more` : '';
+              throw new Error(
+                `Cannot start: ${pending.length} participant${pending.length === 1 ? '' : 's'} haven't acknowledged yet (${head}${more}).`
+              );
+            }
+          }
         }
       }
       const now = new Date().toISOString();
@@ -551,6 +595,21 @@ export default function TaskDetail() {
         taskId: id!, kind: 'system',
         body: `${currentUser?.fullName ?? 'Owner'} confirmed actual hours for ${targetName}.`,
       });
+      // Notify the person whose hours were confirmed so they get a clear
+      // "your reported hours have been signed off" signal — closes the
+      // missing event in the timesheet round-trip flagged in review.
+      if (targetUserId && targetUserId !== currentUser?.id) {
+        try {
+          notify({
+            event: 'task_status_changed',
+            taskId: id!,
+            taskTitle: task?.title as string,
+            recipientUserId: targetUserId,
+            dueDate: (task?.due_date as string) ?? null,
+            extra: { reason: 'Your reported hours have been confirmed by the task owner.' },
+          });
+        } catch { /* non-critical */ }
+      }
     },
     onError: (e: Error) => toast({ title: 'Could not confirm', description: e.message, variant: 'destructive' }),
   });

@@ -109,7 +109,11 @@ export const TaskDependenciesView: React.FC<TaskDependenciesViewProps> = ({
         .order('created_at', { ascending: false })
         .limit(100);
       if (uid) {
-        q = q.or(`assignee_id.eq.${uid},created_by.eq.${uid}`);
+        // The personal_tasks schema uses `assigned_to` (primary assignee) and
+        // `user_id` (creator/owner). The previous `assignee_id` / `created_by`
+        // columns don't exist, which made the dependency picker silently
+        // return zero candidates and the "Add dependency" dialog feel broken.
+        q = q.or(`assigned_to.eq.${uid},user_id.eq.${uid}`);
       }
       const { data, error } = await q;
       if (error) throw error;
