@@ -17,6 +17,7 @@ import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation
 import { PostponementHistoryEntry } from '@/types/mmp/site';
 import { useUser } from '@/context/user/UserContext';
 import { isPdmActivity, isMdmRequired, isWhmRequired, calculatePdmSiteVisits, calculatePdmRemainder } from '@/utils/pdmMdmUtils';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -220,12 +221,17 @@ const MMPSiteEntriesTable = ({
     const rejectedBy = site.rejected_by || ad['rejected_by'] || undefined;
     const rejectedAt = site.rejected_at || (ad['rejected_at'] ? new Date(ad['rejected_at']).toISOString() : undefined) || undefined;
     
-    // Completion information - for completed sites, the person who completed is typically the one who accepted/claimed
-    const siteStatusLower = (status || '').toString().toLowerCase();
+    // Completion information - for completed sites, the person who completed is typically the one who accepted/claimed.
+    // Task #59: terminal-status detection uses the shared
+    // `isTerminalCompletionRawStatus` helper from
+    // `src/utils/siteCompletionStatus.ts` so this surface stays aligned with
+    // the dialog, PortfolioDashboard, MonthlyComparisonCard and the adapter
+    // (covers `completed` AND `verified`, not just `completed`).
+    const isSiteTerminalCompletion = isTerminalCompletionRawStatus(status);
     const completedBy = site.completed_by || ad['completed_by'] || ad['Completed By'] || 
-      (siteStatusLower === 'completed' ? (site.accepted_by || site.acceptedBy || ad['accepted_by'] || ad['Accepted By']) : undefined) || undefined;
+      (isSiteTerminalCompletion ? (site.accepted_by || site.acceptedBy || ad['accepted_by'] || ad['Accepted By']) : undefined) || undefined;
     const completedAt = site.completed_at || ad['completed_at'] || (ad['Completed At'] ? new Date(ad['Completed At']).toISOString() : undefined) || 
-      (siteStatusLower === 'completed' ? (site.updated_at || site.last_modified) : undefined) || undefined;
+      (isSiteTerminalCompletion ? (site.updated_at || site.last_modified) : undefined) || undefined;
 
     // Time-to-complete: how long from dispatch → completion (only when both are present)
     const timeToCompleteMs = diffMsBetween(dispatchedAt, completedAt);
@@ -849,58 +855,58 @@ const MMPSiteEntriesTable = ({
                                 >
                                   {displayStatus || 'Pending'}
                                 </Badge>
-                                {displayStatus === 'completed' && row.completedByName && row.completedByName !== '—' ? (
-                                  <>
-                                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium" data-testid="text-completed-by">
-                                      By: {row.completedByName}
-                                    </span>
-                                    {row.completedAt && (
-                                      <span
-                                        className="text-xs text-muted-foreground"
-                                        data-testid="text-completed-at"
-                                        title="First time this site reached a completed state (does not change on later edits)"
-                                      >
-                                        Completed on{' '}
-                                        {new Date(row.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
-                                        {new Date(row.completedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    )}
-                                    {row.timeToCompleteMs !== null && row.timeToCompleteMs !== undefined && (
-                                      <span
-                                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
-                                        title={`From dispatch on ${row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('en-GB') : '—'} to completion on ${row.completedAt ? new Date(row.completedAt).toLocaleString('en-GB') : '—'}`}
-                                        data-testid={`pill-time-to-complete-${site.id}`}
-                                      >
-                                        <Clock className="h-3 w-3" />
-                                        Completed in {formatDurationFromMs(row.timeToCompleteMs)}
-                                      </span>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    {row.acceptedByName && row.acceptedByName !== '—' && (
-                                      <span className="text-xs text-purple-600 dark:text-purple-400 font-medium" data-testid="text-accepted-by">
-                                        By: {row.acceptedByName}
-                                      </span>
-                                    )}
-                                    {row.acceptedAt && (
-                                      <span className="text-xs text-muted-foreground" data-testid="text-accepted-at">
-                                        {new Date(row.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
-                                        {new Date(row.acceptedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    )}
-                                    {row.timeToCompleteMs !== null && row.timeToCompleteMs !== undefined && (
-                                      <span
-                                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
-                                        title={`From dispatch on ${row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('en-GB') : '—'} to completion on ${row.completedAt ? new Date(row.completedAt).toLocaleString('en-GB') : '—'}`}
-                                        data-testid={`pill-time-to-complete-${site.id}`}
-                                      >
-                                        <Clock className="h-3 w-3" />
-                                        Completed in {formatDurationFromMs(row.timeToCompleteMs)}
-                                      </span>
-                                    )}
-                                  </>
-                                )}
+                                {/* Task #59: surface "Completed on" whenever a real
+                                    completedAt exists, regardless of whether
+                                    completedByName resolves. The "By: NAME" line
+                                    falls back gracefully — completed sites prefer
+                                    completedByName, others use acceptedByName. */}
+                                {(() => {
+                                  const hasCompletedTime = !!row.completedAt;
+                                  const hasCompletedName = row.completedByName && row.completedByName !== '—';
+                                  const hasAcceptedName = row.acceptedByName && row.acceptedByName !== '—';
+                                  const isCompletedRow = displayStatus === 'completed' || hasCompletedTime;
+                                  return (
+                                    <>
+                                      {isCompletedRow && hasCompletedName ? (
+                                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium" data-testid="text-completed-by">
+                                          By: {row.completedByName}
+                                        </span>
+                                      ) : hasAcceptedName ? (
+                                        <span className="text-xs text-purple-600 dark:text-purple-400 font-medium" data-testid="text-accepted-by">
+                                          By: {row.acceptedByName}
+                                        </span>
+                                      ) : null}
+
+                                      {hasCompletedTime ? (
+                                        <span
+                                          className="text-xs text-muted-foreground"
+                                          data-testid="text-completed-at"
+                                          title="First time this site reached a completed state (does not change on later edits)"
+                                        >
+                                          Completed on{' '}
+                                          {new Date(row.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
+                                          {new Date(row.completedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      ) : row.acceptedAt ? (
+                                        <span className="text-xs text-muted-foreground" data-testid="text-accepted-at">
+                                          {new Date(row.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
+                                          {new Date(row.acceptedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      ) : null}
+
+                                      {row.timeToCompleteMs !== null && row.timeToCompleteMs !== undefined && (
+                                        <span
+                                          className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                          title={`From dispatch on ${row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('en-GB') : '—'} to completion on ${row.completedAt ? new Date(row.completedAt).toLocaleString('en-GB') : '—'}`}
+                                          data-testid={`pill-time-to-complete-${site.id}`}
+                                        >
+                                          <Clock className="h-3 w-3" />
+                                          Completed in {formatDurationFromMs(row.timeToCompleteMs)}
+                                        </span>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             );
                           })()}
