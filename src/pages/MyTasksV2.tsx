@@ -13,6 +13,7 @@ import {
   Inbox, Archive, Star, AlertTriangle, Flag,
   Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil, BookOpen,
   Share2, Globe, Shield, Folder, ExternalLink, FileText, FileImage, History,
+  Pause, Play,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Link, useNavigate } from 'react-router-dom';
@@ -21,7 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TaskInsightsTabs } from '@/components/tasks/TaskInsightsTabs';
 import { TaskWorkSessionCard } from '@/components/tasks/TaskWorkSessionCard';
 import { TimesheetRow } from '@/components/tasks/TimesheetRow';
-import { useTaskWorkSession } from '@/hooks/useTaskWorkSession';
+import { useTaskWorkSession, formatElapsed } from '@/hooks/useTaskWorkSession';
 import { useTaskActivity, useTaskElements, useTaskStatusHistory } from '@/hooks/useTaskActivity';
 import { STATUS_LABELS, STATUS_COLORS } from '@/hooks/usePersonalTasks';
 import { cn } from '@/lib/utils';
@@ -4131,13 +4132,63 @@ function InboxTaskDetailExtras({
 
   const hoursPending = setActualHoursForUser.isPending || confirmActualHoursForUser.isPending;
 
+  const hoursCardRef = useRef<HTMLDivElement | null>(null);
+  const outputCardRef = useRef<HTMLDivElement | null>(null);
+
   return (
     <div className="space-y-4 mb-5">
+      {/* ── Session Quick Bar ── */}
+      {sessionEnabled && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-50 border border-indigo-100" data-testid="bar-session-quick-inbox">
+          <div className="flex items-center gap-1.5 text-indigo-700 min-w-[96px]">
+            <Clock className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-sm font-mono font-semibold tabular-nums">
+              {formatElapsed(session.elapsedSec)}
+            </span>
+            {session.isRunning && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Session running" />
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={session.isRunning ? session.pause : session.start}
+            data-testid="btn-inbox-quickbar-toggle"
+            className={cn(
+              'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors',
+              session.isRunning
+                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700',
+            )}
+          >
+            {session.isRunning
+              ? <><Pause className="w-3 h-3" />Pause</>
+              : <><Play className="w-3 h-3" />Resume</>}
+          </button>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => hoursCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            data-testid="btn-inbox-quickbar-hours"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-100 transition-colors"
+          >
+            <Clock className="w-3 h-3" />Log Hours
+          </button>
+          <button
+            type="button"
+            onClick={() => outputCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            data-testid="btn-inbox-quickbar-output"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-100 transition-colors"
+          >
+            <FileText className="w-3 h-3" />Add Output
+          </button>
+        </div>
+      )}
+
       {/* Hours & Timesheet — editable inline. Mirrors the full /tasks/:id panel
           so the user can run the live timer, log hours, and confirm sign-off
           without leaving the inbox. */}
       {hoursRows.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4" data-testid="inbox-hours-card">
+        <div ref={hoursCardRef} className="bg-white rounded-xl border border-slate-200 p-4 scroll-mt-4" data-testid="inbox-hours-card">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" /> Hours & Timesheet
@@ -4245,7 +4296,7 @@ function InboxTaskDetailExtras({
 
       {/* Output Elements — read-only progress + checkboxes. */}
       {elements.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4" data-testid="inbox-elements-card">
+        <div ref={outputCardRef} className="bg-white rounded-xl border border-slate-200 p-4 scroll-mt-4" data-testid="inbox-elements-card">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
               <ListTodo className="w-3.5 h-3.5" /> Output Elements

@@ -374,7 +374,7 @@ function HROverviewPanel() {
     const deptCounts: Record<string, number> = {};
     const now = Date.now();
     for (const p of profiles) {
-      const ct = p.contract_type ?? 'salary';
+      const ct = p.contract_type ?? '__none__';
       contractCounts[ct] = (contractCounts[ct] ?? 0) + 1;
       const role = (p as any).role ?? 'Unassigned';
       roleCounts[role] = (roleCounts[role] ?? 0) + 1;
@@ -393,10 +393,12 @@ function HROverviewPanel() {
     return { total, contractCounts, roleCounts, missingBank, expiring30, expired, incompleteCount, deptCounts };
   }, [profiles]);
 
+  const CT_LABEL: Record<string, string> = { salary: 'Salary', retainer: 'Retainer-Only', both: 'Salary + Retainer', __none__: 'Unset' };
+  const CT_COLOR: Record<string, string> = { salary: '#3b82f6', retainer: '#8b5cf6', both: '#14b8a6', __none__: '#94a3b8' };
   const contractChartData = Object.entries(stats.contractCounts).map(([k, v]) => ({
-    name: k === 'both' ? 'Salary + Retainer' : k === 'salary' ? 'Salary' : 'Retainer-Only',
+    name: CT_LABEL[k] ?? k.replace(/_/g, ' '),
     value: v,
-    fill: k === 'salary' ? '#3b82f6' : k === 'retainer' ? '#8b5cf6' : '#14b8a6',
+    fill: CT_COLOR[k] ?? '#94a3b8',
   }));
 
   const roleChartData = Object.entries(stats.roleCounts)
