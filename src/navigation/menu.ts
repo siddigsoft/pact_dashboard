@@ -81,6 +81,10 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator || isSupervisor || isCountryDirector)) {
     overviewItems.push({ id: 'cost-submission', title: 'Cost Submission', url: '/cost-submission', icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
   }
+  // My Expenses — personal reimbursement claims (visible to every authenticated user)
+  if (!isHidden('/my-expenses')) {
+    overviewItems.push({ id: 'my-expenses', title: 'My Expenses', url: '/my-expenses', icon: CreditCard, priority: 4, isPinned: isPinned('/my-expenses') });
+  }
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
 
   // Communication section - available to all users
