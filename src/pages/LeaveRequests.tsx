@@ -13,6 +13,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -469,6 +470,25 @@ export default function LeaveRequests() {
 
   return (
     <div className="min-h-screen bg-background">
+      <div className="px-6 pt-4">
+        <PageInfoBanner
+          title="Leave Requests"
+          description="Apply for time off and track every request. Pick the leave type (annual, sick, unpaid, study, hajj, marriage, paternity, bereavement), pick dates, add a reason, and submit. Your direct manager reviews, then HR confirms. Your remaining balance for each leave type is shown on this page. Admins see all requests across the org and can approve, reject, or escalate."
+          descriptionAr="قدِّم طلب إجازة وتابع كل طلب. اختر نوع الإجازة (سنوية، مرضية، بدون أجر، دراسية، حج، زواج، أبوة، وفاة)، اختر التواريخ، أضف سببًا، وأرسل. يراجع مديرك المباشر أولًا، ثم يؤكد قسم الموارد البشرية. يظهر رصيدك المتبقي لكل نوع إجازة في هذه الصفحة. يرى المسؤولون جميع الطلبات عبر المنظمة ويمكنهم الموافقة أو الرفض أو التصعيد."
+          workflowSteps={[
+            { step: 1, role: 'Field Staff', action: 'Submit request', description: 'Pick leave type, dates, and reason. Submit.' },
+            { step: 2, role: 'Supervisor', action: 'Manager review', description: 'Your line manager (or chain) approves or rejects.' },
+            { step: 3, role: 'Admin', action: 'HR confirm', description: 'HR records the decision and updates your leave balance.' },
+            { step: 4, role: 'System', action: 'Calendar sync', description: 'Approved leave appears in the Schedule, your team\u2019s leave view, and payroll calculations.' },
+          ]}
+          workflowStepsAr={[
+            { step: 1, role: 'موظف ميداني', action: 'تقديم الطلب', description: 'اختر نوع الإجازة والتواريخ والسبب. أرسل.' },
+            { step: 2, role: 'المشرف', action: 'مراجعة المدير', description: 'يوافق مديرك المباشر (أو السلسلة) أو يرفض.' },
+            { step: 3, role: 'المدير', action: 'تأكيد الموارد البشرية', description: 'تسجل الموارد البشرية القرار وتحدّث رصيد إجازتك.' },
+            { step: 4, role: 'النظام', action: 'مزامنة التقويم', description: 'تظهر الإجازة الموافق عليها في الجدول وعرض إجازة فريقك وحسابات الرواتب.' },
+          ]}
+        />
+      </div>
       {/* Header */}
       <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] text-white px-6 py-8">
         <div className="flex items-center justify-between flex-wrap gap-4">

@@ -1,6 +1,7 @@
 import { type FC, useMemo, useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '@/context/notifications/NotificationContext';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
@@ -613,6 +614,13 @@ const Notifications: FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950" data-testid="notifications-page">
+      <div className="px-6 pt-4 shrink-0">
+        <PageInfoBanner
+          title="Notifications"
+          description="Every alert the platform has sent you — approvals waiting, mentions, status changes, payroll-ready notices, and broadcast announcements — in one inbox. Use the category chips to filter, the Pending Actions tab to act on items that need a decision, and the bell badge to see the unread count anywhere in the app. Click any notification to open the related screen."
+          descriptionAr="كل تنبيه أرسلته المنصة لك — الموافقات المعلقة، الإشارات، تغييرات الحالة، إشعارات جاهزية الرواتب، وإعلانات البث — في صندوق وارد واحد. استخدم رقاقات الفئات للتصفية، وعلامة تبويب الإجراءات المعلقة للتصرف بناءً على العناصر التي تحتاج قرارًا، وشارة الجرس لرؤية عدد غير المقروءة في أي مكان في التطبيق. انقر على أي إشعار لفتح الشاشة ذات الصلة."
+        />
+      </div>
 
       {/* ── Page Header ── */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">

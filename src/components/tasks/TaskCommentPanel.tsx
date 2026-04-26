@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2, Send, MessageSquare, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { MentionTextarea, extractMentionIds } from '@/components/mentions/MentionTextarea';
+import { MentionRenderer } from '@/components/mentions/MentionRenderer';
+import { dispatchNotification } from '@/lib/notify';
 
 interface Comment {
   id: string;
@@ -85,12 +87,34 @@ export function TaskCommentPanel({ taskId, compact = false }: TaskCommentPanelPr
     if (!text.trim() || !currentUser?.id) return;
     setSaving(true);
     try {
+      const trimmed = text.trim();
       const { error } = await supabase.from('task_comments').insert({
         task_id: taskId,
         user_id: currentUser.id,
-        content: text.trim(),
+        content: trimmed,
       });
-      if (!error) setText('');
+      if (!error) {
+        setText('');
+        const mentionIds = extractMentionIds(trimmed).filter((id) => id !== currentUser.id);
+        if (mentionIds.length > 0) {
+          const authorName = currentUser.full_name ?? 'A teammate';
+          const preview = trimmed.replace(/@\[([^\]]+)\]\([a-f0-9\-]+\)/g, '@$1').slice(0, 140);
+          dispatchNotification({
+            event: 'comment_mention',
+            recipientIds: mentionIds,
+            titleEn: `${authorName} mentioned you in a comment`,
+            titleAr: `${authorName} أشار إليك في تعليق`,
+            messageEn: preview,
+            messageAr: preview,
+            priority: 'normal',
+            entityType: 'task',
+            entityId: taskId,
+            actionUrl: `/my-tasks?task=${taskId}`,
+            triggeredBy: currentUser.id,
+            triggeredByName: authorName,
+          });
+        }
+      }
     } finally {
       setSaving(false);
     }
@@ -149,7 +173,7 @@ export function TaskCommentPanel({ taskId, compact = false }: TaskCommentPanelPr
                       ? 'bg-[#0F2041] text-white rounded-tr-sm'
                       : 'bg-slate-100 dark:bg-slate-800 text-foreground rounded-tl-sm'
                   )}>
-                    {c.content}
+                    <MentionRenderer content={c.content} currentUserId={currentUser?.id} />
                   </div>
                   <div className={cn('flex items-center gap-1', isMine ? 'flex-row-reverse' : 'flex-row')}>
                     <span className="text-[10px] text-muted-foreground">
@@ -175,20 +199,18 @@ export function TaskCommentPanel({ taskId, compact = false }: TaskCommentPanelPr
 
       {/* Input */}
       <div className="flex gap-2 items-end">
-        <Textarea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          placeholder="Write a comment…"
-          rows={2}
-          className="resize-none text-xs flex-1"
-          onKeyDown={e => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          data-testid="input-task-comment"
-        />
+        <div className="flex-1">
+          <MentionTextarea
+            value={text}
+            onChange={setText}
+            onSubmit={() => handleSend()}
+            placeholder="Write a comment… type @ to mention"
+            rows={2}
+            className="text-xs"
+            data-testid="input-task-comment"
+            excludeUserIds={currentUser?.id ? [currentUser.id] : []}
+          />
+        </div>
         <Button
           size="sm"
           onClick={handleSend}
@@ -199,7 +221,7 @@ export function TaskCommentPanel({ taskId, compact = false }: TaskCommentPanelPr
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
         </Button>
       </div>
-      <p className="text-[10px] text-muted-foreground">Ctrl+Enter to send</p>
+      <p className="text-[10px] text-muted-foreground">Ctrl+Enter to send · @ to mention</p>
     </div>
   );
 }

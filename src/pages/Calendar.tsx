@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
+import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DateRange } from "react-day-picker";
@@ -320,6 +321,11 @@ const CalendarPage = () => {
 
   return (
     <div className="space-y-6">
+      <PageInfoBanner
+        title="Schedule & Planning"
+        description="Unified calendar showing every site visit, leave day, project milestone, and meeting on a single view. Switch between day, week, and month. Click any event to open it. The Outlook tab syncs with your Microsoft Outlook calendar so both stay in sync. Use the Planning tab to drag visits across days and adjust schedules."
+        descriptionAr="تقويم موحد يعرض كل زيارة موقع، يوم إجازة، معلم مشروع، واجتماع في عرض واحد. بدّل بين اليوم والأسبوع والشهر. انقر على أي حدث لفتحه. تتزامن علامة التبويب Outlook مع تقويم Microsoft Outlook الخاص بك حتى يبقيا متزامنين. استخدم علامة تبويب التخطيط لسحب الزيارات عبر الأيام وتعديل الجداول."
+      />
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-2 sm:space-y-0">
         <div>
           <h1 className="text-2xl font-bold flex items-center">

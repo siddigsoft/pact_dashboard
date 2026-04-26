@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -897,6 +898,23 @@ const SiteVisits = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <PageInfoBanner
+        title="Site Visits"
+        description="Browse, claim, and track all site visits across hubs and projects. Field workers see sites available in their assigned state/locality and can claim them by GPS proximity. Supervisors and FOMs can dispatch new visits, recall stale ones, request down-payments, and view live progress on the map. Use the filters to focus by state, status, or project."
+        descriptionAr="تصفح وطالب وتابع جميع زيارات المواقع عبر المراكز والمشاريع. يرى العاملون الميدانيون المواقع المتاحة في الولاية/المحلية المعينة لهم ويمكنهم المطالبة بها حسب القرب الجغرافي. يمكن للمشرفين ومديري العمليات الميدانية توزيع زيارات جديدة وسحب الزيارات القديمة وطلب الدفعات المقدمة وعرض التقدم المباشر على الخريطة. استخدم الفلاتر للتركيز حسب الولاية أو الحالة أو المشروع."
+        workflowSteps={[
+          { step: 1, role: 'FOM', action: 'Dispatch visit', description: 'A site visit is dispatched to a state/locality from MMP or created directly here.' },
+          { step: 2, role: 'Data Collector', action: 'Claim site', description: 'A nearby field worker claims the visit (first-claim wins) and starts the work.' },
+          { step: 3, role: 'Data Collector', action: 'Visit & report', description: 'Visit the site, complete the form on-device (offline OK), and submit.' },
+          { step: 4, role: 'Supervisor', action: 'Verify & close', description: 'Supervisor reviews, requests fixes, or marks the visit verified.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'المدير', action: 'توزيع الزيارة', description: 'يتم توزيع زيارة الموقع على ولاية/محلية من خلال الخطة الشهرية أو إنشاؤها مباشرة هنا.' },
+          { step: 2, role: 'جامع بيانات', action: 'مطالبة بالموقع', description: 'يطالب عامل ميداني قريب بالزيارة (الأولوية للأول) ويبدأ العمل.' },
+          { step: 3, role: 'جامع بيانات', action: 'زيارة وتقرير', description: 'زر الموقع وأكمل النموذج على الجهاز (يعمل بدون إنترنت) ثم أرسل.' },
+          { step: 4, role: 'المشرف', action: 'تحقق وإغلاق', description: 'يراجع المشرف ويطلب تصحيحات أو يحدد الزيارة كمتحققة.' },
+        ]}
+      />
       {/* Warning banner for field workers without geographic profile */}
       {isFieldWorker && userGeographicInfo && !userGeographicInfo.hasGeo && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950" data-testid="alert-no-geographic-profile">

@@ -177,6 +177,7 @@ const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
   advance_request_submitted: 'whatsapp_notify_payroll', advance_request_approved: 'whatsapp_notify_payroll',
   advance_request_rejected: 'whatsapp_notify_payroll',
   project_created: 'whatsapp_notify_projects', project_stage_advanced: 'whatsapp_notify_projects',
+  project_milestone_reached: 'whatsapp_notify_projects',
   project_milestone_overdue: 'whatsapp_notify_projects', project_stalled: 'whatsapp_notify_projects',
   project_completed: 'whatsapp_notify_projects', project_archived: 'whatsapp_notify_projects',
   project_member_added: 'whatsapp_notify_projects', project_task_assigned: 'whatsapp_notify_projects',

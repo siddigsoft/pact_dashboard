@@ -8,6 +8,7 @@ import {
   RefreshCw, Loader2, CheckCircle2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -116,6 +117,13 @@ export default function CRMDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <div className="px-6 pt-4">
+        <PageInfoBanner
+          title="CRM Dashboard"
+          description="Your at-a-glance view of every external relationship — partners (donors, government, NGOs), the contacts inside them, recent engagements (meetings, calls, emails), and active opportunities (proposals, contracts in pipeline). Use the deeper CRM pages to drill into each list. This dashboard is visible to admins, leadership, and assigned account managers only."
+          descriptionAr="نظرة سريعة على كل علاقة خارجية — الشركاء (الممولون، الحكومة، المنظمات غير الحكومية)، جهات الاتصال داخلهم، المشاركات الأخيرة (الاجتماعات، المكالمات، رسائل البريد الإلكتروني)، والفرص النشطة (المقترحات، العقود في الانتظار). استخدم صفحات CRM الأعمق للتعمق في كل قائمة. هذه اللوحة مرئية للمسؤولين والقيادة ومديري الحسابات المعينين فقط."
+        />
+      </div>
       {/* Header */}
       <div className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] text-white px-6 py-8">
         <div className="flex items-center justify-between flex-wrap gap-4">

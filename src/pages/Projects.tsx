@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { useProjectStalledAlert } from '@/hooks/useProjectStalledAlert';
 import {
   Plus,
@@ -145,6 +146,11 @@ const ProjectsPage = () => {
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-4 space-y-3">
+      <PageInfoBanner
+        title="Projects"
+        description="Browse, create, and manage every project in the organization. Each project has its own lifecycle (10 stage flows depending on type), team, budget, milestones, and tasks. Click a project to open its details, advance its stage, edit its team, or archive it. Use the filters to focus on a specific status, type, or hub."
+        descriptionAr="تصفح وأنشئ وأدِر كل مشروع في المنظمة. لكل مشروع دورة حياته الخاصة (10 تدفقات مراحل حسب النوع) وفريقه وميزانيته ومعالمه ومهامه. انقر على مشروع لفتح تفاصيله أو تقدّم مرحلته أو تعديل فريقه أو أرشفته. استخدم الفلاتر للتركيز على حالة أو نوع أو مركز معين."
+      />
       {/* Compact Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="flex items-center gap-2.5">

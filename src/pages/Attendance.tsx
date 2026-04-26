@@ -4,6 +4,7 @@ import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -234,6 +235,11 @@ export default function Attendance() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6 max-w-6xl" data-testid="page-attendance">
+      <PageInfoBanner
+        title="Attendance"
+        description="Check in for the day using one of three methods: GPS (verifies you're at site), Office (Wi-Fi/QR-code check-in), or Remote (manual with reason). Your check-in time, location, and method are logged. HR and managers can view team attendance, export reports, and follow up on missed days. Check out at end-of-day to record total hours worked."
+        descriptionAr="سجِّل حضورك لليوم بإحدى ثلاث طرق: نظام تحديد المواقع (يتحقق من وجودك في الموقع)، أو المكتب (تسجيل عبر شبكة Wi-Fi / رمز QR)، أو عن بُعد (يدوي مع سبب). يتم تسجيل وقت تسجيل الدخول والموقع والطريقة. يمكن لقسم الموارد البشرية والمديرين عرض حضور الفريق وتصدير التقارير ومتابعة الأيام الغائبة. سجِّل خروجك في نهاية اليوم لتسجيل إجمالي ساعات العمل."
+      />
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">

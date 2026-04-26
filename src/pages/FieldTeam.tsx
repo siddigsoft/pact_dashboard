@@ -8,6 +8,7 @@ import SiteVisitsSummary from '@/components/field-team/SiteVisitsSummary';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -277,6 +278,11 @@ const FieldTeam = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <PageInfoBanner
+        title="Field Team"
+        description="Live view of every field worker — where they are right now (last GPS ping), what they're doing (current site visit), and their workload over the past 30 days. Use the map to see real-time positions, the table to drill into a person's recent visits, or the workload chart to spot overloaded or under-utilised collectors. FOMs and supervisors use this page to dispatch help where it's needed."
+        descriptionAr="عرض مباشر لكل عامل ميداني — أين يتواجد الآن (آخر إشارة GPS) وماذا يفعل (زيارة الموقع الحالية) وعبء عمله خلال الـ 30 يومًا الماضية. استخدم الخريطة لرؤية المواقع في الوقت الفعلي، والجدول للتعمق في زيارات الشخص الأخيرة، أو الرسم البياني لعبء العمل لرصد المجمعين المثقلين بالعمل أو غير المستغلين. يستخدم مديرو العمليات الميدانية والمشرفون هذه الصفحة لإرسال المساعدة حيث الحاجة."
+      />
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">

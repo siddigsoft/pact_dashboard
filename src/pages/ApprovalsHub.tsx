@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useApprovalsData, ApprovalItem, ApprovalItemType } from '@/hooks/useApprovalsData';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -302,6 +303,11 @@ export default function ApprovalsHub() {
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-6xl">
+      <PageInfoBanner
+        title="Approvals Hub"
+        description="One inbox for every approval waiting on you — cost submissions, advance requests, leave applications, down-payments, withdrawals, payroll runs, and more. Filter by type, urgency, or amount. Click any item to review the full request and approve or reject inline. Items disappear from your queue the moment you act."
+        descriptionAr="صندوق وارد واحد لكل طلب موافقة ينتظرك — تقديم التكاليف، طلبات السلف، طلبات الإجازة، الدفعات المقدمة، السحوبات، رواتب الدفع، والمزيد. صفِّ حسب النوع أو الأولوية أو المبلغ. انقر على أي عنصر لمراجعة الطلب الكامل والموافقة أو الرفض مباشرة. تختفي العناصر من قائمتك بمجرد اتخاذ الإجراء."
+      />
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>

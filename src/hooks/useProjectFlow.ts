@@ -159,6 +159,9 @@ async function sendStageNotifications(
     ? `أكمل ${advancedByName} المرحلة الرئيسية "${nextStageLabel}" في "${projectName}"`
     : `قام ${advancedByName} بتقديم "${projectName}" إلى المرحلة: ${nextStageLabel}`;
 
+  // dispatch-notification handles in-app + email AND fans out to send-whatsapp
+  // (see supabase/functions/dispatch-notification/index.ts) — calling
+  // send-whatsapp directly here would deliver duplicate WA messages.
   supabase.functions.invoke('dispatch-notification', {
     body: {
       event_type: eventType,
@@ -175,6 +178,11 @@ async function sendStageNotifications(
       workflow_stage: nextStageLabel,
       action_url: `/projects/${projectId}`,
       send_email: true,
+      metadata: {
+        project_name: projectName,
+        stage: nextStageLabel,
+        advanced_by: advancedByName,
+      },
     },
   }).catch(() => {});
 

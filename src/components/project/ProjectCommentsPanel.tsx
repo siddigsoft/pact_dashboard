@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { MessageCircle, Send, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   AlertDialog,
@@ -16,6 +15,9 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useProjectComments } from '@/hooks/useProjectComments';
+import { MentionTextarea, extractMentionIds } from '@/components/mentions/MentionTextarea';
+import { MentionRenderer } from '@/components/mentions/MentionRenderer';
+import { dispatchNotification } from '@/lib/notify';
 
 interface ProjectCommentsPanelProps {
   projectId: string;
@@ -44,14 +46,29 @@ const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
 
   const handleSubmit = async () => {
     if (!text.trim()) return;
-    const ok = await addComment(text, currentUserId, currentUserName);
-    if (ok) setText('');
-  };
-
-  const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      handleSubmit();
+    const trimmed = text.trim();
+    const ok = await addComment(trimmed, currentUserId, currentUserName);
+    if (ok) {
+      setText('');
+      const mentionIds = extractMentionIds(trimmed).filter((id) => id !== currentUserId);
+      if (mentionIds.length > 0) {
+        const authorName = currentUserName ?? 'A teammate';
+        const preview = trimmed.replace(/@\[([^\]]+)\]\([a-f0-9\-]+\)/g, '@$1').slice(0, 140);
+        dispatchNotification({
+          event: 'comment_mention',
+          recipientIds: mentionIds,
+          titleEn: `${authorName} mentioned you in a project comment`,
+          titleAr: `${authorName} أشار إليك في تعليق على المشروع`,
+          messageEn: preview,
+          messageAr: preview,
+          priority: 'normal',
+          entityType: 'project',
+          entityId: projectId,
+          actionUrl: `/projects/${projectId}`,
+          triggeredBy: currentUserId,
+          triggeredByName: authorName,
+        });
+      }
     }
   };
 
@@ -59,14 +76,14 @@ const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
     <div className="space-y-4">
       {/* Input */}
       <div className="space-y-2">
-        <Textarea
-          placeholder="Write a comment… (Ctrl+Enter to submit)"
+        <MentionTextarea
+          placeholder="Write a comment… type @ to mention (Ctrl+Enter to submit)"
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKey}
+          onChange={setText}
+          onSubmit={() => handleSubmit()}
           rows={3}
-          className="resize-none"
           data-testid="input-comment"
+          excludeUserIds={currentUserId ? [currentUserId] : []}
         />
         <div className="flex justify-end">
           <Button
@@ -124,7 +141,9 @@ const ProjectCommentsPanel: React.FC<ProjectCommentsPanelProps> = ({
                     <span className="text-sm font-medium">{name}</span>
                     <span className="text-xs text-muted-foreground">{relTime}</span>
                   </div>
-                  <p className="text-sm mt-0.5 whitespace-pre-wrap break-words">{comment.content}</p>
+                  <p className="text-sm mt-0.5">
+                    <MentionRenderer content={comment.content} currentUserId={currentUserId} />
+                  </p>
                 </div>
                 {canDelete && (
                   <AlertDialog>

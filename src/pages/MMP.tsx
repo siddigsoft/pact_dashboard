@@ -32,6 +32,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
 import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
 import { sudanStates } from '@/data/sudanStates';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
 import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
@@ -4716,6 +4717,25 @@ const MMP = () => {
 
   return (
     <div className="space-y-3 min-h-screen bg-slate-50 dark:bg-gray-900 py-2 sm:py-3 px-2 sm:px-4 md:px-6">
+      <PageInfoBanner
+        title="Monthly Monitoring Plans (MMP)"
+        description="Plan, dispatch, and track monthly site visits across all hubs and projects. Upload an MMP to add planned visits, then dispatch them to data collectors who claim and execute them. Track progress by state, locality, partner, and project. Use the cycle-close tools at month end to lock the cycle, compare vs. prior month, and trigger follow-up actions."
+        descriptionAr="خطّط ونفّذ وتابع زيارات المواقع الشهرية عبر جميع المراكز والمشاريع. ارفع خطة شهرية لإضافة زيارات مخطط لها، ثم وزّعها على جامعي البيانات الذين يطالبون بها وينفذونها. تابع التقدم حسب الولاية والمحلية والشريك والمشروع. استخدم أدوات إغلاق الدورة في نهاية الشهر لقفل الدورة ومقارنتها بالشهر السابق وإطلاق إجراءات المتابعة."
+        workflowSteps={[
+          { step: 1, role: 'Admin', action: 'Upload MMP', description: 'Admin or FOM uploads the monthly plan file or creates entries manually.' },
+          { step: 2, role: 'FOM', action: 'Dispatch sites', description: 'Field Operations Manager dispatches each site to a state/locality so collectors can claim it.' },
+          { step: 3, role: 'Data Collector', action: 'Claim & visit', description: 'Collectors claim available sites by GPS proximity and complete the visit on the ground.' },
+          { step: 4, role: 'Supervisor', action: 'Verify report', description: 'Supervisors review the submitted visit report and request fixes or approve.' },
+          { step: 5, role: 'Admin', action: 'Close cycle', description: 'At month end, lock the cycle, compare to prior month, and trigger any follow-ups.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'المدير', action: 'رفع الخطة', description: 'يرفع المدير أو مدير العمليات الميدانية ملف الخطة الشهرية أو ينشئ المدخلات يدويًا.' },
+          { step: 2, role: 'المدير', action: 'توزيع المواقع', description: 'يوزع مدير العمليات الميدانية كل موقع على ولاية/محلية حتى يتمكن المجمعون من المطالبة به.' },
+          { step: 3, role: 'جامع بيانات', action: 'مطالبة وزيارة', description: 'يطالب المجمعون بالمواقع المتاحة حسب القرب الجغرافي وينفذون الزيارة على الأرض.' },
+          { step: 4, role: 'المشرف', action: 'تحقق من التقرير', description: 'يراجع المشرفون تقرير الزيارة المقدم ويطلبون تصحيحات أو يوافقون.' },
+          { step: 5, role: 'المدير', action: 'إغلاق الدورة', description: 'في نهاية الشهر، اقفل الدورة، قارنها بالشهر السابق، وأطلق أي إجراءات متابعة.' },
+        ]}
+      />
       {/* Blue Header Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-3 sm:p-4 text-white shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
