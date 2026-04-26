@@ -138,7 +138,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
 
     const isTerminalForCompletion =
       isTerminalCompletionAppStatus(status) ||
-      isTerminalCompletionRawStatus(site.status);
+      isTerminalCompletionRawStatus(status);
     const isLegacyFallbackCompleted = isTerminalForCompletion && !site.completed_at && !ad['completed_at'] && !ad['Completed At'];
     const completedAt = site.completed_at
       || ad['completed_at']
