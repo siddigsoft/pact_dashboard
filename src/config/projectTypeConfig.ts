@@ -71,7 +71,7 @@ export const PROJECT_TYPE_CONFIGS: Record<string, ProjectTypeConfig> = {
       { role: 'analyst', count: 1 },
     ],
     tabLabels: {
-      monitoring: 'Monitoring Plan',
+      monitoring: 'Flow',
       reporting: 'TPM Reports',
     },
     templateDefaults: {
