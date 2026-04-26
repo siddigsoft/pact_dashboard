@@ -19,6 +19,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { TaskInsightsTabs } from '@/components/tasks/TaskInsightsTabs';
+import { TaskWorkSessionCard } from '@/components/tasks/TaskWorkSessionCard';
+import { TimesheetRow } from '@/components/tasks/TimesheetRow';
+import { useTaskWorkSession } from '@/hooks/useTaskWorkSession';
 import { useTaskActivity, useTaskElements, useTaskStatusHistory } from '@/hooks/useTaskActivity';
 import { STATUS_LABELS, STATUS_COLORS } from '@/hooks/usePersonalTasks';
 import { cn } from '@/lib/utils';
@@ -2316,14 +2319,15 @@ function Timeline({ tasks, weekOffset, onTaskClick }: TimelineProps) {
 
       {/* Grid */}
       <div className="relative flex-1 border border-slate-200 rounded-xl bg-slate-50/40 overflow-hidden min-h-[460px]">
-        {/* Column lines */}
-        <div className="absolute inset-0 grid grid-cols-7">
+        {/* Column lines — pointer-events-none so the underlying task pills
+            still receive clicks (was eating clicks on the pills above). */}
+        <div className="absolute inset-0 grid grid-cols-7 pointer-events-none">
           {days.map(({ d, isToday: tod }) => (
             <div key={d.toISOString()} className={cn('border-r border-slate-100 h-full last:border-r-0', tod && 'bg-blue-50/40')} />
           ))}
         </div>
-        {/* Row lines */}
-        <div className="absolute inset-0 flex flex-col">
+        {/* Row lines — same pointer-events-none guard. */}
+        <div className="absolute inset-0 flex flex-col pointer-events-none">
           {Array.from({ length: ROW_COUNT }).map((_, i) => (
             <div key={i} className="flex-1 border-b border-dashed border-slate-100 last:border-b-0" />
           ))}
@@ -4010,9 +4014,25 @@ function InboxTaskDetailExtras({
   taskId: string;
   fullTask: Record<string, unknown> | null | undefined;
 }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { currentUser, hasRole } = useUser();
+  const currentUserId = currentUser?.id ?? null;
+  const isAdmin = hasRole('admin') || hasRole('super_admin');
   const { data: history = [] } = useTaskStatusHistory(taskId);
   const { data: elements = [] } = useTaskElements(taskId);
   const { data: activity = [] } = useTaskActivity(taskId);
+
+  // Lightweight profiles list so the "Confirmed by …" tooltip on each row
+  // can render a real name instead of a UUID. Cached app-wide.
+  const { data: profiles = [] } = useQuery<Array<{ id: string; full_name: string | null; email: string | null }>>({
+    queryKey: ['profiles-min'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, email');
+      return (data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>;
+    },
+  });
 
   type CoAssignee = {
     id?: string;
@@ -4020,37 +4040,102 @@ function InboxTaskDetailExtras({
     hours?: number | null;
     actual_hours?: number | null;
     actual_hours_confirmed_at?: string | null;
+    actual_hours_confirmed_by?: string | null;
   };
   const cos = (Array.isArray(fullTask?.co_assignees) ? fullTask?.co_assignees : []) as CoAssignee[];
   const assignedToName = (fullTask?.assigned_to_name as string | null) ?? null;
+  const ownerId = (fullTask?.user_id as string | null) ?? null;
+  const taskStarted = !!(fullTask?.started_at as string | null | undefined);
+  const isOwner = !!currentUserId && ownerId === currentUserId;
+  const canConfirmHours = isOwner || isAdmin;
 
-  type HoursRow = { id: string; name: string; planned: number | null; actual: number | null; confirmed: boolean };
+  type HoursRow = {
+    id: string;
+    name: string;
+    role: 'Primary' | 'Co-assignee';
+    planned: number | null;
+    actual: number | null;
+    confirmedAt: string | null;
+    confirmedBy: string | null;
+  };
   const hoursRows: HoursRow[] = [];
   if (fullTask?.assigned_to) {
     hoursRows.push({
       id: String(fullTask.assigned_to),
       name: assignedToName ?? 'Primary assignee',
+      role: 'Primary',
       planned: (fullTask.estimated_hours as number | null) ?? null,
       actual: (fullTask.actual_hours as number | null) ?? null,
-      confirmed: !!fullTask.actual_hours_confirmed_at,
+      confirmedAt: (fullTask.actual_hours_confirmed_at as string | null) ?? null,
+      confirmedBy: (fullTask.actual_hours_confirmed_by as string | null) ?? null,
     });
   }
   for (const c of cos) {
+    if (!c.id) continue;
     hoursRows.push({
-      id: c.id ?? Math.random().toString(36),
+      id: c.id,
       name: c.name ?? 'Co-assignee',
+      role: 'Co-assignee',
       planned: c.hours ?? null,
       actual: c.actual_hours ?? null,
-      confirmed: !!c.actual_hours_confirmed_at,
+      confirmedAt: c.actual_hours_confirmed_at ?? null,
+      confirmedBy: c.actual_hours_confirmed_by ?? null,
     });
   }
   const totalPlanned = hoursRows.reduce((s, r) => s + (r.planned ?? 0), 0);
   const totalActual = hoursRows.reduce((s, r) => s + (r.actual ?? 0), 0);
   const hoursPct = totalPlanned > 0 ? Math.min(100, Math.round((totalActual / totalPlanned) * 100)) : 0;
+  const myRow = currentUserId ? hoursRows.find(r => r.id === currentUserId) ?? null : null;
+
+  // Live work-session timer for the signed-in participant. Only enabled when
+  // the task is started and the user is a participant — same gate the full
+  // task page applies.
+  const isParticipant = !!myRow;
+  const sessionEnabled = taskStarted && isParticipant;
+  const session = useTaskWorkSession(taskId, currentUserId ?? undefined, sessionEnabled);
+
+  // Per-person actual-hours editing. Routes through the same hardened RPCs
+  // that /tasks/:id uses (set_task_actual_hours / confirm_task_actual_hours)
+  // so RLS / self-or-admin / owner-or-admin enforcement is unchanged.
+  const setActualHoursForUser = useMutation({
+    mutationFn: async (args: { targetUserId: string; hours: number | null }) => {
+      const { error } = await supabase.rpc('set_task_actual_hours', {
+        p_task_id: taskId,
+        p_target_user_id: args.targetUserId,
+        p_hours: args.hours,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inbox-task-full', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-detail', taskId] });
+    },
+    onError: (e: Error) => toast({ title: 'Could not update hours', description: e.message, variant: 'destructive' }),
+  });
+
+  const confirmActualHoursForUser = useMutation({
+    mutationFn: async (targetUserId: string) => {
+      const { error } = await supabase.rpc('confirm_task_actual_hours', {
+        p_task_id: taskId,
+        p_target_user_id: targetUserId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inbox-task-full', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-detail', taskId] });
+      toast({ title: 'Hours confirmed' });
+    },
+    onError: (e: Error) => toast({ title: 'Could not confirm', description: e.message, variant: 'destructive' }),
+  });
+
+  const hoursPending = setActualHoursForUser.isPending || confirmActualHoursForUser.isPending;
 
   return (
     <div className="space-y-4 mb-5">
-      {/* Hours / timesheet summary — read-only here. Editing remains on /tasks/:id. */}
+      {/* Hours & Timesheet — editable inline. Mirrors the full /tasks/:id panel
+          so the user can run the live timer, log hours, and confirm sign-off
+          without leaving the inbox. */}
       {hoursRows.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 p-4" data-testid="inbox-hours-card">
           <div className="flex items-center justify-between mb-2">
@@ -4070,25 +4155,91 @@ function InboxTaskDetailExtras({
               />
             </div>
           )}
+          {/* Live work-session timer — visible only to participants on a
+              started task. Apply rolls the elapsed time into the user's
+              actual hours via the same RPC the full task page uses. */}
+          {sessionEnabled && myRow && (
+            <TaskWorkSessionCard
+              isRunning={session.isRunning}
+              elapsedSec={session.elapsedSec}
+              currentHours={myRow.actual}
+              onStart={session.start}
+              onPause={session.pause}
+              onReset={session.reset}
+              onApply={(addHours) => {
+                // Read the freshest server-side actual from the cache so a
+                // manual edit landing between render and click isn't reverted.
+                const fresh = qc.getQueryData<Record<string, unknown> | null>(['inbox-task-full', taskId]);
+                let baseline = myRow.actual ?? 0;
+                if (fresh) {
+                  if (myRow.id === (fresh.assigned_to as string | null)) {
+                    baseline = (fresh.actual_hours as number | null) ?? 0;
+                  } else {
+                    const co = ((fresh.co_assignees as Array<{ id: string; actual_hours?: number | null }> | undefined) ?? [])
+                      .find(c => c.id === myRow.id);
+                    baseline = (co?.actual_hours as number | null) ?? baseline;
+                  }
+                }
+                const next = Math.round((baseline + addHours) * 100) / 100;
+                setActualHoursForUser.mutate({ targetUserId: myRow.id, hours: next });
+                session.reset();
+              }}
+              pending={setActualHoursForUser.isPending}
+            />
+          )}
+          {!taskStarted && isParticipant && (
+            <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-2">
+              Start the task on the full page to log time — the timer and hours editor unlock once it's started.
+            </p>
+          )}
+          <p className="text-[11px] text-slate-500 mb-1">
+            Each person edits only their own actual hours.
+            {canConfirmHours ? ' As task owner, confirm reported hours below.' : ''}
+          </p>
+          {/* Owner-confirmation nudge — surfaces rows with reported actuals
+              not yet confirmed so the timesheet doesn't stall at 99%. */}
+          {(() => {
+            if (!canConfirmHours) return null;
+            const pending = hoursRows.filter(r => (r.actual ?? 0) > 0 && !r.confirmedAt);
+            if (pending.length === 0) return null;
+            return (
+              <div
+                className="mb-3 mt-1 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800"
+                data-testid="inbox-banner-hours-pending-confirm"
+              >
+                <Clock className="w-3 h-3 mt-px shrink-0" />
+                <span>
+                  <b>{pending.length}</b> {pending.length === 1 ? 'person has' : 'people have'} reported hours awaiting your confirmation:{' '}
+                  <span className="font-semibold">{pending.map(p => p.name).join(', ')}</span>.
+                </span>
+              </div>
+            );
+          })()}
           <ul className="divide-y divide-slate-100">
             {hoursRows.map(r => (
-              <li key={r.id} className="py-2 flex items-center gap-2 text-[12px]" data-testid={`inbox-hours-row-${r.id}`}>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-800 truncate" title={r.name}>{r.name}</p>
-                  <p className="text-[10px] text-slate-400">planned {r.planned != null ? `${r.planned}h` : '—'}</p>
-                </div>
-                <span className="text-[12px] font-semibold text-slate-700 tabular-nums">
-                  {r.actual != null ? `${r.actual}h` : '—'}
-                </span>
-                {r.confirmed && (
-                  <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-semibold">
-                    <Check className="w-2.5 h-2.5" /> Confirmed
-                  </span>
-                )}
-              </li>
+              <TimesheetRow
+                key={r.id}
+                row={{
+                  id: r.id,
+                  name: r.name,
+                  role: r.role,
+                  planned: r.planned,
+                  actual: r.actual,
+                  confirmedAt: r.confirmedAt,
+                }}
+                taskStarted={taskStarted}
+                isSelf={!!currentUserId && currentUserId === r.id}
+                isAdmin={isAdmin}
+                canConfirmHours={canConfirmHours}
+                confirmedByName={r.confirmedBy
+                  ? (profiles.find(p => p.id === r.confirmedBy)?.full_name ?? 'Owner')
+                  : null}
+                onChangeHours={(hours) => setActualHoursForUser.mutate({ targetUserId: r.id, hours })}
+                onConfirm={() => confirmActualHoursForUser.mutate(r.id)}
+                pending={hoursPending}
+              />
             ))}
           </ul>
-          <p className="text-[10px] text-slate-400 mt-2">Open the full task to log or confirm hours.</p>
         </div>
       )}
 
@@ -4248,8 +4399,9 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
         .from('personal_tasks')
         .select(`
           id, title, description, notes, status, priority, due_date,
-          assigned_to, assigned_to_name, created_by, created_by_name,
-          estimated_hours, actual_hours, actual_hours_confirmed_at,
+          assigned_to, assigned_to_name, created_by, created_by_name, user_id,
+          estimated_hours, actual_hours,
+          actual_hours_confirmed_at, actual_hours_confirmed_by, started_at,
           co_assignees, project_id, category, recurrence, recurrence_end_date,
           tags, attachments, created_at, updated_at
         `)
