@@ -284,9 +284,9 @@ async function fetchAll() {
     supabase.from('project_flow_log').select('project_id, advanced_at').order('advanced_at', { ascending: false }),
     supabase.from('mmp_files').select('id, status, entries, processed_entries, hub, month').order('created_at', { ascending: false }),
     supabase.from('mmp_site_entries').select('id, status, mmp_file_id, hub_office, dispatched_at, completed_at, updated_at'),
-    supabase.from('site_visit_cost_submissions').select('id, status, total_cost_cents').limit(200),
-    supabase.from('down_payment_requests').select('id, status, requested_amount, supervisor_status, admin_status').limit(200),
-    supabase.from('operational_cost_submissions').select('id, status, amount_cents, tier1_status, tier2_status').limit(200),
+    supabase.from('site_visit_cost_submissions').select('id, status, total_cost_cents').limit(5000),
+    supabase.from('down_payment_requests').select('id, status, requested_amount, supervisor_status, admin_status').limit(5000),
+    supabase.from('operational_cost_submissions').select('id, status, amount_cents, tier1_status, tier2_status').limit(5000),
     supabase.from('profiles').select('id, full_name, role, employment_type, status, department_id, contract_end_date').limit(300),
     supabase.from('departments').select('id, name, manager_user_id, parent_department_id'),
     supabase.from('leave_requests').select('id, user_id, leave_type, start_date, end_date, status').limit(200),
@@ -772,10 +772,34 @@ export default function PortfolioDashboard() {
   // ── Financial Overview ───────────────────────────────────────────────────
   const financialOverview = useMemo(() => {
     const totalBudget = execFiltered.reduce((s, p) => s + p.budget.total, 0);
-    const totalSpent = execFiltered.reduce((s, p) => s + p.budget.spent, 0);
+    const budgetSpent = execFiltered.reduce((s, p) => s + p.budget.spent, 0);
     const costSubs = d?.costSubs ?? [];
     const downPays = d?.downPays ?? [];
     const opCosts = d?.opCosts ?? [];
+    // Mirror the kpis logic so Overview tab and global KPI cards never disagree.
+    // We use Math.max(downPaysPaid, costSubsApproved) instead of summing both
+    // to avoid double-counting when a paid down payment is later reconciled
+    // through a site visit cost submission. opCosts are independent and added.
+    const opCostsApproved = opCosts
+      .filter(o => {
+        const s = (o.status ?? '').toLowerCase();
+        const t1 = (o.tier1_status ?? '').toLowerCase();
+        const t2 = (o.tier2_status ?? '').toLowerCase();
+        return s === 'approved' || s === 'paid' || (t1 === 'approved' && (t2 === 'approved' || t2 === 'paid'));
+      })
+      .reduce((s, o) => s + (o.amount_cents ?? 0), 0);
+    const downPaysPaid = downPays
+      .filter(dp => {
+        const s = (dp.status ?? '').toLowerCase();
+        const a = (dp.admin_status ?? '').toLowerCase();
+        return s === 'paid' || s === 'approved' || a === 'paid' || a === 'approved';
+      })
+      .reduce((s, dp) => s + (dp.requested_amount ?? 0) * 100, 0);
+    const costSubsApproved = costSubs
+      .filter(c => { const s = (c.status ?? '').toLowerCase(); return s === 'approved' || s === 'paid'; })
+      .reduce((s, c) => s + (c.total_cost_cents ?? 0), 0);
+    const actualSpent = opCostsApproved + Math.max(downPaysPaid, costSubsApproved);
+    const totalSpent = Math.max(budgetSpent, actualSpent);
     const pendingApprovalsValue = [
       ...costSubs.filter(c => c.status === 'pending').map(c => c.total_cost_cents ?? 0),
       ...downPays.filter(dp => dp.status === 'pending_supervisor' || dp.status === 'pending_admin').map(dp => (dp.requested_amount ?? 0) * 100),
@@ -856,15 +880,57 @@ export default function PortfolioDashboard() {
     const stalled = enriched.filter(p => p.health === 'stalled').length;
     const atRisk = enriched.filter(p => p.health === 'at-risk').length;
     const totalBudget = enriched.reduce((s, p) => s + p.budget.total, 0);
-    const totalSpent = enriched.reduce((s, p) => s + p.budget.spent, 0);
+
+    // Total Spent = actual disbursed money across the org. We sum approved/paid
+    // amounts from the three real expense tables (op costs, down payments, site
+    // visit cost subs) and take the larger of that vs project_budgets.spent so
+    // cards never show SDG 0 while op costs visibly total billions. The previous
+    // implementation only summed project_budgets.spent_budget_cents, which is a
+    // sparsely-populated table and caused the "Total Spent SDG 0 / Op Costs
+    // SDG 2.8B" inconsistency.
+    const budgetSpent = enriched.reduce((s, p) => s + p.budget.spent, 0);
+    const opCostsApproved = (d?.opCosts ?? [])
+      .filter(o => {
+        const s = (o.status ?? '').toLowerCase();
+        const t1 = (o.tier1_status ?? '').toLowerCase();
+        const t2 = (o.tier2_status ?? '').toLowerCase();
+        return s === 'approved' || s === 'paid' || (t1 === 'approved' && (t2 === 'approved' || t2 === 'paid'));
+      })
+      .reduce((s, o) => s + (o.amount_cents ?? 0), 0);
+    const downPaysPaid = (d?.downPays ?? [])
+      .filter(dp => {
+        const s = (dp.status ?? '').toLowerCase();
+        const a = (dp.admin_status ?? '').toLowerCase();
+        return s === 'paid' || s === 'approved' || a === 'paid' || a === 'approved';
+      })
+      .reduce((s, dp) => s + (dp.requested_amount ?? 0) * 100, 0);
+    const costSubsApproved = (d?.costSubs ?? [])
+      .filter(c => {
+        const s = (c.status ?? '').toLowerCase();
+        return s === 'approved' || s === 'paid';
+      })
+      .reduce((s, c) => s + (c.total_cost_cents ?? 0), 0);
+    // Use Math.max(downPaysPaid, costSubsApproved) to avoid double-counting
+    // when a paid down payment is later reconciled into a site visit cost
+    // submission (advances → reconciliation flow).
+    const actualSpent = opCostsApproved + Math.max(downPaysPaid, costSubsApproved);
+    const totalSpent = Math.max(budgetSpent, actualSpent);
     const portfolioBurn = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
     const overdueMilestones = enriched.reduce((s, p) => s + p.overdueMilestones, 0);
 
-    // MMP — uses canonical classifier so 'Approved', 'Dispatched', 'verified', 'costed', etc. all count as completed visits
+    // MMP — broaden the active set so "Active MMPs" reflects every file that's
+    // moved past draft. Limiting this to {approved, verified} caused the
+    // Operations card to read "1 Active MMP" when the workspace had files in
+    // forwarded_to_coordinator, dispatched, in_progress, etc.
     const mmps = d?.mmps ?? [];
+    const ACTIVE_MMP_STATUSES = new Set([
+      'approved', 'verified', 'in_progress', 'inprogress', 'dispatched',
+      'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators',
+      'submitted', 'processed', 'costed', 'approved and costed',
+    ]);
     const activeMMPs = mmps.filter(m => {
       const s = (m.status ?? '').toString().toLowerCase().trim();
-      return s === 'approved' || s === 'verified';
+      return ACTIVE_MMP_STATUSES.has(s);
     }).length;
     const siteEntries = d?.siteEntries ?? [];
     const completedSites = siteEntries.filter(e => classifySiteEntryStatus(e.status) === 'verified').length;
@@ -904,10 +970,14 @@ export default function PortfolioDashboard() {
 
   const mmpStats = useMemo(() => {
     const mmps = d?.mmps ?? [];
-    const byStatus = { pending: 0, verified: 0, approved: 0, rejected: 0, archived: 0 };
+    // Open dictionary: count every distinct status that comes back from the DB
+    // (forwarded_to_coordinator, dispatched, draft, in_progress, etc.) instead
+    // of dropping anything outside a hardcoded 5-bucket list. UI below renders
+    // canonical buckets first then rolls everything else into "Other".
+    const byStatus: Record<string, number> = { pending: 0, verified: 0, approved: 0, rejected: 0, archived: 0 };
     mmps.forEach(m => {
-      const s = (m.status ?? '').toString().toLowerCase().trim();
-      if (s in byStatus) (byStatus as any)[s]++;
+      const s = (m.status ?? '').toString().toLowerCase().trim() || 'unknown';
+      byStatus[s] = (byStatus[s] ?? 0) + 1;
     });
     const totalPlanned = mmps.reduce((s, m) => s + (m.entries ?? 0), 0);
     const totalProcessed = mmps.reduce((s, m) => s + (m.processed_entries ?? 0), 0);
@@ -981,7 +1051,13 @@ export default function PortfolioDashboard() {
 
     const costSubTotal = costSubs.reduce((s, c) => s + (c.total_cost_cents ?? 0), 0);
     const costSubPending = costSubs.filter(c => c.status === 'pending');
-    const costSubApproved = costSubs.filter(c => c.status === 'approved');
+    // Include 'paid' as a terminal approved state — the cost submission lifecycle
+    // moves approved → paid, and previously the dashboard would drop to 0 once
+    // a cost was paid. Cards now reflect every approved-or-disbursed cost.
+    const costSubApproved = costSubs.filter(c => {
+      const s = (c.status ?? '').toLowerCase();
+      return s === 'approved' || s === 'paid';
+    });
 
     const downPayPending = downPays.filter(dp => dp.status === 'pending_supervisor' || dp.status === 'pending_admin');
     const downPayTotal = downPays.reduce((s, dp) => s + (dp.requested_amount ?? 0) * 100, 0);
@@ -1106,21 +1182,44 @@ export default function PortfolioDashboard() {
   // ── Task Health (org-wide) ────────────────────────────────────────────────
 
   const taskStats = useMemo(() => {
-    const tasks = d?.tasks ?? [];
+    // Merge personal_tasks AND project_field_tasks for an honest org-wide health
+    // signal. The dashboard previously only looked at personal_tasks AND used
+    // the wrong status strings — the personal_tasks enum is
+    // 'todo'|'inprogress'|'on_hold'|'rescheduled'|'done'|'cancelled', so the
+    // old check for 'in_progress'|'in-progress'|'doing' never matched a single
+    // row, which is why every counter showed 0.
+    const personalTasks = d?.tasks ?? [];
+    const fieldTasks = (d?.projectFieldTasks ?? []).map(ft => ({
+      id: ft.id, title: ft.title, status: ft.status, priority: ft.priority,
+      due_date: ft.due_date, assigned_to: ft.assigned_to, assigned_to_name: null,
+      user_id: null, department_id: null, updated_at: ft.updated_at, created_at: ft.created_at,
+    } as TaskRow));
+    const tasks = [...personalTasks, ...fieldTasks];
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    const open = tasks.filter(t => t.status === 'todo' || t.status === 'open' || t.status === 'not_started');
-    const inProgress = tasks.filter(t => t.status === 'in_progress' || t.status === 'in-progress' || t.status === 'doing');
+    const isDone = (s: string) => {
+      const x = (s ?? '').toLowerCase();
+      return x === 'done' || x === 'completed' || x === 'complete' || x === 'closed';
+    };
+    const isInProgress = (s: string) => {
+      const x = (s ?? '').toLowerCase();
+      return x === 'inprogress' || x === 'in_progress' || x === 'in-progress' || x === 'doing' || x === 'started' || x === 'in progress';
+    };
+    const isCancelled = (s: string) => {
+      const x = (s ?? '').toLowerCase();
+      return x === 'cancelled' || x === 'canceled';
+    };
+
+    const open = tasks.filter(t => !isDone(t.status) && !isInProgress(t.status) && !isCancelled(t.status));
+    const inProgress = tasks.filter(t => isInProgress(t.status));
     const overdue = tasks.filter(t => {
       if (!t.due_date) return false;
       const due = safeDate(t.due_date);
-      const done = t.status === 'done' || t.status === 'completed' || t.status === 'complete';
-      return due && isBefore(due, today) && !done;
+      return due && isBefore(due, today) && !isDone(t.status) && !isCancelled(t.status);
     });
     const completedThisMonth = tasks.filter(t => {
-      const done = t.status === 'done' || t.status === 'completed' || t.status === 'complete';
-      if (!done) return false;
+      if (!isDone(t.status)) return false;
       const updated = safeDate(t.updated_at);
       return updated && isAfter(updated, startOfMonth);
     });
@@ -2727,13 +2826,39 @@ export default function PortfolioDashboard() {
           <TabsContent value="operations" className="mt-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
-              {/* MMP Status */}
+              {/* MMP Status — render canonical 5 buckets first, then any other
+                   live statuses present in the data (forwarded_to_coordinator,
+                   dispatched, in_progress, draft…) so the card reflects every
+                   file rather than dropping unfamiliar statuses to zero. */}
               <SectionCard icon={ClipboardList} title="MMP File Status" action={() => navigate('/mmp')} actionLabel="Open MMP">
-                {(['approved', 'verified', 'pending', 'rejected', 'archived'] as const).map(s => {
-                  const count = mmpStats.byStatus[s] ?? 0;
-                  const cfg = { approved: 'text-emerald-600', verified: 'text-blue-600', pending: 'text-amber-600', rejected: 'text-red-600', archived: 'text-slate-500' }[s];
-                  return <StatRow key={s} label={s.charAt(0).toUpperCase() + s.slice(1)} value={count} color={cfg} />;
-                })}
+                {(() => {
+                  const CANONICAL = ['approved', 'verified', 'pending', 'rejected', 'archived'] as const;
+                  const COLORS: Record<string, string> = {
+                    approved: 'text-emerald-600', verified: 'text-blue-600',
+                    pending: 'text-amber-600', rejected: 'text-red-600', archived: 'text-slate-500',
+                    in_progress: 'text-blue-600', inprogress: 'text-blue-600',
+                    forwarded_to_fom: 'text-blue-500', forwarded_to_coordinator: 'text-blue-500',
+                    forwarded_to_coordinators: 'text-blue-500', dispatched: 'text-indigo-600',
+                    submitted: 'text-cyan-600', processed: 'text-emerald-500',
+                    draft: 'text-slate-400', cancelled: 'text-red-500',
+                  };
+                  const prettify = (s: string) =>
+                    s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                  const extras = Object.entries(mmpStats.byStatus)
+                    .filter(([k, v]) => v > 0 && !(CANONICAL as readonly string[]).includes(k))
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 8);
+                  return (
+                    <>
+                      {CANONICAL.map(s => (
+                        <StatRow key={s} label={prettify(s)} value={mmpStats.byStatus[s] ?? 0} color={COLORS[s]} />
+                      ))}
+                      {extras.map(([s, v]) => (
+                        <StatRow key={s} label={prettify(s)} value={v} color={COLORS[s] ?? 'text-slate-600'} />
+                      ))}
+                    </>
+                  );
+                })()}
               </SectionCard>
 
               {/* Site Visit Coverage */}
