@@ -470,7 +470,12 @@
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
 
     const acctRole = ['finance', 'accountant'].includes(defaultRole.toLowerCase());
-    const isAuditorRole = hasAnyRole(['auditor']);
+    // Use the local `hasRole` helper that's in scope of this function. The
+    // `hasAnyRole` from `useAuthorization()` is destructured inside the
+    // `AppSidebar` component (line ~739) which is OUTSIDE this builder
+    // function, so referencing it here threw "hasAnyRole is not defined"
+    // and crashed the entire dashboard for every user.
+    const isAuditorRole = hasRole('auditor');
     const acctItems: MenuGroup['items'] = [];
     if (!isHidden('/accounting/coa') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
       acctItems.push({ id: 'accounting-coa', title: 'Chart of Accounts', url: '/accounting/coa', icon: BarChart3, priority: 1, isPinned: isPinned('/accounting/coa') });
