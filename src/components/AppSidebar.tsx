@@ -579,6 +579,19 @@
     }
     if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 
+    // ── Surveys ───────────────────────────────────────────────────────────────
+    const hasSurveyAccess = isSuperAdmin || isAdmin || isFOM || isCountryDirector || isProjectManager;
+    if (hasSurveyAccess && !isHidden('/surveys')) {
+      groups.push({
+        id: 'surveys',
+        label: 'Surveys',
+        order: 5.9,
+        items: [
+          { id: 'surveys', title: 'Surveys', url: '/surveys', icon: ClipboardList, priority: 1, isPinned: isPinned('/surveys') },
+        ],
+      });
+    }
+
     // ── 9. Analytics & Reports ────────────────────────────────────────────────
     const analyticsItems: MenuGroup['items'] = [];
     if (!isHidden('/data-export-center') && (isSuperAdmin || isAdmin)) {
@@ -759,7 +772,7 @@
     const roleIsFinance      = isSuperAdmin || hasAnyRole(['fom', 'FOM', 'admin', 'Admin', 'financial_auditor', 'financialAdmin', 'financialadmin']);
     const roleCanSeeIncident = isSuperAdmin || hasAnyRole(['admin', 'Admin', 'fom', 'FOM', 'supervisor', 'Supervisor', 'hubSupervisor', 'hub_supervisor']);
 
-    const ALL_GROUP_IDS = ['workspace','communication','programme-management','field-ops','coordination','finance-parent','hr-people','crm','analytics','admin','help','super-admin'];
+    const ALL_GROUP_IDS = ['workspace','communication','programme-management','field-ops','coordination','finance-parent','hr-people','crm','surveys','analytics','admin','help','super-admin'];
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
       try {
         const stored = localStorage.getItem('pact-sidebar-collapsed');

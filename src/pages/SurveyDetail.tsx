@@ -1,0 +1,747 @@
+import { useState, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useUser } from '@/context/user/UserContext';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import {
+  ArrowLeft, Plus, Trash2, Loader2, ChevronUp, ChevronDown, ExternalLink,
+  Eye, BarChart2, Edit3, Save, Copy, GripVertical, Toggle,
+  AlignLeft, AlignJustify, List, CheckSquare, Star, Sliders,
+  Calendar, ChevronDown as ChevronDownIcon, Minus, Hash, Type,
+  Users, FileText, Clock, ToggleLeft,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts';
+
+type SurveyStatus = 'draft' | 'active' | 'closed';
+
+type QuestionType =
+  | 'text' | 'textarea' | 'radio' | 'checkbox'
+  | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header';
+
+interface Survey {
+  id: string;
+  title: string;
+  description: string | null;
+  status: SurveyStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  settings: Record<string, unknown>;
+}
+
+interface Question {
+  id: string;
+  survey_id: string;
+  type: QuestionType;
+  label: string;
+  description: string | null;
+  required: boolean;
+  options: string[] | null;
+  order_index: number;
+  settings: Record<string, unknown>;
+}
+
+interface Response {
+  id: string;
+  respondent_id: string | null;
+  respondent_name: string | null;
+  respondent_email: string | null;
+  submitted_at: string;
+}
+
+interface Answer {
+  id: string;
+  response_id: string;
+  question_id: string;
+  answer_text: string | null;
+  answer_json: unknown;
+}
+
+const STATUS_CFG: Record<SurveyStatus, { label: string; color: string }> = {
+  draft:  { label: 'Draft',  color: 'bg-slate-100 text-slate-600 border-slate-200'   },
+  active: { label: 'Active', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  closed: { label: 'Closed', color: 'bg-orange-50 text-orange-700 border-orange-200'  },
+};
+
+const Q_TYPES: { type: QuestionType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { type: 'text',           label: 'Short Text',      icon: Type },
+  { type: 'textarea',       label: 'Long Text',        icon: AlignJustify },
+  { type: 'radio',          label: 'Multiple Choice',  icon: List },
+  { type: 'checkbox',       label: 'Checkboxes',       icon: CheckSquare },
+  { type: 'dropdown',       label: 'Dropdown',         icon: ChevronDownIcon },
+  { type: 'rating',         label: 'Star Rating (1–5)', icon: Star },
+  { type: 'scale',          label: 'Scale (1–10)',      icon: Sliders },
+  { type: 'date',           label: 'Date',             icon: Calendar },
+  { type: 'section_header', label: 'Section Header',   icon: Minus },
+];
+
+const CHART_COLORS = ['#6366f1','#22c55e','#f59e0b','#ec4899','#14b8a6','#8b5cf6','#f97316','#0ea5e9'];
+
+export default function SurveyDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { currentUser, hasRole } = useUser();
+  const { toast } = useToast();
+
+  const isAdmin = hasRole('admin') || hasRole('super_admin');
+  const canManage = isAdmin || hasRole('hub_manager') || hasRole('fom') || hasRole('sr_program_officer') || hasRole('country_director');
+
+  const [tab, setTab] = useState<'builder' | 'responses' | 'analytics'>('builder');
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [addTypeOpen, setAddTypeOpen] = useState(false);
+  const [editQId, setEditQId] = useState<string | null>(null);
+  const [expandedResponse, setExpandedResponse] = useState<string | null>(null);
+
+  // ── Fetch survey ───────────────────────────────────────────────────────────
+  const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
+    queryKey: ['survey', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('surveys').select('*').eq('id', id!).single();
+      if (error) throw error;
+      setEditTitle(data.title);
+      setEditDesc(data.description ?? '');
+      return data as Survey;
+    },
+  });
+
+  const { data: questions = [], isLoading: qLoading } = useQuery<Question[]>({
+    queryKey: ['survey-questions', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('survey_questions').select('*').eq('survey_id', id!).order('order_index');
+      if (error) throw error;
+      return (data ?? []) as Question[];
+    },
+  });
+
+  const { data: responses = [], isLoading: rLoading } = useQuery<Response[]>({
+    queryKey: ['survey-responses', id],
+    enabled: !!id && tab !== 'builder',
+    queryFn: async () => {
+      const { data, error } = await supabase.from('survey_responses').select('*').eq('survey_id', id!).order('submitted_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Response[];
+    },
+  });
+
+  const { data: allAnswers = [] } = useQuery<Answer[]>({
+    queryKey: ['survey-answers', id],
+    enabled: !!id && tab === 'analytics' && responses.length > 0,
+    queryFn: async () => {
+      const rIds = responses.map(r => r.id);
+      if (!rIds.length) return [];
+      const { data, error } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
+      if (error) throw error;
+      return (data ?? []) as Answer[];
+    },
+  });
+
+  // ── Mutations ──────────────────────────────────────────────────────────────
+  const saveMeta = async () => {
+    if (!id || !editTitle.trim()) return;
+    setSavingMeta(true);
+    try {
+      const { error } = await supabase.from('surveys').update({
+        title: editTitle.trim(),
+        description: editDesc.trim() || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['survey', id] });
+      qc.invalidateQueries({ queryKey: ['surveys'] });
+      toast({ title: 'Survey saved' });
+    } catch (e: unknown) {
+      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+    } finally { setSavingMeta(false); }
+  };
+
+  const changeStatus = useMutation({
+    mutationFn: async (status: SurveyStatus) => {
+      const { error } = await supabase.from('surveys').update({ status, updated_at: new Date().toISOString() }).eq('id', id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['survey', id] });
+      qc.invalidateQueries({ queryKey: ['surveys'] });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const addQuestion = useMutation({
+    mutationFn: async (type: QuestionType) => {
+      const nextIndex = questions.length;
+      const { error } = await supabase.from('survey_questions').insert({
+        survey_id: id,
+        type,
+        label: type === 'section_header' ? 'Section Title' : 'Untitled question',
+        required: false,
+        order_index: nextIndex,
+        options: ['radio','checkbox','dropdown'].includes(type) ? ['Option 1', 'Option 2'] : null,
+        settings: type === 'scale' ? { min: 1, max: 10 } : {},
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+      setAddTypeOpen(false);
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const updateQuestion = useMutation({
+    mutationFn: async (q: Partial<Question> & { id: string }) => {
+      const { id: qid, ...rest } = q;
+      const { error } = await supabase.from('survey_questions').update(rest).eq('id', qid);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['survey-questions', id] }),
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const deleteQuestion = useMutation({
+    mutationFn: async (qid: string) => {
+      const { error } = await supabase.from('survey_questions').delete().eq('id', qid);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['survey-questions', id] }),
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const reorderQuestion = async (qid: string, direction: 'up' | 'down') => {
+    const sorted = [...questions].sort((a, b) => a.order_index - b.order_index);
+    const idx = sorted.findIndex(q => q.id === qid);
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === sorted.length - 1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const a = sorted[idx], b = sorted[swapIdx];
+    await Promise.all([
+      supabase.from('survey_questions').update({ order_index: b.order_index }).eq('id', a.id),
+      supabase.from('survey_questions').update({ order_index: a.order_index }).eq('id', b.id),
+    ]);
+    qc.invalidateQueries({ queryKey: ['survey-questions', id] });
+  };
+
+  // ── Analytics helpers ──────────────────────────────────────────────────────
+  const getChartData = (q: Question) => {
+    const qAnswers = allAnswers.filter(a => a.question_id === q.id);
+    if (['radio', 'dropdown'].includes(q.type)) {
+      const counts: Record<string, number> = {};
+      for (const a of qAnswers) if (a.answer_text) counts[a.answer_text] = (counts[a.answer_text] ?? 0) + 1;
+      return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    }
+    if (q.type === 'checkbox') {
+      const counts: Record<string, number> = {};
+      for (const a of qAnswers) {
+        const arr = Array.isArray(a.answer_json) ? a.answer_json as string[] : [];
+        for (const v of arr) counts[v] = (counts[v] ?? 0) + 1;
+      }
+      return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    }
+    if (q.type === 'rating') {
+      const counts: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+      for (const a of qAnswers) {
+        const v = String(a.answer_json ?? a.answer_text ?? '');
+        if (v in counts) counts[v]++;
+      }
+      return Object.entries(counts).map(([name, value]) => ({ name: `★${name}`, value }));
+    }
+    if (q.type === 'scale') {
+      const counts: Record<string, number> = {};
+      for (const a of qAnswers) {
+        const v = String(a.answer_json ?? a.answer_text ?? '');
+        if (v) counts[v] = (counts[v] ?? 0) + 1;
+      }
+      return Object.entries(counts).sort((a, b) => Number(a[0]) - Number(b[0])).map(([name, value]) => ({ name, value }));
+    }
+    return [];
+  };
+
+  const getTextAnswers = (q: Question) =>
+    allAnswers.filter(a => a.question_id === q.id && (a.answer_text ?? '').trim()).map(a => a.answer_text!);
+
+  const getAvgRating = (q: Question) => {
+    const qAnswers = allAnswers.filter(a => a.question_id === q.id);
+    const nums = qAnswers.map(a => Number(a.answer_json ?? a.answer_text)).filter(n => !isNaN(n) && n > 0);
+    return nums.length ? (nums.reduce((s, n) => s + n, 0) / nums.length).toFixed(1) : null;
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  if (surveyLoading) return (
+    <div className="flex items-center justify-center h-64 text-slate-400">
+      <Loader2 className="w-6 h-6 animate-spin mr-2" />Loading survey…
+    </div>
+  );
+  if (!survey) return (
+    <div className="max-w-2xl mx-auto p-8 text-center">
+      <p className="text-slate-500">Survey not found.</p>
+      <Link to="/surveys" className="text-indigo-600 underline mt-2 block">Back to Surveys</Link>
+    </div>
+  );
+
+  const scfg = STATUS_CFG[survey.status];
+
+  return (
+    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <button onClick={() => navigate('/surveys')} className="p-2 rounded-lg hover:bg-slate-100 mt-0.5" data-testid="btn-back">
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 h-4 border', scfg.color)}>{scfg.label}</Badge>
+            {survey.status === 'active' && (
+              <a href={`/surveys/${survey.id}/fill`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline">
+                <ExternalLink className="w-3 h-3" />Fill Link
+              </a>
+            )}
+          </div>
+          <h1 className="text-xl font-bold text-slate-800 mt-1">{survey.title}</h1>
+          {survey.description && <p className="text-sm text-slate-500 mt-0.5">{survey.description}</p>}
+        </div>
+        {canManage && (
+          <div className="flex items-center gap-2">
+            <Select value={survey.status} onValueChange={v => changeStatus.mutate(v as SurveyStatus)}>
+              <SelectTrigger className="h-8 text-xs w-[110px]" data-testid="select-survey-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-slate-200 pb-0">
+        {([
+          { id: 'builder',   label: 'Builder',   icon: Edit3  },
+          { id: 'responses', label: 'Responses', icon: Users  },
+          { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+        ] as const).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            data-testid={`tab-${t.id}`}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+              tab === t.id
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700',
+            )}
+          >
+            <t.icon className="w-3.5 h-3.5" />{t.label}
+            {t.id === 'responses' && responses.length > 0 && (
+              <span className="ml-0.5 px-1.5 py-0 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">{responses.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── BUILDER TAB ─────────────────────────────────────────────────────── */}
+      {tab === 'builder' && (
+        <div className="space-y-4">
+          {/* Meta editor */}
+          {canManage && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Survey Details</h3>
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="edit-title">Title</Label>
+                  <Input id="edit-title" value={editTitle} onChange={e => setEditTitle(e.target.value)} data-testid="input-survey-title" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-desc">Description</Label>
+                  <Textarea id="edit-desc" value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={2} data-testid="input-survey-desc" />
+                </div>
+              </div>
+              <Button size="sm" onClick={saveMeta} disabled={savingMeta || !editTitle.trim()} data-testid="btn-save-meta">
+                {savingMeta ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Save className="w-3.5 h-3.5 mr-1" />}
+                Save Details
+              </Button>
+            </div>
+          )}
+
+          {/* Questions */}
+          <div className="space-y-2">
+            {qLoading ? (
+              <div className="flex items-center justify-center py-10 text-slate-400">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />Loading questions…
+              </div>
+            ) : questions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2 bg-white rounded-xl border border-dashed border-slate-300">
+                <FileText className="w-8 h-8 opacity-30" />
+                <p className="text-sm">No questions yet. Add your first question below.</p>
+              </div>
+            ) : (
+              questions.map((q, idx) => (
+                <QuestionCard
+                  key={q.id}
+                  q={q}
+                  idx={idx}
+                  total={questions.length}
+                  canManage={canManage}
+                  isEditing={editQId === q.id}
+                  onEdit={() => setEditQId(editQId === q.id ? null : q.id)}
+                  onUpdate={(patch) => updateQuestion.mutate({ id: q.id, ...patch })}
+                  onDelete={() => deleteQuestion.mutate(q.id)}
+                  onMoveUp={() => reorderQuestion(q.id, 'up')}
+                  onMoveDown={() => reorderQuestion(q.id, 'down')}
+                  saving={updateQuestion.isPending}
+                  deleting={deleteQuestion.isPending}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Add question */}
+          {canManage && (
+            <Button variant="outline" onClick={() => setAddTypeOpen(true)} className="w-full gap-1.5" data-testid="btn-add-question">
+              <Plus className="w-4 h-4" />Add Question
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* ── RESPONSES TAB ───────────────────────────────────────────────────── */}
+      {tab === 'responses' && (
+        <div className="space-y-3">
+          {rLoading ? (
+            <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 className="w-5 h-5 animate-spin mr-2" />Loading…</div>
+          ) : responses.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
+              <Users className="w-10 h-10 opacity-20" />
+              <p className="text-sm">No responses yet</p>
+            </div>
+          ) : (
+            responses.map(r => (
+              <ResponseRow
+                key={r.id}
+                r={r}
+                questions={questions}
+                isExpanded={expandedResponse === r.id}
+                onToggle={() => setExpandedResponse(expandedResponse === r.id ? null : r.id)}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── ANALYTICS TAB ───────────────────────────────────────────────────── */}
+      {tab === 'analytics' && (
+        <div className="space-y-4">
+          {/* Summary */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Responses', value: responses.length, icon: Users },
+              { label: 'Questions', value: questions.filter(q => q.type !== 'section_header').length, icon: FileText },
+              { label: 'Avg completion', value: responses.length > 0 ? '100%' : '—', icon: BarChart2 },
+            ].map(s => (
+              <div key={s.label} className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-medium uppercase tracking-wide">
+                  <s.icon className="w-3.5 h-3.5" />{s.label}
+                </div>
+                <p className="text-2xl font-bold text-slate-800 mt-1">{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-question analytics */}
+          {questions.filter(q => q.type !== 'section_header').map(q => {
+            const chartData = getChartData(q);
+            const textAnswers = getTextAnswers(q);
+            const avg = getAvgRating(q);
+            const answerCount = allAnswers.filter(a => a.question_id === q.id).length;
+
+            return (
+              <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-5">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div>
+                    <p className="font-semibold text-slate-800">{q.label}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5 capitalize">{q.type.replace('_', ' ')} · {answerCount} answer{answerCount !== 1 ? 's' : ''}</p>
+                  </div>
+                  {avg && (
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-indigo-600">{avg}</p>
+                      <p className="text-[10px] text-slate-400">{q.type === 'rating' ? 'avg / 5' : 'avg / 10'}</p>
+                    </div>
+                  )}
+                </div>
+
+                {chartData.length > 0 && (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
+                      <Tooltip formatter={(v: number) => [`${v} response${v !== 1 ? 's' : ''}`, '']} />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                        {chartData.map((_, i) => (
+                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+
+                {(q.type === 'text' || q.type === 'textarea') && textAnswers.length > 0 && (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {textAnswers.map((t, i) => (
+                      <div key={i} className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">"{t}"</div>
+                    ))}
+                  </div>
+                )}
+
+                {answerCount === 0 && (
+                  <p className="text-sm text-slate-400 italic">No answers yet</p>
+                )}
+              </div>
+            );
+          })}
+
+          {responses.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-2">
+              <BarChart2 className="w-10 h-10 opacity-20" />
+              <p className="text-sm">Analytics will appear once there are responses</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add question type picker */}
+      <Dialog open={addTypeOpen} onOpenChange={setAddTypeOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Choose Question Type</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-2 py-2">
+            {Q_TYPES.map(qt => (
+              <button
+                key={qt.type}
+                onClick={() => addQuestion.mutate(qt.type)}
+                disabled={addQuestion.isPending}
+                data-testid={`btn-add-type-${qt.type}`}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-sm font-medium text-slate-700 transition-colors text-left"
+              >
+                <qt.icon className="w-4 h-4 text-indigo-500 shrink-0" />
+                {qt.label}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── QuestionCard ─────────────────────────────────────────────────────────────
+function QuestionCard({
+  q, idx, total, canManage, isEditing, onEdit, onUpdate, onDelete, onMoveUp, onMoveDown, saving, deleting,
+}: {
+  q: Question; idx: number; total: number; canManage: boolean;
+  isEditing: boolean; onEdit: () => void;
+  onUpdate: (p: Partial<Question>) => void;
+  onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void;
+  saving: boolean; deleting: boolean;
+}) {
+  const [labelDraft, setLabelDraft] = useState(q.label);
+  const [descDraft, setDescDraft] = useState(q.description ?? '');
+  const [reqDraft, setReqDraft] = useState(q.required);
+  const [optsDraft, setOptsDraft] = useState<string[]>(q.options ?? []);
+  const [newOpt, setNewOpt] = useState('');
+
+  const QIcon = Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
+  const hasOptions = ['radio','checkbox','dropdown'].includes(q.type);
+  const isSection = q.type === 'section_header';
+
+  const save = () => {
+    onUpdate({
+      label: labelDraft.trim() || q.label,
+      description: descDraft.trim() || null,
+      required: reqDraft,
+      options: hasOptions ? optsDraft.filter(Boolean) : null,
+    });
+    onEdit();
+  };
+
+  if (isSection) {
+    return (
+      <div className="flex items-center gap-2 py-2 px-4 bg-slate-50 rounded-xl border border-slate-200">
+        <Minus className="w-4 h-4 text-slate-400 shrink-0" />
+        {isEditing ? (
+          <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} className="h-7 text-sm font-semibold" />
+        ) : (
+          <p className="text-sm font-bold text-slate-600 uppercase tracking-wide flex-1">{q.label}</p>
+        )}
+        {canManage && (
+          <div className="flex items-center gap-1 ml-auto">
+            {isEditing
+              ? <Button size="sm" onClick={save} className="h-6 px-2 text-xs">Save</Button>
+              : <button onClick={onEdit} className="p-1 rounded hover:bg-slate-200 text-slate-400"><Edit3 className="w-3 h-3" /></button>
+            }
+            <button onClick={onDelete} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn('bg-white rounded-xl border transition-colors', isEditing ? 'border-indigo-300' : 'border-slate-200')}>
+      {/* Question header */}
+      <div className="flex items-center gap-3 p-3">
+        <span className="text-[11px] font-mono text-slate-400 w-5 text-center shrink-0">{idx + 1}</span>
+        <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+          <QIcon className="w-3.5 h-3.5 text-indigo-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-800 truncate">{q.label}</p>
+          <p className="text-[10px] text-slate-400 capitalize">{q.type.replace('_', ' ')}{q.required ? ' · Required' : ''}</p>
+        </div>
+        {canManage && (
+          <div className="flex items-center gap-0.5">
+            <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+            <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+            <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')}><Edit3 className="w-3.5 h-3.5" /></button>
+            <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+        )}
+      </div>
+
+      {/* Edit panel */}
+      {isEditing && (
+        <div className="border-t border-indigo-100 p-4 space-y-3 bg-indigo-50/30">
+          <div className="space-y-1">
+            <Label className="text-xs">Question text</Label>
+            <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} data-testid={`input-label-${q.id}`} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Helper text <span className="text-slate-400 font-normal">(optional)</span></Label>
+            <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown below the question…" />
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id={`req-${q.id}`} checked={reqDraft} onChange={e => setReqDraft(e.target.checked)} className="rounded" />
+            <Label htmlFor={`req-${q.id}`} className="text-xs font-medium">Required</Label>
+          </div>
+          {hasOptions && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Options</Label>
+              {optsDraft.map((opt, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <Input
+                    value={opt}
+                    onChange={e => {
+                      const next = [...optsDraft]; next[i] = e.target.value; setOptsDraft(next);
+                    }}
+                    className="h-7 text-sm flex-1"
+                  />
+                  <button onClick={() => setOptsDraft(optsDraft.filter((_, j) => j !== i))} className="p-1 text-slate-400 hover:text-red-500">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <Input value={newOpt} onChange={e => setNewOpt(e.target.value)} placeholder="Add option…" className="h-7 text-sm flex-1"
+                  onKeyDown={e => { if (e.key === 'Enter' && newOpt.trim()) { setOptsDraft([...optsDraft, newOpt.trim()]); setNewOpt(''); } }} />
+                <button
+                  onClick={() => { if (newOpt.trim()) { setOptsDraft([...optsDraft, newOpt.trim()]); setNewOpt(''); } }}
+                  className="p-1 text-indigo-600 hover:bg-indigo-100 rounded"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-2 pt-1">
+            <Button size="sm" onClick={save} disabled={saving} data-testid={`btn-save-q-${q.id}`}>
+              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onEdit}>Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ResponseRow ───────────────────────────────────────────────────────────────
+function ResponseRow({
+  r, questions, isExpanded, onToggle,
+}: {
+  r: Response; questions: Question[]; isExpanded: boolean; onToggle: () => void;
+}) {
+  const [answers, setAnswers] = useState<Answer[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const expand = async () => {
+    onToggle();
+    if (!loaded && !isExpanded) {
+      setLoading(true);
+      const { data } = await supabase.from('survey_answers').select('*').eq('response_id', r.id);
+      setAnswers((data ?? []) as Answer[]);
+      setLoaded(true);
+      setLoading(false);
+    }
+  };
+
+  const displayName = r.respondent_name ?? r.respondent_email ?? 'Anonymous';
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <button
+        onClick={expand}
+        className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 transition-colors"
+        data-testid={`btn-response-${r.id}`}
+      >
+        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+          <span className="text-xs font-bold text-indigo-700">{displayName.charAt(0).toUpperCase()}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-800">{displayName}</p>
+          <p className="text-[11px] text-slate-400">{format(new Date(r.submitted_at), 'dd MMM yyyy, HH:mm')}</p>
+        </div>
+        <ChevronDown className={cn('w-4 h-4 text-slate-400 transition-transform shrink-0', isExpanded && 'rotate-180')} />
+      </button>
+      {isExpanded && (
+        <div className="border-t border-slate-100 p-4 space-y-3">
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" />Loading answers…</div>
+          ) : (
+            questions.filter(q => q.type !== 'section_header').map(q => {
+              const ans = answers.find(a => a.question_id === q.id);
+              const value = ans?.answer_text ?? (Array.isArray(ans?.answer_json) ? (ans!.answer_json as string[]).join(', ') : ans?.answer_json != null ? String(ans!.answer_json) : null);
+              return (
+                <div key={q.id}>
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{q.label}{q.required ? ' *' : ''}</p>
+                  <p className="text-sm text-slate-700 mt-0.5">{value ?? <span className="text-slate-300 italic">No answer</span>}</p>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

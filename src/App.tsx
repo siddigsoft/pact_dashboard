@@ -139,6 +139,9 @@ const CRMDashboard = lazy(() => import('./pages/CRMDashboard'));
 const CRMContacts = lazy(() => import('./pages/CRMContacts'));
 const CRMEngagements = lazy(() => import('./pages/CRMEngagements'));
 const CRMOpportunities = lazy(() => import('./pages/CRMOpportunities'));
+const SurveysPage = lazy(() => import('./pages/SurveysPage'));
+const SurveyDetail = lazy(() => import('./pages/SurveyDetail'));
+const SurveyFill = lazy(() => import('./pages/SurveyFill'));
 const Helpline = lazy(() => import('./pages/Helpline'));
 const MyTasksPage = lazy(() => import('./pages/MyTasksV2'));
 const TaskDetail = lazy(() => import('./pages/TaskDetail'));
@@ -458,6 +461,9 @@ const AppRoutes = () => {
         <Route path="/crm/contacts" element={<CRMContacts />} />
         <Route path="/crm/engagements" element={<CRMEngagements />} />
         <Route path="/crm/opportunities" element={<CRMOpportunities />} />
+        <Route path="/surveys" element={<PageWrapper><SurveysPage /></PageWrapper>} />
+        <Route path="/surveys/:id" element={<PageWrapper><SurveyDetail /></PageWrapper>} />
+        <Route path="/surveys/:id/fill" element={<SurveyFill />} />
         <Route path="/workspace" element={<WorkspaceHub />} />
         <Route path="/field-operation-manager" element={<FieldOperationManager />} />
         <Route path="/mmp-management" element={<MMPManagementPage />} />
