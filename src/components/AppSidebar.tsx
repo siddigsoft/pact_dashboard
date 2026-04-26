@@ -633,6 +633,9 @@
     if (!isHidden('/task-admin') && canSeePath('/task-admin', defaultRole)) {
       adminItems.push({ id: 'task-admin', title: "Task Admin", url: "/task-admin", icon: CheckSquare, priority: 7, isPinned: isPinned('/task-admin') });
     }
+    if (!isHidden('/admin/project-flow-stages') && (isSuperAdmin || isAdmin)) {
+      adminItems.push({ id: 'admin-project-flow-stages', title: "Project Flow Stages", url: "/admin/project-flow-stages", icon: ClipboardList, priority: 7, isPinned: isPinned('/admin/project-flow-stages') });
+    }
     if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {
       adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 8, isPinned: isPinned('/settings') });
     }

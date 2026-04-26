@@ -74,6 +74,64 @@ export interface UseProjectFlowReturn {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+export interface StageOverrideRow {
+  stage_id: string;
+  label_en: string | null;
+  label_ar: string | null;
+  description_en: string | null;
+  description_ar: string | null;
+  typical_duration_days: number | null;
+  key_outputs_en: string[] | null;
+  key_outputs_ar: string[] | null;
+  is_disabled: boolean;
+}
+
+async function fetchStageOverrides(projectType: string): Promise<StageOverrideRow[]> {
+  // Always query by the canonical flow type (getProjectFlow handles legacy aliases
+  // like survey/monitoring/training -> their canonical id), so a project stored
+  // with a legacy/aliased type still picks up overrides keyed against the
+  // canonical type the admin page exposes.
+  const canonicalType = getProjectFlow(projectType).type;
+  const { data, error } = await supabase
+    .from('project_flow_stage_overrides')
+    .select('stage_id, label_en, label_ar, description_en, description_ar, typical_duration_days, key_outputs_en, key_outputs_ar, is_disabled')
+    .eq('project_type', canonicalType);
+  if (error) {
+    // Only swallow the "table does not exist" cases (env where the SQL has not
+    // been pasted yet). Surface every other error (RLS / network / data) so we
+    // do not silently hide bugs.
+    const code = (error as { code?: string }).code;
+    const msg = (error as { message?: string }).message?.toLowerCase() ?? '';
+    const isMissingTable =
+      code === 'PGRST205' ||
+      code === '42P01' ||
+      msg.includes('does not exist') ||
+      msg.includes('could not find the table');
+    if (isMissingTable) return [];
+    throw new Error(error.message);
+  }
+  return (data ?? []) as StageOverrideRow[];
+}
+
+/** Apply admin overrides on top of the hard-coded flow stages. */
+function applyOverrides(stages: FlowStage[], overrides: StageOverrideRow[]): FlowStage[] {
+  if (!overrides.length) return stages;
+  const byId = new Map(overrides.map(o => [o.stage_id, o]));
+  return stages
+    .filter(s => !byId.get(s.id)?.is_disabled)
+    .map(s => {
+      const ov = byId.get(s.id);
+      if (!ov) return s;
+      return {
+        ...s,
+        label: ov.label_en?.trim() || s.label,
+        description: ov.description_en?.trim() || s.description,
+        keyOutputs: ov.key_outputs_en?.length ? ov.key_outputs_en : s.keyOutputs,
+        typicalDurationDays: ov.typical_duration_days ?? s.typicalDurationDays,
+      };
+    });
+}
+
 async function fetchFlowLog(projectId: string): Promise<FlowLogEntry[]> {
   const { data, error } = await supabase
     .from('project_flow_log')
@@ -213,7 +271,15 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const queryClient = useQueryClient();
 
   const defaultFlow = getProjectFlow(project.projectType);
-  const allDefaultStages = defaultFlow.stages;
+
+  const overridesQuery = useQuery({
+    queryKey: ['project_flow_stage_overrides', project.projectType],
+    queryFn: () => fetchStageOverrides(project.projectType),
+    staleTime: 5 * 60 * 1000,
+  });
+  const overrides = overridesQuery.data ?? [];
+
+  const allDefaultStages = applyOverrides(defaultFlow.stages, overrides);
 
   const customEntries: CustomStageEntry[] = (project.customFlowStages as CustomStageEntry[]) ?? [];
   const hasCustom = customEntries.length > 0;

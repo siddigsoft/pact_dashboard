@@ -18,6 +18,7 @@ import { TaskStatusMenu } from '@/components/tasks/TaskStatusMenu';
 import {
   useTaskStatusHistory, useTaskActivity, useAddActivity,
   useTaskElements, useAddElement, useToggleElement, useDeleteElement,
+  useSetElementTarget, useUpdateElementProgress,
 } from '@/hooks/useTaskActivity';
 import { STATUS_LABELS, STATUS_COLORS, type PersonalTaskStatus } from '@/hooks/usePersonalTasks';
 import { useToast } from '@/hooks/use-toast';
@@ -217,6 +218,8 @@ export default function TaskDetail() {
   const addElement = useAddElement();
   const toggleElement = useToggleElement();
   const deleteElement = useDeleteElement();
+  const setElementTarget = useSetElementTarget();
+  const updateElementProgress = useUpdateElementProgress();
 
   const updateTask = useMutation({
     mutationFn: async (patch: Record<string, unknown>) => {
@@ -922,8 +925,23 @@ export default function TaskDetail() {
   // ---------- Elements progress ----------
   const elementProgress = useMemo(() => {
     if (elements.length === 0) return null;
-    const done = elements.filter(e => e.done).length;
-    return { done, total: elements.length, pct: Math.round((done / elements.length) * 100) };
+    // Quantitative elements contribute their fractional completion;
+    // binary elements contribute 1 when done, 0 when not.
+    let weighted = 0;
+    let done = 0;
+    for (const e of elements) {
+      if (e.target_value && e.target_value > 0) {
+        const cur = Math.min(e.current_value ?? 0, e.target_value);
+        weighted += cur / e.target_value;
+        if (cur >= e.target_value) done += 1;
+      } else {
+        if (e.done) {
+          weighted += 1;
+          done += 1;
+        }
+      }
+    }
+    return { done, total: elements.length, pct: Math.round((weighted / elements.length) * 100) };
   }, [elements]);
 
   if (isLoading) {
@@ -1838,6 +1856,10 @@ export default function TaskDetail() {
               addElement.mutate({ taskId: id!, assigneeId, assigneeName, label, position: elements.length })}
             onToggleElement={(elementId, done) => toggleElement.mutate({ id: elementId, taskId: id!, done })}
             onDeleteElement={(elementId) => deleteElement.mutate({ id: elementId, taskId: id! })}
+            onSetElementTarget={(elementId, target, unit) =>
+              setElementTarget.mutate({ id: elementId, taskId: id!, target, unit })}
+            onUpdateElementProgress={(elementId, value, note) =>
+              updateElementProgress.mutate({ id: elementId, taskId: id!, value, note })}
             progress={elementProgress}
             currentUserId={currentUser?.id}
           />
@@ -1982,8 +2004,199 @@ function ActivityItem({ a }: { a: import('@/hooks/useTaskActivity').ActivityRow 
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// ElementRow — single row in the assignee element list. Shows a binary
+// checkbox by default, or a quantitative progress bar + numeric input when
+// the element has a `target_value` set. Click the small target chip to
+// open an inline editor that sets target & unit (or clears them).
+// ─────────────────────────────────────────────────────────────────────────
+function ElementRow({
+  element,
+  canEditTarget,
+  onToggle,
+  onDelete,
+  onSetTarget,
+  onUpdateProgress,
+}: {
+  element: import('@/hooks/useTaskActivity').ElementRow;
+  canEditTarget: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+  onSetTarget: (target: number | null, unit: string | null) => void;
+  onUpdateProgress: (value: number) => void;
+}) {
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [draftTarget, setDraftTarget] = useState<string>(
+    element.target_value != null ? String(element.target_value) : ''
+  );
+  const [draftUnit, setDraftUnit] = useState<string>(element.unit ?? '');
+  const [draftValue, setDraftValue] = useState<string>(
+    element.current_value != null ? String(element.current_value) : '0'
+  );
+
+  const isQuant = element.target_value != null && element.target_value > 0;
+  const cur = Math.min(element.current_value ?? 0, element.target_value ?? 0);
+  const pct = isQuant ? Math.round((cur / (element.target_value as number)) * 100) : 0;
+
+  // Keep input in sync when the row updates from the server.
+  useEffect(() => {
+    setDraftValue(element.current_value != null ? String(element.current_value) : '0');
+  }, [element.current_value]);
+
+  if (editingTarget) {
+    return (
+      <li className="border border-amber-200 bg-amber-50 rounded p-1.5 space-y-1" data-testid={`element-target-edit-${element.id}`}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-semibold text-slate-700 truncate flex-1">{element.label}</span>
+          <button onClick={() => setEditingTarget(false)} className="text-slate-400 hover:text-slate-700">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+        <div className="flex gap-1.5 items-center">
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={draftTarget}
+            onChange={e => setDraftTarget(e.target.value)}
+            placeholder="Target"
+            className="w-16 h-6 px-1.5 text-[11px] border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
+            data-testid={`input-target-${element.id}`}
+          />
+          <input
+            type="text"
+            value={draftUnit}
+            onChange={e => setDraftUnit(e.target.value.slice(0, 16))}
+            placeholder="unit (e.g. sites)"
+            className="flex-1 h-6 px-1.5 text-[11px] border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
+            data-testid={`input-unit-${element.id}`}
+          />
+          <button
+            onClick={() => {
+              const t = Number(draftTarget);
+              if (!Number.isFinite(t) || t <= 0) return;
+              onSetTarget(t, draftUnit.trim() || null);
+              setEditingTarget(false);
+            }}
+            className="px-2 h-6 rounded bg-[#1D3461] text-white text-[11px] font-semibold"
+            data-testid={`save-target-${element.id}`}
+          >
+            Save
+          </button>
+        </div>
+        {isQuant && (
+          <button
+            onClick={() => { onSetTarget(null, null); setEditingTarget(false); }}
+            className="text-[10px] text-rose-600 hover:underline"
+            data-testid={`clear-target-${element.id}`}
+          >
+            Clear target (revert to checkbox)
+          </button>
+        )}
+      </li>
+    );
+  }
+
+  return (
+    <li className="group" data-testid={`element-${element.id}`}>
+      <div className="flex items-center gap-1.5">
+        {isQuant ? (
+          <div
+            className={cn(
+              'w-4 h-4 rounded border flex items-center justify-center shrink-0 text-[8px] font-bold',
+              cur >= (element.target_value ?? 0)
+                ? 'bg-emerald-500 border-emerald-500 text-white'
+                : 'bg-amber-50 border-amber-300 text-amber-700'
+            )}
+            title={`${cur} / ${element.target_value} ${element.unit ?? ''}`}
+          >
+            {pct}
+          </div>
+        ) : (
+          <button
+            onClick={onToggle}
+            className={cn(
+              'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+              element.done ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 hover:border-slate-400'
+            )}
+            data-testid={`toggle-element-${element.id}`}
+          >
+            {element.done && <Check className="w-2.5 h-2.5 text-white" />}
+          </button>
+        )}
+        <span className={cn('flex-1 text-xs', element.done && !isQuant && 'line-through text-slate-400')}>
+          {element.label}
+          {isQuant && (
+            <span className="text-[10px] text-slate-500 ml-1.5 font-mono">
+              {cur}/{element.target_value}{element.unit ? ` ${element.unit}` : ''}
+            </span>
+          )}
+        </span>
+        {canEditTarget && (
+          <button
+            onClick={() => setEditingTarget(true)}
+            className={cn(
+              'opacity-0 group-hover:opacity-100 text-[9px] font-bold px-1 py-0.5 rounded',
+              isQuant ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+            )}
+            title={isQuant ? 'Edit target' : 'Set target for progress tracking'}
+            data-testid={`edit-target-${element.id}`}
+          >
+            {isQuant ? '⊟' : '＋#'}
+          </button>
+        )}
+        <button
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500"
+          data-testid={`del-element-${element.id}`}
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+      {isQuant && (
+        <div className="flex items-center gap-1.5 mt-1 ml-5">
+          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                'h-full transition-all',
+                pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-orange-500'
+              )}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <input
+            type="number"
+            min={0}
+            max={element.target_value ?? undefined}
+            step={1}
+            value={draftValue}
+            onChange={e => setDraftValue(e.target.value)}
+            onBlur={() => {
+              const v = Number(draftValue);
+              if (!Number.isFinite(v) || v < 0 || v > (element.target_value ?? 0)) {
+                setDraftValue(String(element.current_value ?? 0));
+                return;
+              }
+              if (v === (element.current_value ?? 0)) return;
+              onUpdateProgress(v);
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+            }}
+            className="w-14 h-5 px-1 text-[11px] text-right border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-[#1D3461]/40"
+            data-testid={`input-progress-${element.id}`}
+            aria-label={`Update progress for ${element.label}`}
+          />
+        </div>
+      )}
+    </li>
+  );
+}
+
 function AssigneesPanel({
-  assignees, elements, onAddElement, onToggleElement, onDeleteElement, progress, currentUserId,
+  assignees, elements, onAddElement, onToggleElement, onDeleteElement,
+  onSetElementTarget, onUpdateElementProgress,
+  progress, currentUserId,
   primaryAssigneeId, profiles, onAddCoAssignee, onRemoveCoAssignee, onSetCoAssigneeHours,
 }: {
   taskId: string;
@@ -1998,6 +2211,8 @@ function AssigneesPanel({
   onAddElement: (assigneeId: string, assigneeName: string, label: string) => void;
   onToggleElement: (id: string, done: boolean) => void;
   onDeleteElement: (id: string) => void;
+  onSetElementTarget: (id: string, target: number | null, unit: string | null) => void;
+  onUpdateElementProgress: (id: string, value: number, note?: string) => void;
   progress: { done: number; total: number; pct: number } | null;
   currentUserId?: string;
   primaryAssigneeId?: string;
@@ -2173,20 +2388,15 @@ function AssigneesPanel({
                 {myElements.length > 0 && (
                   <ul className="space-y-1 mb-1.5">
                     {myElements.map(e => (
-                      <li key={e.id} className="flex items-center gap-1.5 group" data-testid={`element-${e.id}`}>
-                        <button
-                          onClick={() => onToggleElement(e.id, !e.done)}
-                          className={cn('w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                            e.done ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 hover:border-slate-400')}
-                          data-testid={`toggle-element-${e.id}`}
-                        >
-                          {e.done && <Check className="w-2.5 h-2.5 text-white" />}
-                        </button>
-                        <span className={cn('flex-1 text-xs', e.done && 'line-through text-slate-400')}>{e.label}</span>
-                        <button onClick={() => onDeleteElement(e.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500" data-testid={`del-element-${e.id}`}>
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </li>
+                      <ElementRow
+                        key={e.id}
+                        element={e}
+                        canEditTarget={isMine || currentUserId === primaryAssigneeId}
+                        onToggle={() => onToggleElement(e.id, !e.done)}
+                        onDelete={() => onDeleteElement(e.id)}
+                        onSetTarget={(t, u) => onSetElementTarget(e.id, t, u)}
+                        onUpdateProgress={(v) => onUpdateElementProgress(e.id, v)}
+                      />
                     ))}
                   </ul>
                 )}

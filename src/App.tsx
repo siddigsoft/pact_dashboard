@@ -109,6 +109,7 @@ const StaffDirectory = lazy(() => import('./pages/StaffDirectory'));
 const Employees = lazy(() => import('./pages/Employees'));
 const Departments = lazy(() => import('./pages/Departments'));
 const TaskAdmin = lazy(() => import('./pages/TaskAdmin'));
+const AdminProjectFlowStages = lazy(() => import('./pages/AdminProjectFlowStages'));
 const TransactionScanner = lazy(() => import('./pages/TransactionScanner'));
 const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
 const RolePerspectiveViewer = lazy(() => import('./pages/RolePerspectiveViewer'));
@@ -436,6 +437,7 @@ const AppRoutes = () => {
         <Route path="/employees" element={<Employees />} />
         <Route path="/departments" element={<Departments />} />
         <Route path="/task-admin" element={<TaskAdmin />} />
+        <Route path="/admin/project-flow-stages" element={<AdminProjectFlowStages />} />
         <Route path="/admin/transaction-scanner" element={<TransactionScanner />} />
         <Route path="/permissions-management" element={<PermissionsManagement />} />
         <Route path="/role-perspective" element={<RolePerspectiveViewer />} />

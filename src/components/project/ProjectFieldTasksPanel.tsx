@@ -40,8 +40,28 @@ import {
   type FieldTaskPriority,
   type CreateFieldTask,
 } from '@/hooks/useProjectTasks';
+import {
+  useTaskDependencies,
+  depTypeShort,
+  depTypeLabel,
+  type DepType,
+  type TaskDependency,
+} from '@/hooks/useTaskDependencies';
 import type { CustomStageEntry } from '@/hooks/useProjectFlow';
 import type { FlowStage } from '@/config/projectFlows';
+
+export interface TypedDepDraft {
+  predecessorId: string;
+  depType: DepType;
+  lagDays: number;
+}
+
+const DEP_TYPE_OPTIONS: { value: DepType; label: string }[] = [
+  { value: 'FS', label: 'FS — Finish to Start' },
+  { value: 'SS', label: 'SS — Start to Start' },
+  { value: 'FF', label: 'FF — Finish to Finish' },
+  { value: 'SF', label: 'SF — Start to Finish' },
+];
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -327,11 +347,16 @@ interface TaskFormProps {
   open: boolean;
   onClose: () => void;
   initial?: FieldTask | null;
-  onSave: (data: CreateFieldTask & { status: FieldTaskStatus }) => Promise<void>;
+  onSave: (
+    data: CreateFieldTask & { status: FieldTaskStatus },
+    typedDeps: TypedDepDraft[],
+  ) => Promise<void>;
   isSaving: boolean;
   allStages: FlowStage[];
   customEntries: CustomStageEntry[];
   allTasks: FieldTask[];
+  /** Existing typed dependency rows where this task is the successor */
+  existingTypedDeps?: TaskDependency[];
 }
 
 function getReachableViaDeps(taskId: string, allTasks: FieldTask[]): Set<string> {
@@ -347,7 +372,7 @@ function getReachableViaDeps(taskId: string, allTasks: FieldTask[]): Set<string>
   return visited;
 }
 
-function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks }: TaskFormProps) {
+function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, customEntries, allTasks, existingTypedDeps = [] }: TaskFormProps) {
   const [title,         setTitle]         = useState(initial?.title ?? '');
   const [description,   setDescription]   = useState(initial?.description ?? '');
   const [priority,      setPriority]      = useState<FieldTaskPriority>(initial?.priority ?? 'medium');
@@ -365,6 +390,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
   const [estCost,       setEstCost]       = useState<string>(initial?.estimatedCost?.toString() ?? '');
   const [actCost,       setActCost]       = useState<string>(initial?.actualCost?.toString() ?? '');
   const [deps,          setDeps]          = useState<string[]>(initial?.dependencies ?? []);
+  const [depsMeta, setDepsMeta] = useState<Record<string, { type: DepType; lag: number }>>({});
 
   useEffect(() => {
     if (open) {
@@ -384,9 +410,24 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       setActHours(initial?.actualHours?.toString() ?? '');
       setEstCost(initial?.estimatedCost?.toString() ?? '');
       setActCost(initial?.actualCost?.toString() ?? '');
-      setDeps(initial?.dependencies ?? []);
+      // Prefer typed-deps rows when present; fall back to legacy uuid[] (FS, lag 0)
+      if (existingTypedDeps.length) {
+        setDeps(existingTypedDeps.map(d => d.predecessorId));
+        const meta: Record<string, { type: DepType; lag: number }> = {};
+        for (const d of existingTypedDeps) {
+          meta[d.predecessorId] = { type: d.depType, lag: d.lagDays };
+        }
+        setDepsMeta(meta);
+      } else {
+        setDeps(initial?.dependencies ?? []);
+        setDepsMeta(
+          (initial?.dependencies ?? []).reduce<Record<string, { type: DepType; lag: number }>>(
+            (acc, id) => { acc[id] = { type: 'FS', lag: 0 }; return acc; }, {},
+          ),
+        );
+      }
     }
-  }, [open, initial]);
+  }, [open, initial, existingTypedDeps]);
 
   const isEditing = !!initial;
   const otherTasks = useMemo(() => {
@@ -398,11 +439,29 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
     });
   }, [allTasks, initial?.id]);
 
-  const toggleDep = (id: string) =>
-    setDeps(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]);
+  const toggleDep = (id: string) => {
+    setDeps(prev => {
+      if (prev.includes(id)) {
+        setDepsMeta(m => { const n = { ...m }; delete n[id]; return n; });
+        return prev.filter(d => d !== id);
+      }
+      setDepsMeta(m => ({ ...m, [id]: { type: 'FS', lag: 0 } }));
+      return [...prev, id];
+    });
+  };
+
+  const setDepType = (id: string, type: DepType) =>
+    setDepsMeta(m => ({ ...m, [id]: { type, lag: m[id]?.lag ?? 0 } }));
+  const setDepLag = (id: string, lag: number) =>
+    setDepsMeta(m => ({ ...m, [id]: { type: m[id]?.type ?? 'FS', lag } }));
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
+    const typedDeps: TypedDepDraft[] = deps.map(id => ({
+      predecessorId: id,
+      depType: depsMeta[id]?.type ?? 'FS',
+      lagDays: depsMeta[id]?.lag ?? 0,
+    }));
     await onSave({
       title: title.trim(),
       description: description.trim() || undefined,
@@ -419,7 +478,7 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
       estimatedCost:  estCost  ? parseFloat(estCost)   : null,
       actualCost:     actCost  ? parseFloat(actCost)   : null,
       dependencies:   deps,
-    });
+    }, typedDeps);
   };
 
   return (
@@ -741,22 +800,65 @@ function TaskFormDialog({ open, onClose, initial, onSave, isSaving, allStages, c
                           </div>
                         );
                       })()}
-                      {/* Chips of selected */}
-                      <div className="flex flex-wrap gap-1">
-                        {otherTasks.filter(t => deps.includes(t.id)).map(t => (
-                          <span key={t.id} className={cn(
-                            'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border',
-                            t.status === 'done'
-                              ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300'
-                              : 'bg-[#1D3461]/10 text-[#1D3461] border-[#1D3461]/30 dark:text-blue-300',
-                          )}>
-                            {t.status === 'done' ? <CheckCircle2 className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
-                            <span className="max-w-[120px] truncate">{t.title}</span>
-                            <button type="button" onClick={() => toggleDep(t.id)} className="hover:text-destructive ml-0.5">
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          </span>
-                        ))}
+                      {/* Per-dep type & lag editor (MS Project style) */}
+                      <div className="space-y-1.5">
+                        {otherTasks.filter(t => deps.includes(t.id)).map(t => {
+                          const meta = depsMeta[t.id] ?? { type: 'FS' as DepType, lag: 0 };
+                          return (
+                            <div
+                              key={t.id}
+                              className={cn(
+                                'flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-md border text-xs',
+                                t.status === 'done'
+                                  ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800'
+                                  : 'bg-card border-[#1D3461]/20',
+                              )}
+                              data-testid={`dep-row-${t.id}`}
+                            >
+                              {t.status === 'done'
+                                ? <CheckCircle2 className="h-3 w-3 text-emerald-600 flex-shrink-0" />
+                                : <Clock className="h-3 w-3 text-[#1D3461] flex-shrink-0" />}
+                              <span className="font-medium truncate flex-1 min-w-[120px]" title={t.title}>{t.title}</span>
+                              <Select
+                                value={meta.type}
+                                onValueChange={v => setDepType(t.id, v as DepType)}
+                              >
+                                <SelectTrigger
+                                  className="h-7 w-[72px] text-[11px]"
+                                  data-testid={`select-dep-type-${t.id}`}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DEP_TYPE_OPTIONS.map(o => (
+                                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                                      {o.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  value={meta.lag}
+                                  onChange={e => setDepLag(t.id, parseInt(e.target.value || '0', 10) || 0)}
+                                  className="h-7 w-14 text-[11px] px-1.5"
+                                  data-testid={`input-dep-lag-${t.id}`}
+                                  title="Lag in days (negative = lead)"
+                                />
+                                <span className="text-[10px] text-muted-foreground">d</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleDep(t.id)}
+                                className="text-muted-foreground hover:text-destructive"
+                                data-testid={`button-remove-dep-${t.id}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -796,9 +898,10 @@ interface TaskDetailProps {
   onEdit: () => void;
   onDelete: () => void;
   onStatusChange: (s: FieldTaskStatus) => void;
+  typedDeps?: TaskDependency[];
 }
 
-function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName }: TaskDetailProps & { currentUserId?: string; currentUserName?: string }) {
+function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, onClose, onEdit, onDelete, onStatusChange, currentUserId, currentUserName, typedDeps = [] }: TaskDetailProps & { currentUserId?: string; currentUserName?: string }) {
   if (!task) return null;
   const overdue = isOverdue(task.dueDate, task.status);
   const sCfg = STATUS_CFG[task.status];
@@ -1162,6 +1265,9 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                     {depTasks.map(t => {
                       const pCfg = PRIORITY_CFG[t.priority];
                       const overdueTask = isOverdue(t.dueDate, t.status);
+                      const typedEdge = typedDeps.find(
+                        d => d.successorId === task.id && d.predecessorId === t.id,
+                      );
                       return (
                         <div key={t.id} className={cn(
                           'flex items-center gap-3 px-3 py-2.5 rounded-lg border border-l-4 text-sm',
@@ -1174,6 +1280,20 @@ function TaskDetailDialog({ task, allTasks, allStages, customEntries, canEdit, o
                             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                               <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', STATUS_CFG[t.status].color)}>{STATUS_CFG[t.status].label}</span>
                               <span className={cn('text-[9px] font-semibold px-1 rounded', pCfg.color)}>{pCfg.label}</span>
+                              {typedEdge && (
+                                <span
+                                  className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-[#1D3461]/10 text-[#1D3461] border border-[#1D3461]/30"
+                                  title={`${depTypeLabel(typedEdge.depType)}${typedEdge.lagDays ? ` · lag ${typedEdge.lagDays}d` : ''}`}
+                                  data-testid={`badge-dep-type-${t.id}`}
+                                >
+                                  {depTypeShort(typedEdge.depType)}
+                                  {typedEdge.lagDays !== 0 && (
+                                    <span className="ml-1 font-normal">
+                                      {typedEdge.lagDays > 0 ? '+' : ''}{typedEdge.lagDays}d
+                                    </span>
+                                  )}
+                                </span>
+                              )}
                               {t.dueDate && (
                                 <span className={cn('text-[9px] flex items-center gap-0.5', overdueTask && t.status !== 'done' ? 'text-red-600 font-semibold' : 'text-muted-foreground')}>
                                   <Calendar className="h-2.5 w-2.5" />
@@ -1849,6 +1969,37 @@ export function ProjectFieldTasksPanel({
   const { toast } = useToast();
   const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } =
     useProjectTasks(projectId);
+  const { dependencies: typedDepsAll, upsertDependency, deleteDependency, predecessorsOf } =
+    useTaskDependencies(projectId);
+
+  const syncTypedDeps = async (taskId: string, edges: TypedDepDraft[]) => {
+    try {
+      const existing = predecessorsOf(taskId);
+      const desired = new Map(edges.map(e => [e.predecessorId, e]));
+      // Delete edges no longer present
+      for (const ex of existing) {
+        if (!desired.has(ex.predecessorId)) {
+          await deleteDependency(ex.id);
+        }
+      }
+      // Upsert all desired edges (covers new + updated type/lag)
+      for (const e of edges) {
+        await upsertDependency({
+          projectId,
+          predecessorId: e.predecessorId,
+          successorId: taskId,
+          depType: e.depType,
+          lagDays: e.lagDays,
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Dependency save partially failed',
+        description: err?.message ?? 'Some typed dependencies could not be saved.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const [viewMode,       setViewMode]       = useState<ViewMode>('list');
   const [formOpen,       setFormOpen]       = useState(false);
@@ -1901,10 +2052,17 @@ export function ProjectFieldTasksPanel({
   const hasTimesheetData = tasks.some(t => t.estimatedHours || t.actualHours);
   const hasCostData      = tasks.some(t => t.estimatedCost  || t.actualCost);
 
-  const handleCreate = async (data: CreateFieldTask & { status: FieldTaskStatus }) => {
+  const handleCreate = async (
+    data: CreateFieldTask & { status: FieldTaskStatus },
+    typedDeps: TypedDepDraft[] = [],
+  ) => {
     if (!currentUserId) return;
     try {
-      await createTask(data, currentUserId, projectName, currentUserName);
+      const created = await createTask(data, currentUserId, projectName, currentUserName);
+      const newId = (created as any)?.id ?? (created as any)?.[0]?.id;
+      if (newId && typedDeps.length) {
+        await syncTypedDeps(newId, typedDeps);
+      }
       toast({ title: 'Field task created' });
       setFormOpen(false);
     } catch (err: any) {
@@ -1912,12 +2070,16 @@ export function ProjectFieldTasksPanel({
     }
   };
 
-  const handleEdit = async (data: CreateFieldTask & { status: FieldTaskStatus }) => {
+  const handleEdit = async (
+    data: CreateFieldTask & { status: FieldTaskStatus },
+    typedDeps: TypedDepDraft[] = [],
+  ) => {
     if (!editTask) return;
     try {
       await updateTask(editTask.id, data, {
         currentUserId, projectName, currentUserName, prevAssignee: editTask.assignedTo,
       });
+      await syncTypedDeps(editTask.id, typedDeps);
       toast({ title: 'Task updated' });
       setEditTask(null);
       setDetailTask(null);
@@ -2296,6 +2458,7 @@ export function ProjectFieldTasksPanel({
         allStages={allStages}
         customEntries={customEntries}
         allTasks={tasks}
+        existingTypedDeps={editTask ? predecessorsOf(editTask.id) : []}
       />
       <TaskDetailDialog
         task={detailTask}
@@ -2305,6 +2468,7 @@ export function ProjectFieldTasksPanel({
         canEdit={canEdit}
         currentUserId={currentUserId}
         currentUserName={currentUserName}
+        typedDeps={typedDepsAll}
         onClose={() => setDetailTask(null)}
         onEdit={() => { setEditTask(detailTask); setDetailTask(null); }}
         onDelete={() => detailTask && handleDelete(detailTask)}

@@ -37,6 +37,11 @@ export interface ElementRow {
   done_at: string | null;
   position: number;
   created_at: string;
+  // Progressive output tracking (added 2026-04). All nullable;
+  // when target_value IS NULL the element behaves as a binary done flag.
+  target_value: number | null;
+  current_value: number | null;
+  unit: string | null;
 }
 
 export function useTaskStatusHistory(taskId: string | undefined) {
@@ -187,5 +192,77 @@ export function useDeleteElement() {
       if (error) throw error;
     },
     onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['task-elements', vars.taskId] }),
+  });
+}
+
+// Progressive output tracking ─────────────────────────────────────────────
+// Sets / clears the quantitative target & unit on an element.
+// target_value = null ⇒ revert to binary done/not-done behaviour.
+export function useSetElementTarget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; taskId: string; target: number | null; unit: string | null }) => {
+      const patch: Record<string, unknown> = {
+        target_value: input.target,
+        unit: input.unit,
+      };
+      if (input.target === null) {
+        patch.current_value = 0;
+      }
+      const { error } = await supabase
+        .from('task_assignee_elements')
+        .update(patch)
+        .eq('id', input.id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['task-elements', vars.taskId] }),
+  });
+}
+
+// Calls the SECURITY DEFINER RPC `update_task_element_progress` which
+// validates range, writes a log row, and auto-sets done/done_at.
+export function useUpdateElementProgress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; taskId: string; value: number; note?: string }) => {
+      const { error } = await supabase.rpc('update_task_element_progress', {
+        p_element_id: input.id,
+        p_value: input.value,
+        p_note: input.note ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['task-elements', vars.taskId] });
+      qc.invalidateQueries({ queryKey: ['task-element-progress-log', vars.id] });
+    },
+  });
+}
+
+export interface ElementProgressLogRow {
+  id: string;
+  element_id: string;
+  task_id: string;
+  value: number;
+  note: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export function useElementProgressLog(elementId: string | undefined) {
+  return useQuery({
+    queryKey: ['task-element-progress-log', elementId],
+    queryFn: async () => {
+      if (!elementId) return [] as ElementProgressLogRow[];
+      const { data, error } = await supabase
+        .from('task_element_progress_log')
+        .select('*')
+        .eq('element_id', elementId)
+        .order('updated_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return (data ?? []) as ElementProgressLogRow[];
+    },
+    enabled: !!elementId,
   });
 }
