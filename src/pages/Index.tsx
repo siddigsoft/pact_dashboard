@@ -70,111 +70,41 @@ const Index = () => {
   const fetchDashboardStats = async () => {
     setIsLoadingStats(true);
     try {
-      // Get current date ranges for trend calculation
-      const now = new Date();
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-
-      // ── MMP site entries — the actual source of truth for the "Live Sites",
-      //    "Tasks Completed" and "Efficiency" tiles. The legacy queries used
-      //    `site_entries` and `site_visits` (the latter was dropped by
-      //    20250125_drop_site_visits_table.sql), which is why those tiles
-      //    were stuck at 0.
+      // ── Task #53: the landing page is publicly reachable, so we can't rely
+      //    on the viewer's RLS view of `mmp_site_entries` / `profiles` —
+      //    anonymous visitors would see zeros across the board.
       //
-      //    Status values written by the MMP module are case-mixed
-      //    ("Pending", "Dispatched", "Assigned", "Accepted", "In Progress",
-      //    "Completed", "Rejected", ...) — see src/pages/MMP.tsx. We
-      //    normalize to lowercase in JS so we don't have to enumerate every
-      //    casing variant in the SQL filter.
-      const { data: mmpEntries } = await supabase
-        .from('mmp_site_entries')
-        .select('id, status, created_at, updated_at');
+      //    Instead we call a SECURITY DEFINER RPC (`public_landing_kpis`)
+      //    that returns ONLY the aggregated numbers, granted to the `anon`
+      //    role. The aggregation logic in the RPC mirrors the previous JS
+      //    here line-for-line (status normalization, LIVE/DONE sets, 30d
+      //    windows, efficiency formula, active-teams heuristic) so the
+      //    displayed numbers are identical for logged-in vs anonymous users.
+      //    See supabase/migrations/20260426_public_landing_kpis_rpc.sql.
+      const { data, error } = await supabase.rpc('public_landing_kpis');
 
-      // Active teams (users with recent activity) — unchanged behavior.
-      const { data: activeUsers } = await supabase
-        .from('profiles')
-        .select('id, updated_at')
-        .gte('updated_at', thirtyDaysAgo.toISOString());
+      if (error) throw error;
 
-      const entries = mmpEntries ?? [];
-      const norm = (s: unknown) =>
-        String(s ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
-
-      // "Live" = currently in-progress: forwarded/dispatched/accepted but not
-      // yet closed. We exclude terminal states (completed/cancelled/rejected)
-      // and the very first "pending" stage (not yet forwarded).
-      const LIVE = new Set([
-        'dispatched', 'assigned', 'smartassigned', 'accepted',
-        'inprogress', 'ongoing', 'started',
-      ]);
-      // "Done" = completed/verified/closed.
-      const DONE = new Set(['completed', 'verified', 'closed', 'cpverified']);
-
-      const liveSites = entries.filter(e => LIVE.has(norm(e.status))).length;
-      const tasksCompleted = entries.filter(e => DONE.has(norm(e.status))).length;
-      const totalEntries = entries.length;
-
-      // Efficiency = completed / total, one decimal place.
-      const efficiency = totalEntries > 0
-        ? Math.round((tasksCompleted / totalEntries) * 1000) / 10
-        : 0;
-
-      const activeTeams = activeUsers?.length || 0;
-
-      // Trends: last 30 days vs prior 30 days, same shape as before.
-      // Live trend uses created_at (when the site entered the workflow).
-      // Completed trend uses updated_at (when status was last changed —
-      // reasonable proxy for completion time without an explicit completed_at).
-      const inWindow = (iso: string | null | undefined, start: Date, end: Date) => {
-        if (!iso) return false;
-        const d = new Date(iso);
-        return d >= start && d < end;
-      };
-
-      const recentLive = entries.filter(e =>
-        LIVE.has(norm(e.status)) && inWindow(e.created_at, thirtyDaysAgo, now)
-      ).length;
-      const olderLive = entries.filter(e =>
-        LIVE.has(norm(e.status)) && inWindow(e.created_at, sixtyDaysAgo, thirtyDaysAgo)
-      ).length;
-      const liveSitesTrend = olderLive > 0
-        ? Math.round(((recentLive - olderLive) / olderLive) * 100)
-        : (recentLive > 0 ? 100 : 0);
-
-      const recentDone = entries.filter(e => {
-        if (!DONE.has(norm(e.status))) return false;
-        return inWindow(e.updated_at || e.created_at, thirtyDaysAgo, now);
-      }).length;
-      const olderDone = entries.filter(e => {
-        if (!DONE.has(norm(e.status))) return false;
-        return inWindow(e.updated_at || e.created_at, sixtyDaysAgo, thirtyDaysAgo);
-      }).length;
-      const tasksCompletedTrend = olderDone > 0
-        ? Math.round(((recentDone - olderDone) / olderDone) * 100)
-        : (recentDone > 0 ? 100 : 0);
-
-      // Efficiency trend: compare 30-day-window efficiency to prior-30-day-window.
-      const recentTotal = entries.filter(e =>
-        inWindow(e.created_at, thirtyDaysAgo, now)
-      ).length;
-      const olderTotal = entries.filter(e =>
-        inWindow(e.created_at, sixtyDaysAgo, thirtyDaysAgo)
-      ).length;
-      const recentEff = recentTotal > 0 ? (recentDone / recentTotal) * 100 : 0;
-      const olderEff = olderTotal > 0 ? (olderDone / olderTotal) * 100 : 0;
-      const efficiencyTrend = olderEff > 0
-        ? Math.round(((recentEff - olderEff) / olderEff) * 100)
-        : (recentEff > 0 ? Math.round(recentEff) : 0);
+      const k = (data ?? {}) as Partial<{
+        live_sites: number;
+        active_teams: number;
+        tasks_completed: number;
+        efficiency: number;
+        live_sites_trend: number;
+        active_teams_trend: number;
+        tasks_completed_trend: number;
+        efficiency_trend: number;
+      }>;
 
       setStats({
-        liveSites,
-        activeTeams,
-        tasksCompleted,
-        efficiency,
-        liveSitesTrend,
-        activeTeamsTrend: activeTeams > 0 ? Math.min(Math.round(activeTeams / 5), 50) : 0,
-        tasksCompletedTrend,
-        efficiencyTrend,
+        liveSites:           Number(k.live_sites ?? 0),
+        activeTeams:         Number(k.active_teams ?? 0),
+        tasksCompleted:      Number(k.tasks_completed ?? 0),
+        efficiency:          Number(k.efficiency ?? 0),
+        liveSitesTrend:      Number(k.live_sites_trend ?? 0),
+        activeTeamsTrend:    Number(k.active_teams_trend ?? 0),
+        tasksCompletedTrend: Number(k.tasks_completed_trend ?? 0),
+        efficiencyTrend:     Number(k.efficiency_trend ?? 0),
       });
     } catch (error) {
       // One-time console.error, then fall back to zeros so the strip never
