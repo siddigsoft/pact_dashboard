@@ -16,12 +16,14 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import type { MMPFile } from '@/types';
+import { isTerminalCompletionAppStatus } from '@/utils/siteCompletionStatus';
 
 interface SiteVisit {
   id: string;
   status: string;
   dueDate?: string;
   completedAt?: string;
+  updatedAt?: string;
   fees?: { total?: number };
   mmpDetails?: { mmpId?: string };
 }
@@ -72,14 +74,22 @@ export const MonthlyComparisonCard: React.FC<MonthlyComparisonCardProps> = ({
         return false;
       });
       
+      // Bucket completed visits by completedAt (fallback to updatedAt for
+      // legacy rows missing the trigger stamp); non-completed by dueDate.
+      // Completion predicate uses the shared helper so numerator and
+      // denominator share one cohort per month.
       const monthVisits = siteVisits.filter(visit => {
-        if (!visit.dueDate) return false;
-        const visitDate = new Date(visit.dueDate);
-        return isWithinInterval(visitDate, { start: monthStart, end: monthEnd });
+        const bucketRaw = isTerminalCompletionAppStatus(visit.status)
+          ? (visit.completedAt ?? visit.updatedAt)
+          : visit.dueDate;
+        if (!bucketRaw) return false;
+        const bucketDate = new Date(bucketRaw);
+        if (Number.isNaN(bucketDate.getTime())) return false;
+        return isWithinInterval(bucketDate, { start: monthStart, end: monthEnd });
       });
-      
-      const completedVisits = monthVisits.filter(v => v.status === 'completed');
-      const pendingVisits = monthVisits.filter(v => 
+
+      const completedVisits = monthVisits.filter(v => isTerminalCompletionAppStatus(v.status));
+      const pendingVisits = monthVisits.filter(v =>
         ['pending', 'assigned', 'inProgress'].includes(v.status)
       );
       

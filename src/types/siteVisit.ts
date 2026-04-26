@@ -15,6 +15,7 @@ export interface SiteVisit {
   notes?: string;
   attachments?: string[];
   completedAt?: string;
+  updatedAt?: string;
   rating?: number;
   ratingNotes?: string;
   fees: {

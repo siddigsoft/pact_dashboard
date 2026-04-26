@@ -34,6 +34,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatDurationFromMs, medianMs } from '@/utils/duration';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -53,7 +54,7 @@ interface BudgetRow { project_id: string; total_budget_cents: number; allocated_
 interface MilestoneRow { id: string; project_id: string; title: string; status: string; due_date: string | null; updated_at: string | null; }
 interface FlowLogRow { project_id: string; advanced_at: string; }
 interface MmpRow { id: string; status: string; entries: number | null; processed_entries: number | null; hub: string | null; month: number | null; }
-interface SiteEntryRow { id: string; status: string; mmp_file_id: string; hub_office: string | null; dispatched_at: string | null; completed_at: string | null; }
+interface SiteEntryRow { id: string; status: string; mmp_file_id: string; hub_office: string | null; dispatched_at: string | null; completed_at: string | null; updated_at: string | null; }
 interface CostSubRow { id: string; status: string; total_cost_cents: number | null; }
 interface DownPayRow { id: string; status: string; requested_amount: number | null; supervisor_status: string | null; admin_status: string | null; }
 interface OpCostRow { id: string; status: string; amount_cents: number | null; tier1_status: string | null; tier2_status: string | null; }
@@ -282,7 +283,7 @@ async function fetchAll() {
     supabase.from('project_milestones').select('id, project_id, title, status, due_date, updated_at').order('due_date', { ascending: true }),
     supabase.from('project_flow_log').select('project_id, advanced_at').order('advanced_at', { ascending: false }),
     supabase.from('mmp_files').select('id, status, entries, processed_entries, hub, month').order('created_at', { ascending: false }),
-    supabase.from('mmp_site_entries').select('id, status, mmp_file_id, hub_office, dispatched_at, completed_at'),
+    supabase.from('mmp_site_entries').select('id, status, mmp_file_id, hub_office, dispatched_at, completed_at, updated_at'),
     supabase.from('site_visit_cost_submissions').select('id, status, total_cost_cents').limit(200),
     supabase.from('down_payment_requests').select('id, status, requested_amount, supervisor_status, admin_status').limit(200),
     supabase.from('operational_cost_submissions').select('id, status, amount_cents, tier1_status, tier2_status').limit(200),
@@ -932,8 +933,8 @@ export default function PortfolioDashboard() {
     return { total: equip.length, byStatus, damaged: equip.filter(e => e.status === 'damaged').length, lost: equip.filter(e => e.status === 'lost').length };
   }, [d?.equip]);
 
-  // Median time-to-complete per hub, last 30 days. Built directly off the
-  // canonical `dispatched_at` → `completed_at` pair on mmp_site_entries.
+  // Median time-to-complete per hub, last 30 days, from
+  // dispatched_at → completed_at (fallback updated_at for legacy rows).
   const hubTimeToComplete = useMemo(() => {
     const siteEntries = d?.siteEntries ?? [];
     const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -941,8 +942,13 @@ export default function PortfolioDashboard() {
     let overallSamples: number[] = [];
 
     for (const e of siteEntries) {
-      if (!e.dispatched_at || !e.completed_at) continue;
-      const completed = new Date(e.completed_at).getTime();
+      if (!e.dispatched_at) continue;
+      // Strict completion check (shared helper): only `completed`/`verified`
+      // raw statuses are eligible for updated_at fallback; intermediate states
+      // like dispatched or approved must not contribute or they skew the median.
+      const completedRaw = e.completed_at ?? (isTerminalCompletionRawStatus(e.status) ? e.updated_at : null);
+      if (!completedRaw) continue;
+      const completed = new Date(completedRaw).getTime();
       const dispatched = new Date(e.dispatched_at).getTime();
       if (!Number.isFinite(completed) || !Number.isFinite(dispatched)) continue;
       if (completed < cutoff) continue;

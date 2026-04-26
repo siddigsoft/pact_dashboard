@@ -6,6 +6,7 @@
 
 import { SiteVisit } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { isTerminalCompletionAppStatus } from '@/utils/siteCompletionStatus';
 
 interface MMPSiteEntry {
   id: string;
@@ -35,6 +36,7 @@ interface MMPSiteEntry {
   dispatched_by: string;
   dispatched_at: string;
   updated_at: string;
+  completed_at: string | null;
   enumerator_fee: number;
   transport_fee: number;
   accepted_by: string;
@@ -83,7 +85,10 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
     acceptedBy: (entry as any).accepted_by || '',
     notes: entry.comments || '',
     attachments: [],
-    completedAt: appStatus === 'completed' ? entry.updated_at : undefined,
+    // Prefer trigger-stamped completed_at; fall back to updated_at only for
+    // terminal completion-equivalent statuses (legacy backfill safety).
+    completedAt: entry.completed_at ?? (isTerminalCompletionAppStatus(appStatus) ? entry.updated_at : undefined),
+    updatedAt: entry.updated_at,
     rating: undefined,
     ratingNotes: undefined,
     fees: {
