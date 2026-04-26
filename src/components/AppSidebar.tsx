@@ -66,6 +66,8 @@
     FilePlus,
     Wallet,
     Clock,
+    Landmark,
+    Settings2,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -488,6 +490,15 @@
     }
     if (!isHidden('/finance/audit-trail') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditorRole)) {
       acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
+    }
+    if (!isHidden('/accounting/fiscal-years') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-fiscal-years', title: 'Fiscal Years & Periods', url: '/accounting/fiscal-years', icon: Calendar, priority: 5, isPinned: isPinned('/accounting/fiscal-years') });
+    }
+    if (!isHidden('/accounting/funds') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-funds', title: 'Funds', url: '/accounting/funds', icon: Landmark, priority: 6, isPinned: isPinned('/accounting/funds') });
+    }
+    if (!isHidden('/accounting/settings') && (isSuperAdmin || isAdmin)) {
+      acctItems.push({ id: 'accounting-settings', title: 'Accounting Settings', url: '/accounting/settings', icon: Settings2, priority: 7, isPinned: isPinned('/accounting/settings') });
     }
     if (acctItems.length) groups.push({ id: 'finance-accounting', label: 'Accounting', order: 5.5, items: acctItems, parentGroup: 'finance' } as any);
 

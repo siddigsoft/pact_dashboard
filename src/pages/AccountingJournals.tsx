@@ -4,11 +4,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader2, Search, Download, RefreshCw, FileText, Eye } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, Search, Download, RefreshCw, FileText, Eye, Plus, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -53,9 +55,26 @@ interface Line {
 
 const PAGE_SIZE = 50;
 
+interface NewLine {
+  account_id: string;
+  fund_id: string;
+  function: string;
+  debit_credit: 'DR' | 'CR';
+  amount: string;
+  currency: string;
+  description: string;
+}
+
+const BLANK_LINE = (): NewLine => ({
+  account_id: '', fund_id: '', function: 'none',
+  debit_credit: 'DR', amount: '', currency: 'SDG', description: '',
+});
+
 export default function AccountingJournals() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
-  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const canPost   = hasAnyRole(['super_admin', 'finance', 'accountant']);
+  const { toast } = useToast();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -74,6 +93,80 @@ export default function AccountingJournals() {
   const [openEntry, setOpenEntry] = useState<Entry | null>(null);
   const [openLines, setOpenLines] = useState<Line[]>([]);
   const [linesLoading, setLinesLoading] = useState(false);
+
+  // ── New entry form ──────────────────────────────────────
+  const [newOpen, setNewOpen]           = useState(false);
+  const [newPeriodId, setNewPeriodId]   = useState('');
+  const [newDate, setNewDate]           = useState('');
+  const [newDescEn, setNewDescEn]       = useState('');
+  const [newDescAr, setNewDescAr]       = useState('');
+  const [newLines, setNewLines]         = useState<NewLine[]>([BLANK_LINE(), BLANK_LINE()]);
+  const [submitting, setSubmitting]     = useState(false);
+
+  const openNewEntry = () => {
+    const firstOpen = periods.find(p => p.status === 'open');
+    setNewPeriodId(firstOpen?.id ?? '');
+    setNewDate(new Date().toISOString().slice(0, 10));
+    setNewDescEn('');
+    setNewDescAr('');
+    setNewLines([BLANK_LINE(), BLANK_LINE()]);
+    setNewOpen(true);
+  };
+
+  const setLineField = (idx: number, k: keyof NewLine, v: string) =>
+    setNewLines(prev => prev.map((l, i) => i === idx ? { ...l, [k]: v } : l));
+
+  const addLine = () => setNewLines(prev => [...prev, BLANK_LINE()]);
+  const removeLine = (idx: number) => setNewLines(prev => prev.filter((_, i) => i !== idx));
+
+  const newLineDrTotal = newLines.reduce((s, l) => l.debit_credit === 'DR' ? s + (Number(l.amount) || 0) : s, 0);
+  const newLineCrTotal = newLines.reduce((s, l) => l.debit_credit === 'CR' ? s + (Number(l.amount) || 0) : s, 0);
+  const newBalanced    = Math.abs(newLineDrTotal - newLineCrTotal) < 0.005;
+
+  const submitEntry = async () => {
+    if (!newPeriodId) { toast({ title: 'Select a period', variant: 'destructive' }); return; }
+    if (!newDescEn.trim()) { toast({ title: 'English description is required', variant: 'destructive' }); return; }
+    if (newLines.length < 2) { toast({ title: 'At least 2 lines required', variant: 'destructive' }); return; }
+    if (!newBalanced) { toast({ title: 'Debits and credits must balance', variant: 'destructive' }); return; }
+    for (const [i, l] of newLines.entries()) {
+      if (!l.account_id) { toast({ title: `Line ${i + 1}: select an account`, variant: 'destructive' }); return; }
+      if (!l.fund_id)    { toast({ title: `Line ${i + 1}: select a fund`,    variant: 'destructive' }); return; }
+      if (!l.amount || Number(l.amount) <= 0) { toast({ title: `Line ${i + 1}: enter a positive amount`, variant: 'destructive' }); return; }
+    }
+    setSubmitting(true);
+    const payload = {
+      period_id:      newPeriodId,
+      posting_date:   newDate,
+      description_en: newDescEn.trim(),
+      description_ar: newDescAr.trim() || null,
+      source_type:    'manual',
+      lines: newLines.map((l, idx) => ({
+        account_id:          l.account_id,
+        fund_id:             l.fund_id,
+        function:            l.function,
+        debit_credit:        l.debit_credit,
+        functional_amount:   Number(l.amount),
+        original_amount:     Number(l.amount),
+        original_currency:   l.currency,
+        functional_currency: 'SDG',
+        description:         l.description || null,
+        line_no:             idx + 1,
+      })),
+    };
+    const idempotencyKey = `manual-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { data: entryId, error: err } = await supabase.rpc('acct_post_journal', {
+      p_payload: payload,
+      p_idempotency_key: idempotencyKey,
+    });
+    setSubmitting(false);
+    if (err) {
+      toast({ title: 'Post failed', description: err.message, variant: 'destructive' });
+    } else {
+      toast({ title: `Journal entry posted (${String(entryId).slice(0, 8)}…)` });
+      setNewOpen(false);
+      void loadAll();
+    }
+  };
 
   const loadAll = async () => {
     setLoading(true);
@@ -202,6 +295,11 @@ export default function AccountingJournals() {
           </p>
         </div>
         <div className="flex gap-2">
+          {canPost && (
+            <Button size="sm" onClick={openNewEntry} data-testid="button-new-entry">
+              <Plus className="w-4 h-4 mr-1" /> New Entry
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => void loadAll()} data-testid="button-refresh">
             <RefreshCw className="w-4 h-4 mr-1" /> Refresh
           </Button>
@@ -316,6 +414,198 @@ export default function AccountingJournals() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── New Journal Entry Dialog ── */}
+      <Dialog open={newOpen} onOpenChange={o => !o && setNewOpen(false)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-new-entry">
+          <DialogHeader>
+            <DialogTitle>New Manual Journal Entry</DialogTitle>
+            <DialogDescription>
+              Balanced double-entry — debits must equal credits before posting. All lines are immutable once posted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Header row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1 sm:col-span-2">
+                <Label>Accounting Period *</Label>
+                <Select value={newPeriodId} onValueChange={setNewPeriodId}>
+                  <SelectTrigger data-testid="select-new-period"><SelectValue placeholder="Select open period…" /></SelectTrigger>
+                  <SelectContent>
+                    {periods.filter(p => p.status === 'open').map(p => (
+                      <SelectItem key={p.id} value={p.id}>{periodLabel(p.id)}</SelectItem>
+                    ))}
+                    {periods.filter(p => p.status !== 'open').length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase font-semibold">Closed / Locked</div>
+                        {periods.filter(p => p.status !== 'open').map(p => (
+                          <SelectItem key={p.id} value={p.id} className="text-muted-foreground">{periodLabel(p.id)} ({p.status})</SelectItem>
+                        ))}
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Posting Date *</Label>
+                <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} data-testid="input-new-date" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Description (English) *</Label>
+                <Input placeholder="Payroll August 2026…" value={newDescEn} onChange={e => setNewDescEn(e.target.value)} data-testid="input-new-desc-en" />
+              </div>
+              <div className="space-y-1">
+                <Label>Description (Arabic)</Label>
+                <Input dir="rtl" lang="ar" placeholder="رواتب أغسطس 2026…" value={newDescAr} onChange={e => setNewDescAr(e.target.value)} data-testid="input-new-desc-ar" />
+              </div>
+            </div>
+
+            {/* Balance indicator */}
+            <div className={cn(
+              'flex items-center gap-3 rounded-lg border px-4 py-2 text-sm',
+              newBalanced ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+            )}>
+              <div>DR: <strong>{formatNumber(newLineDrTotal)}</strong></div>
+              <div>CR: <strong>{formatNumber(newLineCrTotal)}</strong></div>
+              <div className="ml-auto">
+                {newBalanced
+                  ? <Badge variant="outline" className="text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200">Balanced ✓</Badge>
+                  : <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-800 border-amber-200">Off by {formatNumber(Math.abs(newLineDrTotal - newLineCrTotal))}</Badge>
+                }
+              </div>
+            </div>
+
+            {/* Lines table */}
+            <div className="border rounded-md overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-2 py-2 w-8">#</th>
+                    <th className="text-left px-2 py-2">Account</th>
+                    <th className="text-left px-2 py-2">Fund</th>
+                    <th className="text-left px-2 py-2 w-24">Function</th>
+                    <th className="text-left px-2 py-2 w-16">DR/CR</th>
+                    <th className="text-left px-2 py-2 w-28">Amount</th>
+                    <th className="text-left px-2 py-2 w-16">CCY</th>
+                    <th className="text-left px-2 py-2">Note</th>
+                    <th className="w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {newLines.map((l, idx) => (
+                    <tr key={idx} className="border-t" data-testid={`new-line-row-${idx}`}>
+                      <td className="px-2 py-1.5 font-mono">{idx + 1}</td>
+                      <td className="px-2 py-1.5">
+                        <Select value={l.account_id} onValueChange={v => setLineField(idx, 'account_id', v)}>
+                          <SelectTrigger className="h-7 text-xs min-w-[160px]" data-testid={`select-line-account-${idx}`}>
+                            <SelectValue placeholder="Select…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(accountsMap).map(([id, a]) => (
+                              <SelectItem key={id} value={id}>{a.code} — {a.name_en}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Select value={l.fund_id} onValueChange={v => setLineField(idx, 'fund_id', v)}>
+                          <SelectTrigger className="h-7 text-xs min-w-[120px]" data-testid={`select-line-fund-${idx}`}>
+                            <SelectValue placeholder="Select…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(fundsMap).map(([id, f]) => (
+                              <SelectItem key={id} value={id}>{f.code} — {f.name_en}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-7 text-xs w-24"
+                          placeholder="none"
+                          value={l.function}
+                          onChange={e => setLineField(idx, 'function', e.target.value)}
+                          data-testid={`input-line-function-${idx}`}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Select value={l.debit_credit} onValueChange={v => setLineField(idx, 'debit_credit', v as 'DR' | 'CR')}>
+                          <SelectTrigger className="h-7 text-xs w-16" data-testid={`select-line-dc-${idx}`}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DR"><span className="text-emerald-700 font-semibold">DR</span></SelectItem>
+                            <SelectItem value="CR"><span className="text-rose-700 font-semibold">CR</span></SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="h-7 text-xs w-28"
+                          placeholder="0.00"
+                          value={l.amount}
+                          onChange={e => setLineField(idx, 'amount', e.target.value)}
+                          data-testid={`input-line-amount-${idx}`}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-7 text-xs w-14"
+                          value={l.currency}
+                          onChange={e => setLineField(idx, 'currency', e.target.value.toUpperCase())}
+                          maxLength={3}
+                          data-testid={`input-line-ccy-${idx}`}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-7 text-xs"
+                          placeholder="Optional note…"
+                          value={l.description}
+                          onChange={e => setLineField(idx, 'description', e.target.value)}
+                          data-testid={`input-line-desc-${idx}`}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {newLines.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLine(idx)}
+                            className="p-1 rounded hover:bg-rose-50 text-rose-500"
+                            title="Remove line"
+                            data-testid={`button-remove-line-${idx}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <Button variant="outline" size="sm" className="text-xs" onClick={addLine} data-testid="button-add-line">
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add Line
+            </Button>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewOpen(false)} disabled={submitting}>Cancel</Button>
+            <Button
+              onClick={() => void submitEntry()}
+              disabled={submitting || !newBalanced}
+              data-testid="button-submit-entry"
+            >
+              {submitting ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Posting…</> : 'Post Journal Entry'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!openEntry} onOpenChange={o => !o && setOpenEntry(null)}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
