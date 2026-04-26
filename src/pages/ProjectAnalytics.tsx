@@ -162,17 +162,43 @@ function fmtMoney(cents: number, currency = 'SDG'): string {
   return `${currency} ${cents.toFixed(0)}`;
 }
 
-function getProjectBudgetCents(p: ProjectRow, budgetMap: Record<string, BudgetRow>): { total: number; spent: number; currency: string } {
+function getProjectBudgetCents(
+  p: ProjectRow,
+  budgetMap: Record<string, BudgetRow>,
+  actualSpentByProject: Record<string, number> = {},
+): { total: number; spent: number; currency: string } {
+  // Real disbursements pulled from operational_cost_submissions (per-project).
+  // We use Math.max(budget_table_spent, real_disbursements) so the dashboard
+  // never under-reports actual spend, even when project_budgets.spent_budget_cents
+  // is sparse (the most common case).
+  const realSpent = actualSpentByProject[p.id] ?? 0;
   const dbBudget = budgetMap[p.id];
   if (dbBudget) {
-    return { total: dbBudget.total_budget_cents ?? 0, spent: dbBudget.spent_budget_cents ?? 0, currency: 'SDG' };
+    const tableSpent = dbBudget.spent_budget_cents ?? 0;
+    return {
+      total: dbBudget.total_budget_cents ?? 0,
+      spent: Math.max(tableSpent, realSpent),
+      currency: 'SDG',
+    };
   }
   const jb = p.budget;
   if (jb) {
-    if (jb.totalBudgetCents != null) return { total: jb.totalBudgetCents, spent: jb.spentBudgetCents ?? 0, currency: jb.currency ?? 'SDG' };
-    if (jb.total != null) return { total: (jb.total ?? 0) * 100, spent: 0, currency: jb.currency ?? 'SDG' };
+    if (jb.totalBudgetCents != null) {
+      return {
+        total: jb.totalBudgetCents,
+        spent: Math.max(jb.spentBudgetCents ?? 0, realSpent),
+        currency: jb.currency ?? 'SDG',
+      };
+    }
+    if (jb.total != null) {
+      return {
+        total: (jb.total ?? 0) * 100,
+        spent: realSpent,
+        currency: jb.currency ?? 'SDG',
+      };
+    }
   }
-  return { total: 0, spent: 0, currency: 'SDG' };
+  return { total: 0, spent: realSpent, currency: 'SDG' };
 }
 
 type SortField = 'name' | 'type' | 'stage' | 'daysSince';
@@ -242,6 +268,79 @@ export default function ProjectAnalytics() {
         .from('project_milestones')
         .select('id, project_id, status, due_date, title');
       return (data ?? []) as MilestoneRow[];
+    },
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
+  });
+
+  // ── Real disbursements (mirrors PortfolioDashboard formula) ──────────────────
+  // Why three tables: project_budgets.spent_budget_cents is sparsely populated
+  // in this org's data, so the dashboard would show "Total Spent SDG 0" even
+  // when millions had been disbursed. We pull from the actual money-movement
+  // tables (op cost submissions, down-payments, site-visit cost submissions)
+  // and roll them up into per-project actuals + an org-wide total.
+  // Anti-double-count: a paid down-payment that later gets reconciled into a
+  // cost submission would otherwise be counted twice. We use Math.max() at
+  // the org level so the larger of (down_pays_paid, cost_subs_approved)
+  // wins, never the sum. Limit 5000 keeps growth headroom.
+  const { data: opCostsRaw = [] } = useQuery({
+    queryKey: ['analytics_op_costs'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('operational_cost_submissions')
+        .select('id, project_id, amount_cents, status, tier1_status, tier2_status')
+        .limit(5000);
+      return (data ?? []) as Array<{
+        id: string;
+        project_id: string | null;
+        amount_cents: number | null;
+        status: string | null;
+        tier1_status: string | null;
+        tier2_status: string | null;
+      }>;
+    },
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
+  });
+
+  // down_payment_requests stores `requested_amount` as NUMERIC (whole units),
+  // NOT cents. PortfolioDashboard multiplies by 100 to get cents — we mirror
+  // that exactly for consistency. No project_id column on this table, so the
+  // total only feeds the org-wide spent KPI, not per-project utilisation.
+  const { data: downPaysRaw = [] } = useQuery({
+    queryKey: ['analytics_down_pays'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('down_payment_requests')
+        .select('id, status, requested_amount, supervisor_status, admin_status')
+        .limit(5000);
+      return (data ?? []) as Array<{
+        id: string;
+        status: string | null;
+        requested_amount: number | null;
+        supervisor_status: string | null;
+        admin_status: string | null;
+      }>;
+    },
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
+  });
+
+  // site_visit_cost_submissions uses `total_cost_cents` (already cents) and is
+  // linked via site_visit_id only — no direct project_id. Org-wide aggregate
+  // only.
+  const { data: costSubsRaw = [] } = useQuery({
+    queryKey: ['analytics_cost_subs'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('site_visit_cost_submissions')
+        .select('id, status, total_cost_cents')
+        .limit(5000);
+      return (data ?? []) as Array<{
+        id: string;
+        status: string | null;
+        total_cost_cents: number | null;
+      }>;
     },
     staleTime: 300_000,
     refetchOnWindowFocus: false,
@@ -363,36 +462,116 @@ export default function ProjectAnalytics() {
   }, [projects]);
 
   // ── Financial analytics ──────────────────────────────────────────────────────
+  // Build a per-project map of actual operational spend so each project's
+  // utilisation reflects real disbursements, not the often-empty
+  // project_budgets.spent_budget_cents column. Only op_costs has project_id;
+  // down_payments and site_visit_cost_submissions don't and feed only the
+  // org-wide total below. Filtered by activeProjectIds so when the user
+  // applies project / PM / client / date filters, the financial KPIs and the
+  // chart all respect the same scope (otherwise the per-project sum and the
+  // org-wide total would draw from different datasets and the cards would
+  // disagree with the chart bars).
+  const opCostsApprovedByProject = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const o of opCostsRaw) {
+      if (!o.project_id || !activeProjectIds.has(o.project_id)) continue;
+      const s = (o.status ?? '').toLowerCase();
+      const t1 = (o.tier1_status ?? '').toLowerCase();
+      const t2 = (o.tier2_status ?? '').toLowerCase();
+      const isApproved = s === 'approved' || s === 'paid' || (t1 === 'approved' && (t2 === 'approved' || t2 === 'paid'));
+      if (!isApproved) continue;
+      m[o.project_id] = (m[o.project_id] ?? 0) + (o.amount_cents ?? 0);
+    }
+    return m;
+  }, [opCostsRaw, activeProjectIds]);
+
   const financialStats = useMemo(() => {
-    let totalBudget = 0, totalSpent = 0, projectsWithBudget = 0;
+    let totalBudget = 0;
+    let projectsWithBudget = 0;
+    let projectsOverBudgetCount = 0;
     const byProject: { name: string; budget: number; spent: number; util: number }[] = [];
+    let perProjectSpentTotal = 0;
     for (const p of projects) {
-      const { total, spent } = getProjectBudgetCents(p, budgetMap);
+      const { total, spent } = getProjectBudgetCents(p, budgetMap, opCostsApprovedByProject);
       if (total > 0) {
         totalBudget += total;
-        totalSpent += spent;
+        perProjectSpentTotal += spent;
         projectsWithBudget++;
+        const util = total > 0 ? Math.round((spent / total) * 100) : 0;
+        if (util > 100) projectsOverBudgetCount++;
         byProject.push({
           name: p.project_code ? `[${p.project_code}]` : p.name.slice(0, 20),
           budget: total,
           spent,
-          util: Math.round((spent / total) * 100),
+          util,
         });
       }
     }
-    const overBudget = byProject.filter(b => b.util > 100).length;
-    const avgUtil = projectsWithBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
-    return { totalBudget, totalSpent, remaining: totalBudget - totalSpent, projectsWithBudget, overBudget, avgUtil, byProject: byProject.sort((a, b) => b.budget - a.budget).slice(0, 10) };
-  }, [projects, budgetMap]);
 
+    // Org-wide actual spend — same anti-double-count formula as PortfolioDashboard
+    // KPI card: opCosts (always added) + Math.max(downPaysPaid, costSubsApproved)
+    // because a down-payment is later reconciled into a cost submission.
+    // op_costs are summed from the already-filtered map so the result respects
+    // any project / PM / client / date filter the user has applied.
+    const opCostsApprovedTotal = Object.values(opCostsApprovedByProject)
+      .reduce((sum, v) => sum + v, 0);
+    // down_payments and site_visit_cost_submissions don't carry a project_id,
+    // so we can only fold them in when the user has not narrowed the view to
+    // a subset of projects. With filters active these unscoped buckets get
+    // skipped to avoid mixing scopes (a paid down-payment for project A
+    // shouldn't inflate the spent KPI when the user is filtered to project B).
+    const filtersActive =
+      projectIdFilter !== 'all' ||
+      clientTypeFilter !== 'all' ||
+      pmFilter !== 'all' ||
+      startFrom !== '' ||
+      startTo !== '';
+    const downPaysPaidTotal = filtersActive ? 0 : downPaysRaw
+      .filter(dp => {
+        const s = (dp.status ?? '').toLowerCase();
+        const a = (dp.admin_status ?? '').toLowerCase();
+        return s === 'paid' || s === 'approved' || a === 'paid' || a === 'approved';
+      })
+      .reduce((sum, dp) => sum + (dp.requested_amount ?? 0) * 100, 0);
+    const costSubsApprovedTotal = filtersActive ? 0 : costSubsRaw
+      .filter(c => { const s = (c.status ?? '').toLowerCase(); return s === 'approved' || s === 'paid'; })
+      .reduce((sum, c) => sum + (c.total_cost_cents ?? 0), 0);
+    const orgWideActualSpent = opCostsApprovedTotal + Math.max(downPaysPaidTotal, costSubsApprovedTotal);
+
+    // Use the larger of (sum of per-project spends) and (org-wide actuals)
+    // so the KPI never under-reports when org-wide cash moves don't carry a
+    // project_id (down payments and site-visit cost subs have no FK back to
+    // projects in this schema).
+    const totalSpent = Math.max(perProjectSpentTotal, orgWideActualSpent);
+    const avgUtil = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+
+    return {
+      totalBudget,
+      totalSpent,
+      remaining: Math.max(0, totalBudget - totalSpent),
+      projectsWithBudget,
+      overBudget: projectsOverBudgetCount,
+      avgUtil,
+      byProject: byProject.sort((a, b) => b.budget - a.budget).slice(0, 10),
+    };
+  }, [projects, budgetMap, opCostsApprovedByProject, opCostsRaw, downPaysRaw, costSubsRaw]);
+
+  // Roll up budget status across ALL filtered projects, not just rows in the
+  // sparse `project_budgets` table. Projects without a budget row get bucketed
+  // as "No Budget Yet" so the donut shows the real coverage gap instead of
+  // misleading "Draft: 2".
   const budgetStatusDist = useMemo(() => {
     const counts: Record<string, number> = {};
-    budgetsRaw.forEach(b => {
-      const key = b.status || 'unknown';
+    for (const p of projects) {
+      const b = budgetMap[p.id];
+      const raw = b?.status ?? null;
+      const key = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'No Budget Yet';
       counts[key] = (counts[key] ?? 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }));
-  }, [budgetsRaw]);
+    }
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [projects, budgetMap]);
 
   const projectStartsByMonth = useMemo(() => {
     const m: Record<string, number> = {};
@@ -407,17 +586,35 @@ export default function ProjectAnalytics() {
   }, [projects]);
 
   // ── Operational analytics ────────────────────────────────────────────────────
+  // Status helpers are tolerant of multiple spellings because project_field_tasks
+  // and personal_tasks each use a different convention ('completed' vs 'done',
+  // 'in_progress' vs 'inprogress' vs 'in-progress'). Without these helpers the
+  // dashboard counted real tasks as zero — same root cause as the org-wide
+  // task health bug fixed in PortfolioDashboard.
+  const isTaskDone = (s: string | null | undefined) => {
+    const v = (s ?? '').toLowerCase();
+    return v === 'completed' || v === 'done' || v === 'closed';
+  };
+  const isTaskInProgress = (s: string | null | undefined) => {
+    const v = (s ?? '').toLowerCase();
+    return v === 'in_progress' || v === 'inprogress' || v === 'in-progress' || v === 'doing' || v === 'started';
+  };
+  const isTaskTodo = (s: string | null | undefined) => {
+    const v = (s ?? '').toLowerCase();
+    return v === 'todo' || v === 'pending' || v === 'open' || v === 'new' || v === '';
+  };
+
   const taskStats = useMemo(() => {
     const total = fieldTasks.length;
-    const completed = fieldTasks.filter(t => t.status === 'completed').length;
-    const inProgress = fieldTasks.filter(t => t.status === 'in_progress').length;
+    const completed = fieldTasks.filter(t => isTaskDone(t.status)).length;
+    const inProgress = fieldTasks.filter(t => isTaskInProgress(t.status)).length;
     const now = new Date();
     const overdue = fieldTasks.filter(t => {
-      if (t.status === 'completed') return false;
+      if (isTaskDone(t.status)) return false;
       const d = safeDate(t.due_date);
       return d ? d < now : false;
     }).length;
-    const todo = fieldTasks.filter(t => t.status === 'todo' || t.status === 'pending').length;
+    const todo = fieldTasks.filter(t => isTaskTodo(t.status)).length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     const estHours = fieldTasks.reduce((s, t) => s + (t.estimated_hours ?? 0), 0);

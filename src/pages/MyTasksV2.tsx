@@ -12,12 +12,15 @@ import {
   CheckSquare, Circle, Zap, ChevronDown, ChevronUp,
   Inbox, Archive, Star, AlertTriangle, Flag,
   Brain, Coffee, Moon, ArrowRight, BarChart3, Users, Layers, Paperclip, Pencil, BookOpen,
-  Share2, Globe, Shield, Folder, ExternalLink, FileText, FileImage,
+  Share2, Globe, Shield, Folder, ExternalLink, FileText, FileImage, History,
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { TaskInsightsTabs } from '@/components/tasks/TaskInsightsTabs';
+import { useTaskActivity, useTaskElements, useTaskStatusHistory } from '@/hooks/useTaskActivity';
+import { STATUS_LABELS, STATUS_COLORS } from '@/hooks/usePersonalTasks';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -3992,6 +3995,217 @@ function ShareTaskAttachmentsDialog({
   );
 }
 
+// ── Inbox rich-detail extras ─────────────────────────────────────────────────
+// Renders the same cards the full /tasks/:id page shows, scoped to the
+// currently-selected inbox row: hours summary, output elements with progress
+// bars, and the consolidated Approvals / Dependencies / Activity tabs.
+// Why a separate component: the data hooks (useTaskActivity, useTaskElements,
+// useTaskStatusHistory) need a stable taskId, so isolating them lets us mount
+// and unmount cleanly as the user clicks between rows without re-firing the
+// inbox list query.
+function InboxTaskDetailExtras({
+  taskId,
+  fullTask,
+}: {
+  taskId: string;
+  fullTask: Record<string, unknown> | null | undefined;
+}) {
+  const { data: history = [] } = useTaskStatusHistory(taskId);
+  const { data: elements = [] } = useTaskElements(taskId);
+  const { data: activity = [] } = useTaskActivity(taskId);
+
+  type CoAssignee = {
+    id?: string;
+    name?: string;
+    hours?: number | null;
+    actual_hours?: number | null;
+    actual_hours_confirmed_at?: string | null;
+  };
+  const cos = (Array.isArray(fullTask?.co_assignees) ? fullTask?.co_assignees : []) as CoAssignee[];
+  const assignedToName = (fullTask?.assigned_to_name as string | null) ?? null;
+
+  type HoursRow = { id: string; name: string; planned: number | null; actual: number | null; confirmed: boolean };
+  const hoursRows: HoursRow[] = [];
+  if (fullTask?.assigned_to) {
+    hoursRows.push({
+      id: String(fullTask.assigned_to),
+      name: assignedToName ?? 'Primary assignee',
+      planned: (fullTask.estimated_hours as number | null) ?? null,
+      actual: (fullTask.actual_hours as number | null) ?? null,
+      confirmed: !!fullTask.actual_hours_confirmed_at,
+    });
+  }
+  for (const c of cos) {
+    hoursRows.push({
+      id: c.id ?? Math.random().toString(36),
+      name: c.name ?? 'Co-assignee',
+      planned: c.hours ?? null,
+      actual: c.actual_hours ?? null,
+      confirmed: !!c.actual_hours_confirmed_at,
+    });
+  }
+  const totalPlanned = hoursRows.reduce((s, r) => s + (r.planned ?? 0), 0);
+  const totalActual = hoursRows.reduce((s, r) => s + (r.actual ?? 0), 0);
+  const hoursPct = totalPlanned > 0 ? Math.min(100, Math.round((totalActual / totalPlanned) * 100)) : 0;
+
+  return (
+    <div className="space-y-4 mb-5">
+      {/* Hours / timesheet summary — read-only here. Editing remains on /tasks/:id. */}
+      {hoursRows.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4" data-testid="inbox-hours-card">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" /> Hours & Timesheet
+            </h3>
+            <span className="text-[11px] text-slate-500">
+              <span className="font-semibold text-slate-700">{totalActual.toFixed(2)}h</span>
+              {' / '}{totalPlanned.toFixed(1)}h planned
+            </span>
+          </div>
+          {totalPlanned > 0 && (
+            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mb-3" aria-hidden>
+              <div
+                className={cn('h-full', hoursPct > 100 ? 'bg-amber-500' : hoursPct >= 90 ? 'bg-emerald-500' : 'bg-emerald-400')}
+                style={{ width: `${Math.min(100, hoursPct)}%` }}
+              />
+            </div>
+          )}
+          <ul className="divide-y divide-slate-100">
+            {hoursRows.map(r => (
+              <li key={r.id} className="py-2 flex items-center gap-2 text-[12px]" data-testid={`inbox-hours-row-${r.id}`}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-slate-800 truncate" title={r.name}>{r.name}</p>
+                  <p className="text-[10px] text-slate-400">planned {r.planned != null ? `${r.planned}h` : '—'}</p>
+                </div>
+                <span className="text-[12px] font-semibold text-slate-700 tabular-nums">
+                  {r.actual != null ? `${r.actual}h` : '—'}
+                </span>
+                {r.confirmed && (
+                  <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-semibold">
+                    <Check className="w-2.5 h-2.5" /> Confirmed
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-slate-400 mt-2">Open the full task to log or confirm hours.</p>
+        </div>
+      )}
+
+      {/* Output Elements — read-only progress + checkboxes. */}
+      {elements.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4" data-testid="inbox-elements-card">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+              <ListTodo className="w-3.5 h-3.5" /> Output Elements
+            </h3>
+            <span className="text-[11px] text-slate-500">
+              {elements.filter(e => e.done).length} / {elements.length} done
+            </span>
+          </div>
+          <ul className="space-y-2">
+            {elements.map(el => {
+              const target = (el as { target_value?: number | null }).target_value ?? null;
+              const current = (el as { current_value?: number | null }).current_value ?? null;
+              const unit = (el as { unit?: string | null }).unit ?? '';
+              const pct = target && target > 0 ? Math.min(100, Math.round(((current ?? 0) / target) * 100)) : null;
+              return (
+                <li key={el.id} className="text-[12px]" data-testid={`inbox-element-${el.id}`}>
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      'w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0',
+                      el.done ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-300',
+                    )}>
+                      {el.done && <Check className="w-2.5 h-2.5 text-white" />}
+                    </div>
+                    <span className={cn('flex-1 min-w-0 truncate', el.done ? 'line-through text-slate-400' : 'text-slate-700')}>
+                      {el.label}
+                    </span>
+                    {target != null && target > 0 && (
+                      <span className="text-[10px] font-semibold text-slate-500 tabular-nums">
+                        {(current ?? 0).toString()} / {target}{unit ? ` ${unit}` : ''}
+                      </span>
+                    )}
+                  </div>
+                  {pct != null && (
+                    <div className="ml-5 mt-1 h-1 w-full bg-slate-100 rounded-full overflow-hidden" aria-hidden>
+                      <div
+                        className={cn('h-full', pct >= 100 ? 'bg-emerald-500' : 'bg-blue-400')}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  )}
+                  {el.assignee_name && (
+                    <p className="ml-5 mt-0.5 text-[10px] text-slate-400">Owner: {el.assignee_name}</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Approvals / Dependencies / Activity tabs — same component the full
+          task page uses, so badges and behavior stay in lock-step. */}
+      <TaskInsightsTabs
+        taskId={taskId}
+        historyCount={history.length}
+        historyChildren={
+          history.length === 0 ? (
+            <div className="text-center py-5 text-slate-500" data-testid="inbox-empty-history">
+              <History className="mx-auto mb-2 h-7 w-7 text-slate-300" />
+              <p className="text-[12px] font-medium text-slate-700">No status changes yet</p>
+            </div>
+          ) : (
+            <ol className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {history.map(h => (
+                <li key={h.id} className="flex items-start gap-2 text-[11px]" data-testid={`inbox-hist-${h.id}`}>
+                  <div className={cn(
+                    'w-2 h-2 rounded-full mt-1.5 shrink-0',
+                    STATUS_COLORS[h.to_status as keyof typeof STATUS_COLORS]?.split(' ')[0] ?? 'bg-slate-300',
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-700">
+                      {h.from_status ? `${STATUS_LABELS[h.from_status as keyof typeof STATUS_LABELS] ?? h.from_status} → ` : ''}
+                      {STATUS_LABELS[h.to_status as keyof typeof STATUS_LABELS] ?? h.to_status}
+                    </p>
+                    <p className="text-slate-400 text-[10px]">
+                      {h.changed_by_name ?? 'Someone'} • {(() => { try { return format(parseISO(h.created_at), 'PP p'); } catch { return ''; } })()}
+                    </p>
+                    {h.reason && <p className="text-slate-500 italic mt-0.5">"{h.reason}"</p>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )
+        }
+      />
+
+      {/* Recent activity (notes / comments timeline) — last 5 items. */}
+      {activity.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4" data-testid="inbox-activity-card">
+          <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5 mb-3">
+            <BookOpen className="w-3.5 h-3.5" /> Recent Activity
+          </h3>
+          <ul className="space-y-2">
+            {activity.slice(0, 5).map(a => (
+              <li key={a.id} className="text-[11px]" data-testid={`inbox-activity-${a.id}`}>
+                <p className="text-slate-700">
+                  <span className="font-semibold">{a.user_name ?? 'Someone'}</span>{' '}
+                  <span className="text-slate-500">— {a.body ?? a.kind}</span>
+                </p>
+                <p className="text-[9px] text-slate-400 mt-0.5">
+                  {(() => { try { return format(parseISO(a.created_at), 'PP p'); } catch { return ''; } })()}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave, onAddTask, currentUserId }: InboxViewProps) {
   const [activeFolder, setActiveFolder] = useState<InboxFolder>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -4020,6 +4234,30 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
     const found = selectedId ? folderTasks.find(t => t.id === selectedId) : null;
     return found ?? folderTasks[0] ?? null;
   }, [selectedId, folderTasks]);
+
+  // Fetch the full task row when the user picks one. The inbox list query
+  // returns only display fields; the rich detail panel needs co_assignees,
+  // assignee names, hours, and project links — so we re-fetch on demand.
+  // staleTime keeps a snappy feel while the user clicks between rows.
+  const { data: fullTask } = useQuery({
+    queryKey: ['inbox-task-full', selected?.id],
+    enabled: !!selected?.id,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('personal_tasks')
+        .select(`
+          id, title, description, notes, status, priority, due_date,
+          assigned_to, assigned_to_name, created_by, created_by_name,
+          estimated_hours, actual_hours, actual_hours_confirmed_at,
+          co_assignees, project_id, category, recurrence, recurrence_end_date,
+          tags, attachments, created_at, updated_at
+        `)
+        .eq('id', selected!.id)
+        .maybeSingle();
+      return (data ?? null) as Record<string, unknown> | null;
+    },
+  });
 
   useEffect(() => {
     setNoteText(selected?.notes ?? '');
@@ -4212,6 +4450,16 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
             >
               <Edit2 className="w-4 h-4" /> Edit
             </button>
+            {/* Deep-link to full task page — gives users access to the editing
+                surfaces (status menu, dependency picker, work-session timer,
+                attachments uploader) that don't fit in the inline panel. */}
+            <Link
+              to={`/tasks/${selected.id}`}
+              data-testid="inbox-open-full-task"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-[12px] hover:bg-slate-50 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" /> Open full task
+            </Link>
             <button
               className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 ml-auto"
               onClick={() => onEdit(selected)}
@@ -4278,15 +4526,31 @@ function InboxView({ tasks, isLoading, isUpdating, onEdit, onToggleDone, onSave,
               </div>
             )}
 
-            {/* Description */}
+            {/* Description — rendered as rich HTML so headings, lists, and
+                links the user added in the editor are preserved. The full task
+                page uses TaskRichEditor in read mode; we mirror the same
+                "prose" container so the visual treatment matches. */}
             {selected.description && stripHtml(selected.description) && (
-              <div className="bg-slate-50 rounded-xl p-5 mb-5">
-                <p className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">{stripHtml(selected.description)}</p>
+              <div className="bg-slate-50 rounded-xl p-5 mb-5" data-testid="inbox-description">
+                <div
+                  className="prose prose-sm max-w-none text-[14px] text-slate-700 leading-relaxed
+                             prose-headings:text-slate-800 prose-a:text-blue-600
+                             prose-strong:text-slate-800 prose-ul:my-2 prose-ol:my-2"
+                  dangerouslySetInnerHTML={{ __html: selected.description }}
+                />
               </div>
             )}
 
             {/* Attachments */}
             <TaskAttachmentsBlock task={selected} currentUserId={currentUserId} />
+
+            {/* Rich detail extras: hours, output elements, approvals,
+                dependencies, status history, recent activity. Mirrors the
+                full /tasks/:id page sections so users no longer have to leave
+                the inbox to see what's going on with the task. */}
+            <div className="mt-5">
+              <InboxTaskDetailExtras taskId={selected.id} fullTask={fullTask} />
+            </div>
 
             {/* Notes area */}
             <div className="border border-slate-200 rounded-xl p-4">
