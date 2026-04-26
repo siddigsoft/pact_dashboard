@@ -13,6 +13,7 @@ import {
   Calendar, ChevronDown as ChevronDownIcon, Minus, Hash, Type,
   Users, FileText, Clock, MapPin, Image as ImageIcon, Paperclip,
   Phone, Mail, ScanLine, CalendarClock, GitBranch, Link2, Download,
+  Folder, FolderOpen, ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +37,7 @@ type QuestionType =
   | 'text' | 'textarea' | 'radio' | 'checkbox'
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
-  | 'gps' | 'image' | 'file' | 'barcode';
+  | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group';
 
 interface SkipLogic {
   condition_question_id: string;
@@ -65,6 +66,7 @@ interface Question {
   options: string[] | null;
   order_index: number;
   settings: Record<string, unknown>;
+  group_id: string | null;
 }
 
 interface Response {
@@ -81,6 +83,21 @@ interface Answer {
   question_id: string;
   answer_text: string | null;
   answer_json: unknown;
+}
+
+interface QTreeNode {
+  q: Question;
+  children: QTreeNode[];
+}
+
+function buildQTree(questions: Question[], parentId: string | null = null): QTreeNode[] {
+  return [...questions]
+    .filter(q => (q.group_id ?? null) === parentId)
+    .sort((a, b) => a.order_index - b.order_index)
+    .map(q => ({
+      q,
+      children: q.type === 'begin_group' ? buildQTree(questions, q.id) : [],
+    }));
 }
 
 const STATUS_CFG: Record<SurveyStatus, { label: string; color: string }> = {
@@ -136,9 +153,10 @@ const Q_TYPE_GROUPS: { label: string; types: QTypeEntry[] }[] = [
     ],
   },
   {
-    label: 'Layout',
+    label: 'Layout & Structure',
     types: [
       { type: 'section_header', label: 'Section Header', icon: Minus },
+      { type: 'begin_group',    label: 'Group / Repeat',  icon: Folder },
     ],
   },
 ];
@@ -163,7 +181,9 @@ export default function SurveyDetail() {
   const [editDesc, setEditDesc] = useState('');
   const [savingMeta, setSavingMeta] = useState(false);
   const [addTypeOpen, setAddTypeOpen] = useState(false);
+  const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
   const [editQId, setEditQId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [expandedResponse, setExpandedResponse] = useState<string | null>(null);
 
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
@@ -241,18 +261,23 @@ export default function SurveyDetail() {
   });
 
   const addQuestion = useMutation({
-    mutationFn: async (type: QuestionType) => {
-      const nextIndex = questions.length;
-      const defaultSettings: Record<string, unknown> =
-        type === 'scale' ? { min: 1, max: 10 } : {};
+    mutationFn: async ({ type, groupId }: { type: QuestionType; groupId?: string | null }) => {
+      const resolvedGroupId = groupId ?? null;
+      const siblings = questions.filter(q => (q.group_id ?? null) === resolvedGroupId);
+      const nextIndex = siblings.length > 0 ? Math.max(...siblings.map(q => q.order_index)) + 1 : questions.length;
+      const defaultLabel =
+        type === 'section_header' ? 'Section Title' :
+        type === 'begin_group'    ? 'Group Name'    : 'Untitled question';
+      const defaultSettings: Record<string, unknown> = type === 'scale' ? { min: 1, max: 10 } : {};
       const { error } = await supabase.from('survey_questions').insert({
         survey_id: id,
         type,
-        label: type === 'section_header' ? 'Section Title' : 'Untitled question',
+        label: defaultLabel,
         required: false,
         order_index: nextIndex,
         options: ['radio','checkbox','dropdown'].includes(type) ? ['Option 1', 'Option 2'] : null,
         settings: defaultSettings,
+        group_id: resolvedGroupId,
       });
       if (error) throw error;
     },
@@ -275,6 +300,8 @@ export default function SurveyDetail() {
 
   const deleteQuestion = useMutation({
     mutationFn: async (qid: string) => {
+      // First ungroup any children of this group
+      await supabase.from('survey_questions').update({ group_id: null }).eq('group_id', qid);
       const { error } = await supabase.from('survey_questions').delete().eq('id', qid);
       if (error) throw error;
     },
@@ -283,12 +310,16 @@ export default function SurveyDetail() {
   });
 
   const reorderQuestion = async (qid: string, direction: 'up' | 'down') => {
-    const sorted = [...questions].sort((a, b) => a.order_index - b.order_index);
-    const idx = sorted.findIndex(q => q.id === qid);
+    const q = questions.find(x => x.id === qid);
+    if (!q) return;
+    const siblings = [...questions]
+      .filter(x => (x.group_id ?? null) === (q.group_id ?? null))
+      .sort((a, b) => a.order_index - b.order_index);
+    const idx = siblings.findIndex(x => x.id === qid);
     if (direction === 'up' && idx === 0) return;
-    if (direction === 'down' && idx === sorted.length - 1) return;
+    if (direction === 'down' && idx === siblings.length - 1) return;
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    const a = sorted[idx], b = sorted[swapIdx];
+    const a = siblings[idx], b = siblings[swapIdx];
     await Promise.all([
       supabase.from('survey_questions').update({ order_index: b.order_index }).eq('id', a.id),
       supabase.from('survey_questions').update({ order_index: a.order_index }).eq('id', b.id),
@@ -298,6 +329,7 @@ export default function SurveyDetail() {
 
   const duplicateQuestion = useMutation({
     mutationFn: async (q: Question) => {
+      const siblings = questions.filter(x => (x.group_id ?? null) === (q.group_id ?? null));
       const { error } = await supabase.from('survey_questions').insert({
         survey_id: id,
         type: q.type,
@@ -305,8 +337,9 @@ export default function SurveyDetail() {
         description: q.description,
         required: q.required,
         options: q.options,
-        order_index: questions.length,
+        order_index: siblings.length > 0 ? Math.max(...siblings.map(x => x.order_index)) + 1 : questions.length,
         settings: { ...q.settings, skip_logic: undefined },
+        group_id: q.group_id,
       });
       if (error) throw error;
     },
@@ -326,12 +359,12 @@ export default function SurveyDetail() {
   const exportCSV = async () => {
     if (!responses.length) return;
     const rIds = responses.map(r => r.id);
-    const { data: answers } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
-    const cols = questions.filter(q => q.type !== 'section_header');
+    const { data: ans } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
+    const cols = questions.filter(q => !['section_header','begin_group'].includes(q.type));
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const header = ['Respondent Name','Respondent Email','Submitted At',...cols.map(q => esc(q.label))].join(',');
     const rows = responses.map(r => {
-      const ra = (answers ?? []).filter(a => a.response_id === r.id);
+      const ra = (ans ?? []).filter(a => a.response_id === r.id);
       const cells = cols.map(q => {
         const a = ra.find(x => x.question_id === q.id);
         if (!a) return '""';
@@ -393,6 +426,92 @@ export default function SurveyDetail() {
     return nums.length ? (nums.reduce((s, n) => s + n, 0) / nums.length).toFixed(1) : null;
   };
 
+  const toggleCollapsed = (gid: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gid)) next.delete(gid); else next.add(gid);
+      return next;
+    });
+  };
+
+  // ── Tree renderer (defined here to close over component state) ──────────────
+  const renderQTree = (nodes: QTreeNode[], depth = 0): React.ReactNode => {
+    return nodes.map(node => {
+      if (node.q.type === 'begin_group') {
+        const collapsed = collapsedGroups.has(node.q.id);
+        const groupLabel = ALL_Q_TYPES.find(t => t.type === 'begin_group')?.label ?? 'Group';
+        const childCount = node.children.length;
+        return (
+          <GroupPanel
+            key={node.q.id}
+            group={node.q}
+            depth={depth}
+            collapsed={collapsed}
+            onToggleCollapse={() => toggleCollapsed(node.q.id)}
+            allQuestions={questions}
+            canManage={canManage}
+            isEditing={editQId === node.q.id}
+            onEdit={() => setEditQId(editQId === node.q.id ? null : node.q.id)}
+            onUpdate={(patch) => updateQuestion.mutate({ id: node.q.id, ...patch })}
+            onDelete={() => deleteQuestion.mutate(node.q.id)}
+            onMoveUp={() => reorderQuestion(node.q.id, 'up')}
+            onMoveDown={() => reorderQuestion(node.q.id, 'down')}
+            saving={updateQuestion.isPending}
+            deleting={deleteQuestion.isPending}
+            onAddToGroup={() => { setAddToGroupId(node.q.id); setAddTypeOpen(true); }}
+          >
+            {!collapsed && (
+              <div className="space-y-2">
+                {node.children.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-slate-400 gap-1 bg-white/60 rounded-lg border border-dashed border-slate-300">
+                    <Folder className="w-5 h-5 opacity-30" />
+                    <p className="text-xs">Empty group — add questions below</p>
+                  </div>
+                ) : (
+                  renderQTree(node.children, depth + 1)
+                )}
+                {canManage && (
+                  <button
+                    onClick={() => { setAddToGroupId(node.q.id); setAddTypeOpen(true); }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-indigo-200 text-indigo-500 text-xs font-medium hover:bg-indigo-50 hover:border-indigo-400 transition-colors"
+                    data-testid={`btn-add-to-group-${node.q.id}`}
+                  >
+                    <Plus className="w-3 h-3" />Add question to this group
+                  </button>
+                )}
+              </div>
+            )}
+          </GroupPanel>
+        );
+      }
+
+      const siblings = questions
+        .filter(x => (x.group_id ?? null) === (node.q.group_id ?? null))
+        .sort((a, b) => a.order_index - b.order_index);
+      const sibIdx = siblings.findIndex(x => x.id === node.q.id);
+
+      return (
+        <QuestionCard
+          key={node.q.id}
+          q={node.q}
+          idx={sibIdx}
+          total={siblings.length}
+          allQuestions={questions}
+          canManage={canManage}
+          isEditing={editQId === node.q.id}
+          onEdit={() => setEditQId(editQId === node.q.id ? null : node.q.id)}
+          onUpdate={(patch) => updateQuestion.mutate({ id: node.q.id, ...patch })}
+          onDelete={() => deleteQuestion.mutate(node.q.id)}
+          onDuplicate={() => duplicateQuestion.mutate(node.q)}
+          onMoveUp={() => reorderQuestion(node.q.id, 'up')}
+          onMoveDown={() => reorderQuestion(node.q.id, 'down')}
+          saving={updateQuestion.isPending}
+          deleting={deleteQuestion.isPending}
+        />
+      );
+    });
+  };
+
   if (surveyLoading) return (
     <div className="flex items-center justify-center h-64 text-slate-400">
       <Loader2 className="w-6 h-6 animate-spin mr-2" />Loading survey…
@@ -406,6 +525,11 @@ export default function SurveyDetail() {
   );
 
   const scfg = STATUS_CFG[survey.status];
+  const nonStructural = questions.filter(q => !['section_header','begin_group'].includes(q.type));
+
+  const addGroupLabel = addToGroupId
+    ? questions.find(q => q.id === addToGroupId)?.label ?? 'group'
+    : null;
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
@@ -455,7 +579,7 @@ export default function SurveyDetail() {
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200 pb-0">
         {([
-          { id: 'builder',   label: 'Builder',   icon: Edit3,     badge: questions.filter(q => q.type !== 'section_header').length },
+          { id: 'builder',   label: 'Builder',   icon: Edit3,     badge: nonStructural.length },
           { id: 'responses', label: 'Responses', icon: Users,     badge: responses.length },
           { id: 'analytics', label: 'Analytics', icon: BarChart2, badge: 0 },
         ] as const).map(t => (
@@ -501,13 +625,14 @@ export default function SurveyDetail() {
             </div>
           )}
 
-          {questions.length > 0 && !qLoading && (() => {
-            const nonSection = questions.filter(q => q.type !== 'section_header');
-            const reqCount = nonSection.filter(q => q.required).length;
-            const condCount = nonSection.filter(q => !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id).length;
+          {nonStructural.length > 0 && !qLoading && (() => {
+            const reqCount = nonStructural.filter(q => q.required).length;
+            const condCount = nonStructural.filter(q => !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id).length;
+            const groupCount = questions.filter(q => q.type === 'begin_group').length;
             return (
-              <div className="flex items-center gap-3 text-[11px] text-slate-400 px-1">
-                <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{nonSection.length} question{nonSection.length !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-3 text-[11px] text-slate-400 px-1 flex-wrap">
+                <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{nonStructural.length} question{nonStructural.length !== 1 ? 's' : ''}</span>
+                {groupCount > 0 && <span className="flex items-center gap-1 text-indigo-400"><Folder className="w-3 h-3" />{groupCount} group{groupCount !== 1 ? 's' : ''}</span>}
                 {reqCount > 0 && <span className="flex items-center gap-1 text-red-400"><span className="font-bold">*</span>{reqCount} required</span>}
                 {condCount > 0 && <span className="flex items-center gap-1 text-amber-500"><GitBranch className="w-3 h-3" />{condCount} conditional</span>}
               </div>
@@ -525,30 +650,12 @@ export default function SurveyDetail() {
                 <p className="text-sm">No questions yet. Add your first question below.</p>
               </div>
             ) : (
-              questions.map((q, idx) => (
-                <QuestionCard
-                  key={q.id}
-                  q={q}
-                  idx={idx}
-                  total={questions.length}
-                  allQuestions={questions}
-                  canManage={canManage}
-                  isEditing={editQId === q.id}
-                  onEdit={() => setEditQId(editQId === q.id ? null : q.id)}
-                  onUpdate={(patch) => updateQuestion.mutate({ id: q.id, ...patch })}
-                  onDelete={() => deleteQuestion.mutate(q.id)}
-                  onDuplicate={() => duplicateQuestion.mutate(q)}
-                  onMoveUp={() => reorderQuestion(q.id, 'up')}
-                  onMoveDown={() => reorderQuestion(q.id, 'down')}
-                  saving={updateQuestion.isPending}
-                  deleting={deleteQuestion.isPending}
-                />
-              ))
+              renderQTree(buildQTree(questions))
             )}
           </div>
 
           {canManage && (
-            <Button variant="outline" onClick={() => setAddTypeOpen(true)} className="w-full gap-1.5" data-testid="btn-add-question">
+            <Button variant="outline" onClick={() => { setAddToGroupId(null); setAddTypeOpen(true); }} className="w-full gap-1.5" data-testid="btn-add-question">
               <Plus className="w-4 h-4" />Add Question
             </Button>
           )}
@@ -593,7 +700,7 @@ export default function SurveyDetail() {
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Responses', value: responses.length, icon: Users },
-              { label: 'Questions', value: questions.filter(q => q.type !== 'section_header').length, icon: FileText },
+              { label: 'Questions', value: nonStructural.length, icon: FileText },
               { label: 'Avg completion', value: responses.length > 0 ? '100%' : '—', icon: BarChart2 },
             ].map(s => (
               <div key={s.label} className="bg-white rounded-xl border border-slate-200 p-4">
@@ -605,12 +712,13 @@ export default function SurveyDetail() {
             ))}
           </div>
 
-          {questions.filter(q => q.type !== 'section_header').map(q => {
+          {nonStructural.map(q => {
             const chartData = getChartData(q);
             const textAnswers = getTextAnswers(q);
             const avg = getAvgRating(q);
             const answerCount = allAnswers.filter(a => a.question_id === q.id).length;
             const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
+            const parentGroup = q.group_id ? questions.find(g => g.id === q.group_id) : null;
 
             return (
               <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-5">
@@ -619,7 +727,10 @@ export default function SurveyDetail() {
                     <QIcon className="w-4 h-4 text-indigo-500 shrink-0" />
                     <div>
                       <p className="font-semibold text-slate-800">{q.label}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5 capitalize">{q.type.replace(/_/g, ' ')} · {answerCount} answer{answerCount !== 1 ? 's' : ''}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 capitalize">
+                        {q.type.replace(/_/g, ' ')} · {answerCount} answer{answerCount !== 1 ? 's' : ''}
+                        {parentGroup && <> · <span className="text-indigo-400"><Folder className="w-2.5 h-2.5 inline" /> {parentGroup.label}</span></>}
+                      </p>
                     </div>
                   </div>
                   {avg && (
@@ -672,7 +783,16 @@ export default function SurveyDetail() {
       {/* Add question type picker */}
       <Dialog open={addTypeOpen} onOpenChange={setAddTypeOpen}>
         <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Choose Question Type</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              {addGroupLabel ? `Add to "${addGroupLabel}"` : 'Choose Question Type'}
+            </DialogTitle>
+          </DialogHeader>
+          {addGroupLabel && (
+            <p className="text-xs text-indigo-600 flex items-center gap-1 -mt-1">
+              <Folder className="w-3 h-3" />Questions will be added inside this group
+            </p>
+          )}
           <div className="space-y-4 py-2">
             {Q_TYPE_GROUPS.map(group => (
               <div key={group.label}>
@@ -681,7 +801,7 @@ export default function SurveyDetail() {
                   {group.types.map(qt => (
                     <button
                       key={qt.type}
-                      onClick={() => addQuestion.mutate(qt.type)}
+                      onClick={() => addQuestion.mutate({ type: qt.type, groupId: addToGroupId })}
                       disabled={addQuestion.isPending}
                       data-testid={`btn-add-type-${qt.type}`}
                       className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-sm font-medium text-slate-700 transition-colors text-left"
@@ -696,6 +816,168 @@ export default function SurveyDetail() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── GroupPanel ────────────────────────────────────────────────────────────────
+function GroupPanel({
+  group, depth, collapsed, onToggleCollapse,
+  allQuestions, canManage,
+  isEditing, onEdit, onUpdate, onDelete, onMoveUp, onMoveDown,
+  saving, deleting, onAddToGroup, children,
+}: {
+  group: Question; depth: number; collapsed: boolean; onToggleCollapse: () => void;
+  allQuestions: Question[]; canManage: boolean;
+  isEditing: boolean; onEdit: () => void;
+  onUpdate: (p: Partial<Question>) => void;
+  onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void;
+  saving: boolean; deleting: boolean; onAddToGroup: () => void;
+  children?: React.ReactNode;
+}) {
+  const [labelDraft, setLabelDraft] = useState(group.label);
+  const [descDraft, setDescDraft] = useState(group.description ?? '');
+  const existingSkip = group.settings?.skip_logic as SkipLogic | undefined;
+  const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
+  const [skipQId, setSkipQId] = useState(existingSkip?.condition_question_id ?? '');
+  const [skipOp, setSkipOp] = useState<SkipLogic['operator']>(existingSkip?.operator ?? 'equals');
+  const [skipVal, setSkipVal] = useState(existingSkip?.value ?? '');
+
+  const prevQuestions = allQuestions.filter(pq =>
+    pq.order_index < group.order_index && !['section_header','begin_group'].includes(pq.type)
+  );
+  const valueNeeded = !['answered','not_answered'].includes(skipOp);
+  const hasSkip = !!existingSkip?.condition_question_id;
+
+  const siblings = allQuestions
+    .filter(x => (x.group_id ?? null) === (group.group_id ?? null) && x.type === 'begin_group')
+    .sort((a, b) => a.order_index - b.order_index);
+  const sibIdx = siblings.findIndex(x => x.id === group.id);
+
+  const indentColors = [
+    'border-indigo-200 bg-indigo-50/20',
+    'border-violet-200 bg-violet-50/20',
+    'border-sky-200 bg-sky-50/20',
+  ];
+  const headerColors = [
+    'bg-indigo-50 border-b border-indigo-100',
+    'bg-violet-50 border-b border-violet-100',
+    'bg-sky-50 border-b border-sky-100',
+  ];
+  const textColors = ['text-indigo-700', 'text-violet-700', 'text-sky-700'];
+  const colorIdx = depth % 3;
+
+  const save = () => {
+    const skipLogic: SkipLogic | undefined = skipEnabled && skipQId
+      ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
+      : undefined;
+    onUpdate({
+      label: labelDraft.trim() || group.label,
+      description: descDraft.trim() || null,
+      settings: { ...group.settings, skip_logic: skipLogic },
+    });
+    onEdit();
+  };
+
+  return (
+    <div className={cn('rounded-xl border-2 overflow-hidden', indentColors[colorIdx])}>
+      {/* Group header bar */}
+      <div className={cn('flex items-center gap-2 px-3 py-2', headerColors[colorIdx])}>
+        <button
+          onClick={onToggleCollapse}
+          className={cn('p-0.5 rounded text-slate-500 hover:bg-white/60 transition-colors shrink-0')}
+          title={collapsed ? 'Expand group' : 'Collapse group'}
+        >
+          <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', !collapsed && 'rotate-90')} />
+        </button>
+        {collapsed ? (
+          <Folder className={cn('w-4 h-4 shrink-0', textColors[colorIdx])} />
+        ) : (
+          <FolderOpen className={cn('w-4 h-4 shrink-0', textColors[colorIdx])} />
+        )}
+        <div className="flex-1 min-w-0">
+          <span className={cn('text-sm font-semibold truncate', textColors[colorIdx])}>{group.label}</span>
+          {group.description && <span className="text-xs text-slate-400 ml-2 truncate">{group.description}</span>}
+          {hasSkip && (
+            <span className="ml-2 inline-flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 px-1 rounded border border-amber-200">
+              <GitBranch className="w-2 h-2" />conditional
+            </span>
+          )}
+        </div>
+        {canManage && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button onClick={onMoveUp} disabled={sibIdx === 0} className="p-1 rounded hover:bg-white/60 text-slate-400 disabled:opacity-30" title="Move up"><ChevronUp className="w-3 h-3" /></button>
+            <button onClick={onMoveDown} disabled={sibIdx === siblings.length - 1} className="p-1 rounded hover:bg-white/60 text-slate-400 disabled:opacity-30" title="Move down"><ChevronDown className="w-3 h-3" /></button>
+            <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-white/80 text-indigo-600' : 'hover:bg-white/60')} title="Edit group"><Edit3 className="w-3 h-3" /></button>
+            <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete group"><Trash2 className="w-3 h-3" /></button>
+          </div>
+        )}
+      </div>
+
+      {/* Edit panel */}
+      {isEditing && (
+        <div className="border-b border-indigo-100 p-4 space-y-3 bg-white/80">
+          <div className="space-y-1">
+            <Label className="text-xs">Group name</Label>
+            <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} placeholder="Group label…" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Description <span className="text-slate-400 font-normal">(optional)</span></Label>
+            <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown to respondents above the group…" />
+          </div>
+          {/* Skip logic for the group */}
+          <div className="border border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/40">
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id={`gskip-${group.id}`} checked={skipEnabled} onChange={e => setSkipEnabled(e.target.checked)} className="rounded" />
+              <Label htmlFor={`gskip-${group.id}`} className="text-xs font-semibold text-amber-800 flex items-center gap-1">
+                <GitBranch className="w-3 h-3" />Show this group only if…
+              </Label>
+            </div>
+            {skipEnabled && (
+              <div className="space-y-2 pl-5">
+                {prevQuestions.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No previous questions available for conditions.</p>
+                ) : (
+                  <>
+                    <Select value={skipQId} onValueChange={setSkipQId}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select a question…" /></SelectTrigger>
+                      <SelectContent>
+                        {prevQuestions.map(pq => (
+                          <SelectItem key={pq.id} value={pq.id} className="text-xs">
+                            {pq.label.length > 40 ? pq.label.slice(0, 40) + '…' : pq.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={skipOp} onValueChange={v => setSkipOp(v as SkipLogic['operator'])}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {SKIP_OPERATORS.map(op => <SelectItem key={op.value} value={op.value} className="text-xs">{op.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {valueNeeded && (
+                      <Input value={skipVal} onChange={e => setSkipVal(e.target.value)} placeholder="Expected answer…" className="h-7 text-xs" />
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onEdit}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Children slot */}
+      {!collapsed && (
+        <div className="p-2">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -728,7 +1010,6 @@ function QuestionCard({
   const [scaleMin, setScaleMin] = useState(Number(q.settings?.min ?? 1));
   const [scaleMax, setScaleMax] = useState(Number(q.settings?.max ?? 10));
 
-  // Skip logic state
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
   const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
   const [skipQId, setSkipQId] = useState(existingSkip?.condition_question_id ?? '');
@@ -739,8 +1020,7 @@ function QuestionCard({
   const hasOptions = ['radio','checkbox','dropdown'].includes(q.type);
   const isSection = q.type === 'section_header';
 
-  // Questions available for skip logic: non-section questions BEFORE this one
-  const prevQuestions = allQuestions.filter((pq, i) => i < idx && pq.type !== 'section_header');
+  const prevQuestions = allQuestions.filter((pq, i) => pq.order_index < q.order_index && !['section_header','begin_group'].includes(pq.type));
   const valueNeeded = !['answered','not_answered'].includes(skipOp);
 
   const save = () => {
@@ -815,7 +1095,6 @@ function QuestionCard({
       {/* Edit panel */}
       {isEditing && (
         <div className="border-t border-indigo-100 p-4 space-y-4 bg-indigo-50/30">
-          {/* Label & description */}
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs">Question text</Label>
@@ -831,7 +1110,6 @@ function QuestionCard({
             </div>
           </div>
 
-          {/* Options (for choice types) */}
           {hasOptions && (
             <div className="space-y-1.5">
               <Label className="text-xs">Answer options</Label>
@@ -839,9 +1117,7 @@ function QuestionCard({
                 <div key={i} className="flex items-center gap-1.5">
                   <Input
                     value={opt}
-                    onChange={e => {
-                      const next = [...optsDraft]; next[i] = e.target.value; setOptsDraft(next);
-                    }}
+                    onChange={e => { const next = [...optsDraft]; next[i] = e.target.value; setOptsDraft(next); }}
                     className="h-7 text-sm flex-1"
                   />
                   <button onClick={() => setOptsDraft(optsDraft.filter((_, j) => j !== i))} className="p-1 text-slate-400 hover:text-red-500">
@@ -862,7 +1138,6 @@ function QuestionCard({
             </div>
           )}
 
-          {/* Scale range */}
           {q.type === 'scale' && (
             <div className="space-y-1.5">
               <Label className="text-xs">Scale range</Label>
@@ -879,16 +1154,9 @@ function QuestionCard({
             </div>
           )}
 
-          {/* Skip logic */}
           <div className="border border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/40">
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id={`skip-${q.id}`}
-                checked={skipEnabled}
-                onChange={e => setSkipEnabled(e.target.checked)}
-                className="rounded"
-              />
+              <input type="checkbox" id={`skip-${q.id}`} checked={skipEnabled} onChange={e => setSkipEnabled(e.target.checked)} className="rounded" />
               <Label htmlFor={`skip-${q.id}`} className="text-xs font-semibold text-amber-800 flex items-center gap-1">
                 <GitBranch className="w-3 h-3" />Show this question only if…
               </Label>
@@ -909,7 +1177,7 @@ function QuestionCard({
                         <SelectContent>
                           {prevQuestions.map(pq => (
                             <SelectItem key={pq.id} value={pq.id} className="text-xs">
-                              Q{allQuestions.indexOf(pq) + 1}: {pq.label.length > 40 ? pq.label.slice(0, 40) + '…' : pq.label}
+                              {pq.label.length > 40 ? pq.label.slice(0, 40) + '…' : pq.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1003,7 +1271,7 @@ function ResponseRow({
           {loading ? (
             <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" />Loading answers…</div>
           ) : (
-            questions.filter(q => q.type !== 'section_header').map(q => {
+            questions.filter(q => !['section_header','begin_group'].includes(q.type)).map(q => {
               const ans = answers.find(a => a.question_id === q.id);
               let displayValue: React.ReactNode = <span className="text-slate-300 italic">No answer</span>;
               if (ans) {

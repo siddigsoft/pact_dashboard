@@ -21,14 +21,19 @@ CREATE TABLE IF NOT EXISTS survey_questions (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   survey_id     UUID        NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
   type          TEXT        NOT NULL,
-  -- types: text | textarea | radio | checkbox | rating | scale | date | dropdown | section_header
+  -- types: text | textarea | radio | checkbox | rating | scale | date | dropdown
+  --        section_header | begin_group
+  --        number | integer | phone | email | time | datetime
+  --        gps | image | file | barcode
   label         TEXT        NOT NULL,
   description   TEXT,
   required      BOOLEAN     NOT NULL DEFAULT false,
   options       JSONB,      -- string[] for radio/checkbox/dropdown
   order_index   INT         NOT NULL DEFAULT 0,
-  settings      JSONB       NOT NULL DEFAULT '{}'::jsonb
-  -- settings keys: min (scale), max (scale), placeholder (text/textarea)
+  settings      JSONB       NOT NULL DEFAULT '{}'::jsonb,
+  -- settings keys: min (scale), max (scale), skip_logic (conditional visibility)
+  group_id      UUID        REFERENCES survey_questions(id) ON DELETE SET NULL
+  -- group_id: parent begin_group question id; null means top-level
 );
 
 -- 3. survey_responses — one row per submission
@@ -52,9 +57,14 @@ CREATE TABLE IF NOT EXISTS survey_answers (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_survey_questions_survey ON survey_questions(survey_id, order_index);
+CREATE INDEX IF NOT EXISTS idx_survey_questions_group  ON survey_questions(group_id);
 CREATE INDEX IF NOT EXISTS idx_survey_responses_survey ON survey_responses(survey_id);
 CREATE INDEX IF NOT EXISTS idx_survey_answers_response  ON survey_answers(response_id);
 CREATE INDEX IF NOT EXISTS idx_survey_answers_question  ON survey_answers(question_id);
+
+-- ── Migration — run if the table already exists ───────────────────────────────
+-- ALTER TABLE survey_questions ADD COLUMN IF NOT EXISTS group_id uuid REFERENCES survey_questions(id) ON DELETE SET NULL;
+-- CREATE INDEX IF NOT EXISTS idx_survey_questions_group ON survey_questions(group_id);
 
 -- ── Row Level Security ────────────────────────────────────────────────────────
 

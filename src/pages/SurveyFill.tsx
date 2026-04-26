@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Loader2, CheckCircle2, ClipboardList, Star, ChevronLeft, ChevronRight,
   AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
-  Hash, Clock, CalendarClock, GitBranch,
+  Hash, Clock, CalendarClock, GitBranch, Folder,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +22,7 @@ type QuestionType =
   | 'text' | 'textarea' | 'radio' | 'checkbox'
   | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
   | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
-  | 'gps' | 'image' | 'file' | 'barcode';
+  | 'gps' | 'image' | 'file' | 'barcode' | 'begin_group';
 
 interface SkipLogic {
   condition_question_id: string;
@@ -48,12 +48,19 @@ interface Question {
   options: string[] | null;
   order_index: number;
   settings: Record<string, unknown>;
+  group_id: string | null;
 }
 
 type AnswerValue = string | string[] | number | null;
 
 // ── Skip logic evaluation ─────────────────────────────────────────────────────
-function isVisible(q: Question, answers: Record<string, AnswerValue>): boolean {
+function isVisible(q: Question, allQuestions: Question[], answers: Record<string, AnswerValue>): boolean {
+  // Check parent group visibility first (if inside a group)
+  if (q.group_id) {
+    const parent = allQuestions.find(g => g.id === q.group_id);
+    if (parent && !isVisible(parent, allQuestions, answers)) return false;
+  }
+  // Check own skip logic
   const sl = q.settings?.skip_logic as SkipLogic | undefined;
   if (!sl?.condition_question_id) return true;
   const trigger = answers[sl.condition_question_id];
@@ -261,13 +268,15 @@ export default function SurveyFill() {
     },
   });
 
-  // Visible questions (respects skip logic)
-  const visibleQuestions = questions.filter(q => isVisible(q, answers));
+  // All questions visible to this respondent (skip logic + group visibility)
+  const visibleIds = new Set(
+    questions.filter(q => isVisible(q, questions, answers)).map(q => q.id)
+  );
 
   const submitMutation = useMutation({
     mutationFn: async () => {
       const newErrors: Record<string, string> = {};
-      for (const q of visibleQuestions.filter(q => q.required && q.type !== 'section_header')) {
+      for (const q of questions.filter(q => visibleIds.has(q.id) && q.required && !['section_header','begin_group'].includes(q.type))) {
         const val = answers[q.id];
         const missing = val === null || val === undefined || val === '' ||
           (Array.isArray(val) && val.length === 0);
@@ -289,8 +298,8 @@ export default function SurveyFill() {
 
       const jsonTypes = ['checkbox', 'rating', 'scale', 'image', 'file'];
 
-      const answerRows = visibleQuestions
-        .filter(q => q.type !== 'section_header')
+      const answerRows = questions
+        .filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type))
         .map(q => {
           const val = answers[q.id] ?? null;
           const isJson = jsonTypes.includes(q.type);
@@ -327,8 +336,9 @@ export default function SurveyFill() {
     setAnswer(qid, next);
   };
 
-  const visibleNonSection = visibleQuestions.filter(q => q.type !== 'section_header');
-  const requiredVisible = visibleNonSection.filter(q => q.required);
+  // Count stats for progress bar
+  const visibleNonStructural = questions.filter(q => visibleIds.has(q.id) && !['section_header','begin_group'].includes(q.type));
+  const requiredVisible = visibleNonStructural.filter(q => q.required);
   const answeredRequired = requiredVisible.filter(q => {
     const v = answers[q.id];
     return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0);
@@ -384,6 +394,312 @@ export default function SurveyFill() {
     </div>
   );
 
+  // ── Recursive question renderer ─────────────────────────────────────────────
+  const renderQuestion = (q: Question, depth = 0): React.ReactNode => {
+    if (!visibleIds.has(q.id)) return null;
+
+    // Group container
+    if (q.type === 'begin_group') {
+      const children = questions
+        .filter(c => (c.group_id ?? null) === q.id)
+        .sort((a, b) => a.order_index - b.order_index);
+      const visibleChildren = children.filter(c => visibleIds.has(c.id));
+      if (visibleChildren.length === 0) return null;
+
+      const groupColors = [
+        'border-indigo-200',
+        'border-violet-200',
+        'border-sky-200',
+      ];
+      const headerColors = [
+        'bg-indigo-50 border-b border-indigo-100',
+        'bg-violet-50 border-b border-violet-100',
+        'bg-sky-50 border-b border-sky-100',
+      ];
+      const iconColors = ['text-indigo-500', 'text-violet-500', 'text-sky-500'];
+      const titleColors = ['text-indigo-700', 'text-violet-700', 'text-sky-700'];
+      const ci = depth % 3;
+
+      return (
+        <div key={q.id} className={cn('rounded-2xl border-2 overflow-hidden', groupColors[ci])}>
+          <div className={cn('flex items-center gap-2 px-5 py-3', headerColors[ci])}>
+            <Folder className={cn('w-4 h-4 shrink-0', iconColors[ci])} />
+            <div className="flex-1 min-w-0">
+              <p className={cn('text-sm font-semibold', titleColors[ci])}>{q.label}</p>
+              {q.description && <p className="text-xs text-slate-500 mt-0.5">{q.description}</p>}
+            </div>
+          </div>
+          <div className="p-4 space-y-4 bg-white/50">
+            {visibleChildren.map(child => renderQuestion(child, depth + 1))}
+          </div>
+        </div>
+      );
+    }
+
+    // Section header (flat divider)
+    if (q.type === 'section_header') {
+      return (
+        <div key={q.id} className="pt-4 pb-1">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">{q.label}</p>
+        </div>
+      );
+    }
+
+    // Regular question
+    const err = errors[q.id];
+    const hasSkip = !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id;
+
+    return (
+      <div
+        key={q.id}
+        className={cn(
+          'bg-white rounded-2xl border p-5 space-y-3 transition-colors',
+          err ? 'border-red-300' : 'border-slate-200',
+        )}
+        data-testid={`question-${q.id}`}
+      >
+        <div>
+          <div className="flex items-start gap-1 justify-between">
+            <div className="flex items-start gap-1">
+              <p className="text-sm font-semibold text-slate-800 leading-snug">{q.label}</p>
+              {q.required && <span className="text-red-500 text-sm leading-none shrink-0 mt-0.5">*</span>}
+            </div>
+            {hasSkip && (
+              <span className="flex items-center gap-0.5 text-[10px] text-amber-600 shrink-0 ml-2">
+                <GitBranch className="w-2.5 h-2.5" />conditional
+              </span>
+            )}
+          </div>
+          {q.description && <p className="text-xs text-slate-500 mt-1">{q.description}</p>}
+        </div>
+
+        {q.type === 'text' && (
+          <Input
+            value={(answers[q.id] as string) ?? ''}
+            onChange={e => setAnswer(q.id, e.target.value)}
+            placeholder="Your answer…"
+            data-testid={`input-answer-${q.id}`}
+          />
+        )}
+
+        {q.type === 'textarea' && (
+          <Textarea
+            value={(answers[q.id] as string) ?? ''}
+            onChange={e => setAnswer(q.id, e.target.value)}
+            placeholder="Your answer…"
+            rows={4}
+            data-testid={`textarea-answer-${q.id}`}
+          />
+        )}
+
+        {q.type === 'number' && (
+          <div className="relative">
+            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              type="number"
+              value={(answers[q.id] as string) ?? ''}
+              onChange={e => setAnswer(q.id, e.target.value)}
+              placeholder="0.00"
+              className="pl-9"
+              step="any"
+              data-testid={`number-answer-${q.id}`}
+            />
+          </div>
+        )}
+
+        {q.type === 'integer' && (
+          <div className="relative">
+            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              type="number"
+              value={(answers[q.id] as string) ?? ''}
+              onChange={e => setAnswer(q.id, e.target.value)}
+              placeholder="0"
+              className="pl-9"
+              step="1"
+              data-testid={`integer-answer-${q.id}`}
+            />
+          </div>
+        )}
+
+        {q.type === 'phone' && (
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              type="tel"
+              value={(answers[q.id] as string) ?? ''}
+              onChange={e => setAnswer(q.id, e.target.value)}
+              placeholder="+1 (000) 000-0000"
+              className="pl-9"
+              data-testid={`phone-answer-${q.id}`}
+            />
+          </div>
+        )}
+
+        {q.type === 'email' && (
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              type="email"
+              value={(answers[q.id] as string) ?? ''}
+              onChange={e => setAnswer(q.id, e.target.value)}
+              placeholder="email@example.com"
+              className="pl-9"
+              data-testid={`email-answer-${q.id}`}
+            />
+          </div>
+        )}
+
+        {q.type === 'date' && (
+          <Input
+            type="date"
+            value={(answers[q.id] as string) ?? ''}
+            onChange={e => setAnswer(q.id, e.target.value)}
+            data-testid={`date-answer-${q.id}`}
+          />
+        )}
+
+        {q.type === 'time' && (
+          <div className="relative">
+            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              type="time"
+              value={(answers[q.id] as string) ?? ''}
+              onChange={e => setAnswer(q.id, e.target.value)}
+              className="pl-9"
+              data-testid={`time-answer-${q.id}`}
+            />
+          </div>
+        )}
+
+        {q.type === 'datetime' && (
+          <div className="relative">
+            <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              type="datetime-local"
+              value={(answers[q.id] as string) ?? ''}
+              onChange={e => setAnswer(q.id, e.target.value)}
+              className="pl-9"
+              data-testid={`datetime-answer-${q.id}`}
+            />
+          </div>
+        )}
+
+        {q.type === 'radio' && (
+          <div className="space-y-2">
+            {(q.options ?? []).map(opt => (
+              <label key={opt} className={cn(
+                'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
+                answers[q.id] === opt ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300',
+              )}>
+                <input
+                  type="radio"
+                  name={q.id}
+                  value={opt}
+                  checked={answers[q.id] === opt}
+                  onChange={() => setAnswer(q.id, opt)}
+                  className="accent-indigo-600"
+                  data-testid={`radio-${q.id}-${opt}`}
+                />
+                <span className="text-sm text-slate-700">{opt}</span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {q.type === 'checkbox' && (
+          <div className="space-y-2">
+            {(q.options ?? []).map(opt => {
+              const checked = ((answers[q.id] as string[]) ?? []).includes(opt);
+              return (
+                <label key={opt} className={cn(
+                  'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
+                  checked ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300',
+                )}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleCheckbox(q.id, opt)}
+                    className="accent-indigo-600"
+                    data-testid={`checkbox-${q.id}-${opt}`}
+                  />
+                  <span className="text-sm text-slate-700">{opt}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {q.type === 'dropdown' && (
+          <Select value={(answers[q.id] as string) ?? ''} onValueChange={v => setAnswer(q.id, v)}>
+            <SelectTrigger data-testid={`select-answer-${q.id}`}>
+              <SelectValue placeholder="Select an option…" />
+            </SelectTrigger>
+            <SelectContent>
+              {(q.options ?? []).map(opt => (
+                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {q.type === 'rating' && (
+          <StarRating value={(answers[q.id] as number) ?? 0} onChange={v => setAnswer(q.id, v)} />
+        )}
+
+        {q.type === 'scale' && (
+          <ScaleSelector
+            value={(answers[q.id] as number) ?? null}
+            onChange={v => setAnswer(q.id, v)}
+            min={Number(q.settings?.min ?? 1)}
+            max={Number(q.settings?.max ?? 10)}
+          />
+        )}
+
+        {q.type === 'gps' && (
+          <GpsCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
+        )}
+
+        {q.type === 'image' && (
+          <ImageCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
+        )}
+
+        {q.type === 'file' && (
+          <FileAttachment value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
+        )}
+
+        {q.type === 'barcode' && (
+          <div className="space-y-2">
+            <div className="relative">
+              <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                value={(answers[q.id] as string) ?? ''}
+                onChange={e => setAnswer(q.id, e.target.value)}
+                placeholder="Scan or type barcode / QR value…"
+                className="pl-9"
+                data-testid={`barcode-answer-${q.id}`}
+              />
+            </div>
+            <p className="text-xs text-slate-400 flex items-center gap-1">
+              <ScanLine className="w-3 h-3" />Use your device camera or type the code manually
+            </p>
+          </div>
+        )}
+
+        {err && (
+          <p className="text-xs text-red-600 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />{err}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  // Top-level items: questions with no parent group
+  const topLevelItems = questions
+    .filter(q => (q.group_id ?? null) === null)
+    .sort((a, b) => a.order_index - b.order_index);
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Top bar */}
@@ -412,282 +728,8 @@ export default function SurveyFill() {
           </div>
         )}
 
-        {/* Questions — only visible ones */}
-        {visibleQuestions.map(q => {
-          if (q.type === 'section_header') {
-            return (
-              <div key={q.id} className="pt-4 pb-1">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">{q.label}</p>
-              </div>
-            );
-          }
-
-          const err = errors[q.id];
-          const hasSkip = !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id;
-
-          return (
-            <div
-              key={q.id}
-              className={cn(
-                'bg-white rounded-2xl border p-5 space-y-3 transition-colors',
-                err ? 'border-red-300' : 'border-slate-200',
-              )}
-              data-testid={`question-${q.id}`}
-            >
-              <div>
-                <div className="flex items-start gap-1 justify-between">
-                  <div className="flex items-start gap-1">
-                    <p className="text-sm font-semibold text-slate-800 leading-snug">{q.label}</p>
-                    {q.required && <span className="text-red-500 text-sm leading-none shrink-0 mt-0.5">*</span>}
-                  </div>
-                  {hasSkip && (
-                    <span className="flex items-center gap-0.5 text-[10px] text-amber-600 shrink-0 ml-2">
-                      <GitBranch className="w-2.5 h-2.5" />conditional
-                    </span>
-                  )}
-                </div>
-                {q.description && <p className="text-xs text-slate-500 mt-1">{q.description}</p>}
-              </div>
-
-              {/* Short text */}
-              {q.type === 'text' && (
-                <Input
-                  value={(answers[q.id] as string) ?? ''}
-                  onChange={e => setAnswer(q.id, e.target.value)}
-                  placeholder="Your answer…"
-                  data-testid={`input-answer-${q.id}`}
-                />
-              )}
-
-              {/* Long text */}
-              {q.type === 'textarea' && (
-                <Textarea
-                  value={(answers[q.id] as string) ?? ''}
-                  onChange={e => setAnswer(q.id, e.target.value)}
-                  placeholder="Your answer…"
-                  rows={4}
-                  data-testid={`textarea-answer-${q.id}`}
-                />
-              )}
-
-              {/* Number */}
-              {q.type === 'number' && (
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="number"
-                    value={(answers[q.id] as string) ?? ''}
-                    onChange={e => setAnswer(q.id, e.target.value)}
-                    placeholder="0.00"
-                    className="pl-9"
-                    step="any"
-                    data-testid={`number-answer-${q.id}`}
-                  />
-                </div>
-              )}
-
-              {/* Integer */}
-              {q.type === 'integer' && (
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="number"
-                    value={(answers[q.id] as string) ?? ''}
-                    onChange={e => setAnswer(q.id, e.target.value)}
-                    placeholder="0"
-                    className="pl-9"
-                    step="1"
-                    data-testid={`integer-answer-${q.id}`}
-                  />
-                </div>
-              )}
-
-              {/* Phone */}
-              {q.type === 'phone' && (
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="tel"
-                    value={(answers[q.id] as string) ?? ''}
-                    onChange={e => setAnswer(q.id, e.target.value)}
-                    placeholder="+1 (000) 000-0000"
-                    className="pl-9"
-                    data-testid={`phone-answer-${q.id}`}
-                  />
-                </div>
-              )}
-
-              {/* Email */}
-              {q.type === 'email' && (
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="email"
-                    value={(answers[q.id] as string) ?? ''}
-                    onChange={e => setAnswer(q.id, e.target.value)}
-                    placeholder="email@example.com"
-                    className="pl-9"
-                    data-testid={`email-answer-${q.id}`}
-                  />
-                </div>
-              )}
-
-              {/* Date */}
-              {q.type === 'date' && (
-                <Input
-                  type="date"
-                  value={(answers[q.id] as string) ?? ''}
-                  onChange={e => setAnswer(q.id, e.target.value)}
-                  data-testid={`date-answer-${q.id}`}
-                />
-              )}
-
-              {/* Time */}
-              {q.type === 'time' && (
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="time"
-                    value={(answers[q.id] as string) ?? ''}
-                    onChange={e => setAnswer(q.id, e.target.value)}
-                    className="pl-9"
-                    data-testid={`time-answer-${q.id}`}
-                  />
-                </div>
-              )}
-
-              {/* Date & Time */}
-              {q.type === 'datetime' && (
-                <div className="relative">
-                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    type="datetime-local"
-                    value={(answers[q.id] as string) ?? ''}
-                    onChange={e => setAnswer(q.id, e.target.value)}
-                    className="pl-9"
-                    data-testid={`datetime-answer-${q.id}`}
-                  />
-                </div>
-              )}
-
-              {/* Radio */}
-              {q.type === 'radio' && (
-                <div className="space-y-2">
-                  {(q.options ?? []).map(opt => (
-                    <label key={opt} className={cn(
-                      'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
-                      answers[q.id] === opt ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300',
-                    )}>
-                      <input
-                        type="radio"
-                        name={q.id}
-                        value={opt}
-                        checked={answers[q.id] === opt}
-                        onChange={() => setAnswer(q.id, opt)}
-                        className="accent-indigo-600"
-                        data-testid={`radio-${q.id}-${opt}`}
-                      />
-                      <span className="text-sm text-slate-700">{opt}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              {/* Checkbox */}
-              {q.type === 'checkbox' && (
-                <div className="space-y-2">
-                  {(q.options ?? []).map(opt => {
-                    const checked = ((answers[q.id] as string[]) ?? []).includes(opt);
-                    return (
-                      <label key={opt} className={cn(
-                        'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
-                        checked ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:border-slate-300',
-                      )}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleCheckbox(q.id, opt)}
-                          className="accent-indigo-600"
-                          data-testid={`checkbox-${q.id}-${opt}`}
-                        />
-                        <span className="text-sm text-slate-700">{opt}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Dropdown */}
-              {q.type === 'dropdown' && (
-                <Select value={(answers[q.id] as string) ?? ''} onValueChange={v => setAnswer(q.id, v)}>
-                  <SelectTrigger data-testid={`select-answer-${q.id}`}>
-                    <SelectValue placeholder="Select an option…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(q.options ?? []).map(opt => (
-                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {/* Star rating */}
-              {q.type === 'rating' && (
-                <StarRating value={(answers[q.id] as number) ?? 0} onChange={v => setAnswer(q.id, v)} />
-              )}
-
-              {/* Scale */}
-              {q.type === 'scale' && (
-                <ScaleSelector
-                  value={(answers[q.id] as number) ?? null}
-                  onChange={v => setAnswer(q.id, v)}
-                  min={Number(q.settings?.min ?? 1)}
-                  max={Number(q.settings?.max ?? 10)}
-                />
-              )}
-
-              {/* GPS */}
-              {q.type === 'gps' && (
-                <GpsCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
-              )}
-
-              {/* Image / Photo */}
-              {q.type === 'image' && (
-                <ImageCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
-              )}
-
-              {/* File upload */}
-              {q.type === 'file' && (
-                <FileAttachment value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
-              )}
-
-              {/* Barcode / QR */}
-              {q.type === 'barcode' && (
-                <div className="space-y-2">
-                  <div className="relative">
-                    <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input
-                      value={(answers[q.id] as string) ?? ''}
-                      onChange={e => setAnswer(q.id, e.target.value)}
-                      placeholder="Scan or type barcode / QR value…"
-                      className="pl-9"
-                      data-testid={`barcode-answer-${q.id}`}
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 flex items-center gap-1">
-                    <ScanLine className="w-3 h-3" />Use your device camera or type the code manually
-                  </p>
-                </div>
-              )}
-
-              {err && (
-                <p className="text-xs text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />{err}
-                </p>
-              )}
-            </div>
-          );
-        })}
+        {/* Render questions from top-level down (groups render their children) */}
+        {topLevelItems.map(q => renderQuestion(q, 0))}
 
         {/* Submit */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
@@ -707,9 +749,9 @@ export default function SurveyFill() {
               ? <><Loader2 className="w-4 h-4 animate-spin" />Submitting…</>
               : <><ChevronRight className="w-4 h-4" />Submit Response</>}
           </Button>
-          {visibleNonSection.length > 0 && (
+          {visibleNonStructural.length > 0 && (
             <p className="text-center text-[11px] text-slate-400 mt-2">
-              {answeredRequired.length} of {visibleNonSection.length} question{visibleNonSection.length !== 1 ? 's' : ''} answered
+              {answeredRequired.length} of {visibleNonStructural.length} question{visibleNonStructural.length !== 1 ? 's' : ''} answered
             </p>
           )}
         </div>
