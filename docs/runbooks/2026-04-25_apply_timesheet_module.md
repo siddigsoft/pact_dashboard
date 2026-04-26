@@ -95,10 +95,12 @@ pasting an older copy of the script. The in-repo version (current as of
 2026-04-26) is bullet-proof against missing columns on the OLD flat
 `timesheets` table — before doing any back-fill it runs a series of
 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` calls that add NULL placeholder
-columns for every field the back-fills read (`submitted_at`, `approved_by`,
-`approved_at`, `reject_comment`, `task_type`, `start_time`, `end_time`,
-`break_minutes`, `description`, `is_billable`, `hours`, `status`,
-`created_at`, `updated_at`). Re-copy the file from the repo and re-paste.
+columns for every field the back-fill reads. The full list patched (16
+columns, must all appear in the SQL before any backfill `INSERT`):
+`submitted_at`, `approved_by`, `approved_at`, `reject_comment`, `status`,
+`created_at`, `updated_at`, `project_id`, `task_id`, `task_type`,
+`start_time`, `end_time`, `break_minutes`, `description`, `is_billable`,
+`hours`. Re-copy the file from the repo and re-paste.
 
 **If the entries back-fill inserts 0 rows** that's expected when the old
 table never tracked daily hours (the `WHERE t.date IS NOT NULL AND
@@ -107,7 +109,13 @@ weekly parents still come over, and you can start logging entries fresh.
 
 ## Roll-back (only if something goes badly wrong)
 
-The migration is additive — it doesn't touch any existing table. To roll back:
+The migration is **transformational on the existing `timesheets` table**:
+the OLD flat table is read into two staging tables (`timesheets_new`,
+`timesheet_entries_new`), then the original `timesheets` is `DROP TABLE …
+CASCADE`'d and the staging tables are renamed into place (see the migration
+around the `DROP TABLE timesheets CASCADE; ALTER TABLE timesheets_new
+RENAME TO timesheets;` block). Anything that referenced the OLD `timesheets`
+via FK is therefore lost on apply. To roll back the new shape after apply:
 
 ```sql
 DROP TABLE IF EXISTS public.timesheet_entries CASCADE;
@@ -115,7 +123,8 @@ DROP TABLE IF EXISTS public.timesheets CASCADE;
 ```
 
 This is destructive (deletes all timesheet data). Only run it if no employees
-have logged hours yet, or if you've taken a backup.
+have logged hours yet, or if you've taken a backup. There is no in-place
+rollback to the OLD flat shape — the original DDL has not been preserved.
 
 ## After it ships
 

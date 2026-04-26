@@ -187,23 +187,6 @@ export default function Timesheet() {
     },
   });
 
-  // Detect "table missing" responses from PostgREST (PGRST205) or raw Postgres
-  // (42P01) on EITHER timesheet table. Catching both means we still warn when
-  // only one of the two tables made it into pactdb (partial-apply drift).
-  // Restricted to messages that name a timesheet table so unrelated errors
-  // (network blips, RLS denials, etc.) don't trigger the banner.
-  const setupRequired = useMemo(() => {
-    const looksMissing = (err: unknown) => {
-      if (!err) return false;
-      const msg = (err as any)?.message ?? '';
-      const code = (err as any)?.code ?? '';
-      const isMissingCode = code === 'PGRST205' || code === '42P01';
-      const isMissingMsg = /relation .*timesheet.* does not exist|Could not find the table .*timesheet/i.test(msg);
-      return isMissingCode || isMissingMsg;
-    };
-    return looksMissing(weeklyError) || looksMissing(entriesError);
-  }, [weeklyError, entriesError]);
-
   /**
    * Fetch per-day entries for the current week's timesheet parent.
    * Empty when no parent exists yet.
@@ -224,6 +207,25 @@ export default function Timesheet() {
       return (data ?? []) as TimesheetEntry[];
     },
   });
+
+  // Detect "table missing" responses from PostgREST (PGRST205) or raw Postgres
+  // (42P01) on EITHER timesheet table. Catching both means we still warn when
+  // only one of the two tables made it into pactdb (partial-apply drift).
+  // Restricted to messages that name a timesheet table so unrelated errors
+  // (network blips, RLS denials, etc.) don't trigger the banner.
+  // Declared AFTER the entries query so `entriesError` is initialised before
+  // this memo's callback reads it (avoids a TDZ ReferenceError on first render).
+  const setupRequired = useMemo(() => {
+    const looksMissing = (err: unknown) => {
+      if (!err) return false;
+      const msg = (err as any)?.message ?? '';
+      const code = (err as any)?.code ?? '';
+      const isMissingCode = code === 'PGRST205' || code === '42P01';
+      const isMissingMsg = /relation .*timesheet.* does not exist|Could not find the table .*timesheet/i.test(msg);
+      return isMissingCode || isMissingMsg;
+    };
+    return looksMissing(weeklyError) || looksMissing(entriesError);
+  }, [weeklyError, entriesError]);
 
   /**
    * Fetch historical weekly timesheets (parent records with total hours derived).

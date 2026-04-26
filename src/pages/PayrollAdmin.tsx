@@ -885,11 +885,21 @@ function SalaryEditDialog({ emp, departments, onClose }: { emp: EmployeeRow; dep
       try {
         if (existingRetainer?.classification_id) {
           const closeAt = (rEffFrom || format(new Date(), 'yyyy-MM-dd'));
-          await (supabase as any).from('user_classifications').update({
+          // Check the close-update result before inserting the new row.
+          // Without this, an RLS denial / network blip on the close would
+          // still let the new row insert and we'd end up with two active
+          // overlapping retainers for the same user.
+          const { error: closeErr } = await (supabase as any).from('user_classifications').update({
             effective_to: closeAt,
             is_active: false,
             updated_at: now,
           }).eq('id', existingRetainer.classification_id);
+          if (closeErr) {
+            failures.push(`retainer (could not close prior row: ${closeErr.message})`);
+            // Skip the insert so we don't create overlapping retainers.
+            // Falls through to the partial-save toast below.
+            throw new Error('skip-retainer-insert');
+          }
         }
         const insertPayload: Record<string, unknown> = {
           user_id: emp.id,
@@ -3228,14 +3238,25 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
 
     // Fetch approved timesheet hours using the split model:
     // timesheet_entries (hours/date) joined through approved timesheets (week_start/status)
+    // FAIL HARD on query error: an RLS denial or network blip would otherwise
+    // silently zero out hourly pay for every hourly employee in the preview.
     const hourlyEmployeeIds = configured.filter(e => (e.salary_config?.hourly_rate ?? 0) > 0).map(e => e.id);
     let hoursByUser: Record<string, number> = {};
     if (hourlyEmployeeIds.length > 0) {
-      const { data: entries } = await supabase
+      const { data: entries, error: entriesErr } = await supabase
         .from('timesheet_entries')
         .select('hours, date, timesheets!inner(user_id, status)')
         .gte('date', startStr)
         .lte('date', endStr);
+      if (entriesErr) {
+        toast({
+          title: 'Failed to load timesheet hours',
+          description: `${entriesErr.message}. Preview aborted to avoid underpaying hourly staff. Re-check your role permissions on timesheet_entries / timesheets and retry.`,
+          variant: 'destructive',
+        });
+        setComputing(false);
+        return;
+      }
       (entries ?? []).forEach((e: { hours: number; date: string; timesheets: { user_id: string; status: string } }) => {
         const uid = e.timesheets.user_id;
         if (e.timesheets.status === 'approved' && hourlyEmployeeIds.includes(uid)) {
@@ -4020,14 +4041,20 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
     try {
       // Fetch approved timesheet hours using the split model:
       // timesheet_entries (hours/date) joined through approved timesheets (week_start/status)
+      // FAIL HARD on query error: this is the trigger path that writes
+      // payroll_run_items to the database, so a silent fall-through to zero
+      // hours would persist underpayment to disk, not just preview it.
       const hourlyEmpIds = configured.filter(e => (e.salary_config?.hourly_rate ?? 0) > 0).map(e => e.id);
       const hoursByUser: Record<string, number> = {};
       if (hourlyEmpIds.length > 0) {
-        const { data: entries } = await supabase
+        const { data: entries, error: entriesErr } = await supabase
           .from('timesheet_entries')
           .select('hours, date, timesheets!inner(user_id, status)')
           .gte('date', startStr)
           .lte('date', endStr);
+        if (entriesErr) {
+          throw new Error(`Failed to load timesheet hours for trigger — aborted to avoid underpaying hourly staff: ${entriesErr.message}`);
+        }
         (entries ?? []).forEach((e: { hours: number; date: string; timesheets: { user_id: string; status: string } }) => {
           const uid = e.timesheets.user_id;
           if (e.timesheets.status === 'approved' && hourlyEmpIds.includes(uid)) {
