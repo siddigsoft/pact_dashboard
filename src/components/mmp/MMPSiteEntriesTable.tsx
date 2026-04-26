@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList, ExternalLink, ArrowUpDown, Users } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X, ShoppingCart, ClipboardList, ExternalLink, ArrowUpDown, Users, Clock } from 'lucide-react';
+import { formatDurationFromMs, diffMsBetween } from '@/utils/duration';
 import { useNavigate } from 'react-router-dom';
 import SiteDetailDialog from './SiteDetailDialog';
 import { PostponementDialog } from './PostponementDialog';
@@ -225,6 +226,9 @@ const MMPSiteEntriesTable = ({
       (siteStatusLower === 'completed' ? (site.accepted_by || site.acceptedBy || ad['accepted_by'] || ad['Accepted By']) : undefined) || undefined;
     const completedAt = site.completed_at || ad['completed_at'] || (ad['Completed At'] ? new Date(ad['Completed At']).toISOString() : undefined) || 
       (siteStatusLower === 'completed' ? (site.updated_at || site.last_modified) : undefined) || undefined;
+
+    // Time-to-complete: how long from dispatch → completion (only when both are present)
+    const timeToCompleteMs = diffMsBetween(dispatchedAt, completedAt);
     
     // Timestamps
     const createdAt = site.created_at || undefined;
@@ -240,7 +244,7 @@ const MMPSiteEntriesTable = ({
       enumeratorFee: enumeratorFee, transportFee: transportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, acceptedByName,
-      completedBy, completedAt, completedByName,
+      completedBy, completedAt, completedByName, timeToCompleteMs,
       rejectionComments, rejectedBy, rejectedAt,
       createdAt, updatedAt
     };
@@ -856,6 +860,16 @@ const MMPSiteEntriesTable = ({
                                         {new Date(row.completedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                                       </span>
                                     )}
+                                    {row.timeToCompleteMs !== null && row.timeToCompleteMs !== undefined && (
+                                      <span
+                                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                        title={`From dispatch on ${row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('en-GB') : '—'} to completion on ${row.completedAt ? new Date(row.completedAt).toLocaleString('en-GB') : '—'}`}
+                                        data-testid={`pill-time-to-complete-${site.id}`}
+                                      >
+                                        <Clock className="h-3 w-3" />
+                                        Completed in {formatDurationFromMs(row.timeToCompleteMs)}
+                                      </span>
+                                    )}
                                   </>
                                 ) : (
                                   <>
@@ -868,6 +882,16 @@ const MMPSiteEntriesTable = ({
                                       <span className="text-xs text-muted-foreground" data-testid="text-accepted-at">
                                         {new Date(row.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
                                         {new Date(row.acceptedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    )}
+                                    {row.timeToCompleteMs !== null && row.timeToCompleteMs !== undefined && (
+                                      <span
+                                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                        title={`From dispatch on ${row.dispatchedAt ? new Date(row.dispatchedAt).toLocaleString('en-GB') : '—'} to completion on ${row.completedAt ? new Date(row.completedAt).toLocaleString('en-GB') : '—'}`}
+                                        data-testid={`pill-time-to-complete-${site.id}`}
+                                      >
+                                        <Clock className="h-3 w-3" />
+                                        Completed in {formatDurationFromMs(row.timeToCompleteMs)}
                                       </span>
                                     )}
                                   </>

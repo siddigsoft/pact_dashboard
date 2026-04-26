@@ -33,6 +33,7 @@ import { getProjectFlow } from '@/config/projectFlows';
 import { useAuthorization } from '@/hooks/use-authorization';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatDurationFromMs, medianMs } from '@/utils/duration';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -52,7 +53,7 @@ interface BudgetRow { project_id: string; total_budget_cents: number; allocated_
 interface MilestoneRow { id: string; project_id: string; title: string; status: string; due_date: string | null; updated_at: string | null; }
 interface FlowLogRow { project_id: string; advanced_at: string; }
 interface MmpRow { id: string; status: string; entries: number | null; processed_entries: number | null; hub: string | null; month: number | null; }
-interface SiteEntryRow { id: string; status: string; mmp_file_id: string; }
+interface SiteEntryRow { id: string; status: string; mmp_file_id: string; hub_office: string | null; dispatched_at: string | null; completed_at: string | null; }
 interface CostSubRow { id: string; status: string; total_cost_cents: number | null; }
 interface DownPayRow { id: string; status: string; requested_amount: number | null; supervisor_status: string | null; admin_status: string | null; }
 interface OpCostRow { id: string; status: string; amount_cents: number | null; tier1_status: string | null; tier2_status: string | null; }
@@ -281,7 +282,7 @@ async function fetchAll() {
     supabase.from('project_milestones').select('id, project_id, title, status, due_date, updated_at').order('due_date', { ascending: true }),
     supabase.from('project_flow_log').select('project_id, advanced_at').order('advanced_at', { ascending: false }),
     supabase.from('mmp_files').select('id, status, entries, processed_entries, hub, month').order('created_at', { ascending: false }),
-    supabase.from('mmp_site_entries').select('id, status, mmp_file_id'),
+    supabase.from('mmp_site_entries').select('id, status, mmp_file_id, hub_office, dispatched_at, completed_at'),
     supabase.from('site_visit_cost_submissions').select('id, status, total_cost_cents').limit(200),
     supabase.from('down_payment_requests').select('id, status, requested_amount, supervisor_status, admin_status').limit(200),
     supabase.from('operational_cost_submissions').select('id, status, amount_cents, tier1_status, tier2_status').limit(200),
@@ -930,6 +931,39 @@ export default function PortfolioDashboard() {
     equip.forEach(e => { byStatus[e.status] = (byStatus[e.status] ?? 0) + 1; });
     return { total: equip.length, byStatus, damaged: equip.filter(e => e.status === 'damaged').length, lost: equip.filter(e => e.status === 'lost').length };
   }, [d?.equip]);
+
+  // Median time-to-complete per hub, last 30 days. Built directly off the
+  // canonical `dispatched_at` → `completed_at` pair on mmp_site_entries.
+  const hubTimeToComplete = useMemo(() => {
+    const siteEntries = d?.siteEntries ?? [];
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const perHub = new Map<string, number[]>();
+    let overallSamples: number[] = [];
+
+    for (const e of siteEntries) {
+      if (!e.dispatched_at || !e.completed_at) continue;
+      const completed = new Date(e.completed_at).getTime();
+      const dispatched = new Date(e.dispatched_at).getTime();
+      if (!Number.isFinite(completed) || !Number.isFinite(dispatched)) continue;
+      if (completed < cutoff) continue;
+      const diff = completed - dispatched;
+      if (diff < 0) continue;
+      const hub = (e.hub_office ?? '').trim() || 'Unassigned';
+      if (!perHub.has(hub)) perHub.set(hub, []);
+      perHub.get(hub)!.push(diff);
+      overallSamples.push(diff);
+    }
+
+    const rows = Array.from(perHub.entries())
+      .map(([hub, vals]) => ({ hub, sampleCount: vals.length, medianMs: medianMs(vals) ?? 0 }))
+      .sort((a, b) => a.medianMs - b.medianMs);
+
+    return {
+      rows,
+      overallMedianMs: medianMs(overallSamples),
+      totalSamples: overallSamples.length,
+    };
+  }, [d?.siteEntries]);
 
   // ── Financial tab ─────────────────────────────────────────────────────────
 
@@ -2729,6 +2763,60 @@ export default function PortfolioDashboard() {
                 ))}
               </SectionCard>
             </div>
+
+            {/* MMP Time-to-Complete by Hub (last 30 days) */}
+            <SectionCard
+              icon={Clock}
+              title="MMP Time-to-Complete by Hub (last 30 days)"
+              action={() => navigate('/mmp')}
+              actionLabel="Open MMP"
+            >
+              {hubTimeToComplete.totalSamples === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center" data-testid="text-no-time-to-complete-data">
+                  No sites completed with both dispatch and completion timestamps in the last 30 days.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-end gap-3 mb-3">
+                    <span
+                      className="text-2xl font-bold text-[#1D3461]"
+                      data-testid="text-overall-median-time-to-complete"
+                    >
+                      {hubTimeToComplete.overallMedianMs !== null
+                        ? formatDurationFromMs(hubTimeToComplete.overallMedianMs)
+                        : '—'}
+                    </span>
+                    <span className="text-xs text-muted-foreground mb-1">
+                      overall median across {hubTimeToComplete.totalSamples} site{hubTimeToComplete.totalSamples === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {hubTimeToComplete.rows.map(row => (
+                      <div
+                        key={row.hub}
+                        className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0"
+                        data-testid={`row-hub-time-to-complete-${row.hub}`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm font-medium truncate" data-testid={`text-hub-name-${row.hub}`}>
+                            {row.hub}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                            {row.sampleCount} site{row.sampleCount === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <span
+                          className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap"
+                          data-testid={`text-hub-median-${row.hub}`}
+                        >
+                          {formatDurationFromMs(row.medianMs)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </SectionCard>
 
             {/* Field team heatmap — role distribution */}
             {d?.profiles && d.profiles.length > 0 && (
