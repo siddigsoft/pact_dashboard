@@ -37,7 +37,10 @@ export interface CustomStageEntry {
   percentComplete?: number | null;
 }
 
+export type StageStatusAction = 'mark-complete' | 'set-current' | 'toggle-skip' | 'reopen';
+
 export interface UseProjectFlowReturn {
+  /** Canonical default stages plus any user-added custom stages, in display order. */
   flowDef: FlowStage[];
   activeStages: FlowStage[];
   /** All parallel groups in order, each is an array of stages */
@@ -57,11 +60,18 @@ export interface UseProjectFlowReturn {
   isLoading: boolean;
   isAdvancing: boolean;
   isSavingCustom: boolean;
+  isMutatingStageStatus: boolean;
   /** Complete a specific stage (handles parallel groups) */
   completeStage: (stageId: string, notes: string) => Promise<void>;
   /** Backward-compat: completes first current stage */
   advanceStage: (notes: string) => Promise<void>;
   updateCustomStages: (customStages: CustomStageEntry[]) => Promise<void>;
+  /**
+   * Manually flip a stage's status. Unlike `completeStage`, this is an
+   * explicit override — no checklist guard, no auto-advance, no notifications.
+   * Caller is expected to be an editor (canEditFlow).
+   */
+  setStageStatus: (stageId: string, action: StageStatusAction) => Promise<void>;
   getStageStatus: (stageId: string) => 'completed' | 'current' | 'skipped' | 'upcoming';
   isStageCompleted: (stageId: string) => boolean;
   /**
@@ -284,12 +294,28 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
   const customEntries: CustomStageEntry[] = (project.customFlowStages as CustomStageEntry[]) ?? [];
   const hasCustom = customEntries.length > 0;
 
+  // Custom-added stages are entries that have no matching id in the canonical
+  // flow definition. We synthesize a FlowStage from the entry's own custom*
+  // fields so they integrate seamlessly with the rest of the rendering code.
+  const synthesizeCustomStage = (entry: CustomStageEntry): FlowStage => ({
+    id: entry.id,
+    label: entry.customLabel?.trim() || 'New Stage',
+    description: entry.customDescription ?? '',
+    keyOutputs: entry.customOutputs ?? [],
+  });
+
+  const resolveStageForEntry = (entry: CustomStageEntry): FlowStage =>
+    allDefaultStages.find(s => s.id === entry.id) ?? synthesizeCustomStage(entry);
+
+  // displayStages = everything the UI should iterate over (default + user-added),
+  // including skipped ones. Order follows customEntries when present, else default.
+  const displayStages: FlowStage[] = hasCustom
+    ? customEntries.map(resolveStageForEntry)
+    : allDefaultStages;
+
+  // effectiveStages = displayStages minus skipped (used for grouping / pointer math)
   const effectiveStages: FlowStage[] = hasCustom
-    ? customEntries
-        .map(ce => ({ entry: ce, stage: allDefaultStages.find(s => s.id === ce.id) }))
-        .filter((x): x is { entry: CustomStageEntry; stage: FlowStage } => !!x.stage)
-        .filter(x => !x.entry.skipped)
-        .map(x => x.stage)
+    ? customEntries.filter(ce => !ce.skipped).map(resolveStageForEntry)
     : allDefaultStages;
 
   const skippedIds = new Set(customEntries.filter(e => e.skipped).map(e => e.id));
@@ -487,6 +513,73 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     },
   });
 
+  // Manual status override for a single stage. Bypasses the checklist guard,
+  // auto-advance, and notifications that completeStageMutation runs — this is
+  // an explicit "I know what I'm doing" admin/PM control surfaced as a
+  // per-stage dropdown in the FlowTab.
+  const setStageStatusMutation = useMutation({
+    mutationFn: async ({ stageId, action }: { stageId: string; action: StageStatusAction }) => {
+      if (!currentUser?.id) throw new Error('Not authenticated');
+      if (!canEditFlow) throw new Error('You do not have permission to change stage status');
+
+      const stage = displayStages.find(s => s.id === stageId);
+      if (!stage) throw new Error('Stage not found');
+
+      if (action === 'mark-complete') {
+        // No-op if already marked complete.
+        if (completedStageIds.has(stageId)) return;
+        const { error } = await supabase.from('project_flow_log').insert({
+          project_id: project.id,
+          stage_id: stageId,
+          stage_label: stage.label,
+          advanced_by: currentUser.id,
+          notes: 'Marked complete via status override',
+        });
+        if (error) throw new Error(error.message);
+        return;
+      }
+
+      if (action === 'set-current') {
+        const { error } = await supabase.rpc('update_project_flow_stage', {
+          p_id: project.id,
+          p_stage: stageId,
+          p_custom_stages: project.customFlowStages ?? null,
+        });
+        if (error) throw new Error(error.message);
+        return;
+      }
+
+      if (action === 'toggle-skip') {
+        const existing = customEntries.find(e => e.id === stageId);
+        const merged: CustomStageEntry[] = existing
+          ? customEntries.map(e => e.id === stageId ? { ...e, skipped: !e.skipped } : e)
+          : [...customEntries, { id: stageId, skipped: true }];
+        const { error } = await supabase.rpc('update_project_custom_stages', {
+          p_id: project.id,
+          p_custom_stages: merged,
+        });
+        if (error) throw new Error(error.message);
+        return;
+      }
+
+      if (action === 'reopen') {
+        // Remove every completion log row for this stage so its status flips
+        // back to 'upcoming' (or 'current' if the pointer is on it).
+        const { error } = await supabase
+          .from('project_flow_log')
+          .delete()
+          .eq('project_id', project.id)
+          .eq('stage_id', stageId);
+        if (error) throw new Error(error.message);
+        return;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project_flow_log', project.id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
   const completeStage = useCallback(
     async (stageId: string, notes: string) => {
       await completeStageMutation.mutateAsync({ stageId, notes });
@@ -510,8 +603,17 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     [customMutation],
   );
 
+  const setStageStatus = useCallback(
+    async (stageId: string, action: StageStatusAction) => {
+      await setStageStatusMutation.mutateAsync({ stageId, action });
+    },
+    [setStageStatusMutation],
+  );
+
   return {
-    flowDef: allDefaultStages,
+    // displayStages = canonical defaults + user-added custom stages, so the
+    // dialog and main list both see every stage that should render.
+    flowDef: displayStages,
     activeStages: effectiveStages,
     groups,
     currentStages,
@@ -526,9 +628,11 @@ export function useProjectFlow(project: Project): UseProjectFlowReturn {
     isLoading: historyQuery.isLoading,
     isAdvancing: completeStageMutation.isPending,
     isSavingCustom: customMutation.isPending,
+    isMutatingStageStatus: setStageStatusMutation.isPending,
     completeStage,
     advanceStage,
     updateCustomStages,
+    setStageStatus,
     getStageStatus,
     isStageCompleted,
     getBlockedBy,

@@ -47,6 +47,11 @@ import {
   FolderOpen,
   Landmark,
   Wallet,
+  Trash2,
+  MoreVertical,
+  Undo2,
+  PlayCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -237,6 +242,39 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
     setCustomEntries(next);
   };
 
+  // Add a brand-new stage (not in the canonical project flow definition).
+  // The id prefix `custom_` lets us distinguish user-added stages so we can
+  // also expose a delete control for them.
+  const addCustomStage = () => {
+    const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const newEntry: CustomStageEntry = {
+      id,
+      customLabel: '',
+      customDescription: '',
+      customOutputs: [],
+    };
+    setCustomEntries([...customEntries, newEntry]);
+    // Auto-expand the new entry so the user can fill it in immediately.
+    setExpandedEditIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  const removeCustomStage = (id: string) => {
+    setCustomEntries(
+      customEntries
+        .filter(e => e.id !== id)
+        // also drop this id from anyone else's dependencies list
+        .map(e => e.dependencies?.includes(id)
+          ? { ...e, dependencies: e.dependencies.filter(d => d !== id) }
+          : e),
+    );
+  };
+
+  const isCustomStage = (id: string) => id.startsWith('custom_');
+
   const addOutput = (id: string) => {
     const entry = customEntries.find(e => e.id === id);
     updateEntry(id, { customOutputs: [...(entry?.customOutputs ?? []), ''] });
@@ -269,8 +307,18 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
 
         <div className="flex-1 overflow-y-auto space-y-2 py-2 pr-1">
           {customEntries.map((entry, idx) => {
-            const stageDef = allDefaultStages.find(s => s.id === entry.id);
-            if (!stageDef) return null;
+            // For user-added stages there is no canonical default — synthesize
+            // a minimal stage definition from the entry itself so the row
+            // still renders correctly until it is saved (after which the hook
+            // synthesizes it on every read).
+            const stageDef =
+              allDefaultStages.find(s => s.id === entry.id) ?? {
+                id: entry.id,
+                label: entry.customLabel?.trim() || 'New Stage',
+                description: '',
+                keyOutputs: [] as string[],
+              };
+            const customStage = isCustomStage(entry.id);
             const isExpanded = expandedEditIds.has(entry.id);
             const displayLabel = entry.customLabel || stageDef.label;
             const status = getStageStatus(entry.id);
@@ -295,7 +343,14 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className={cn('text-sm font-medium truncate', entry.skipped && 'line-through text-muted-foreground')}>
                         {displayLabel}
-                        {entry.customLabel && entry.customLabel !== stageDef.label && <span className="ml-1 text-[10px] text-[#1D3461]">(custom)</span>}
+                        {customStage && (
+                          <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 rounded px-1 py-0.5 font-medium" title="Stage added by you">
+                            <Sparkles className="inline h-2.5 w-2.5 mr-0.5" />Added
+                          </span>
+                        )}
+                        {!customStage && entry.customLabel && entry.customLabel !== stageDef.label && (
+                          <span className="ml-1 text-[10px] text-[#1D3461]">(custom)</span>
+                        )}
                       </p>
                       {isParallel && (
                         <span className="text-[9px] bg-violet-100 text-violet-700 rounded px-1 font-medium">∥ Group {entry.parallelGroup}</span>
@@ -320,6 +375,18 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
                   <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => toggleEditExpand(entry.id)} title="Edit details">
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
+                  {customStage && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => removeCustomStage(entry.id)}
+                      title="Delete this added stage"
+                      data-testid={`button-delete-stage-${entry.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
 
                 {/* Expanded editor */}
@@ -470,6 +537,20 @@ function EditFlowDialog({ open, onClose, customEntries, setCustomEntries, allDef
               </div>
             );
           })}
+
+          {/* Add Stage — appends a brand-new user-defined stage to the flow.
+              Saved when the user clicks "Save Flow". */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addCustomStage}
+            disabled={isSaving}
+            className="w-full mt-2 border-dashed text-[#1D3461] hover:bg-[#0F2041]/5 hover:border-[#1D3461]"
+            data-testid="button-add-flow-stage"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Stage
+          </Button>
         </div>
 
         <Separator />
@@ -499,10 +580,25 @@ export function FlowTab({
   const {
     activeStages, groups, currentStages, currentStage, currentStageIndex, currentGroupIdx,
     stageHistory, isLastGroup, canAdvance, canEditFlow,
-    isAdvancing, isSavingCustom,
-    completeStage, updateCustomStages, getStageStatus, isStageCompleted,
+    isAdvancing, isSavingCustom, isMutatingStageStatus,
+    completeStage, updateCustomStages, setStageStatus,
+    getStageStatus, isStageCompleted,
     getBlockedBy, isStageBlocked,
   } = flow;
+
+  const handleSetStageStatus = async (stageId: string, action: Parameters<typeof setStageStatus>[1]) => {
+    try {
+      await setStageStatus(stageId, action);
+      const verb =
+        action === 'mark-complete' ? 'Marked complete'
+        : action === 'set-current' ? 'Set as current stage'
+        : action === 'toggle-skip' ? 'Skip toggled'
+        : 'Reopened';
+      toast({ title: `Status updated`, description: verb });
+    } catch (err: any) {
+      toast({ title: 'Failed to update status', description: err.message, variant: 'destructive' });
+    }
+  };
 
   // Load ALL stage assignees for this project in one query
   const { data: allAssignees = [] } = useAllStageAssignees(projectId);
@@ -815,7 +911,21 @@ export function FlowTab({
                 data-testid={`flow-stage-${stage.id}`}
               >
                 {/* Card header */}
-                <button type="button" className="w-full text-left" onClick={() => hasDetails || blocked ? toggleExpand(stage.id) : undefined}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="w-full text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D3461]/30 rounded-xl"
+                  onClick={() => hasDetails || blocked ? toggleExpand(stage.id) : undefined}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if ((e.key === 'Enter' || e.key === ' ') && (hasDetails || blocked)) {
+                      e.preventDefault();
+                      toggleExpand(stage.id);
+                    }
+                  }}
+                  aria-expanded={hasDetails ? isExpanded : undefined}
+                  data-testid={`button-stage-header-${stage.id}`}
+                >
                   <div className="flex items-center gap-3 px-4 py-3.5">
                     {/* Status icon — milestone shows diamond, blocked shows ban */}
                     {isMilestone && status !== 'completed' ? (
@@ -944,13 +1054,90 @@ export function FlowTab({
                       ) : null;
                     })()}
 
+                    {/* Per-stage status menu */}
+                    {canEditFlow && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => e.stopPropagation()}
+                            disabled={isMutatingStageStatus}
+                            data-testid={`button-stage-menu-${stage.id}`}
+                            title="Change status"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-48"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {status !== 'completed' && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetStageStatus(stage.id, 'mark-complete');
+                              }}
+                              disabled={isMutatingStageStatus || blocked}
+                              data-testid={`menu-stage-complete-${stage.id}`}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-600" />
+                              Mark Complete
+                            </DropdownMenuItem>
+                          )}
+                          {status !== 'current' && status !== 'completed' && status !== 'skipped' && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetStageStatus(stage.id, 'set-current');
+                              }}
+                              disabled={isMutatingStageStatus || blocked}
+                              data-testid={`menu-stage-current-${stage.id}`}
+                            >
+                              <PlayCircle className="h-3.5 w-3.5 mr-2 text-blue-600" />
+                              Set as Current
+                            </DropdownMenuItem>
+                          )}
+                          {status !== 'completed' && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetStageStatus(stage.id, status === 'skipped' ? 'unskip' : 'skip');
+                              }}
+                              disabled={isMutatingStageStatus}
+                              data-testid={`menu-stage-skip-${stage.id}`}
+                            >
+                              <SkipForward className="h-3.5 w-3.5 mr-2 text-amber-600" />
+                              {status === 'skipped' ? 'Unskip Stage' : 'Skip Stage'}
+                            </DropdownMenuItem>
+                          )}
+                          {status === 'completed' && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetStageStatus(stage.id, 'reopen');
+                              }}
+                              disabled={isMutatingStageStatus}
+                              data-testid={`menu-stage-reopen-${stage.id}`}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 mr-2 text-slate-600" />
+                              Reopen Stage
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+
                     {hasDetails && (
                       <div className="flex-shrink-0 text-muted-foreground/60">
                         {isExpanded ? <CollapseIcon className="h-4 w-4" /> : <ExpandIcon className="h-4 w-4" />}
                       </div>
                     )}
                   </div>
-                </button>
+                </div>
 
                 {/* Expanded panel */}
                 {isExpanded && (
