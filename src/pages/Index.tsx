@@ -75,53 +75,96 @@ const Index = () => {
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
-      // Fetch live sites (active site entries)
-      const { data: siteEntries, error: sitesError } = await supabase
-        .from('site_entries')
-        .select('id, created_at')
-        .eq('status', 'active');
+      // ── MMP site entries — the actual source of truth for the "Live Sites",
+      //    "Tasks Completed" and "Efficiency" tiles. The legacy queries used
+      //    `site_entries` and `site_visits` (the latter was dropped by
+      //    20250125_drop_site_visits_table.sql), which is why those tiles
+      //    were stuck at 0.
+      //
+      //    Status values written by the MMP module are case-mixed
+      //    ("Pending", "Dispatched", "Assigned", "Accepted", "In Progress",
+      //    "Completed", "Rejected", ...) — see src/pages/MMP.tsx. We
+      //    normalize to lowercase in JS so we don't have to enumerate every
+      //    casing variant in the SQL filter.
+      const { data: mmpEntries } = await supabase
+        .from('mmp_site_entries')
+        .select('id, status, created_at, updated_at');
 
-      // Fetch active teams (users with recent activity)
-      const { data: activeUsers, error: usersError } = await supabase
+      // Active teams (users with recent activity) — unchanged behavior.
+      const { data: activeUsers } = await supabase
         .from('profiles')
         .select('id, updated_at')
         .gte('updated_at', thirtyDaysAgo.toISOString());
 
-      // Fetch completed tasks (site visits with completed status)
-      const { data: completedVisits, error: visitsError } = await supabase
-        .from('site_visits')
-        .select('id, status, created_at, completed_at');
+      const entries = mmpEntries ?? [];
+      const norm = (s: unknown) =>
+        String(s ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
 
-      // Fetch all site visits for efficiency calculation
-      const { data: allVisits, error: allVisitsError } = await supabase
-        .from('site_visits')
-        .select('id, status, created_at');
+      // "Live" = currently in-progress: forwarded/dispatched/accepted but not
+      // yet closed. We exclude terminal states (completed/cancelled/rejected)
+      // and the very first "pending" stage (not yet forwarded).
+      const LIVE = new Set([
+        'dispatched', 'assigned', 'smartassigned', 'accepted',
+        'inprogress', 'ongoing', 'started',
+      ]);
+      // "Done" = completed/verified/closed.
+      const DONE = new Set(['completed', 'verified', 'closed', 'cpverified']);
 
-      // Calculate stats
-      const liveSites = siteEntries?.length || 0;
+      const liveSites = entries.filter(e => LIVE.has(norm(e.status))).length;
+      const tasksCompleted = entries.filter(e => DONE.has(norm(e.status))).length;
+      const totalEntries = entries.length;
+
+      // Efficiency = completed / total, one decimal place.
+      const efficiency = totalEntries > 0
+        ? Math.round((tasksCompleted / totalEntries) * 1000) / 10
+        : 0;
+
       const activeTeams = activeUsers?.length || 0;
-      const tasksCompleted = completedVisits?.filter(v => v.status === 'completed')?.length || 0;
-      
-      // Calculate efficiency (completed / total * 100)
-      const totalVisits = allVisits?.length || 0;
-      const completedCount = allVisits?.filter(v => v.status === 'completed')?.length || 0;
-      const efficiency = totalVisits > 0 ? Math.round((completedCount / totalVisits) * 1000) / 10 : 0;
 
-      // Calculate trends (compare last 30 days to previous 30 days)
-      const recentSites = siteEntries?.filter(s => new Date(s.created_at) >= thirtyDaysAgo)?.length || 0;
-      const olderSites = siteEntries?.filter(s => {
-        const date = new Date(s.created_at);
-        return date >= sixtyDaysAgo && date < thirtyDaysAgo;
-      })?.length || 0;
-      const liveSitesTrend = olderSites > 0 ? Math.round(((recentSites - olderSites) / olderSites) * 100) : (recentSites > 0 ? 100 : 0);
+      // Trends: last 30 days vs prior 30 days, same shape as before.
+      // Live trend uses created_at (when the site entered the workflow).
+      // Completed trend uses updated_at (when status was last changed —
+      // reasonable proxy for completion time without an explicit completed_at).
+      const inWindow = (iso: string | null | undefined, start: Date, end: Date) => {
+        if (!iso) return false;
+        const d = new Date(iso);
+        return d >= start && d < end;
+      };
 
-      const recentVisits = completedVisits?.filter(v => v.status === 'completed' && new Date(v.completed_at || v.created_at) >= thirtyDaysAgo)?.length || 0;
-      const olderVisits = completedVisits?.filter(v => {
-        if (v.status !== 'completed') return false;
-        const date = new Date(v.completed_at || v.created_at);
-        return date >= sixtyDaysAgo && date < thirtyDaysAgo;
-      })?.length || 0;
-      const tasksCompletedTrend = olderVisits > 0 ? Math.round(((recentVisits - olderVisits) / olderVisits) * 100) : (recentVisits > 0 ? 100 : 0);
+      const recentLive = entries.filter(e =>
+        LIVE.has(norm(e.status)) && inWindow(e.created_at, thirtyDaysAgo, now)
+      ).length;
+      const olderLive = entries.filter(e =>
+        LIVE.has(norm(e.status)) && inWindow(e.created_at, sixtyDaysAgo, thirtyDaysAgo)
+      ).length;
+      const liveSitesTrend = olderLive > 0
+        ? Math.round(((recentLive - olderLive) / olderLive) * 100)
+        : (recentLive > 0 ? 100 : 0);
+
+      const recentDone = entries.filter(e => {
+        if (!DONE.has(norm(e.status))) return false;
+        return inWindow(e.updated_at || e.created_at, thirtyDaysAgo, now);
+      }).length;
+      const olderDone = entries.filter(e => {
+        if (!DONE.has(norm(e.status))) return false;
+        return inWindow(e.updated_at || e.created_at, sixtyDaysAgo, thirtyDaysAgo);
+      }).length;
+      const tasksCompletedTrend = olderDone > 0
+        ? Math.round(((recentDone - olderDone) / olderDone) * 100)
+        : (recentDone > 0 ? 100 : 0);
+
+      // Efficiency trend: compare 30-day-window efficiency to prior-30-day-window.
+      const recentTotal = entries.filter(e =>
+        inWindow(e.created_at, thirtyDaysAgo, now)
+      ).length;
+      const olderTotal = entries.filter(e =>
+        inWindow(e.created_at, sixtyDaysAgo, thirtyDaysAgo)
+      ).length;
+      const recentEff = recentTotal > 0 ? (recentDone / recentTotal) * 100 : 0;
+      const olderEff = olderTotal > 0 ? (olderDone / olderTotal) * 100 : 0;
+      const efficiencyTrend = olderEff > 0
+        ? Math.round(((recentEff - olderEff) / olderEff) * 100)
+        : (recentEff > 0 ? Math.round(recentEff) : 0);
 
       setStats({
         liveSites,
@@ -131,10 +174,22 @@ const Index = () => {
         liveSitesTrend,
         activeTeamsTrend: activeTeams > 0 ? Math.min(Math.round(activeTeams / 5), 50) : 0,
         tasksCompletedTrend,
-        efficiencyTrend: efficiency > 90 ? 5 : (efficiency > 70 ? 3 : 0),
+        efficiencyTrend,
       });
     } catch (error) {
+      // One-time console.error, then fall back to zeros so the strip never
+      // gets stuck on "..." or breaks the layout.
       console.error('Error fetching dashboard stats:', error);
+      setStats({
+        liveSites: 0,
+        activeTeams: 0,
+        tasksCompleted: 0,
+        efficiency: 0,
+        liveSitesTrend: 0,
+        activeTeamsTrend: 0,
+        tasksCompletedTrend: 0,
+        efficiencyTrend: 0,
+      });
     } finally {
       setIsLoadingStats(false);
     }

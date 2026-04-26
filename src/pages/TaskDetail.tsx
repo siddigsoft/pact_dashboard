@@ -179,12 +179,13 @@ export default function TaskDetail() {
   const depGateQuery = useQuery({
     queryKey: ['task-can-start', id],
     queryFn: async () => {
-      if (!id) return { canStart: true, blockingTasks: [] as any[], errored: false };
+      if (!id) return { canStart: true, blockingTasks: [] as any[], errored: false, errorMessage: null as string | null };
       const res = await canTaskStart(id);
       return {
         canStart: res.canStart,
         blockingTasks: res.blockingTasks ?? [],
         errored: !!res.error,
+        errorMessage: res.error ?? null,
       };
     },
     enabled: !!id,
@@ -195,7 +196,13 @@ export default function TaskDetail() {
   const depGate = depGateQuery.data;
   const depGateLoading = depGateQuery.isLoading || depGateQuery.isFetching;
   const depGateErrored = depGateQuery.isError || !!depGate?.errored;
-  // True whenever we can't prove the task is unblocked.
+  const depGateErrorMessage =
+    depGate?.errorMessage ||
+    (depGateQuery.error instanceof Error ? depGateQuery.error.message : null);
+  // True whenever we can't prove the task is unblocked. A *successful* RPC
+  // response with zero blockers must be treated as unblocked even when the
+  // viewer can't read the parent rows directly — that is the whole point of
+  // the SECURITY DEFINER RPC behind canTaskStart().
   const depBlocked =
     depGateLoading ||
     depGateErrored ||
@@ -1040,7 +1047,21 @@ export default function TaskDetail() {
             bodyContent = <>Verifying whether any predecessor tasks must finish first.</>;
           } else if (depGateErrored) {
             headerText = "Couldn't verify dependencies";
-            bodyContent = <>We couldn't check predecessor tasks. Please refresh — the task is locked until verification succeeds.</>;
+            bodyContent = (
+              <>
+                We couldn't check predecessor tasks. Please refresh — the task is locked until verification succeeds.
+                {depGateErrorMessage && (
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-[11px] text-amber-700 hover:text-amber-900 underline" data-testid="disclosure-dep-gate-error">
+                      details
+                    </summary>
+                    <p className="mt-1 text-[11px] font-mono text-amber-900 break-words" data-testid="text-dep-gate-error">
+                      {depGateErrorMessage}
+                    </p>
+                  </details>
+                )}
+              </>
+            );
           } else if (names.length > 0) {
             headerText = `Waiting on predecessor task${totalBlockers > 1 ? 's' : ''}`;
             bodyContent = (

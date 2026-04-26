@@ -520,7 +520,21 @@ export async function buildDependencyGraph(
 }
 
 /**
- * Check if a task can start (all dependencies met)
+ * Check if a task can start (all predecessor dependencies are 'done').
+ *
+ * Calls the SECURITY DEFINER RPC `task_can_start` (see migration
+ * 20260426_task_can_start_rpc.sql). The RPC reads task_dependencies and
+ * personal_tasks server-side, so an admin/superadmin viewing a task whose
+ * predecessors they cannot see via RLS still gets a correct answer instead
+ * of tripping the fail-closed dep-gate.
+ *
+ * Contract:
+ *   - On RPC error: { canStart: false, ..., error: <msg> }  (fail closed)
+ *   - On success with empty blocking list: { canStart: true, blockingTasks: [], error: null }
+ *   - On success with blocking list: { canStart: false, blockingTasks: [...], error: null }
+ *
+ * The RPC's `blocking` array only contains predecessors whose status is
+ * NOT 'done' — i.e. the ones actually blocking the start.
  */
 export async function canTaskStart(taskId: string): Promise<{
   canStart: boolean;
@@ -528,21 +542,37 @@ export async function canTaskStart(taskId: string): Promise<{
   error: string | null;
 }> {
   try {
-    const { blockingTasks, error } = await getBlockingTasks(taskId);
+    const { data, error } = await supabase.rpc('task_can_start' as any, {
+      p_task_id: taskId,
+    } as any);
 
-    if (error || !blockingTasks) {
-      return { canStart: false, blockingTasks: [], error };
+    if (error) {
+      // Surface the raw error so the UI can show a "(details)" disclosure.
+      // Keep fail-closed: do NOT flip the gate to canStart=true here.
+      console.error('[task_can_start] RPC error:', error);
+      return {
+        canStart: false,
+        blockingTasks: [],
+        error: error.message || 'Failed to verify dependencies',
+      };
     }
 
-    const incompleteTasks = blockingTasks.filter((t) => t.status !== 'done');
+    // Defensive parsing: the RPC returns jsonb { can_start, blocking }.
+    const payload = (data ?? {}) as { can_start?: boolean; blocking?: any[] };
+    const blocking = Array.isArray(payload.blocking) ? payload.blocking : [];
+    const canStart = payload.can_start === true && blocking.length === 0;
 
     return {
-      canStart: incompleteTasks.length === 0,
-      blockingTasks: incompleteTasks,
+      canStart,
+      blockingTasks: blocking,
       error: null,
     };
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error checking if task can start:', err);
-    return { canStart: false, blockingTasks: [], error: 'Failed to check task status' };
+    return {
+      canStart: false,
+      blockingTasks: [],
+      error: err?.message || 'Failed to check task status',
+    };
   }
 }
