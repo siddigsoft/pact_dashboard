@@ -536,6 +536,32 @@ export async function buildDependencyGraph(
  * The RPC's `blocking` array only contains predecessors whose status is
  * NOT 'done' — i.e. the ones actually blocking the start.
  */
+function isMissingRpcError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  if (err.code === 'PGRST202' || err.code === '42883') return true;
+  const m = (err.message ?? '').toLowerCase();
+  return m.includes('could not find the function')
+    || m.includes('schema cache')
+    || m.includes('does not exist');
+}
+
+async function canTaskStartFallback(taskId: string): Promise<{
+  canStart: boolean;
+  blockingTasks: any[];
+  error: string | null;
+}> {
+  const { blockingTasks, error } = await getBlockingTasks(taskId);
+  if (error) {
+    return { canStart: false, blockingTasks: [], error };
+  }
+  const stillBlocking = (blockingTasks || []).filter((t: any) => t?.status !== 'done');
+  return {
+    canStart: stillBlocking.length === 0,
+    blockingTasks: stillBlocking,
+    error: null,
+  };
+}
+
 export async function canTaskStart(taskId: string): Promise<{
   canStart: boolean;
   blockingTasks: any[];
@@ -547,8 +573,10 @@ export async function canTaskStart(taskId: string): Promise<{
     } as any);
 
     if (error) {
-      // Surface the raw error so the UI can show a "(details)" disclosure.
-      // Keep fail-closed: do NOT flip the gate to canStart=true here.
+      if (isMissingRpcError(error)) {
+        console.warn('[task_can_start] RPC not present in pactdb — falling back to client-side check. Paste supabase/migrations/20260426_task_can_start_rpc.sql to enable the SECURITY DEFINER path.');
+        return await canTaskStartFallback(taskId);
+      }
       console.error('[task_can_start] RPC error:', error);
       return {
         canStart: false,
@@ -557,7 +585,6 @@ export async function canTaskStart(taskId: string): Promise<{
       };
     }
 
-    // Defensive parsing: the RPC returns jsonb { can_start, blocking }.
     const payload = (data ?? {}) as { can_start?: boolean; blocking?: any[] };
     const blocking = Array.isArray(payload.blocking) ? payload.blocking : [];
     const canStart = payload.can_start === true && blocking.length === 0;
@@ -568,6 +595,10 @@ export async function canTaskStart(taskId: string): Promise<{
       error: null,
     };
   } catch (err: any) {
+    if (isMissingRpcError(err)) {
+      console.warn('[task_can_start] RPC missing — falling back to client-side check.');
+      try { return await canTaskStartFallback(taskId); } catch { /* fall through */ }
+    }
     console.error('Error checking if task can start:', err);
     return {
       canStart: false,

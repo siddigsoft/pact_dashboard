@@ -160,6 +160,10 @@ const SalaryIncrements = lazy(() => import('./pages/SalaryIncrements'));
 const PositionsPage = lazy(() => import('./pages/Positions'));
 const TrainingCertificationsPage = lazy(() => import('./pages/TrainingCertifications'));
 const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
+const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
+const AccountingJournals = lazy(() => import('./pages/AccountingJournals'));
+const AccountingTrialBalance = lazy(() => import('./pages/AccountingTrialBalance'));
+const FinanceAuditTrail = lazy(() => import('./pages/FinanceAuditTrail'));
 // HR audit gaps H2-H5: self-service pages
 const MyAdvances = lazy(() => import('./pages/MyAdvances'));
 const MyExpenses = lazy(() => import('./pages/MyExpenses'));
@@ -465,6 +469,10 @@ const AppRoutes = () => {
         <Route path="/positions" element={<PageWrapper><PositionsPage /></PageWrapper>} />
         <Route path="/training-certifications" element={<PageWrapper><TrainingCertificationsPage /></PageWrapper>} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
+        <Route path="/accounting/coa" element={<PageWrapper><AccountingCOA /></PageWrapper>} />
+        <Route path="/accounting/journals" element={<PageWrapper><AccountingJournals /></PageWrapper>} />
+        <Route path="/accounting/trial-balance" element={<PageWrapper><AccountingTrialBalance /></PageWrapper>} />
+        <Route path="/finance/audit-trail" element={<PageWrapper><FinanceAuditTrail /></PageWrapper>} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />
         <Route path="/my-expenses" element={<PageWrapper><MyExpenses /></PageWrapper>} />

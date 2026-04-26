@@ -469,6 +469,23 @@
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
 
+    const acctRole = ['finance', 'accountant'].includes(defaultRole.toLowerCase());
+    const isAuditorRole = hasAnyRole(['auditor']);
+    const acctItems: MenuGroup['items'] = [];
+    if (!isHidden('/accounting/coa') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-coa', title: 'Chart of Accounts', url: '/accounting/coa', icon: BarChart3, priority: 1, isPinned: isPinned('/accounting/coa') });
+    }
+    if (!isHidden('/accounting/journals') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-journals', title: 'Journal Entries', url: '/accounting/journals', icon: Receipt, priority: 2, isPinned: isPinned('/accounting/journals') });
+    }
+    if (!isHidden('/accounting/trial-balance') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-trial-balance', title: 'Trial Balance', url: '/accounting/trial-balance', icon: TrendingUp, priority: 3, isPinned: isPinned('/accounting/trial-balance') });
+    }
+    if (!isHidden('/finance/audit-trail') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditorRole)) {
+      acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
+    }
+    if (acctItems.length) groups.push({ id: 'finance-accounting', label: 'Accounting', order: 5.5, items: acctItems, parentGroup: 'finance' } as any);
+
     // ── 7. HR & People — logical flow: Employees → Payroll → Retainer → Leave → Analytics → My Payslip ──
     const hrItems: MenuGroup['items'] = [];
     // 1. Employees — who works here: contracts, bank accounts, contract type
