@@ -80,10 +80,14 @@ function TimesheetRow({
     : '';
 
   return (
-    <li className="py-2 flex items-center gap-3" data-testid={`row-timesheet-${row.id}`}>
+    <li className="py-2 flex items-center gap-2.5" data-testid={`row-timesheet-${row.id}`}>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate">{row.name}</p>
-        <p className="text-[10px] text-slate-400">
+        {/* break-words + title tooltip so long names ("ELSIDDIG IBRAHIM…", "Mohamed Yousif")
+            don't collapse to two characters in this narrow right-column card. */}
+        <p className="text-sm font-medium text-slate-800 break-words leading-tight" title={row.name}>
+          {row.name}
+        </p>
+        <p className="text-[10px] text-slate-400 mt-0.5">
           {row.role} · planned {row.planned != null ? `${row.planned}h` : '—'}
         </p>
       </div>
@@ -104,7 +108,7 @@ function TimesheetRow({
         />
         <span className="text-[10px] text-slate-400">h</span>
       </div>
-      <div className="w-32 flex items-center justify-end">
+      <div className="w-24 flex items-center justify-end shrink-0">
         {confirmed ? (
           <span
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold"
@@ -124,7 +128,7 @@ function TimesheetRow({
             <Check className="w-3 h-3" /> Confirm
           </button>
         ) : (
-          <span className="text-[10px] text-slate-400 italic">
+          <span className="text-[10px] text-slate-400 italic text-right leading-tight">
             {row.actual == null || row.actual === 0 ? 'Awaiting log' : 'Pending owner'}
           </span>
         )}
@@ -1555,7 +1559,7 @@ export default function TaskDetail() {
               );
             })()}
             {task.recurrence && task.recurrence !== 'none' && (
-              <MetaRow icon={History} label="Recurrence" value={String(task.recurrence)} />
+              <MetaRow icon={History} label="Recurrence" value={formatRecurrence(String(task.recurrence))} />
             )}
           </div>
 
@@ -1843,6 +1847,33 @@ export default function TaskDetail() {
 }
 
 // ---------- Sub-components ----------
+
+// Convert raw recurrence enum values into human-readable labels so the Details
+// card doesn't surface DB internals ("every_2_days") to end users.
+function formatRecurrence(r: string): string {
+  if (!r) return '';
+  const v = r.trim().toLowerCase();
+  if (v === 'none') return '';
+  // every_<N>_<unit>(s)? → "Every N units"
+  const m = v.match(/^every[_\s-]*(\d+)[_\s-]*(day|days|week|weeks|month|months|year|years)$/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    const unit = m[2].replace(/s$/, '');
+    return n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
+  }
+  const presets: Record<string, string> = {
+    daily: 'Daily',
+    weekly: 'Weekly',
+    biweekly: 'Every 2 weeks',
+    monthly: 'Monthly',
+    quarterly: 'Quarterly',
+    yearly: 'Yearly',
+    annually: 'Yearly',
+  };
+  if (presets[v]) return presets[v];
+  // Fallback: snake/kebab → Title Case
+  return v.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
 function MetaRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode }) {
   return (
