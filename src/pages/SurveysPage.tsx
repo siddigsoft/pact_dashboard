@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 import {
   Plus, ClipboardList, BarChart2, Users, CheckCircle2, Clock,
   Trash2, ExternalLink, Edit3, Copy, Loader2, Search, Archive,
-  PlayCircle, FileText, ChevronRight,
+  PlayCircle, FileText, ChevronRight, Link2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -285,16 +285,29 @@ export default function SurveysPage() {
                 {/* Actions */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                   {survey.status === 'active' && (
-                    <a
-                      href={`/surveys/${survey.id}/fill`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Open fill page"
-                      className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors"
-                      data-testid={`btn-open-fill-${survey.id}`}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+                    <>
+                      <a
+                        href={`/surveys/${survey.id}/fill`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open fill page"
+                        className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors"
+                        data-testid={`btn-open-fill-${survey.id}`}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        title="Copy fill link"
+                        onClick={() => {
+                          const url = `${window.location.origin}/surveys/${survey.id}/fill`;
+                          navigator.clipboard.writeText(url).then(() => toast({ title: 'Link copied!' }));
+                        }}
+                        className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors"
+                        data-testid={`btn-copy-link-${survey.id}`}
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
                   )}
                   {canManage && (
                     <>

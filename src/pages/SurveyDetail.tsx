@@ -8,11 +8,11 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Plus, Trash2, Loader2, ChevronUp, ChevronDown, ExternalLink,
-  Eye, BarChart2, Edit3, Save, Copy,
+  BarChart2, Edit3, Save, Copy,
   AlignLeft, AlignJustify, List, CheckSquare, Star, Sliders,
   Calendar, ChevronDown as ChevronDownIcon, Minus, Hash, Type,
   Users, FileText, Clock, MapPin, Image as ImageIcon, Paperclip,
-  Phone, Mail, ScanLine, CalendarClock, GitBranch,
+  Phone, Mail, ScanLine, CalendarClock, GitBranch, Link2, Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -296,6 +296,60 @@ export default function SurveyDetail() {
     qc.invalidateQueries({ queryKey: ['survey-questions', id] });
   };
 
+  const duplicateQuestion = useMutation({
+    mutationFn: async (q: Question) => {
+      const { error } = await supabase.from('survey_questions').insert({
+        survey_id: id,
+        type: q.type,
+        label: `${q.label} (Copy)`,
+        description: q.description,
+        required: q.required,
+        options: q.options,
+        order_index: questions.length,
+        settings: { ...q.settings, skip_logic: undefined },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['survey-questions', id] }),
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const copyFillLink = () => {
+    const url = `${window.location.origin}/surveys/${id}/fill`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast({ title: 'Link copied!', description: 'Share this link with your respondents.' });
+    }).catch(() => {
+      toast({ title: 'Link', description: url });
+    });
+  };
+
+  const exportCSV = async () => {
+    if (!responses.length) return;
+    const rIds = responses.map(r => r.id);
+    const { data: answers } = await supabase.from('survey_answers').select('*').in('response_id', rIds);
+    const cols = questions.filter(q => q.type !== 'section_header');
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const header = ['Respondent Name','Respondent Email','Submitted At',...cols.map(q => esc(q.label))].join(',');
+    const rows = responses.map(r => {
+      const ra = (answers ?? []).filter(a => a.response_id === r.id);
+      const cells = cols.map(q => {
+        const a = ra.find(x => x.question_id === q.id);
+        if (!a) return '""';
+        if (Array.isArray(a.answer_json)) return esc((a.answer_json as string[]).join('; '));
+        if (a.answer_text) return esc(a.answer_text);
+        if (a.answer_json !== null && a.answer_json !== undefined) return esc(String(a.answer_json));
+        return '""';
+      });
+      return [esc(r.respondent_name ?? ''), esc(r.respondent_email ?? ''), esc(format(new Date(r.submitted_at), 'yyyy-MM-dd HH:mm:ss')), ...cells].join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${survey?.title ?? 'survey'}_responses.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const getChartData = (q: Question) => {
     const qAnswers = allAnswers.filter(a => a.question_id === q.id);
     if (['radio', 'dropdown'].includes(q.type)) {
@@ -364,10 +418,19 @@ export default function SurveyDetail() {
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0 h-4 border', scfg.color)}>{scfg.label}</Badge>
             {survey.status === 'active' && (
-              <a href={`/surveys/${survey.id}/fill`} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline">
-                <ExternalLink className="w-3 h-3" />Fill Link
-              </a>
+              <>
+                <a href={`/surveys/${survey.id}/fill`} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline">
+                  <ExternalLink className="w-3 h-3" />Fill Link
+                </a>
+                <button
+                  onClick={copyFillLink}
+                  className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline"
+                  title="Copy fill link to clipboard"
+                >
+                  <Link2 className="w-3 h-3" />Copy Link
+                </button>
+              </>
             )}
           </div>
           <h1 className="text-xl font-bold text-slate-800 mt-1">{survey.title}</h1>
@@ -392,9 +455,9 @@ export default function SurveyDetail() {
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-slate-200 pb-0">
         {([
-          { id: 'builder',   label: 'Builder',   icon: Edit3  },
-          { id: 'responses', label: 'Responses', icon: Users  },
-          { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+          { id: 'builder',   label: 'Builder',   icon: Edit3,     badge: questions.filter(q => q.type !== 'section_header').length },
+          { id: 'responses', label: 'Responses', icon: Users,     badge: responses.length },
+          { id: 'analytics', label: 'Analytics', icon: BarChart2, badge: 0 },
         ] as const).map(t => (
           <button
             key={t.id}
@@ -408,8 +471,8 @@ export default function SurveyDetail() {
             )}
           >
             <t.icon className="w-3.5 h-3.5" />{t.label}
-            {t.id === 'responses' && responses.length > 0 && (
-              <span className="ml-0.5 px-1.5 py-0 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">{responses.length}</span>
+            {t.badge > 0 && (
+              <span className="ml-0.5 px-1.5 py-0 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">{t.badge}</span>
             )}
           </button>
         ))}
@@ -438,6 +501,19 @@ export default function SurveyDetail() {
             </div>
           )}
 
+          {questions.length > 0 && !qLoading && (() => {
+            const nonSection = questions.filter(q => q.type !== 'section_header');
+            const reqCount = nonSection.filter(q => q.required).length;
+            const condCount = nonSection.filter(q => !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id).length;
+            return (
+              <div className="flex items-center gap-3 text-[11px] text-slate-400 px-1">
+                <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{nonSection.length} question{nonSection.length !== 1 ? 's' : ''}</span>
+                {reqCount > 0 && <span className="flex items-center gap-1 text-red-400"><span className="font-bold">*</span>{reqCount} required</span>}
+                {condCount > 0 && <span className="flex items-center gap-1 text-amber-500"><GitBranch className="w-3 h-3" />{condCount} conditional</span>}
+              </div>
+            );
+          })()}
+
           <div className="space-y-2">
             {qLoading ? (
               <div className="flex items-center justify-center py-10 text-slate-400">
@@ -461,6 +537,7 @@ export default function SurveyDetail() {
                   onEdit={() => setEditQId(editQId === q.id ? null : q.id)}
                   onUpdate={(patch) => updateQuestion.mutate({ id: q.id, ...patch })}
                   onDelete={() => deleteQuestion.mutate(q.id)}
+                  onDuplicate={() => duplicateQuestion.mutate(q)}
                   onMoveUp={() => reorderQuestion(q.id, 'up')}
                   onMoveDown={() => reorderQuestion(q.id, 'down')}
                   saving={updateQuestion.isPending}
@@ -481,6 +558,14 @@ export default function SurveyDetail() {
       {/* ── RESPONSES TAB ───────────────────────────────────────────────────── */}
       {tab === 'responses' && (
         <div className="space-y-3">
+          {responses.length > 0 && (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">{responses.length} response{responses.length !== 1 ? 's' : ''}</p>
+              <Button size="sm" variant="outline" onClick={exportCSV} className="gap-1.5 text-xs" data-testid="btn-export-csv">
+                <Download className="w-3.5 h-3.5" />Export CSV
+              </Button>
+            </div>
+          )}
           {rLoading ? (
             <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 className="w-5 h-5 animate-spin mr-2" />Loading…</div>
           ) : responses.length === 0 ? (
@@ -627,12 +712,12 @@ const SKIP_OPERATORS: { value: SkipLogic['operator']; label: string }[] = [
 ];
 
 function QuestionCard({
-  q, idx, total, allQuestions, canManage, isEditing, onEdit, onUpdate, onDelete, onMoveUp, onMoveDown, saving, deleting,
+  q, idx, total, allQuestions, canManage, isEditing, onEdit, onUpdate, onDelete, onDuplicate, onMoveUp, onMoveDown, saving, deleting,
 }: {
   q: Question; idx: number; total: number; allQuestions: Question[]; canManage: boolean;
   isEditing: boolean; onEdit: () => void;
   onUpdate: (p: Partial<Question>) => void;
-  onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void;
+  onDelete: () => void; onDuplicate: () => void; onMoveUp: () => void; onMoveDown: () => void;
   saving: boolean; deleting: boolean;
 }) {
   const [labelDraft, setLabelDraft] = useState(q.label);
@@ -640,6 +725,8 @@ function QuestionCard({
   const [reqDraft, setReqDraft] = useState(q.required);
   const [optsDraft, setOptsDraft] = useState<string[]>(q.options ?? []);
   const [newOpt, setNewOpt] = useState('');
+  const [scaleMin, setScaleMin] = useState(Number(q.settings?.min ?? 1));
+  const [scaleMax, setScaleMax] = useState(Number(q.settings?.max ?? 10));
 
   // Skip logic state
   const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
@@ -660,12 +747,13 @@ function QuestionCard({
     const skipLogic: SkipLogic | undefined = skipEnabled && skipQId
       ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
       : undefined;
+    const scaleSettings = q.type === 'scale' ? { min: scaleMin, max: scaleMax } : {};
     onUpdate({
       label: labelDraft.trim() || q.label,
       description: descDraft.trim() || null,
       required: reqDraft,
       options: hasOptions ? optsDraft.filter(Boolean) : null,
-      settings: { ...q.settings, skip_logic: skipLogic },
+      settings: { ...q.settings, ...scaleSettings, skip_logic: skipLogic },
     });
     onEdit();
   };
@@ -715,10 +803,11 @@ function QuestionCard({
         </div>
         {canManage && (
           <div className="flex items-center gap-0.5">
-            <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
-            <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
-            <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')}><Edit3 className="w-3.5 h-3.5" /></button>
-            <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+            <button onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
+            <button onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 text-slate-400 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
+            <button onClick={onDuplicate} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-indigo-600" title="Duplicate question"><Copy className="w-3.5 h-3.5" /></button>
+            <button onClick={onEdit} className={cn('p-1 rounded text-slate-400', isEditing ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-100')} title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
+            <button onClick={onDelete} disabled={deleting} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
         )}
       </div>
@@ -769,6 +858,23 @@ function QuestionCard({
                 >
                   <Plus className="w-3 h-3" />
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Scale range */}
+          {q.type === 'scale' && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Scale range</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-slate-500">Min</Label>
+                  <Input type="number" value={scaleMin} onChange={e => setScaleMin(Number(e.target.value))} className="h-7 text-sm" min={0} max={scaleMax - 1} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-slate-500">Max</Label>
+                  <Input type="number" value={scaleMax} onChange={e => setScaleMax(Number(e.target.value))} className="h-7 text-sm" min={scaleMin + 1} max={20} />
+                </div>
               </div>
             </div>
           )}
