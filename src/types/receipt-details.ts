@@ -62,8 +62,11 @@ export const CURRENCIES = [
   { code: 'EUR', name: 'Euro', symbol: '€' },
   { code: 'SAR', name: 'Saudi Riyal', symbol: 'SAR' },
   { code: 'AED', name: 'UAE Dirham', symbol: 'AED' },
+  { code: 'QAR', name: 'Qatari Riyal', symbol: 'QAR' },
   { code: 'UGX', name: 'Ugandan Shilling', symbol: 'USh' },
   { code: 'RWF', name: 'Rwandan Franc', symbol: 'RF' },
+  { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh' },
+  { code: 'SSP', name: 'South Sudanese Pound', symbol: 'SSP' },
 ] as const;
 
 export type Currency = typeof CURRENCIES[number]['code'];

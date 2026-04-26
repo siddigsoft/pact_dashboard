@@ -475,7 +475,7 @@ interface ProjectionRow { id: string; role: string; headcount: number; baseSalar
 
 const CHART_COLORS = ['#0F2041','#1D3461','#4f86c6','#34d399','#f59e0b','#a78bfa','#f87171','#38bdf8','#fb923c'];
 
-const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'EGP', 'SAR', 'AED', 'TRY'] as const;
+const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'EGP', 'SAR', 'AED', 'QAR', 'TRY', 'UGX', 'RWF', 'KES', 'SSP'] as const;
 
 interface Scenario {
   id: string;

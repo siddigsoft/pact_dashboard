@@ -20,8 +20,10 @@ import {
 import {
   Receipt, Plus, Trash2, Send, FileText, Upload, Info,
   CreditCard, Clock, CheckCircle2,
+  Plane, UtensilsCrossed, BedDouble, Package, Phone, Stethoscope, MoreHorizontal,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { SUPPORTED_CURRENCIES } from '@/utils/currencyUtils';
 
 export type ExpenseClaim = {
   id: string; user_id: string; claim_number: string | null; title: string;
@@ -35,6 +37,16 @@ type ExpenseLine = {
 };
 
 const CATEGORIES = ['travel','meals','accommodation','supplies','communications','medical','other'];
+
+const CATEGORY_META: Record<string, { label: string; labelAr: string; icon: any; color: string }> = {
+  travel:         { label: 'Travel',         labelAr: 'سفر',           icon: Plane,          color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900' },
+  meals:          { label: 'Meals',          labelAr: 'طعام',          icon: UtensilsCrossed,color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900' },
+  accommodation:  { label: 'Accommodation',  labelAr: 'إقامة',         icon: BedDouble,      color: 'text-violet-600 bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-900' },
+  supplies:       { label: 'Supplies',       labelAr: 'مستلزمات',      icon: Package,        color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950/30 border-cyan-200 dark:border-cyan-900' },
+  communications: { label: 'Communications', labelAr: 'اتصالات',       icon: Phone,          color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900' },
+  medical:        { label: 'Medical',        labelAr: 'طبي',           icon: Stethoscope,    color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900' },
+  other:          { label: 'Other',          labelAr: 'أخرى',          icon: MoreHorizontal, color: 'text-slate-600 bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800' },
+};
 export const PERSONAL_STATUS_META: Record<string, { label: string; cls: string }> = {
   draft:             { label: 'Draft / مسودة',                cls: 'bg-gray-100 text-gray-700 border-gray-300' },
   submitted:         { label: 'Submitted / مرسل',             cls: 'bg-blue-100 text-blue-800 border-blue-300' },
@@ -432,108 +444,254 @@ function PersonalExpenseFlow({ embedded = false, onDirtyChange, embeddedTitle, e
 
       {/* New claim dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-personal-new-claim">
-          <DialogHeader><DialogTitle>New Expense Claim / مطالبة مصاريف جديدة</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label htmlFor="personal-title">Title / العنوان *</Label>
-                <Input id="personal-title" value={header.title}
-                  onChange={e => setHeader(h => ({ ...h, title: e.target.value }))}
-                  placeholder="e.g. Field trip to Kassala / مثال: زيارة ميدانية لكسلا"
-                  data-testid="input-personal-title" />
+        <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto" data-testid="dialog-personal-new-claim">
+          <DialogHeader>
+            <DialogTitle>New Expense Claim / مطالبة مصاريف جديدة</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid lg:grid-cols-[1fr,300px] gap-5 py-2">
+            {/* Main column — header + grouped line items */}
+            <div className="space-y-4 min-w-0">
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label htmlFor="personal-title">Title / العنوان *</Label>
+                  <Input id="personal-title" value={header.title}
+                    onChange={e => setHeader(h => ({ ...h, title: e.target.value }))}
+                    placeholder="e.g. Field trip to Kassala / مثال: زيارة ميدانية لكسلا"
+                    data-testid="input-personal-title" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="personal-currency">Currency / العملة</Label>
+                  <Select value={header.currency} onValueChange={v => setHeader(h => ({ ...h, currency: v }))}>
+                    <SelectTrigger id="personal-currency" data-testid="select-personal-currency">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {SUPPORTED_CURRENCIES.map(c => (
+                        <SelectItem key={c.code} value={c.code} data-testid={`option-currency-${c.code}`}>
+                          <span className="inline-flex items-center gap-2">
+                            <span aria-hidden>{c.flag}</span>
+                            <span className="font-mono font-semibold">{c.code}</span>
+                            <span className="text-muted-foreground text-xs">— {c.name}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
               <div className="space-y-1.5">
-                <Label htmlFor="personal-currency">Currency / العملة</Label>
-                <Select value={header.currency} onValueChange={v => setHeader(h => ({ ...h, currency: v }))}>
-                  <SelectTrigger id="personal-currency"><SelectValue /></SelectTrigger>
-                  <SelectContent>{['SDG','USD','EUR'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                </Select>
+                <Label htmlFor="personal-description">Description / الوصف</Label>
+                <Textarea id="personal-description" rows={2} value={header.description}
+                  onChange={e => setHeader(h => ({ ...h, description: e.target.value }))} />
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="personal-description">Description / الوصف</Label>
-              <Textarea id="personal-description" rows={2} value={header.description}
-                onChange={e => setHeader(h => ({ ...h, description: e.target.value }))} />
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Line Items / البنود <span className="text-muted-foreground font-normal">({lines.length})</span></Label>
+                  <Button size="sm" variant="outline" onClick={() =>
+                    setLines(prev => [...prev, { date: format(new Date(),'yyyy-MM-dd'), category:'travel', description:'', amount:0, receipt_url:null }])
+                  } data-testid="button-personal-add-line">
+                    <Plus className="w-3 h-3 mr-1" /> Add Line / أضف بنداً
+                  </Button>
+                </div>
+
+                {/* Items grouped by category with subtotals — mirrors /cost-submission review style */}
+                {(() => {
+                  const indexed = lines.map((l, i) => ({ line: l, idx: i }));
+                  const groups = CATEGORIES
+                    .map(cat => ({ cat, entries: indexed.filter(e => e.line.category === cat) }))
+                    .filter(g => g.entries.length > 0);
+
+                  return groups.map(({ cat, entries }) => {
+                    const meta = CATEGORY_META[cat];
+                    const Icon = meta.icon;
+                    const subtotal = entries.reduce((s, e) => s + (Number(e.line.amount) || 0), 0);
+                    return (
+                      <div key={cat} className={`rounded-lg border ${meta.color}`} data-testid={`group-personal-${cat}`}>
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-current/10">
+                          <div className="flex items-center gap-2">
+                            <Icon className="w-4 h-4" />
+                            <span className="text-sm font-semibold">{meta.label} / {meta.labelAr}</span>
+                            <Badge variant="outline" className="text-[10px] bg-background">
+                              {entries.length} {entries.length === 1 ? 'item' : 'items'}
+                            </Badge>
+                          </div>
+                          <div className="text-sm font-mono font-semibold tabular-nums" data-testid={`subtotal-personal-${cat}`}>
+                            {subtotal.toLocaleString()} {header.currency}
+                          </div>
+                        </div>
+                        <div className="p-2 space-y-2 bg-background/60">
+                          {entries.map(({ line: l, idx: i }) => (
+                            <div key={i} className="grid grid-cols-12 gap-2 items-end p-2 border rounded-md bg-card">
+                              <div className="col-span-2">
+                                <Label className="text-xs">Date</Label>
+                                <Input type="date" value={l.date} onChange={e => setLines(p => p.map((x,j) => j===i?{...x,date:e.target.value}:x))}
+                                  data-testid={`input-personal-line-date-${i}`} />
+                              </div>
+                              <div className="col-span-2">
+                                <Label className="text-xs">Category</Label>
+                                <Select value={l.category} onValueChange={v => setLines(p => p.map((x,j) => j===i?{...x,category:v}:x))}>
+                                  <SelectTrigger data-testid={`select-personal-line-category-${i}`}><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {CATEGORIES.map(c => (
+                                      <SelectItem key={c} value={c}>
+                                        <span className="inline-flex items-center gap-2">
+                                          {(() => { const I = CATEGORY_META[c].icon; return <I className="w-3 h-3" />; })()}
+                                          {CATEGORY_META[c].label}
+                                        </span>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="col-span-4">
+                                <Label className="text-xs">Description</Label>
+                                <Input value={l.description} onChange={e => setLines(p => p.map((x,j) => j===i?{...x,description:e.target.value}:x))}
+                                  placeholder="What was this for?" data-testid={`input-personal-line-desc-${i}`} />
+                              </div>
+                              <div className="col-span-2">
+                                <Label className="text-xs">Amount</Label>
+                                <Input type="number" min="0" step="0.01" value={l.amount}
+                                  onChange={e => setLines(p => p.map((x,j) => j===i?{...x,amount:Number(e.target.value)}:x))}
+                                  data-testid={`input-personal-line-amount-${i}`} />
+                              </div>
+                              <div className="col-span-1">
+                                <Label className="text-xs" htmlFor={`input-personal-line-receipt-${i}`}>Receipt</Label>
+                                <label
+                                  htmlFor={`input-personal-line-receipt-${i}`}
+                                  className="flex items-center justify-center h-9 border rounded cursor-pointer hover:bg-muted"
+                                  aria-label={`Upload receipt for line ${i + 1}`}
+                                  data-testid={`button-personal-upload-receipt-${i}`}
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  <input
+                                    id={`input-personal-line-receipt-${i}`}
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    onChange={e => e.target.files?.[0] && uploadReceipt(e.target.files[0], i)}
+                                    data-testid={`input-personal-line-receipt-${i}`}
+                                  />
+                                </label>
+                                {l.receipt_url && (
+                                  <a
+                                    href={l.receipt_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-blue-600 underline"
+                                    data-testid={`link-personal-receipt-${i}`}
+                                  >
+                                    view
+                                  </a>
+                                )}
+                              </div>
+                              <div className="col-span-1">
+                                <Button size="icon" variant="ghost" onClick={() => setLines(p => p.filter((_,j) => j!==i))}
+                                  disabled={lines.length === 1} data-testid={`button-personal-remove-line-${i}`}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Line Items / البنود</Label>
-                <Button size="sm" variant="outline" onClick={() =>
-                  setLines(prev => [...prev, { date: format(new Date(),'yyyy-MM-dd'), category:'travel', description:'', amount:0, receipt_url:null }])
-                } data-testid="button-personal-add-line">
-                  <Plus className="w-3 h-3 mr-1" /> Add Line / أضف بنداً
-                </Button>
+            {/* Side column — Request Summary (sticky on large screens) */}
+            <aside className="lg:sticky lg:top-2 self-start space-y-3" data-testid="panel-personal-summary">
+              <Card className="border-primary/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-primary" />
+                    Request Summary / ملخص الطلب
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Currency / العملة</span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold">
+                      {(() => {
+                        const c = SUPPORTED_CURRENCIES.find(x => x.code === header.currency);
+                        return <><span aria-hidden>{c?.flag}</span> <span className="font-mono">{header.currency}</span></>;
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Line items / البنود</span>
+                    <span className="font-semibold tabular-nums">{lines.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">With receipts / مع إيصال</span>
+                    <span className="font-semibold tabular-nums">
+                      {lines.filter(l => !!l.receipt_url).length} / {lines.length}
+                    </span>
+                  </div>
+
+                  <div className="border-t pt-3 space-y-1.5">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">By category / حسب الفئة</div>
+                    {(() => {
+                      const groups = CATEGORIES
+                        .map(cat => ({
+                          cat,
+                          subtotal: lines.filter(l => l.category === cat).reduce((s,l) => s + (Number(l.amount)||0), 0),
+                          count: lines.filter(l => l.category === cat).length,
+                        }))
+                        .filter(g => g.count > 0);
+                      if (groups.length === 0) {
+                        return <div className="text-xs text-muted-foreground italic">No items yet / لا توجد بنود بعد</div>;
+                      }
+                      return groups.map(g => {
+                        const meta = CATEGORY_META[g.cat];
+                        const Icon = meta.icon;
+                        const pct = total > 0 ? (g.subtotal / total) * 100 : 0;
+                        return (
+                          <div key={g.cat} className="space-y-1" data-testid={`summary-row-${g.cat}`}>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="inline-flex items-center gap-1.5">
+                                <Icon className="w-3 h-3" />
+                                {meta.label}
+                              </span>
+                              <span className="font-mono tabular-nums">{g.subtotal.toLocaleString()}</span>
+                            </div>
+                            <div className="h-1 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full bg-primary/70" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  <div className="border-t pt-3 flex items-center justify-between">
+                    <span className="text-sm font-semibold">Grand Total / الإجمالي</span>
+                    <span className="text-lg font-bold font-mono tabular-nums" data-testid="text-personal-grand-total">
+                      {total.toLocaleString()} {header.currency}
+                    </span>
+                  </div>
+
+                  {lines.some(l => !l.receipt_url) && (
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1.5 border border-amber-200 dark:border-amber-900">
+                      <Info className="w-3 h-3 inline mr-1" />
+                      Some items have no receipt. Finance may bounce the claim. /
+                      بعض البنود بدون إيصال — قد ترفض المالية المطالبة.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="text-[11px] text-muted-foreground leading-snug px-1">
+                Flow / المسار: <b>You → Manager → Finance → Paid</b>.
+                {' '}You'll be notified at each step. / ستصلك إشعارات في كل خطوة.
               </div>
-              {lines.map((l, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-end p-2 border rounded-md">
-                  <div className="col-span-2">
-                    <Label className="text-xs">Date</Label>
-                    <Input type="date" value={l.date} onChange={e => setLines(p => p.map((x,j) => j===i?{...x,date:e.target.value}:x))}
-                      data-testid={`input-personal-line-date-${i}`} />
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs">Category</Label>
-                    <Select value={l.category} onValueChange={v => setLines(p => p.map((x,j) => j===i?{...x,category:v}:x))}>
-                      <SelectTrigger data-testid={`select-personal-line-category-${i}`}><SelectValue /></SelectTrigger>
-                      <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-4">
-                    <Label className="text-xs">Description</Label>
-                    <Input value={l.description} onChange={e => setLines(p => p.map((x,j) => j===i?{...x,description:e.target.value}:x))}
-                      placeholder="What was this for?" data-testid={`input-personal-line-desc-${i}`} />
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs">Amount</Label>
-                    <Input type="number" min="0" step="0.01" value={l.amount}
-                      onChange={e => setLines(p => p.map((x,j) => j===i?{...x,amount:Number(e.target.value)}:x))}
-                      data-testid={`input-personal-line-amount-${i}`} />
-                  </div>
-                  <div className="col-span-1">
-                    <Label className="text-xs" htmlFor={`input-personal-line-receipt-${i}`}>Receipt</Label>
-                    <label
-                      htmlFor={`input-personal-line-receipt-${i}`}
-                      className="flex items-center justify-center h-9 border rounded cursor-pointer hover:bg-muted"
-                      aria-label={`Upload receipt for line ${i + 1}`}
-                      data-testid={`button-personal-upload-receipt-${i}`}
-                    >
-                      <Upload className="w-4 h-4" />
-                      <input
-                        id={`input-personal-line-receipt-${i}`}
-                        type="file"
-                        accept="image/*,application/pdf"
-                        className="hidden"
-                        onChange={e => e.target.files?.[0] && uploadReceipt(e.target.files[0], i)}
-                        data-testid={`input-personal-line-receipt-${i}`}
-                      />
-                    </label>
-                    {l.receipt_url && (
-                      <a
-                        href={l.receipt_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-blue-600 underline"
-                        data-testid={`link-personal-receipt-${i}`}
-                      >
-                        view
-                      </a>
-                    )}
-                  </div>
-                  <div className="col-span-1">
-                    <Button size="icon" variant="ghost" onClick={() => setLines(p => p.filter((_,j) => j!==i))}
-                      disabled={lines.length === 1} data-testid={`button-personal-remove-line-${i}`}>
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <div className="text-right text-sm font-medium pt-2">
-                Total / الإجمالي: <span className="text-lg ml-2">{total.toLocaleString()} {header.currency}</span>
-              </div>
-            </div>
+            </aside>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>Cancel</Button>
             <Button onClick={submit} disabled={submitting} data-testid="button-personal-submit-claim">

@@ -229,7 +229,7 @@ export default function MyAdvances() {
                 <Select value={form.currency} onValueChange={v => setForm(f => ({ ...f, currency: v }))}>
                   <SelectTrigger data-testid="select-currency"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {['SDG','USD','EUR'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {['SDG','USD','EUR','GBP','SAR','AED','QAR','UGX','RWF','KES','SSP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

@@ -89,7 +89,7 @@ interface PayrollRun {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'UGX', 'RWF'];
+const CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'QAR', 'UGX', 'RWF', 'KES', 'SSP'];
 const fmt = (n: number, c = 'SDG') =>
   `${c} ${(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
@@ -2974,7 +2974,7 @@ function AdvancesTab({ employees, currentUserId }: { employees: EmployeeRow[]; c
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Currency</p>
                 <Select value={newAdv.currency} onValueChange={v => setNewAdv(p => ({ ...p, currency: v }))}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>{['SDG','USD','EUR','GBP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>{['SDG','USD','EUR','GBP','SAR','AED','QAR','UGX','RWF','KES','SSP'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>

@@ -4,6 +4,7 @@ import {
   Receipt, ArrowRight, Info, Wallet,
 } from 'lucide-react';
 import { PersonalExpenseFlow } from '@/components/cost-submission/PersonalExpenseFlow';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 /**
  * /my-expenses — personal reimbursement page.
@@ -12,10 +13,31 @@ import { PersonalExpenseFlow } from '@/components/cost-submission/PersonalExpens
  * the previous implementation. The actual claim-flow logic lives in the
  * shared <PersonalExpenseFlow /> component so the same flow can be embedded
  * inside the Cost Submission page (Task #56) without code duplication.
+ *
+ * Layout updated to match /cost-submission framing: bilingual EN/AR
+ * "What does this page do?" PageInfoBanner with workflow steps, then the
+ * comparison banner, then the shared expense-claim flow.
  */
 export default function MyExpenses() {
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-5 max-w-6xl" data-testid="page-my-expenses">
+      <PageInfoBanner
+        title="My Expenses"
+        description="Submit personal reimbursement claims for money you paid out of your own pocket (taxi, lunch, supplies, communications, medical, etc.). Add line items grouped by category, attach receipts, then submit. Your line manager reviews first, then Finance approves and pays. Use the New Claim dialog to start — the right-side Request Summary keeps a live breakdown by category and a grand total in your chosen currency."
+        descriptionAr="قدّم مطالبات استرداد المصاريف التي دفعتها من جيبك الخاص (مواصلات، غداء، مستلزمات، اتصالات، طبي، إلخ). أضف البنود مجمعة حسب الفئة، أرفق الإيصالات، ثم اضغط إرسال. يراجع المدير المباشر أولاً، ثم تعتمد المالية وتدفع. استخدم نافذة مطالبة جديدة للبدء — يعرض ملخص الطلب على اليمين توزيع البنود حسب الفئة والإجمالي بالعملة التي اخترتها."
+        workflowSteps={[
+          { step: 1, role: 'Field Staff',   action: 'Submit claim',   description: 'Enter title, pick currency, add line items by category, attach receipts.' },
+          { step: 2, role: 'Supervisor',    action: 'Manager review', description: 'Your line manager gets a notification, reviews the request, and approves or rejects.' },
+          { step: 3, role: 'Finance Admin', action: 'Finance review', description: 'Finance verifies receipts and approves the payment.' },
+          { step: 4, role: 'Finance Admin', action: 'Pay & close',    description: 'Funds are released, payment proof is attached, and the claim is marked Paid.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'موظف ميداني',  action: 'إرسال المطالبة', description: 'املأ العنوان واختر العملة وأضف البنود حسب الفئة وارفع الإيصالات.' },
+          { step: 2, role: 'المشرف',       action: 'مراجعة المدير',  description: 'يصل إشعار للمدير المباشر للموافقة أو الرفض.' },
+          { step: 3, role: 'مدير المالية', action: 'مراجعة المالية', description: 'تتحقق المالية من الإيصالات وتعتمد الدفع.' },
+          { step: 4, role: 'مدير المالية', action: 'الدفع والإغلاق', description: 'يُصرف المبلغ، ويُرفق إثبات الدفع، وتُعلَّم المطالبة كمدفوعة.' },
+        ]}
+      />
       {/* When-to-use comparison banner — bilingual cross-link to Cost Submission */}
       <Card className="border-blue-200 bg-blue-50/40 dark:bg-blue-950/20 dark:border-blue-900">
         <CardContent className="pt-4 pb-4">

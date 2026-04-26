@@ -356,7 +356,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {['SDG', 'USD', 'EUR'].map((currency) => (
+                        {['SDG','USD','EUR','GBP','SAR','AED','QAR','UGX','RWF','KES','SSP'].map((currency) => (
                           <SelectItem key={currency} value={currency} data-testid={`option-currency-${currency}`}>
                             {currency}
                           </SelectItem>
