@@ -710,26 +710,14 @@ export function usePersonalTasks(userId: string | undefined) {
       const p = (task.priority ?? 'medium') as PersonalTaskPriority;
 
       if (assignedTo !== task.userId && data?.id) {
+        // Single unified path — `dispatchTaskMultiChannel` calls the central
+        // `dispatch-notification` edge function which handles in-app insert +
+        // email + push (per the user's notification preferences) and then we
+        // fan out to WhatsApp via `send-whatsapp`. The legacy direct
+        // `sendTaskNotification` + `sendTaskEmail` calls were ALSO firing
+        // here, which produced duplicate inbox rows and double emails for
+        // every newly-assigned person. Keep one canonical path only.
         try {
-          await sendTaskNotification({ userId: assignedTo, taskId: data.id, title: task.title, priority: p, event: 'assigned' });
-          // Resolve assignee email: use explicitly supplied email, or look up from profiles
-          let emailToNotify = task.assignedToEmail ?? null;
-          if (!emailToNotify) {
-            const { data: prof } = await supabase
-              .from('profiles')
-              .select('email')
-              .eq('id', assignedTo)
-              .maybeSingle();
-            emailToNotify = (prof?.email as string) ?? null;
-          }
-          if (emailToNotify) {
-            await sendTaskEmail({
-              email: emailToNotify,
-              titleEn: 'New Task Assigned',
-              body: `You have been assigned a new task: "${task.title}".\n\nView your tasks: https://app.pactorg.com/my-tasks`,
-            });
-          }
-          // ── Multi-channel (in-app + email + WhatsApp + push) for primary assignee ─
           await dispatchTaskMultiChannel({
             recipientId: assignedTo,
             taskId: data.id,
@@ -745,20 +733,12 @@ export function usePersonalTasks(userId: string | undefined) {
       }
 
       // ── Notify co-assignees (people added alongside the primary assignee) ─────
+      // Same dedupe rationale as primary assignee block above.
       if (data?.id && Array.isArray(task.coAssignees) && task.coAssignees.length > 0) {
         for (const co of task.coAssignees) {
           const coId = (co as { id?: string })?.id;
           if (!coId || coId === task.userId || coId === assignedTo) continue;
           try {
-            await sendTaskNotification({ userId: coId, taskId: data.id, title: task.title, priority: p, event: 'assigned' });
-            const { data: prof } = await supabase.from('profiles').select('email').eq('id', coId).maybeSingle();
-            if (prof?.email) {
-              await sendTaskEmail({
-                email: prof.email as string,
-                titleEn: 'You were added to a task',
-                body: `You have been added as a collaborator on the task: "${task.title}".\n\nView the task: https://app.pactorg.com/my-tasks`,
-              });
-            }
             await dispatchTaskMultiChannel({
               recipientId: coId,
               taskId: data.id,
@@ -790,15 +770,7 @@ export function usePersonalTasks(userId: string | undefined) {
               if (!ownerId || ownerId === task.userId) continue;
               const dtTitle = (dt.title as string) ?? 'your task';
               try {
-                await sendTaskNotification({ userId: ownerId, taskId: dt.id as string, title: dtTitle, priority: p, event: 'dependency_added', extra: task.title });
-                const { data: ownerProf } = await supabase.from('profiles').select('email').eq('id', ownerId).maybeSingle();
-                if (ownerProf?.email) {
-                  await sendTaskEmail({
-                    email: ownerProf.email as string,
-                    titleEn: 'Your task is now blocking another task',
-                    body: `Your task "${dtTitle}" was linked as a dependency of a new task: "${task.title}".\n\nThe new task can't proceed until your task is complete.\n\nView your tasks: https://app.pactorg.com/my-tasks`,
-                  });
-                }
+                // Single unified path — see primary-assignee block for rationale.
                 await dispatchTaskMultiChannel({
                   recipientId: ownerId,
                   taskId: dt.id as string,
@@ -827,19 +799,11 @@ export function usePersonalTasks(userId: string | undefined) {
           d => (d as { type?: string }).type === 'department' && (d as { deptId?: string }).deptId,
         ) as Array<{ deptId: string; label: string }>;
 
-        // Person dependencies — notify the named user directly
+        // Person dependencies — notify the named user directly via the
+        // unified dispatcher (in-app + email + WhatsApp + push).
         for (const dep of personDeps) {
           if (dep.userId === task.userId || dep.userId === assignedTo) continue;
           try {
-            await sendTaskNotification({ userId: dep.userId, taskId: data.id, title: task.title, priority: p, event: 'dependency_added', extra: dep.label });
-            const { data: prof } = await supabase.from('profiles').select('email').eq('id', dep.userId).maybeSingle();
-            if (prof?.email) {
-              await sendTaskEmail({
-                email: prof.email as string,
-                titleEn: 'You are listed as a dependency',
-                body: `You were listed as a dependency on the new task: "${task.title}".\n\nThe task owner will need your input/approval before they can start, and you'll be asked to confirm when ready.\n\nView: https://app.pactorg.com/my-tasks`,
-              });
-            }
             await dispatchTaskMultiChannel({
               recipientId: dep.userId,
               taskId: data.id,
@@ -870,15 +834,7 @@ export function usePersonalTasks(userId: string | undefined) {
               const managerId = dept?.manager_user_id ?? null;
               if (!managerId || managerId === task.userId || managerId === assignedTo) continue;
               try {
-                await sendTaskNotification({ userId: managerId, taskId: data.id, title: task.title, priority: p, event: 'dependency_added', extra: dep.label });
-                const { data: prof } = await supabase.from('profiles').select('email').eq('id', managerId).maybeSingle();
-                if (prof?.email) {
-                  await sendTaskEmail({
-                    email: prof.email as string,
-                    titleEn: 'Your department is listed as a dependency',
-                    body: `Your department (${dept?.name ?? 'department'}) was listed as a dependency on the new task: "${task.title}".\n\nThe task can't start until your team delivers / approves. You'll be asked to confirm when ready.\n\nView: https://app.pactorg.com/my-tasks`,
-                  });
-                }
+                // Single unified path — see primary-assignee block for rationale.
                 await dispatchTaskMultiChannel({
                   recipientId: managerId,
                   taskId: data.id,
@@ -988,6 +944,38 @@ export function usePersonalTasks(userId: string | undefined) {
         patch.target_department_id = (updates as { targetDepartmentId?: string | null }).targetDepartmentId;
       }
 
+      // ── Capture pre-patch dependencies so the "dep added" diff after
+      // the update can compare against the actual previous state. The
+      // notification block below USED to re-read `dependencies` after the
+      // patch had already written the new values to the row — meaning
+      // `oldDeps` was actually the new deps and the diff was always empty,
+      // so the "dependency added" notification never fired on edit.
+      let preUpdateDeps: { type?: string; taskId?: string; text?: string }[] | null = null;
+      let preUpdateRowMeta: {
+        title?: string | null;
+        priority?: string | null;
+        assigned_to?: string | null;
+        user_id?: string | null;
+      } | null = null;
+      if (updates.dependencies !== undefined && updates.dependencies.length > 0) {
+        const { data: pre } = await supabase
+          .from('personal_tasks')
+          .select('title, priority, assigned_to, user_id, dependencies')
+          .eq('id', id)
+          .maybeSingle();
+        if (pre) {
+          preUpdateDeps = Array.isArray(pre.dependencies)
+            ? (pre.dependencies as { type?: string; taskId?: string; text?: string }[])
+            : [];
+          preUpdateRowMeta = {
+            title: (pre.title as string | null) ?? null,
+            priority: (pre.priority as string | null) ?? null,
+            assigned_to: (pre.assigned_to as string | null) ?? null,
+            user_id: (pre.user_id as string | null) ?? null,
+          };
+        }
+      }
+
       // ── Auto-track timestamps for status transitions ──────
       if (updates.status !== undefined) {
         const { data: cur } = await supabase
@@ -1047,34 +1035,30 @@ export function usePersonalTasks(userId: string | undefined) {
       }
       if (error) throw error;
 
-      // Dependency-added notification: only fires when new dependencies are actually added (diff old vs new)
-      if (updates.dependencies !== undefined && updates.dependencies.length > 0) {
+      // Dependency-added notification: only fires when new dependencies are
+      // actually added (diff old vs new). Uses the snapshot we took BEFORE
+      // the patch ran — comparing against the post-write row would always
+      // show zero diff because we already wrote `updates.dependencies` to it.
+      if (updates.dependencies !== undefined && updates.dependencies.length > 0 && preUpdateRowMeta) {
         try {
-          const { data: taskRow } = await supabase
-            .from('personal_tasks')
-            .select('title, priority, assigned_to, user_id, dependencies')
-            .eq('id', id)
-            .maybeSingle();
-          if (taskRow) {
-            // Compare old vs new to find actually-new dependency entries
-            const oldDeps = Array.isArray(taskRow.dependencies) ? (taskRow.dependencies as { type?: string; taskId?: string; text?: string }[]) : [];
-            const newDeps = updates.dependencies;
-            const hasActuallyNew = newDeps.some(nd => {
-              // A dep is new if it doesn't appear in oldDeps (match by taskId for task type, or text for custom)
-              return !oldDeps.some(od =>
-                nd.type === 'task' ? od.type === 'task' && od.taskId === nd.taskId : od.text === nd.text
-              );
-            });
-            if (hasActuallyNew) {
-              const depTitle = updates.title ?? (taskRow.title as string) ?? 'Task';
-              const depPriority = (_taskPriority ?? updates.priority ?? taskRow.priority ?? 'medium') as PersonalTaskPriority;
-              const recipientId = (taskRow.assigned_to as string | null) ?? (taskRow.user_id as string | null);
-              if (recipientId) {
-                await sendTaskNotification({ userId: recipientId, taskId: id, title: depTitle, priority: depPriority, event: 'dependency_added' });
-                const { data: prof } = await supabase.from('profiles').select('email').eq('id', recipientId).maybeSingle();
-                if (prof?.email) {
-                  await sendTaskEmail({ email: prof.email as string, titleEn: 'Task Dependency Added', body: `A dependency was added to your task "${depTitle}". View your tasks: https://app.pactorg.com/my-tasks` });
-                }
+          const oldDeps = preUpdateDeps ?? [];
+          const newDeps = updates.dependencies;
+          // A dep is new if it doesn't appear in the pre-update list.
+          // Match task-type deps by taskId, custom/text deps by text.
+          const hasActuallyNew = newDeps.some(nd => {
+            return !oldDeps.some(od =>
+              nd.type === 'task' ? od.type === 'task' && od.taskId === nd.taskId : od.text === nd.text
+            );
+          });
+          if (hasActuallyNew) {
+            const depTitle = updates.title ?? preUpdateRowMeta.title ?? 'Task';
+            const depPriority = (_taskPriority ?? updates.priority ?? preUpdateRowMeta.priority ?? 'medium') as PersonalTaskPriority;
+            const recipientId = preUpdateRowMeta.assigned_to ?? preUpdateRowMeta.user_id;
+            if (recipientId) {
+              await sendTaskNotification({ userId: recipientId, taskId: id, title: depTitle, priority: depPriority, event: 'dependency_added' });
+              const { data: prof } = await supabase.from('profiles').select('email').eq('id', recipientId).maybeSingle();
+              if (prof?.email) {
+                await sendTaskEmail({ email: prof.email as string, titleEn: 'Task Dependency Added', body: `A dependency was added to your task "${depTitle}". View your tasks: https://app.pactorg.com/my-tasks` });
               }
             }
           }
