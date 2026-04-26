@@ -944,7 +944,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <TabsTrigger value="costs" data-testid="tab-costs">Costs</TabsTrigger>
           <TabsTrigger value="budget">Budget</TabsTrigger>
           <TabsTrigger value="flow" data-testid="tab-flow">
-            <GitBranch className="h-3.5 w-3.5 mr-1" />{typeConfig.tabLabels.monitoring ?? 'Flow'}
+            <GitBranch className="h-3.5 w-3.5 mr-1" />{typeConfig.tabLabels.monitoring ?? 'Stages'}
           </TabsTrigger>
           <TabsTrigger value="field_tasks" data-testid="tab-field-tasks">
             <CheckSquare className="h-3.5 w-3.5 mr-1" />Tasks
