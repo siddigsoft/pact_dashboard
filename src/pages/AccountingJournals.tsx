@@ -1,0 +1,406 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Loader2, Search, Download, RefreshCw, FileText, Eye } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { cn } from '@/lib/utils';
+
+interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
+interface FiscalYear { id: string; code: string }
+interface Entry {
+  id: string;
+  entry_no: number;
+  period_id: string;
+  posting_date: string;
+  description_en: string;
+  description_ar: string | null;
+  source_type: string;
+  source_id: string | null;
+  status: 'draft' | 'pending_approval' | 'posted' | 'reversed' | 'rejected';
+  branch_id: string | null;
+  idempotency_key: string;
+  posted_at: string | null;
+  posted_by: string | null;
+  created_at: string;
+  created_by: string;
+  reversed_by_entry_id: string | null;
+}
+interface Line {
+  id: string;
+  line_no: number;
+  account_id: string;
+  fund_id: string;
+  function: string;
+  partner_id: string | null;
+  project_id: string | null;
+  cost_center_id: string | null;
+  original_amount: number;
+  original_currency: string;
+  functional_amount: number;
+  functional_currency: string;
+  fx_rate: number | null;
+  debit_credit: 'DR' | 'CR';
+  description: string | null;
+}
+
+const PAGE_SIZE = 50;
+
+export default function AccountingJournals() {
+  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+
+  const [years, setYears] = useState<FiscalYear[]>([]);
+  const [periods, setPeriods] = useState<Period[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [accountsMap, setAccountsMap] = useState<Record<string, { code: string; name_en: string; name_ar: string }>>({});
+  const [fundsMap, setFundsMap] = useState<Record<string, { code: string; name_en: string }>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [periodFilter, setPeriodFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+
+  const [openEntry, setOpenEntry] = useState<Entry | null>(null);
+  const [openLines, setOpenLines] = useState<Line[]>([]);
+  const [linesLoading, setLinesLoading] = useState(false);
+
+  const loadAll = async () => {
+    setLoading(true);
+    setError(null);
+    const [yres, pres, eres, ares, fres] = await Promise.all([
+      supabase.from('acct_fiscal_years').select('id, code').order('code', { ascending: false }),
+      supabase.from('acct_fiscal_periods').select('id, period_no, start_date, end_date, status, fiscal_year_id').order('start_date', { ascending: false }),
+      supabase.from('acct_journal_entries').select('id, entry_no, period_id, posting_date, description_en, description_ar, source_type, source_id, status, branch_id, idempotency_key, posted_at, posted_by, created_at, created_by, reversed_by_entry_id').order('posting_date', { ascending: false }).order('entry_no', { ascending: false }).limit(2000),
+      supabase.from('acct_accounts').select('id, code, name_en, name_ar'),
+      supabase.from('acct_funds').select('id, code, name_en'),
+    ]);
+    const firstErr = [yres.error, pres.error, eres.error, ares.error, fres.error].find(Boolean);
+    if (firstErr) setError(firstErr.message);
+    setYears((yres.data ?? []) as FiscalYear[]);
+    setPeriods((pres.data ?? []) as Period[]);
+    setEntries((eres.data ?? []) as Entry[]);
+    const am: typeof accountsMap = {};
+    for (const a of (ares.data ?? [])) am[a.id] = { code: a.code, name_en: a.name_en, name_ar: a.name_ar };
+    setAccountsMap(am);
+    const fm: typeof fundsMap = {};
+    for (const f of (fres.data ?? [])) fm[f.id] = { code: f.code, name_en: f.name_en };
+    setFundsMap(fm);
+    setLoading(false);
+  };
+
+  useEffect(() => { if (allowed) void loadAll(); }, [allowed]);
+
+  const sources = useMemo(() => {
+    const s = new Set<string>();
+    entries.forEach(e => s.add(e.source_type));
+    return Array.from(s).sort();
+  }, [entries]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return entries.filter(e => {
+      if (periodFilter !== 'all' && e.period_id !== periodFilter) return false;
+      if (statusFilter !== 'all' && e.status !== statusFilter) return false;
+      if (sourceFilter !== 'all' && e.source_type !== sourceFilter) return false;
+      if (q) {
+        return String(e.entry_no).includes(q)
+          || e.description_en.toLowerCase().includes(q)
+          || (e.description_ar ?? '').toLowerCase().includes(q)
+          || e.idempotency_key.toLowerCase().includes(q)
+          || (e.source_id ?? '').toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [entries, periodFilter, statusFilter, sourceFilter, search]);
+
+  const paged = useMemo(() => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [filtered, page]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  useEffect(() => { setPage(0); }, [periodFilter, statusFilter, sourceFilter, search]);
+
+  const counts = useMemo(() => {
+    const c = { total: entries.length, posted: 0, draft: 0, reversed: 0 };
+    for (const e of entries) {
+      if (e.status === 'posted') c.posted++;
+      else if (e.status === 'draft') c.draft++;
+      else if (e.status === 'reversed') c.reversed++;
+    }
+    return c;
+  }, [entries]);
+
+  const periodLabel = (id: string) => {
+    const p = periods.find(x => x.id === id);
+    if (!p) return id.slice(0, 8);
+    const y = years.find(yy => yy.id === p.fiscal_year_id);
+    return `${y?.code ?? '?'} P${String(p.period_no).padStart(2, '0')}`;
+  };
+
+  const openDetails = async (e: Entry) => {
+    setOpenEntry(e);
+    setOpenLines([]);
+    setLinesLoading(true);
+    const { data } = await supabase
+      .from('acct_journal_lines')
+      .select('id, line_no, account_id, fund_id, function, partner_id, project_id, cost_center_id, original_amount, original_currency, functional_amount, functional_currency, fx_rate, debit_credit, description')
+      .eq('entry_id', e.id)
+      .order('line_no', { ascending: true });
+    setOpenLines((data ?? []) as Line[]);
+    setLinesLoading(false);
+  };
+
+  const exportCsv = () => {
+    const header = ['Entry #', 'Posting Date', 'Period', 'Status', 'Source Type', 'Source ID', 'Description (EN)', 'Description (AR)', 'Idempotency Key', 'Posted At', 'Created At'];
+    const body = filtered.map(e => [
+      e.entry_no,
+      e.posting_date,
+      periodLabel(e.period_id),
+      e.status,
+      e.source_type,
+      e.source_id ?? '',
+      e.description_en,
+      e.description_ar ?? '',
+      e.idempotency_key,
+      e.posted_at ?? '',
+      e.created_at,
+    ]);
+    downloadCsv(`journal-entries-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
+  };
+
+  const lineTotals = useMemo(() => {
+    let dr = 0, cr = 0;
+    for (const l of openLines) {
+      if (l.debit_credit === 'DR') dr += Number(l.functional_amount);
+      else cr += Number(l.functional_amount);
+    }
+    return { dr, cr, balanced: Math.abs(dr - cr) < 0.005 };
+  }, [openLines]);
+
+  if (authLoading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (!allowed) return <Navigate to="/" replace />;
+
+  return (
+    <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-[1400px]">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <FileText className="w-6 h-6 text-violet-600" /> Journal Entries
+            <span className="text-sm font-normal text-muted-foreground" dir="rtl" lang="ar">قيود اليومية</span>
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Every balanced GL posting routed through <code className="text-xs bg-muted px-1 rounded">acct_post_journal</code>. Lines are immutable.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => void loadAll()} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export-csv">
+            <Download className="w-4 h-4 mr-1" /> CSV
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Loaded entries</div><div className="text-xl font-bold" data-testid="kpi-total">{counts.total}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Posted</div><div className="text-xl font-bold text-emerald-700" data-testid="kpi-posted">{counts.posted}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Draft</div><div className="text-xl font-bold text-slate-700" data-testid="kpi-draft">{counts.draft}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-[11px] text-muted-foreground">Reversed</div><div className="text-xl font-bold text-rose-700" data-testid="kpi-reversed">{counts.reversed}</div></CardContent></Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Entries</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search #, desc, key…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8" data-testid="input-search" />
+            </div>
+            <Select value={periodFilter} onValueChange={setPeriodFilter}>
+              <SelectTrigger data-testid="select-period"><SelectValue placeholder="Period" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All periods</SelectItem>
+                {periods.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{periodLabel(p.id)} · {p.status}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger data-testid="select-source"><SelectValue placeholder="Source" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                {sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger data-testid="select-status"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="pending_approval">Pending approval</SelectItem>
+                <SelectItem value="posted">Posted</SelectItem>
+                <SelectItem value="reversed">Reversed</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {error && (
+            <div className="p-3 rounded border border-rose-200 bg-rose-50 text-rose-800 text-sm" data-testid="text-error">
+              {error}
+              <div className="text-xs mt-1 text-rose-700/80">If this is a missing-relation error, Sprint 1.1/1.2 SQL has not been pasted into pactdb yet.</div>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading entries…</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm" data-testid="text-empty">No journal entries match the current filters.</div>
+          ) : (
+            <>
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-[11px] uppercase text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-3 py-2">Entry #</th>
+                      <th className="text-left px-3 py-2">Posting Date</th>
+                      <th className="text-left px-3 py-2">Period</th>
+                      <th className="text-left px-3 py-2">Source</th>
+                      <th className="text-left px-3 py-2">Description</th>
+                      <th className="text-left px-3 py-2">Status</th>
+                      <th className="text-right px-3 py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paged.map(e => (
+                      <tr key={e.id} className="border-t hover:bg-muted/30" data-testid={`row-entry-${e.id}`}>
+                        <td className="px-3 py-2 font-mono text-xs">{e.entry_no}</td>
+                        <td className="px-3 py-2">{format(parseISO(e.posting_date), 'yyyy-MM-dd')}</td>
+                        <td className="px-3 py-2">{periodLabel(e.period_id)}</td>
+                        <td className="px-3 py-2 text-xs"><Badge variant="outline" className="text-[10px]">{e.source_type}</Badge></td>
+                        <td className="px-3 py-2 max-w-[420px]">
+                          <div className="truncate">{e.description_en}</div>
+                          {e.description_ar && <div className="truncate text-xs text-muted-foreground" dir="rtl" lang="ar">{e.description_ar}</div>}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge variant="outline" className={cn('text-[10px]', ACCT_STATUS_TONE[e.status] ?? '')}>{e.status}</Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => void openDetails(e)} data-testid={`button-view-${e.id}`}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</div>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} data-testid="button-prev">Prev</Button>
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} data-testid="button-next">Next</Button>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!openEntry} onOpenChange={o => !o && setOpenEntry(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Entry #{openEntry?.entry_no}
+              {openEntry && <Badge variant="outline" className={cn('text-[10px]', ACCT_STATUS_TONE[openEntry.status] ?? '')}>{openEntry.status}</Badge>}
+            </DialogTitle>
+          </DialogHeader>
+          {openEntry && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div><div className="text-muted-foreground">Posting date</div><div className="font-medium">{format(parseISO(openEntry.posting_date), 'PPP')}</div></div>
+                <div><div className="text-muted-foreground">Period</div><div className="font-medium">{periodLabel(openEntry.period_id)}</div></div>
+                <div><div className="text-muted-foreground">Source</div><div className="font-medium">{openEntry.source_type}</div></div>
+                <div><div className="text-muted-foreground">Source ID</div><div className="font-mono text-[11px] truncate">{openEntry.source_id ?? '—'}</div></div>
+                <div className="sm:col-span-2"><div className="text-muted-foreground">Description (EN)</div><div className="font-medium">{openEntry.description_en}</div></div>
+                <div className="sm:col-span-2"><div className="text-muted-foreground">Description (AR)</div><div className="font-medium" dir="rtl" lang="ar">{openEntry.description_ar ?? '—'}</div></div>
+                <div className="sm:col-span-2"><div className="text-muted-foreground">Idempotency key</div><div className="font-mono text-[11px] break-all">{openEntry.idempotency_key}</div></div>
+                <div><div className="text-muted-foreground">Posted at</div><div className="font-medium">{openEntry.posted_at ? format(parseISO(openEntry.posted_at), 'PPp') : '—'}</div></div>
+                <div><div className="text-muted-foreground">Created</div><div className="font-medium">{format(parseISO(openEntry.created_at), 'PPp')}</div></div>
+                {openEntry.reversed_by_entry_id && (
+                  <div className="sm:col-span-4 p-2 rounded border border-rose-200 bg-rose-50 text-rose-800 text-xs">
+                    Reversed by entry: <span className="font-mono">{openEntry.reversed_by_entry_id.slice(0, 8)}…</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="border rounded-md overflow-x-auto">
+                {linesLoading ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading lines…</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
+                      <tr>
+                        <th className="text-left px-2 py-1.5">#</th>
+                        <th className="text-left px-2 py-1.5">Account</th>
+                        <th className="text-left px-2 py-1.5">Fund</th>
+                        <th className="text-left px-2 py-1.5">Function</th>
+                        <th className="text-right px-2 py-1.5">Original</th>
+                        <th className="text-right px-2 py-1.5">DR</th>
+                        <th className="text-right px-2 py-1.5">CR</th>
+                        <th className="text-left px-2 py-1.5">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {openLines.map(l => {
+                        const acct = accountsMap[l.account_id];
+                        const fund = fundsMap[l.fund_id];
+                        return (
+                          <tr key={l.id} className="border-t" data-testid={`row-line-${l.id}`}>
+                            <td className="px-2 py-1.5 font-mono">{l.line_no}</td>
+                            <td className="px-2 py-1.5">
+                              <div className="font-mono text-[10px]">{acct?.code ?? l.account_id.slice(0, 8)}</div>
+                              <div className="text-[11px]">{acct?.name_en ?? ''}</div>
+                            </td>
+                            <td className="px-2 py-1.5"><span className="font-mono text-[10px]">{fund?.code ?? l.fund_id.slice(0, 8)}</span></td>
+                            <td className="px-2 py-1.5">{l.function}</td>
+                            <td className="px-2 py-1.5 text-right">{formatNumber(l.original_amount)} {l.original_currency}</td>
+                            <td className="px-2 py-1.5 text-right font-medium text-emerald-700">{l.debit_credit === 'DR' ? formatNumber(l.functional_amount) : ''}</td>
+                            <td className="px-2 py-1.5 text-right font-medium text-rose-700">{l.debit_credit === 'CR' ? formatNumber(l.functional_amount) : ''}</td>
+                            <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[200px]">{l.description ?? ''}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="border-t bg-muted/30">
+                      <tr>
+                        <td colSpan={5} className="px-2 py-2 text-right text-xs font-semibold">Totals (functional {openLines[0]?.functional_currency ?? 'SDG'}):</td>
+                        <td className="px-2 py-2 text-right font-bold text-emerald-700">{formatNumber(lineTotals.dr)}</td>
+                        <td className="px-2 py-2 text-right font-bold text-rose-700">{formatNumber(lineTotals.cr)}</td>
+                        <td className="px-2 py-2 text-xs">
+                          {lineTotals.balanced
+                            ? <Badge variant="outline" className="bg-emerald-50 text-emerald-700 text-[10px]">Balanced</Badge>
+                            : <Badge variant="outline" className="bg-rose-50 text-rose-700 text-[10px]">Out of balance</Badge>}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
