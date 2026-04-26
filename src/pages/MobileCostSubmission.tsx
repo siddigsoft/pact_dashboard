@@ -22,6 +22,8 @@ import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
 import { AppRole } from "@/types";
 import UnifiedCostRequestForm from "@/components/cost-submission/UnifiedCostRequestForm";
+import { ExpenseTypeSelector, type ExpenseMode } from "@/components/cost-submission/ExpenseTypeSelector";
+import { PersonalExpenseFlow, type PersonalExpenseFlowHandle } from "@/components/cost-submission/PersonalExpenseFlow";
 import CostDocumentUpload from "@/components/cost-submission/CostDocumentUpload";
 import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvances";
 import { MobileTabBar } from "@/components/mobile/MobileTabBar";
@@ -128,6 +130,24 @@ const MobileCostSubmission = () => {
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;
 
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
+  // Task #56 — expense-type selector
+  const [expenseMode, setExpenseMode] = useState<ExpenseMode>("operational");
+  const [pendingMode, setPendingMode] = useState<ExpenseMode | null>(null);
+  const [personalDirty, setPersonalDirty] = useState(false);
+  const personalFlowRef = useRef<PersonalExpenseFlowHandle>(null);
+  const handleSwitchMode = (next: ExpenseMode) => {
+    if (next === expenseMode) return;
+    if (expenseMode === 'personal' && personalDirty) { setPendingMode(next); return; }
+    setExpenseMode(next);
+  };
+  const confirmSwitchMode = () => {
+    if (pendingMode) {
+      personalFlowRef.current?.reset();
+      setPersonalDirty(false);
+      setExpenseMode(pendingMode);
+      setPendingMode(null);
+    }
+  };
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">("all");
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
   const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
@@ -917,6 +937,31 @@ const MobileCostSubmission = () => {
           )}
         </div>
 
+        {/* Task #56 — expense-type selector */}
+        <ExpenseTypeSelector
+          value={expenseMode}
+          onChange={handleSwitchMode}
+          compact
+          className="mb-3"
+        />
+
+        <AlertDialog open={!!pendingMode} onOpenChange={(o) => !o && setPendingMode(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Discard unsaved claim? / تجاهل المطالبة؟</AlertDialogTitle>
+              <AlertDialogDescription>
+                You have unsaved changes in the personal reimbursement form.
+                <br /><span dir="rtl">لديك تغييرات غير محفوظة.</span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-discard-cancel-mobile">Keep / متابعة</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmSwitchMode} data-testid="button-discard-confirm-mobile">Discard / تجاهل</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {expenseMode === 'operational' && (<>
         <PageInfoBanner
           title="Cost Submission - Operational Expenses"
           description="Submit operational costs for reimbursement. Each submission goes through a two-tier approval before the amount is credited."
@@ -943,8 +988,20 @@ const MobileCostSubmission = () => {
           <MobileStatsCard title="Paid" value={submissionStats.paid} subtitle="Completed" icon={<DollarSign className="h-4 w-4" />} variant="compact" />
           <MobileStatsCard title="Total" value={submissionStats.total} subtitle="All submissions" icon={<FileText className="h-4 w-4" />} variant="compact" />
         </div>
+        </>)}
       </div>
 
+      {expenseMode === 'personal' && (
+        <div className="px-4 pb-6">
+          <PersonalExpenseFlow
+            ref={personalFlowRef}
+            embedded
+            onDirtyChange={setPersonalDirty}
+          />
+        </div>
+      )}
+
+      {expenseMode === 'operational' && (<>
       <div className="px-4 mt-3 mb-3">
         <MobileTabBar
           tabs={tabItems}
@@ -1841,6 +1898,7 @@ const MobileCostSubmission = () => {
           }}
         />
       )}
+      </>)}
     </div>
   );
 };

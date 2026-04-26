@@ -28,6 +28,8 @@ import CostReconciliationForm from "@/components/cost-submission/CostReconciliat
 import CostDocumentUpload from "@/components/cost-submission/CostDocumentUpload";
 import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvances";
 import type { SupportingDocument } from "@/types/cost-submission";
+import { ExpenseTypeSelector, type ExpenseMode } from "@/components/cost-submission/ExpenseTypeSelector";
+import { PersonalExpenseFlow, type PersonalExpenseFlowHandle } from "@/components/cost-submission/PersonalExpenseFlow";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -200,6 +202,30 @@ const CostSubmission = () => {
 
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history" | "payment_audit">("submit");
+  // Task #56 — top-of-page expense-type selector (operational vs personal reimbursement)
+  const [expenseMode, setExpenseMode] = useState<ExpenseMode>("operational");
+  const [pendingMode, setPendingMode] = useState<ExpenseMode | null>(null);
+  const [personalDirty, setPersonalDirty] = useState(false);
+  const personalFlowRef = useRef<PersonalExpenseFlowHandle>(null);
+  const handleSwitchMode = (next: ExpenseMode) => {
+    if (next === expenseMode) return;
+    // Discard guard: only fires if leaving an in-progress personal claim. We
+    // don't instrument UnifiedCostRequestForm so switching from operational
+    // to personal does not gate (operational form keeps its own state).
+    if (expenseMode === 'personal' && personalDirty) {
+      setPendingMode(next);
+      return;
+    }
+    setExpenseMode(next);
+  };
+  const confirmSwitchMode = () => {
+    if (pendingMode) {
+      personalFlowRef.current?.reset();
+      setPersonalDirty(false);
+      setExpenseMode(pendingMode);
+      setPendingMode(null);
+    }
+  };
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">("all");
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
@@ -2159,6 +2185,39 @@ const CostSubmission = () => {
         </div>
       </div>
 
+      {/* Task #56 — expense-type selector */}
+      <ExpenseTypeSelector
+        value={expenseMode}
+        onChange={handleSwitchMode}
+        className="mb-4"
+      />
+
+      {/* Discard-confirm dialog for switching away from a dirty personal claim */}
+      <AlertDialog open={!!pendingMode} onOpenChange={(o) => !o && setPendingMode(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved expense claim? / تجاهل المطالبة غير المحفوظة؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes in the personal reimbursement form. Switching now will lose them.
+              <br /><span dir="rtl">لديك تغييرات غير محفوظة في نموذج الاسترداد الشخصي. التبديل الآن سيؤدي إلى فقدها.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-discard-cancel">Keep editing / متابعة التعديل</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSwitchMode} data-testid="button-discard-confirm">Discard &amp; switch / تجاهل وتبديل</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {expenseMode === 'personal' && (
+        <PersonalExpenseFlow
+          ref={personalFlowRef}
+          embedded
+          onDirtyChange={setPersonalDirty}
+        />
+      )}
+
+      {expenseMode === 'operational' && (<>
       <PageInfoBanner
         title="Cost Submission - Operational Expenses"
         description="This page is for submitting OPERATIONAL COSTS you have already spent during fieldwork -- things like transportation, accommodation, communication, supplies, and other work-related expenses (9 categories available). This is DIFFERENT from wallet withdrawals (taking money out of your wallet -- use My Wallet page) and transportation advances (getting money upfront before a trip -- use Down-Payment Approval page). Here you are requesting REIMBURSEMENT for expenses already incurred. Each submission goes through a two-tier approval before the amount is credited to your wallet."
@@ -6855,6 +6914,7 @@ const CostSubmission = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>)}
     </div>
   );
 };
