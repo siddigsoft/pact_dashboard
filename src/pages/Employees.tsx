@@ -170,13 +170,15 @@ function RoleBadge({ role }: { role: string | null }) {
 
 /* ─── Employee Detail Modal ──────────────────────────────── */
 function EmployeeDetail({
-  profile, onClose, dbHubs, onUpdate, onEmploymentChange, canEdit,
+  profile, onClose, dbHubs, departments, onUpdate, onEmploymentChange, onRoleDeptChange, canEdit,
 }: {
   profile: EmployeeProfile;
   onClose: () => void;
   dbHubs: { id: string; name: string }[];
+  departments: { id: string; name: string }[];
   onUpdate: (id: string, type: ContractType) => void;
   onEmploymentChange: (id: string, updates: { is_employee: boolean; employee_id: string | null }) => void;
+  onRoleDeptChange: (id: string, updates: { role?: string | null; department_id?: string | null }) => void;
   canEdit: boolean;
 }) {
   const { toast } = useToast();
@@ -185,6 +187,29 @@ function EmployeeDetail({
   const av       = avBadge(profile.presence);
   const ba       = profile.bank_account;
   const hasBank  = !!(ba?.accountNumber || ba?.accountName);
+
+  /* ── Inline role & department edit ── */
+  const [editingRoleDept, setEditingRoleDept] = useState(false);
+  const [roleDraft, setRoleDraft]             = useState(profile.role || '');
+  const [deptDraft, setDeptDraft]             = useState(profile.department_id || '');
+  const [savingRoleDept, setSavingRoleDept]   = useState(false);
+
+  const saveRoleDept = async () => {
+    setSavingRoleDept(true);
+    const updates: Record<string, unknown> = {
+      role: roleDraft || null,
+      department_id: deptDraft || null,
+    };
+    const { error } = await supabase.from('profiles').update(updates).eq('id', profile.id);
+    if (error) {
+      toast({ title: 'Failed to update role/department', description: error.message, variant: 'destructive' });
+    } else {
+      onRoleDeptChange(profile.id, { role: roleDraft || null, department_id: deptDraft || null });
+      setEditingRoleDept(false);
+      toast({ title: 'Role & Department updated', description: profile.full_name || '' });
+    }
+    setSavingRoleDept(false);
+  };
 
   /* ── Employment registration (admin-only) ── */
   const [empIdDraft, setEmpIdDraft]         = useState(profile.employee_id || '');
@@ -307,6 +332,103 @@ function EmployeeDetail({
         </div>
 
         <div className="divide-y divide-border">
+          {/* ── Role & Department — always visible ── */}
+          <div className="px-6 py-4 bg-[#0F2041]/5 dark:bg-[#1D3461]/10">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#1D3461] dark:text-blue-300 flex items-center gap-1.5">
+                <Shield className="h-3 w-3" />Role & Department
+              </p>
+              {canEdit && !editingRoleDept && (
+                <button
+                  type="button"
+                  onClick={() => { setRoleDraft(profile.role || ''); setDeptDraft(profile.department_id || ''); setEditingRoleDept(true); }}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground border rounded-md px-2 py-1 hover:bg-muted transition-colors"
+                  data-testid="button-edit-role-dept"
+                >
+                  <Pencil className="h-3 w-3" />Edit
+                </button>
+              )}
+            </div>
+            {editingRoleDept ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">System Role</p>
+                    <select
+                      value={roleDraft}
+                      onChange={e => setRoleDraft(e.target.value)}
+                      className="w-full text-xs border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-[#1D3461]"
+                      data-testid="select-role-draft"
+                    >
+                      <option value="">— No Role —</option>
+                      {ROLE_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground mb-1.5 font-medium">Department</p>
+                    <select
+                      value={deptDraft}
+                      onChange={e => setDeptDraft(e.target.value)}
+                      className="w-full text-xs border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-[#1D3461]"
+                      data-testid="select-dept-draft"
+                    >
+                      <option value="">— No Department —</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={saveRoleDept}
+                    disabled={savingRoleDept}
+                    className="flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold bg-[#0F2041] text-white rounded-md px-2 py-1.5 hover:bg-[#1D3461] disabled:opacity-60 transition-colors"
+                    data-testid="button-save-role-dept"
+                  >
+                    {savingRoleDept ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    {savingRoleDept ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingRoleDept(false)}
+                    disabled={savingRoleDept}
+                    className="flex items-center justify-center gap-1 text-[10px] font-semibold border rounded-md px-2 py-1.5 hover:bg-muted transition-colors disabled:opacity-60"
+                    data-testid="button-cancel-role-dept"
+                  >
+                    <XCircle className="h-3 w-3" />Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-[#1D3461]/20 bg-white dark:bg-[#0F2041]/30 p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1.5 font-medium flex items-center gap-1">
+                    <Shield className="h-3 w-3" />System Role
+                  </p>
+                  <RoleBadge role={profile.role} />
+                  <p className="text-[10px] text-muted-foreground mt-1.5">
+                    {ROLE_LABELS[profile.role || ''] || profile.role || 'Not assigned'}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[#1D3461]/20 bg-white dark:bg-[#0F2041]/30 p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1.5 font-medium flex items-center gap-1">
+                    <Building2 className="h-3 w-3" />Department
+                  </p>
+                  {(() => {
+                    const dept = departments.find(d => d.id === profile.department_id);
+                    return dept ? (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:text-emerald-300">
+                        <Building2 className="h-3 w-3" />{dept.name}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground italic">Not assigned</span>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── Employment (Admin Only) ── */}
           {canEdit && (
             <div className="px-6 py-4">
@@ -967,6 +1089,11 @@ export default function Employees() {
   }, []);
 
   const handleEmploymentChange = useCallback((id: string, updates: { is_employee: boolean; employee_id: string | null }) => {
+    setProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    setSelected(prev => prev?.id === id ? { ...prev, ...updates } : prev);
+  }, []);
+
+  const handleRoleDeptChange = useCallback((id: string, updates: { role?: string | null; department_id?: string | null }) => {
     setProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
     setSelected(prev => prev?.id === id ? { ...prev, ...updates } : prev);
   }, []);
@@ -1658,7 +1785,7 @@ export default function Employees() {
 
       {/* ── Employee Detail Modal ── */}
       {selected && (
-        <EmployeeDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} onUpdate={handleUpdate} onEmploymentChange={handleEmploymentChange} canEdit={canEdit} />
+        <EmployeeDetail profile={selected} onClose={() => setSelected(null)} dbHubs={dbHubs} departments={departments} onUpdate={handleUpdate} onEmploymentChange={handleEmploymentChange} onRoleDeptChange={handleRoleDeptChange} canEdit={canEdit} />
       )}
 
       {/* ── Bulk Contract Dialog ── */}
