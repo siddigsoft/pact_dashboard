@@ -22,9 +22,13 @@
 BEGIN;
 
 -- 1) Table -------------------------------------------------------------------
+-- NOTE: project_id is TEXT (not uuid) to match the existing
+-- project_field_tasks.project_id column type in pactdb. Cascading deletes are
+-- already covered by the predecessor/successor FKs to project_field_tasks, so
+-- we deliberately omit a separate FK to projects(id).
 CREATE TABLE IF NOT EXISTS public.project_field_task_dependencies (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id      uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  project_id      text NOT NULL,
   predecessor_id  uuid NOT NULL REFERENCES public.project_field_tasks(id) ON DELETE CASCADE,
   successor_id    uuid NOT NULL REFERENCES public.project_field_tasks(id) ON DELETE CASCADE,
   dep_type        TEXT NOT NULL DEFAULT 'FS'
@@ -48,11 +52,11 @@ COMMENT ON TABLE public.project_field_task_dependencies
 CREATE OR REPLACE FUNCTION public.pftd_assert_same_project()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
-  pred_proj uuid;
-  succ_proj uuid;
+  pred_proj text;
+  succ_proj text;
 BEGIN
-  SELECT project_id INTO pred_proj FROM public.project_field_tasks WHERE id = NEW.predecessor_id;
-  SELECT project_id INTO succ_proj FROM public.project_field_tasks WHERE id = NEW.successor_id;
+  SELECT project_id::text INTO pred_proj FROM public.project_field_tasks WHERE id = NEW.predecessor_id;
+  SELECT project_id::text INTO succ_proj FROM public.project_field_tasks WHERE id = NEW.successor_id;
   IF pred_proj IS NULL OR succ_proj IS NULL THEN
     RAISE EXCEPTION 'Predecessor or successor task does not exist';
   END IF;
@@ -143,7 +147,7 @@ CREATE POLICY pftd_write_if_task_writable
 INSERT INTO public.project_field_task_dependencies
   (project_id, predecessor_id, successor_id, dep_type, lag_days, notes)
 SELECT
-  t.project_id,
+  t.project_id::text AS project_id,
   dep_id::uuid       AS predecessor_id,
   t.id               AS successor_id,
   'FS'               AS dep_type,

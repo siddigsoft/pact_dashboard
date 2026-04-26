@@ -118,11 +118,15 @@ CREATE POLICY task_element_progress_log_select
         JOIN public.personal_tasks t ON t.id = e.task_id
        WHERE e.id = task_element_progress_log.element_id
          AND (
-              t.created_by = auth.uid()
+              t.user_id = auth.uid()
            OR t.assigned_to = auth.uid()
            OR e.assignee_id = auth.uid()
-           OR EXISTS (SELECT 1 FROM public.task_co_assignees c
-                        WHERE c.task_id = t.id AND c.user_id = auth.uid())
+           OR (t.co_assignees IS NOT NULL
+               AND jsonb_typeof(t.co_assignees) = 'array'
+               AND EXISTS (
+                 SELECT 1 FROM jsonb_array_elements(t.co_assignees) elem
+                  WHERE (elem->>'id') = auth.uid()::text
+               ))
          )
     )
   );

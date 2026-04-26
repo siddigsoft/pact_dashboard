@@ -13,7 +13,7 @@ that supersedes the legacy `project_field_tasks.dependencies uuid[]` column:
 | Column            | Type    | Notes                                          |
 |-------------------|---------|------------------------------------------------|
 | `id`              | uuid    | PK, default `gen_random_uuid()`                |
-| `project_id`      | uuid    | FK → `projects.id`, cascade delete             |
+| `project_id`      | text    | Matches `project_field_tasks.project_id` (which is text in pactdb). No separate FK to `projects` — cascade delete is already covered by the predecessor/successor FKs below. |
 | `predecessor_id`  | uuid    | FK → `project_field_tasks.id`, cascade delete  |
 | `successor_id`    | uuid    | FK → `project_field_tasks.id`, cascade delete  |
 | `dep_type`        | text    | `FS` \| `SS` \| `FF` \| `SF` (default `FS`)    |
