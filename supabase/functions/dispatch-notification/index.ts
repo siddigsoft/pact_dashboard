@@ -100,6 +100,7 @@ const eventTemplates: Record<string, { title_en: string; title_ar: string; categ
   // Projects — full lifecycle
   'project_created':            { title_en: 'New Project Created',                  title_ar: 'تم إنشاء مشروع جديد',                        category: 'assignments',  priority: 'normal' },
   'project_stage_advanced':     { title_en: 'Project Stage Advanced',               title_ar: 'تقدمت مرحلة المشروع',                        category: 'system',       priority: 'normal' },
+  'project_stage_assigned':     { title_en: 'You\'ve Been Assigned to a Stage',     title_ar: 'تم تعيينك في مرحلة',                          category: 'assignments',  priority: 'high'   },
   'project_milestone_overdue':  { title_en: 'Project Milestone Overdue',            title_ar: 'تأخر إنجاز المرحلة الرئيسية',                category: 'assignments',  priority: 'high'   },
   'project_stalled':            { title_en: 'Project Stalled – Action Needed',      title_ar: 'المشروع متوقف – مطلوب إجراء',                category: 'assignments',  priority: 'high'   },
   'project_completed':          { title_en: 'Project Completed',                    title_ar: 'اكتمل المشروع',                              category: 'system',       priority: 'normal' },
@@ -164,6 +165,7 @@ const EVENT_TYPE_PREF_MAP: Record<string, string> = {
   'site_visit_completed':        'email_notify_project_milestones',
   'mmp_cycle_closed':            'email_notify_project_milestones',
   'project_stage_advanced':      'email_notify_project_milestones',
+  'project_stage_assigned':      'email_notify_project_milestones',
   'project_milestone_overdue':   'email_notify_project_milestones',
   'project_stalled':             'email_notify_project_milestones',
   'mmp_created':                 'email_notify_system',
@@ -274,6 +276,7 @@ function getEventAccentColor(eventType: string, priority?: string): string {
     'project_completed':        '#059669',
     'project_archived':         '#6b7280',
     'project_member_added':     '#2563eb',
+    'project_stage_assigned':   '#2563eb',
     'project_task_assigned':    '#2563eb',
     'project_task_completed':   '#059669',
     'project_task_overdue':     '#dc2626',
@@ -314,6 +317,7 @@ function getEventIconSvg(eventType: string): string {
     'task_reminder_1day': '⏰', 'task_reminder_3day': '🔔', 'task_comment_added': '💬',
     'project_created': '🚀', 'project_completed': '🏁', 'project_archived': '📦',
     'project_member_added': '👤', 'project_task_assigned': '📋', 'project_task_completed': '✅',
+    'project_stage_assigned': '📌',
     'project_task_overdue': '🔴', 'project_health_changed': '📊', 'project_budget_exceeded': '🚨',
     'crm_partner_created': '🤝', 'crm_engagement_created': '📞', 'crm_contact_added': '👥',
     'advance_request_submitted': '📋', 'advance_request_approved': '✅', 'advance_request_rejected': '❌',
@@ -369,7 +373,7 @@ function getEventContextBlock(eventType: string, metadata: Record<string, any>, 
     if (metadata.status)       items.push({ label_en: 'Status',          label_ar: 'الحالة',          value: metadata.status })
   }
   if ([
-    'project_stage_advanced', 'project_stalled', 'project_milestone_overdue',
+    'project_stage_advanced', 'project_stage_assigned', 'project_stalled', 'project_milestone_overdue',
     'project_created', 'project_completed', 'project_archived', 'project_member_added',
     'project_health_changed', 'project_budget_exceeded',
   ].includes(eventType)) {
@@ -453,12 +457,17 @@ function generateEventEmailHtml(
   const actionBtnLabel_en = (() => {
     if (['approval_required', 'cost_submitted', 'leave_request_submitted', 'payroll_approval_needed', 'mmp_forwarded', 'signature_requested'].includes(eventType)) return 'Review & Approve →'
     if (eventType.includes('assigned')) return 'View Assignment →'
-    if (['project_stage_advanced', 'project_stalled', 'project_milestone_overdue'].includes(eventType)) return 'View Project →'
+    if (['project_stage_advanced', 'project_stage_assigned', 'project_stalled', 'project_milestone_overdue'].includes(eventType)) return 'View Project →'
     if (['contract_expiring_7d', 'contract_expiring_30d', 'contract_expired'].includes(eventType)) return 'View Contract →'
     return 'View Details →'
   })()
   const actionBtnLabel_ar = (() => {
     if (['approval_required', 'cost_submitted', 'leave_request_submitted', 'payroll_approval_needed', 'mmp_forwarded', 'signature_requested'].includes(eventType)) return '← المراجعة والموافقة'
+    // EN label for these is "View Project →" — mirror with "← عرض المشروع"
+    // (must come BEFORE the generic .includes('assigned') catch so the
+    // project-scoped events resolve to the project label, not the
+    // generic "View Assignment" label).
+    if (['project_stage_advanced', 'project_stage_assigned', 'project_stalled', 'project_milestone_overdue'].includes(eventType)) return '← عرض المشروع'
     if (eventType.includes('assigned')) return '← عرض التعيين'
     return '← عرض التفاصيل'
   })()

@@ -56,20 +56,34 @@ async function sendAssignmentNotification(
   const msgEn = `${assignedByName} assigned you to "${stageLabel}" in project "${projectName}"`;
   const msgAr = `قام ${assignedByName} بتعيينك في "${stageLabel}" في مشروع "${projectName}"`;
 
-  await supabase.from('notifications').insert({
-    recipient_id: assigneeId,
-    user_id: assigneeId,
-    title_en: titleEn,
-    title_ar: titleAr,
-    message_en: msgEn,
-    message_ar: msgAr,
-    priority: 'normal',
-    action_url: `/projects/${projectId}`,
-    entity_id: projectId,
-    entity_type: 'project',
-    event_type: 'project_stage_assigned',
-    status: 'pending',
-    email_sent: false,
+  // Route through the central dispatcher so the notification is delivered
+  // in-app + email + WhatsApp (subject to per-user opt-in preferences),
+  // matching how task assignments are delivered. The dispatcher inserts
+  // the notifications row itself — do NOT also insert here, or the
+  // recipient's bell will show duplicates. The metadata keys
+  // (recipient_name / project_name / stage / actor) line up with the
+  // pact_status_update WhatsApp template registered for
+  // `project_stage_assigned` in send-whatsapp/index.ts.
+  await supabase.functions.invoke('dispatch-notification', {
+    body: {
+      event_type: 'project_stage_assigned',
+      entity_type: 'project',
+      entity_id: projectId,
+      priority: 'high',
+      recipient_ids: [assigneeId],
+      title_en: titleEn,
+      title_ar: titleAr,
+      message_en: msgEn,
+      message_ar: msgAr,
+      action_url: `/projects/${projectId}`,
+      send_email: true,
+      metadata: {
+        recipient_name: assigneeName,
+        project_name: projectName,
+        stage: stageLabel,
+        actor: assignedByName,
+      },
+    },
   });
 }
 
