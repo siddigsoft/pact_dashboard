@@ -25,6 +25,28 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
+
+/**
+ * Resolve the effective completion timestamp for an mmp_site_entries row using
+ * the same fallback chain as the in-app analytics: completed_at → verified_at →
+ * updated_at (the last only counts for rows whose raw status is terminal
+ * completion). Without this chain, rows that were completed but never
+ * explicitly verified — or whose verified_at was wiped during older edits —
+ * silently disappear from digest tallies.
+ */
+function effectiveCompletionTs(e: {
+  status?: string | null;
+  completed_at?: string | null;
+  verified_at?: string | null;
+  updated_at?: string | null;
+}): string | null {
+  return (
+    e.completed_at ??
+    e.verified_at ??
+    (isTerminalCompletionRawStatus(e.status) ? e.updated_at ?? null : null)
+  );
+}
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -216,7 +238,7 @@ async function fetchHubNames(): Promise<Map<string, string>> {
 async function fetchCoordinators(): Promise<CoordRow[]> {
   const { data, error } = await supabase
     .from('mmp_site_entries')
-    .select('id, accepted_by, status, hub_office, verified_at, dispatched_at')
+    .select('id, accepted_by, status, hub_office, verified_at, completed_at, updated_at, dispatched_at')
     .not('accepted_by', 'is', null)
     .limit(8000);
   if (error || !data) return [];
@@ -242,8 +264,12 @@ async function fetchCoordinators(): Promise<CoordRow[]> {
     const pending = !verified && !returned;
     if (verified) {
       r.totalVerified++;
-      if (e.verified_at && (!r.lastVerifiedAt || e.verified_at > r.lastVerifiedAt))
-        r.lastVerifiedAt = e.verified_at;
+      // Use the same completed_at → verified_at → updated_at fallback chain as
+      // the in-app analytics so the "last verified" stamp doesn't disappear for
+      // rows that completed without an explicit verified_at write.
+      const completionTs = effectiveCompletionTs(e);
+      if (completionTs && (!r.lastVerifiedAt || completionTs > r.lastVerifiedAt))
+        r.lastVerifiedAt = completionTs;
     }
     if (returned) r.totalReturned++;
     if (pending) {
@@ -439,11 +465,18 @@ async function fetchWeeklyStats(): Promise<WeeklyStats | null> {
   if (!isWeekly()) return null;
   try {
     const weekStart = startOfWeekIso();
-    const [verifRes, dpRes] = await Promise.all([
+    // Pull the candidate completion rows for the week and bucket them in JS
+    // using the completed_at → verified_at → updated_at fallback chain. This
+    // matches the in-app analytics and recovers rows that completed without a
+    // verified_at write — which the old `gte('verified_at', weekStart)` filter
+    // silently dropped from the weekly tally.
+    const [verifData, dpRes] = await Promise.all([
       supabase.from('mmp_site_entries')
-        .select('id', { count: 'exact', head: true })
+        .select('id, status, completed_at, verified_at, updated_at')
         .in('status', ['verified', 'completed'])
-        .gte('verified_at', weekStart),
+        .or(
+          `completed_at.gte.${weekStart},verified_at.gte.${weekStart},updated_at.gte.${weekStart}`,
+        ),
       supabase.from('down_payment_requests')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'approved')
@@ -457,8 +490,12 @@ async function fetchWeeklyStats(): Promise<WeeklyStats | null> {
         .select('id', { count: 'exact', head: true })
         .in('status', ['pending_supervisor', 'pending_admin']),
     ]);
+    const verifiedThisWeek = (verifData.data || []).reduce((acc: number, e: any) => {
+      const ts = effectiveCompletionTs(e);
+      return ts && ts >= weekStart ? acc + 1 : acc;
+    }, 0);
     return {
-      verifiedThisWeek: verifRes.count ?? 0,
+      verifiedThisWeek,
       totalPendingVerif: pendVerif.count ?? 0,
       dpApprovedThisWeek: dpRes.count ?? 0,
       dpPendingTotal: pendDp.count ?? 0,
