@@ -57,7 +57,7 @@ interface MmpRow { id: string; status: string; entries: number | null; processed
 interface SiteEntryRow { id: string; status: string; mmp_file_id: string; hub_office: string | null; dispatched_at: string | null; completed_at: string | null; updated_at: string | null; }
 interface CostSubRow { id: string; status: string; total_cost_cents: number | null; }
 interface DownPayRow { id: string; status: string; requested_amount: number | null; supervisor_status: string | null; admin_status: string | null; }
-interface OpCostRow { id: string; status: string; amount_cents: number | null; tier1_status: string | null; tier2_status: string | null; }
+interface OpCostRow { id: string; status: string; amount_cents: number | null; tier1_status: string | null; tier2_status: string | null; expense_category: string | null; expense_date: string | null; currency: string | null; vendor: string | null; description: string | null; created_at: string | null; }
 interface ProfileRow { id: string; full_name: string | null; role: string | null; employment_type: string | null; status: string | null; department_id: string | null; contract_end_date: string | null; }
 interface DeptRow { id: string; name: string; manager_user_id: string | null; parent_department_id: string | null; }
 interface LeaveRow { id: string; user_id: string; leave_type: string; start_date: string; end_date: string | null; status: string; }
@@ -283,15 +283,15 @@ async function fetchAll() {
     supabase.from('project_milestones').select('id, project_id, title, status, due_date, updated_at').order('due_date', { ascending: true }),
     supabase.from('project_flow_log').select('project_id, advanced_at').order('advanced_at', { ascending: false }),
     supabase.from('mmp_files').select('id, status, entries, processed_entries, hub, month').order('created_at', { ascending: false }),
-    supabase.from('mmp_site_entries').select('id, status, mmp_file_id, hub_office, dispatched_at, completed_at, updated_at'),
+    supabase.from('mmp_site_entries').select('id, status, mmp_file_id, hub_office, dispatched_at, completed_at, updated_at').limit(20000),
     supabase.from('site_visit_cost_submissions').select('id, status, total_cost_cents').limit(5000),
     supabase.from('down_payment_requests').select('id, status, requested_amount, supervisor_status, admin_status').limit(5000),
-    supabase.from('operational_cost_submissions').select('id, status, amount_cents, tier1_status, tier2_status').limit(5000),
+    supabase.from('operational_cost_submissions').select('id, status, amount_cents, tier1_status, tier2_status, expense_category, expense_date, currency, vendor, description, created_at').order('created_at', { ascending: false }).limit(5000),
     supabase.from('profiles').select('id, full_name, role, employment_type, status, department_id, contract_end_date').limit(300),
     supabase.from('departments').select('id, name, manager_user_id, parent_department_id'),
     supabase.from('leave_requests').select('id, user_id, leave_type, start_date, end_date, status').limit(200),
     supabase.from('incident_reports').select('id, title, severity, status, date_reported').order('date_reported', { ascending: false }).limit(100),
-    supabase.from('equipment').select('id, name, category, status, location').limit(200),
+    supabase.from('equipment').select('id, name, category, status, location').limit(5000),
     supabase.from('crm_partners').select('id, name, type, status'),
     supabase.from('crm_opportunities').select('id, title, value_usd, stage, expected_close_date').order('expected_close_date', { ascending: true }),
     supabase.from('payroll_runs').select('id, status, period_start, period_end, total_gross_cents, created_at').order('created_at', { ascending: false }).limit(6),
@@ -362,12 +362,12 @@ function KpiTile({ label, value, sub, icon: Icon, color, urgent, onClick, action
   return onClick ? <button type="button" onClick={onClick} className="text-left w-full h-full">{inner}</button> : inner;
 }
 
-function SectionCard({ icon: Icon, title, action, actionLabel, children, noPad }: {
+function SectionCard({ icon: Icon, title, action, actionLabel, children, noPad, className }: {
   icon: React.ElementType; title: string; action?: () => void; actionLabel?: string;
-  children: React.ReactNode; noPad?: boolean;
+  children: React.ReactNode; noPad?: boolean; className?: string;
 }) {
   return (
-    <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+    <div className={cn('rounded-2xl border bg-card shadow-sm overflow-hidden', className)}>
       <div className="flex items-center gap-2.5 px-4 py-3 border-b bg-muted/20">
         <div className="h-7 w-7 rounded-lg bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
           <Icon className="h-3.5 w-3.5 text-[#1D3461]" />
@@ -981,11 +981,28 @@ export default function PortfolioDashboard() {
     });
     const totalPlanned = mmps.reduce((s, m) => s + (m.entries ?? 0), 0);
     const totalProcessed = mmps.reduce((s, m) => s + (m.processed_entries ?? 0), 0);
+    // Per-hub volume snapshot derived from mmp_files. This survives even when
+    // mmp_site_entries is empty / RLS-restricted, so the Operations tab still
+    // shows real numbers per hub instead of empty rows.
+    const byHub: Record<string, { files: number; planned: number; processed: number }> = {};
+    mmps.forEach(m => {
+      const hub = (m.hub ?? '').toString().trim() || 'Unassigned';
+      const slot = byHub[hub] ?? { files: 0, planned: 0, processed: 0 };
+      slot.files += 1;
+      slot.planned += m.entries ?? 0;
+      slot.processed += m.processed_entries ?? 0;
+      byHub[hub] = slot;
+    });
+    const hubVolumeRows = Object.entries(byHub)
+      .map(([hub, v]) => ({ hub, files: v.files, planned: v.planned, processed: v.processed, pct: v.planned > 0 ? Math.round((v.processed / v.planned) * 100) : 0 }))
+      .sort((a, b) => b.files - a.files);
     const siteEntries = d?.siteEntries ?? [];
     const buckets = { verified: 0, inProgress: 0, returned: 0, rejected: 0, pending: 0, other: 0 };
     siteEntries.forEach(e => { buckets[classifySiteEntryStatus(e.status)]++; });
     return {
       byStatus, totalPlanned, totalProcessed,
+      processingPct: totalPlanned > 0 ? Math.round((totalProcessed / totalPlanned) * 100) : 0,
+      hubVolumeRows,
       completedSites: buckets.verified,
       inProgressSites: buckets.inProgress,
       pendingSites: buckets.pending,
@@ -999,8 +1016,23 @@ export default function PortfolioDashboard() {
   const equipStats = useMemo(() => {
     const equip = d?.equip ?? [];
     const byStatus: Record<string, number> = {};
-    equip.forEach(e => { byStatus[e.status] = (byStatus[e.status] ?? 0) + 1; });
-    return { total: equip.length, byStatus, damaged: equip.filter(e => e.status === 'damaged').length, lost: equip.filter(e => e.status === 'lost').length };
+    const byCategory: Record<string, number> = {};
+    const byLocation: Record<string, number> = {};
+    equip.forEach(e => {
+      byStatus[e.status] = (byStatus[e.status] ?? 0) + 1;
+      const cat = (e.category ?? '').trim() || 'Uncategorized';
+      byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+      const loc = (e.location ?? '').trim() || 'Unassigned';
+      byLocation[loc] = (byLocation[loc] ?? 0) + 1;
+    });
+    return {
+      total: equip.length,
+      byStatus,
+      byCategory,
+      byLocation,
+      damaged: equip.filter(e => e.status === 'damaged').length,
+      lost: equip.filter(e => e.status === 'lost').length,
+    };
   }, [d?.equip]);
 
   // Median time-to-complete per hub, last 30 days, from
@@ -1065,6 +1097,91 @@ export default function PortfolioDashboard() {
     const opCostPending = opCosts.filter(o => o.tier1_status === 'pending' || o.tier2_status === 'pending');
     const opCostTotal = opCosts.reduce((s, o) => s + (o.amount_cents ?? 0), 0);
 
+    // Spend by Expense Category — director-level breakdown so the Financial tab
+    // shows where the money is actually going (transport vs per-diem vs supplies
+    // etc.). Approved-only totals are computed in addition to the gross total
+    // so the chart can show "approved spend" without inflating from pending
+    // claims that may yet be rejected.
+    const isApprovedOp = (o: OpCostRow) => {
+      const t1 = (o.tier1_status ?? '').toLowerCase();
+      const t2 = (o.tier2_status ?? '').toLowerCase();
+      const st = (o.status ?? '').toLowerCase();
+      return t1 === 'approved' || t2 === 'approved' || st === 'approved' || st === 'paid';
+    };
+    const isPendingOp = (o: OpCostRow) =>
+      (o.tier1_status ?? '').toLowerCase() === 'pending' || (o.tier2_status ?? '').toLowerCase() === 'pending';
+
+    const opCategoryAgg: Record<string, { count: number; total: number; approved: number; approvedCount: number; pending: number; pendingCount: number }> = {};
+    opCosts.forEach(o => {
+      const cat = (o.expense_category ?? '').trim() || 'Uncategorized';
+      const slot = opCategoryAgg[cat] ?? { count: 0, total: 0, approved: 0, approvedCount: 0, pending: 0, pendingCount: 0 };
+      slot.count += 1;
+      slot.total += o.amount_cents ?? 0;
+      if (isApprovedOp(o)) {
+        slot.approved += o.amount_cents ?? 0;
+        slot.approvedCount += 1;
+      }
+      if (isPendingOp(o)) {
+        slot.pending += o.amount_cents ?? 0;
+        slot.pendingCount += 1;
+      }
+      opCategoryAgg[cat] = slot;
+    });
+    const CATEGORY_PALETTE = ['#1D3461', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#6b7280'];
+    const opCategoryRows = Object.entries(opCategoryAgg)
+      .map(([category, v], i) => ({
+        category,
+        count: v.count,
+        total: v.total,
+        approved: v.approved,
+        approvedCount: v.approvedCount,
+        pending: v.pending,
+        pendingCount: v.pendingCount,
+        color: CATEGORY_PALETTE[i % CATEGORY_PALETTE.length],
+      }))
+      .sort((a, b) => b.total - a.total);
+    // Keep `value` in cents so the PieChart label/tooltip can format it with
+    // the page-wide `fmtMoney` helper (which expects cents) and stay numerically
+    // consistent with the right-side list. Recharts only needs proportional
+    // values for slice sizing, so cents vs whole units doesn't matter for the
+    // visual shape.
+    const opCategoryChartData = opCategoryRows.map(r => ({
+      name: r.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      value: r.total,
+      color: r.color,
+    }));
+
+    // Currency mix — most rows are SDG, but USD/EUR may exist for partner-side
+    // payments. Surfacing this prevents totals from silently mixing currencies.
+    const opCurrencyAgg: Record<string, { count: number; total: number }> = {};
+    opCosts.forEach(o => {
+      const cur = (o.currency ?? 'SDG').toString().trim().toUpperCase() || 'SDG';
+      const slot = opCurrencyAgg[cur] ?? { count: 0, total: 0 };
+      slot.count += 1;
+      slot.total += o.amount_cents ?? 0;
+      opCurrencyAgg[cur] = slot;
+    });
+    const opCurrencyRows = Object.entries(opCurrencyAgg)
+      .map(([currency, v]) => ({ currency, count: v.count, total: v.total }))
+      .sort((a, b) => b.total - a.total);
+
+    // Recent op-cost submissions — the 8 most recent rows for the Financial tab
+    // recent activity feed.
+    const recentOpCosts = [...opCosts]
+      .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+      .slice(0, 8)
+      .map(o => ({
+        id: o.id,
+        category: (o.expense_category ?? 'Uncategorized').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        vendor: o.vendor ?? '—',
+        description: o.description ?? '',
+        amount: o.amount_cents ?? 0,
+        currency: (o.currency ?? 'SDG').toString().toUpperCase(),
+        date: o.expense_date ?? o.created_at ?? null,
+        approved: isApprovedOp(o),
+        pending: isPendingOp(o),
+      }));
+
     const latestPayroll = payrollRuns[0];
     const payrollData = payrollRuns.slice(0, 6).map(r => ({
       period: r.period_start ? format(parseISO(r.period_start), 'MMM yy') : '—',
@@ -1088,6 +1205,7 @@ export default function PortfolioDashboard() {
       costSubTotal, costSubPending: costSubPending.length, costSubApproved: costSubApproved.length,
       downPayPending: downPayPending.length, downPayTotal,
       opCostPending: opCostPending.length, opCostTotal,
+      opCategoryRows, opCategoryChartData, opCurrencyRows, recentOpCosts,
       latestPayroll, payrollData, budgetBarData,
       totalBudget: kpis.totalBudget, totalSpent: kpis.totalSpent,
     };
@@ -2895,6 +3013,83 @@ export default function PortfolioDashboard() {
               </SectionCard>
             </div>
 
+            {/* Second row of Operations cards — fills in detail that the
+                top three cards don't surface. MMP Processing Throughput
+                shows real numbers from mmp_files (entries/processed_entries)
+                even when the mmp_site_entries table is empty / RLS-restricted.
+                MMP Volume by Hub gives the director a quick read on which
+                hubs are carrying the load. Equipment by Category turns the
+                bare "Total Assets" number into a real inventory breakdown. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+
+              {/* MMP Processing Throughput */}
+              <SectionCard icon={Activity} title="MMP Processing Throughput" action={() => navigate('/mmp')} actionLabel="Open MMP">
+                <div className="mb-3">
+                  <div className="flex items-end gap-2 mb-1">
+                    <span className="text-3xl font-bold text-[#1D3461]" data-testid="text-mmp-processing-pct">{mmpStats.processingPct}%</span>
+                    <span className="text-sm text-muted-foreground mb-1">entries processed across all files</span>
+                  </div>
+                  <Progress value={Math.min(100, Math.max(0, mmpStats.processingPct))} className="h-3 rounded-full" />
+                </div>
+                <StatRow label="Total Planned Entries" value={mmpStats.totalPlanned.toLocaleString()} />
+                <StatRow label="Processed Entries" value={mmpStats.totalProcessed.toLocaleString()} color="text-emerald-600" />
+                <StatRow label="Outstanding Entries" value={Math.max(0, mmpStats.totalPlanned - mmpStats.totalProcessed).toLocaleString()} color="text-amber-600" />
+                <StatRow label="Total MMP Files" value={(d?.mmps?.length ?? 0).toLocaleString()} />
+              </SectionCard>
+
+              {/* MMP Volume by Hub */}
+              <SectionCard icon={Globe} title="MMP Volume by Hub" action={() => navigate('/mmp')} actionLabel="Open MMP">
+                {mmpStats.hubVolumeRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No MMP files yet</p>
+                ) : (
+                  <div className="space-y-1.5 mt-1">
+                    {mmpStats.hubVolumeRows.slice(0, 8).map(row => (
+                      <div
+                        key={row.hub}
+                        className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0"
+                        data-testid={`row-hub-volume-${row.hub}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate" data-testid={`text-hub-name-${row.hub}`}>{row.hub}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {row.files} file{row.files === 1 ? '' : 's'} · {row.planned.toLocaleString()} planned · {row.processed.toLocaleString()} processed
+                          </p>
+                        </div>
+                        <Badge className={cn('text-[10px] whitespace-nowrap',
+                          row.pct >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                          row.pct >= 50 ? 'bg-amber-100 text-amber-700' :
+                          'bg-slate-100 text-slate-700')}>
+                          {row.pct}%
+                        </Badge>
+                      </div>
+                    ))}
+                    {mmpStats.hubVolumeRows.length > 8 && (
+                      <p className="text-[11px] text-muted-foreground text-center pt-1">+{mmpStats.hubVolumeRows.length - 8} more hubs</p>
+                    )}
+                  </div>
+                )}
+              </SectionCard>
+
+              {/* Equipment by Category */}
+              <SectionCard icon={Layers} title="Equipment by Category" action={() => navigate('/equipment')} actionLabel="Equipment">
+                {Object.keys(equipStats.byCategory).length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No equipment recorded</p>
+                ) : (
+                  <div className="space-y-1 mt-1">
+                    {Object.entries(equipStats.byCategory)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 10)
+                      .map(([cat, count]) => (
+                        <StatRow key={cat} label={cat} value={count} />
+                      ))}
+                    {Object.keys(equipStats.byCategory).length > 10 && (
+                      <p className="text-[11px] text-muted-foreground text-center pt-1">+{Object.keys(equipStats.byCategory).length - 10} more categories</p>
+                    )}
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+
             {/* MMP Time-to-Complete by Hub (last 30 days) */}
             <SectionCard
               icon={Clock}
@@ -3037,6 +3232,143 @@ export default function PortfolioDashboard() {
                           </div>
                         )}
                       </>
+                    )}
+                  </SectionCard>
+                </div>
+
+                {/* Spend by Expense Category — the headline breakdown the
+                    director needs: where is the money actually going? Pulls
+                    from operational_cost_submissions.expense_category, paired
+                    with approved-vs-pending splits per category so the chart
+                    doesn't lie about disbursed cash. */}
+                {finStats.opCategoryRows.length > 0 && (
+                  <SectionCard icon={BarChart3} title="Spend by Expense Category">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={finStats.opCategoryChartData}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={80}
+                              label={({ name, value }) => `${name}: ${fmtMoney(value as number)}`}
+                              labelLine={false}
+                            >
+                              {finStats.opCategoryChartData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                              formatter={(v: number) => [fmtMoney(v), 'Total']}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="space-y-1.5">
+                        {finStats.opCategoryRows.map(r => (
+                          <div
+                            key={r.category}
+                            className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0"
+                            data-testid={`row-expense-category-${r.category}`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate" data-testid={`text-expense-category-${r.category}`}>
+                                  {r.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {r.count} claim{r.count === 1 ? '' : 's'} · {r.approvedCount} approved · {r.pendingCount} pending
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right whitespace-nowrap">
+                              <p className="text-sm font-semibold text-[#1D3461]" data-testid={`text-expense-total-${r.category}`}>{fmtMoney(r.total)}</p>
+                              {r.approved > 0 && r.approved !== r.total && (
+                                <p className="text-[10px] text-emerald-600">{fmtMoney(r.approved)} approved</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </SectionCard>
+                )}
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+                  {/* Currency mix — only render if there's actually more than
+                      one currency in play. Single-currency portfolios get the
+                      full row for Recent Op Costs instead. */}
+                  {finStats.opCurrencyRows.length > 1 && (
+                    <SectionCard icon={Wallet} title="Spend by Currency">
+                      <div className="space-y-1.5 mt-1">
+                        {finStats.opCurrencyRows.map(r => (
+                          <div
+                            key={r.currency}
+                            className="flex items-center justify-between gap-3 py-1.5 border-b last:border-0"
+                            data-testid={`row-currency-${r.currency}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="font-mono text-[11px]">{r.currency}</Badge>
+                              <span className="text-[11px] text-muted-foreground">{r.count} claim{r.count === 1 ? '' : 's'}</span>
+                            </div>
+                            <span className="text-sm font-semibold text-[#1D3461]" data-testid={`text-currency-total-${r.currency}`}>
+                              {(r.total / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} {r.currency}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </SectionCard>
+                  )}
+
+                  {/* Recent Operational Cost Submissions — gives the director
+                      a quick scrollable feed of the last 8 expense claims with
+                      vendor, category, amount, and approval state. Falls back
+                      to a placeholder when nothing has been submitted yet. */}
+                  <SectionCard
+                    icon={Receipt}
+                    title="Recent Operational Cost Submissions"
+                    action={() => navigate('/approvals?tab=op-costs')}
+                    actionLabel="Approvals"
+                    className={finStats.opCurrencyRows.length > 1 ? '' : 'xl:col-span-2'}
+                  >
+                    {finStats.recentOpCosts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-6 text-center">No operational cost submissions yet</p>
+                    ) : (
+                      <div className="space-y-1 mt-1">
+                        {finStats.recentOpCosts.map(c => (
+                          <div
+                            key={c.id}
+                            className="flex items-start justify-between gap-3 py-2 border-b last:border-0"
+                            data-testid={`row-recent-op-cost-${c.id}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium" data-testid={`text-recent-op-category-${c.id}`}>{c.category}</span>
+                                <Badge
+                                  className={cn('text-[10px]',
+                                    c.approved ? 'bg-emerald-100 text-emerald-700' :
+                                    c.pending ? 'bg-amber-100 text-amber-700' :
+                                    'bg-slate-100 text-slate-700')}
+                                  data-testid={`badge-recent-op-status-${c.id}`}
+                                >
+                                  {c.approved ? 'Approved' : c.pending ? 'Pending' : 'Other'}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground truncate">
+                                {c.vendor !== '—' ? c.vendor : (c.description || 'No vendor / description')}
+                                {c.date ? ` · ${fmtDate(c.date)}` : ''}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-[#1D3461] whitespace-nowrap" data-testid={`text-recent-op-amount-${c.id}`}>
+                              {(c.amount / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} {c.currency}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </SectionCard>
                 </div>
