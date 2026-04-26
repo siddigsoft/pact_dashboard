@@ -8,10 +8,11 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Plus, Trash2, Loader2, ChevronUp, ChevronDown, ExternalLink,
-  Eye, BarChart2, Edit3, Save, Copy, GripVertical, Toggle,
+  Eye, BarChart2, Edit3, Save, Copy,
   AlignLeft, AlignJustify, List, CheckSquare, Star, Sliders,
   Calendar, ChevronDown as ChevronDownIcon, Minus, Hash, Type,
-  Users, FileText, Clock, ToggleLeft,
+  Users, FileText, Clock, MapPin, Image as ImageIcon, Paperclip,
+  Phone, Mail, ScanLine, CalendarClock, GitBranch,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +34,15 @@ type SurveyStatus = 'draft' | 'active' | 'closed';
 
 type QuestionType =
   | 'text' | 'textarea' | 'radio' | 'checkbox'
-  | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header';
+  | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
+  | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
+  | 'gps' | 'image' | 'file' | 'barcode';
+
+interface SkipLogic {
+  condition_question_id: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'answered' | 'not_answered' | 'greater_than' | 'less_than';
+  value?: string;
+}
 
 interface Survey {
   id: string;
@@ -80,17 +89,61 @@ const STATUS_CFG: Record<SurveyStatus, { label: string; color: string }> = {
   closed: { label: 'Closed', color: 'bg-orange-50 text-orange-700 border-orange-200'  },
 };
 
-const Q_TYPES: { type: QuestionType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { type: 'text',           label: 'Short Text',      icon: Type },
-  { type: 'textarea',       label: 'Long Text',        icon: AlignJustify },
-  { type: 'radio',          label: 'Multiple Choice',  icon: List },
-  { type: 'checkbox',       label: 'Checkboxes',       icon: CheckSquare },
-  { type: 'dropdown',       label: 'Dropdown',         icon: ChevronDownIcon },
-  { type: 'rating',         label: 'Star Rating (1–5)', icon: Star },
-  { type: 'scale',          label: 'Scale (1–10)',      icon: Sliders },
-  { type: 'date',           label: 'Date',             icon: Calendar },
-  { type: 'section_header', label: 'Section Header',   icon: Minus },
+type QTypeEntry = { type: QuestionType; label: string; icon: React.ComponentType<{ className?: string }> };
+
+const Q_TYPE_GROUPS: { label: string; types: QTypeEntry[] }[] = [
+  {
+    label: 'Text & Numbers',
+    types: [
+      { type: 'text',    label: 'Short Text',  icon: Type },
+      { type: 'textarea',label: 'Long Text',   icon: AlignJustify },
+      { type: 'number',  label: 'Number',      icon: Hash },
+      { type: 'integer', label: 'Integer',     icon: Hash },
+      { type: 'phone',   label: 'Phone',       icon: Phone },
+      { type: 'email',   label: 'Email',       icon: Mail },
+    ],
+  },
+  {
+    label: 'Choice',
+    types: [
+      { type: 'radio',    label: 'Multiple Choice', icon: List },
+      { type: 'checkbox', label: 'Checkboxes',      icon: CheckSquare },
+      { type: 'dropdown', label: 'Dropdown',        icon: ChevronDownIcon },
+    ],
+  },
+  {
+    label: 'Date & Time',
+    types: [
+      { type: 'date',     label: 'Date',        icon: Calendar },
+      { type: 'time',     label: 'Time',        icon: Clock },
+      { type: 'datetime', label: 'Date & Time', icon: CalendarClock },
+    ],
+  },
+  {
+    label: 'Scale & Rating',
+    types: [
+      { type: 'rating', label: 'Star Rating (1–5)', icon: Star },
+      { type: 'scale',  label: 'Scale (1–10)',      icon: Sliders },
+    ],
+  },
+  {
+    label: 'Location & Media',
+    types: [
+      { type: 'gps',     label: 'GPS Location',  icon: MapPin },
+      { type: 'image',   label: 'Photo',         icon: ImageIcon },
+      { type: 'file',    label: 'File Upload',   icon: Paperclip },
+      { type: 'barcode', label: 'Barcode / QR',  icon: ScanLine },
+    ],
+  },
+  {
+    label: 'Layout',
+    types: [
+      { type: 'section_header', label: 'Section Header', icon: Minus },
+    ],
+  },
 ];
+
+const ALL_Q_TYPES: QTypeEntry[] = Q_TYPE_GROUPS.flatMap(g => g.types);
 
 const CHART_COLORS = ['#6366f1','#22c55e','#f59e0b','#ec4899','#14b8a6','#8b5cf6','#f97316','#0ea5e9'];
 
@@ -113,7 +166,6 @@ export default function SurveyDetail() {
   const [editQId, setEditQId] = useState<string | null>(null);
   const [expandedResponse, setExpandedResponse] = useState<string | null>(null);
 
-  // ── Fetch survey ───────────────────────────────────────────────────────────
   const { data: survey, isLoading: surveyLoading } = useQuery<Survey>({
     queryKey: ['survey', id],
     enabled: !!id,
@@ -158,7 +210,6 @@ export default function SurveyDetail() {
     },
   });
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
   const saveMeta = async () => {
     if (!id || !editTitle.trim()) return;
     setSavingMeta(true);
@@ -192,6 +243,8 @@ export default function SurveyDetail() {
   const addQuestion = useMutation({
     mutationFn: async (type: QuestionType) => {
       const nextIndex = questions.length;
+      const defaultSettings: Record<string, unknown> =
+        type === 'scale' ? { min: 1, max: 10 } : {};
       const { error } = await supabase.from('survey_questions').insert({
         survey_id: id,
         type,
@@ -199,7 +252,7 @@ export default function SurveyDetail() {
         required: false,
         order_index: nextIndex,
         options: ['radio','checkbox','dropdown'].includes(type) ? ['Option 1', 'Option 2'] : null,
-        settings: type === 'scale' ? { min: 1, max: 10 } : {},
+        settings: defaultSettings,
       });
       if (error) throw error;
     },
@@ -243,7 +296,6 @@ export default function SurveyDetail() {
     qc.invalidateQueries({ queryKey: ['survey-questions', id] });
   };
 
-  // ── Analytics helpers ──────────────────────────────────────────────────────
   const getChartData = (q: Question) => {
     const qAnswers = allAnswers.filter(a => a.question_id === q.id);
     if (['radio', 'dropdown'].includes(q.type)) {
@@ -287,7 +339,6 @@ export default function SurveyDetail() {
     return nums.length ? (nums.reduce((s, n) => s + n, 0) / nums.length).toFixed(1) : null;
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   if (surveyLoading) return (
     <div className="flex items-center justify-center h-64 text-slate-400">
       <Loader2 className="w-6 h-6 animate-spin mr-2" />Loading survey…
@@ -367,7 +418,6 @@ export default function SurveyDetail() {
       {/* ── BUILDER TAB ─────────────────────────────────────────────────────── */}
       {tab === 'builder' && (
         <div className="space-y-4">
-          {/* Meta editor */}
           {canManage && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">Survey Details</h3>
@@ -388,7 +438,6 @@ export default function SurveyDetail() {
             </div>
           )}
 
-          {/* Questions */}
           <div className="space-y-2">
             {qLoading ? (
               <div className="flex items-center justify-center py-10 text-slate-400">
@@ -406,6 +455,7 @@ export default function SurveyDetail() {
                   q={q}
                   idx={idx}
                   total={questions.length}
+                  allQuestions={questions}
                   canManage={canManage}
                   isEditing={editQId === q.id}
                   onEdit={() => setEditQId(editQId === q.id ? null : q.id)}
@@ -420,7 +470,6 @@ export default function SurveyDetail() {
             )}
           </div>
 
-          {/* Add question */}
           {canManage && (
             <Button variant="outline" onClick={() => setAddTypeOpen(true)} className="w-full gap-1.5" data-testid="btn-add-question">
               <Plus className="w-4 h-4" />Add Question
@@ -456,7 +505,6 @@ export default function SurveyDetail() {
       {/* ── ANALYTICS TAB ───────────────────────────────────────────────────── */}
       {tab === 'analytics' && (
         <div className="space-y-4">
-          {/* Summary */}
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Responses', value: responses.length, icon: Users },
@@ -472,19 +520,22 @@ export default function SurveyDetail() {
             ))}
           </div>
 
-          {/* Per-question analytics */}
           {questions.filter(q => q.type !== 'section_header').map(q => {
             const chartData = getChartData(q);
             const textAnswers = getTextAnswers(q);
             const avg = getAvgRating(q);
             const answerCount = allAnswers.filter(a => a.question_id === q.id).length;
+            const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
 
             return (
               <div key={q.id} className="bg-white rounded-xl border border-slate-200 p-5">
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <div>
-                    <p className="font-semibold text-slate-800">{q.label}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5 capitalize">{q.type.replace('_', ' ')} · {answerCount} answer{answerCount !== 1 ? 's' : ''}</p>
+                  <div className="flex items-center gap-2">
+                    <QIcon className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-slate-800">{q.label}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 capitalize">{q.type.replace(/_/g, ' ')} · {answerCount} answer{answerCount !== 1 ? 's' : ''}</p>
+                    </div>
                   </div>
                   {avg && (
                     <div className="text-right">
@@ -509,7 +560,7 @@ export default function SurveyDetail() {
                   </ResponsiveContainer>
                 )}
 
-                {(q.type === 'text' || q.type === 'textarea') && textAnswers.length > 0 && (
+                {['text','textarea','phone','email','number','integer','barcode','gps'].includes(q.type) && textAnswers.length > 0 && (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {textAnswers.map((t, i) => (
                       <div key={i} className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">"{t}"</div>
@@ -535,20 +586,27 @@ export default function SurveyDetail() {
 
       {/* Add question type picker */}
       <Dialog open={addTypeOpen} onOpenChange={setAddTypeOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Choose Question Type</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-2 py-2">
-            {Q_TYPES.map(qt => (
-              <button
-                key={qt.type}
-                onClick={() => addQuestion.mutate(qt.type)}
-                disabled={addQuestion.isPending}
-                data-testid={`btn-add-type-${qt.type}`}
-                className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-sm font-medium text-slate-700 transition-colors text-left"
-              >
-                <qt.icon className="w-4 h-4 text-indigo-500 shrink-0" />
-                {qt.label}
-              </button>
+          <div className="space-y-4 py-2">
+            {Q_TYPE_GROUPS.map(group => (
+              <div key={group.label}>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{group.label}</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {group.types.map(qt => (
+                    <button
+                      key={qt.type}
+                      onClick={() => addQuestion.mutate(qt.type)}
+                      disabled={addQuestion.isPending}
+                      data-testid={`btn-add-type-${qt.type}`}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-sm font-medium text-slate-700 transition-colors text-left"
+                    >
+                      <qt.icon className="w-4 h-4 text-indigo-500 shrink-0" />
+                      {qt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </DialogContent>
@@ -558,10 +616,20 @@ export default function SurveyDetail() {
 }
 
 // ── QuestionCard ─────────────────────────────────────────────────────────────
+const SKIP_OPERATORS: { value: SkipLogic['operator']; label: string }[] = [
+  { value: 'equals',       label: 'equals' },
+  { value: 'not_equals',   label: 'does not equal' },
+  { value: 'contains',     label: 'contains' },
+  { value: 'greater_than', label: 'is greater than' },
+  { value: 'less_than',    label: 'is less than' },
+  { value: 'answered',     label: 'has any answer' },
+  { value: 'not_answered', label: 'has no answer' },
+];
+
 function QuestionCard({
-  q, idx, total, canManage, isEditing, onEdit, onUpdate, onDelete, onMoveUp, onMoveDown, saving, deleting,
+  q, idx, total, allQuestions, canManage, isEditing, onEdit, onUpdate, onDelete, onMoveUp, onMoveDown, saving, deleting,
 }: {
-  q: Question; idx: number; total: number; canManage: boolean;
+  q: Question; idx: number; total: number; allQuestions: Question[]; canManage: boolean;
   isEditing: boolean; onEdit: () => void;
   onUpdate: (p: Partial<Question>) => void;
   onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void;
@@ -573,16 +641,31 @@ function QuestionCard({
   const [optsDraft, setOptsDraft] = useState<string[]>(q.options ?? []);
   const [newOpt, setNewOpt] = useState('');
 
-  const QIcon = Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
+  // Skip logic state
+  const existingSkip = q.settings?.skip_logic as SkipLogic | undefined;
+  const [skipEnabled, setSkipEnabled] = useState(!!existingSkip?.condition_question_id);
+  const [skipQId, setSkipQId] = useState(existingSkip?.condition_question_id ?? '');
+  const [skipOp, setSkipOp] = useState<SkipLogic['operator']>(existingSkip?.operator ?? 'equals');
+  const [skipVal, setSkipVal] = useState(existingSkip?.value ?? '');
+
+  const QIcon = ALL_Q_TYPES.find(t => t.type === q.type)?.icon ?? FileText;
   const hasOptions = ['radio','checkbox','dropdown'].includes(q.type);
   const isSection = q.type === 'section_header';
 
+  // Questions available for skip logic: non-section questions BEFORE this one
+  const prevQuestions = allQuestions.filter((pq, i) => i < idx && pq.type !== 'section_header');
+  const valueNeeded = !['answered','not_answered'].includes(skipOp);
+
   const save = () => {
+    const skipLogic: SkipLogic | undefined = skipEnabled && skipQId
+      ? { condition_question_id: skipQId, operator: skipOp, value: valueNeeded ? skipVal : undefined }
+      : undefined;
     onUpdate({
       label: labelDraft.trim() || q.label,
       description: descDraft.trim() || null,
       required: reqDraft,
       options: hasOptions ? optsDraft.filter(Boolean) : null,
+      settings: { ...q.settings, skip_logic: skipLogic },
     });
     onEdit();
   };
@@ -609,6 +692,8 @@ function QuestionCard({
     );
   }
 
+  const hasSkip = !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id;
+
   return (
     <div className={cn('bg-white rounded-xl border transition-colors', isEditing ? 'border-indigo-300' : 'border-slate-200')}>
       {/* Question header */}
@@ -619,7 +704,14 @@ function QuestionCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-800 truncate">{q.label}</p>
-          <p className="text-[10px] text-slate-400 capitalize">{q.type.replace('_', ' ')}{q.required ? ' · Required' : ''}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[10px] text-slate-400 capitalize">{q.type.replace(/_/g, ' ')}{q.required ? ' · Required' : ''}</p>
+            {hasSkip && (
+              <span className="flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200">
+                <GitBranch className="w-2.5 h-2.5" />Conditional
+              </span>
+            )}
+          </div>
         </div>
         {canManage && (
           <div className="flex items-center gap-0.5">
@@ -633,22 +725,27 @@ function QuestionCard({
 
       {/* Edit panel */}
       {isEditing && (
-        <div className="border-t border-indigo-100 p-4 space-y-3 bg-indigo-50/30">
-          <div className="space-y-1">
-            <Label className="text-xs">Question text</Label>
-            <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} data-testid={`input-label-${q.id}`} />
+        <div className="border-t border-indigo-100 p-4 space-y-4 bg-indigo-50/30">
+          {/* Label & description */}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Question text</Label>
+              <Input value={labelDraft} onChange={e => setLabelDraft(e.target.value)} data-testid={`input-label-${q.id}`} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Helper text <span className="text-slate-400 font-normal">(optional)</span></Label>
+              <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown below the question…" />
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id={`req-${q.id}`} checked={reqDraft} onChange={e => setReqDraft(e.target.checked)} className="rounded" />
+              <Label htmlFor={`req-${q.id}`} className="text-xs font-medium">Required</Label>
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Helper text <span className="text-slate-400 font-normal">(optional)</span></Label>
-            <Input value={descDraft} onChange={e => setDescDraft(e.target.value)} placeholder="Shown below the question…" />
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id={`req-${q.id}`} checked={reqDraft} onChange={e => setReqDraft(e.target.checked)} className="rounded" />
-            <Label htmlFor={`req-${q.id}`} className="text-xs font-medium">Required</Label>
-          </div>
+
+          {/* Options (for choice types) */}
           {hasOptions && (
             <div className="space-y-1.5">
-              <Label className="text-xs">Options</Label>
+              <Label className="text-xs">Answer options</Label>
               {optsDraft.map((opt, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <Input
@@ -675,6 +772,75 @@ function QuestionCard({
               </div>
             </div>
           )}
+
+          {/* Skip logic */}
+          <div className="border border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/40">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id={`skip-${q.id}`}
+                checked={skipEnabled}
+                onChange={e => setSkipEnabled(e.target.checked)}
+                className="rounded"
+              />
+              <Label htmlFor={`skip-${q.id}`} className="text-xs font-semibold text-amber-800 flex items-center gap-1">
+                <GitBranch className="w-3 h-3" />Show this question only if…
+              </Label>
+            </div>
+
+            {skipEnabled && (
+              <div className="space-y-2 pl-5">
+                {prevQuestions.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No previous questions available for conditions.</p>
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-slate-500">Question</Label>
+                      <Select value={skipQId} onValueChange={setSkipQId}>
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue placeholder="Select a question…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {prevQuestions.map(pq => (
+                            <SelectItem key={pq.id} value={pq.id} className="text-xs">
+                              Q{allQuestions.indexOf(pq) + 1}: {pq.label.length > 40 ? pq.label.slice(0, 40) + '…' : pq.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-slate-500">Condition</Label>
+                      <Select value={skipOp} onValueChange={v => setSkipOp(v as SkipLogic['operator'])}>
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SKIP_OPERATORS.map(op => (
+                            <SelectItem key={op.value} value={op.value} className="text-xs">{op.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {valueNeeded && (
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-slate-500">Value</Label>
+                        <Input
+                          value={skipVal}
+                          onChange={e => setSkipVal(e.target.value)}
+                          placeholder="Enter expected answer…"
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 pt-1">
             <Button size="sm" onClick={save} disabled={saving} data-testid={`btn-save-q-${q.id}`}>
               {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}Save
@@ -733,11 +899,25 @@ function ResponseRow({
           ) : (
             questions.filter(q => q.type !== 'section_header').map(q => {
               const ans = answers.find(a => a.question_id === q.id);
-              const value = ans?.answer_text ?? (Array.isArray(ans?.answer_json) ? (ans!.answer_json as string[]).join(', ') : ans?.answer_json != null ? String(ans!.answer_json) : null);
+              let displayValue: React.ReactNode = <span className="text-slate-300 italic">No answer</span>;
+              if (ans) {
+                if (q.type === 'image' && ans.answer_json) {
+                  displayValue = <img src={String(ans.answer_json)} className="max-h-32 rounded-lg border border-slate-200" alt="Response" />;
+                } else if (q.type === 'file' && ans.answer_json) {
+                  const meta = (() => { try { return JSON.parse(String(ans.answer_json)); } catch { return null; } })();
+                  displayValue = meta ? `${meta.name} (${(meta.size / 1024).toFixed(1)} KB)` : String(ans.answer_json);
+                } else if (q.type === 'gps' && ans.answer_text) {
+                  const parts = ans.answer_text.split(',');
+                  displayValue = parts.length >= 2 ? `Lat: ${parts[0]}, Lng: ${parts[1]}${parts[2] ? `, ±${parts[2]}m` : ''}` : ans.answer_text;
+                } else {
+                  const value = ans.answer_text ?? (Array.isArray(ans.answer_json) ? (ans.answer_json as string[]).join(', ') : ans.answer_json != null ? String(ans.answer_json) : null);
+                  if (value) displayValue = value;
+                }
+              }
               return (
                 <div key={q.id}>
                   <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{q.label}{q.required ? ' *' : ''}</p>
-                  <p className="text-sm text-slate-700 mt-0.5">{value ?? <span className="text-slate-300 italic">No answer</span>}</p>
+                  <p className="text-sm text-slate-700 mt-0.5">{displayValue}</p>
                 </div>
               );
             })

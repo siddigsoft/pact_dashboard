@@ -6,7 +6,8 @@ import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2, CheckCircle2, ClipboardList, Star, ChevronLeft, ChevronRight,
-  AlertCircle,
+  AlertCircle, MapPin, Image as ImageIcon, Paperclip, ScanLine, Phone, Mail,
+  Hash, Clock, CalendarClock, GitBranch,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,15 @@ import {
 
 type QuestionType =
   | 'text' | 'textarea' | 'radio' | 'checkbox'
-  | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header';
+  | 'rating' | 'scale' | 'date' | 'dropdown' | 'section_header'
+  | 'number' | 'integer' | 'phone' | 'email' | 'time' | 'datetime'
+  | 'gps' | 'image' | 'file' | 'barcode';
+
+interface SkipLogic {
+  condition_question_id: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'answered' | 'not_answered' | 'greater_than' | 'less_than';
+  value?: string;
+}
 
 interface Survey {
   id: string;
@@ -43,6 +52,33 @@ interface Question {
 
 type AnswerValue = string | string[] | number | null;
 
+// ── Skip logic evaluation ─────────────────────────────────────────────────────
+function isVisible(q: Question, answers: Record<string, AnswerValue>): boolean {
+  const sl = q.settings?.skip_logic as SkipLogic | undefined;
+  if (!sl?.condition_question_id) return true;
+  const trigger = answers[sl.condition_question_id];
+  const triggerStr = Array.isArray(trigger) ? trigger.join(',') : String(trigger ?? '');
+  switch (sl.operator) {
+    case 'answered':
+      return trigger !== null && trigger !== undefined && trigger !== '' && !(Array.isArray(trigger) && trigger.length === 0);
+    case 'not_answered':
+      return trigger === null || trigger === undefined || trigger === '' || (Array.isArray(trigger) && trigger.length === 0);
+    case 'equals':
+      return triggerStr === (sl.value ?? '');
+    case 'not_equals':
+      return triggerStr !== (sl.value ?? '');
+    case 'contains':
+      return triggerStr.toLowerCase().includes((sl.value ?? '').toLowerCase());
+    case 'greater_than':
+      return Number(trigger) > Number(sl.value ?? 0);
+    case 'less_than':
+      return Number(trigger) < Number(sl.value ?? 0);
+    default:
+      return true;
+  }
+}
+
+// ── Helper components ─────────────────────────────────────────────────────────
 function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hover, setHover] = useState(0);
   return (
@@ -57,12 +93,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
           className="transition-transform hover:scale-110"
           data-testid={`star-${n}`}
         >
-          <Star
-            className={cn(
-              'w-8 h-8 transition-colors',
-              n <= (hover || value) ? 'fill-amber-400 text-amber-400' : 'text-slate-200',
-            )}
-          />
+          <Star className={cn('w-8 h-8 transition-colors', n <= (hover || value) ? 'fill-amber-400 text-amber-400' : 'text-slate-200')} />
         </button>
       ))}
       {value > 0 && <span className="ml-2 text-sm font-medium text-slate-600">{value} / 5</span>}
@@ -99,6 +130,108 @@ function ScaleSelector({ value, onChange, min = 1, max = 10 }: { value: number |
   );
 }
 
+function GpsCapture({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
+  const capture = () => {
+    if (!navigator.geolocation) {
+      setGpsError('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLoading(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const coords = `${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)},${pos.coords.accuracy.toFixed(1)}`;
+        onChange(coords);
+        setLoading(false);
+      },
+      err => {
+        setGpsError(err.message);
+        setLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+
+  const parts = value ? value.split(',') : null;
+
+  return (
+    <div className="space-y-2">
+      {parts && parts.length >= 2 && (
+        <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-sm">
+          <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-emerald-800">Location captured</p>
+            <p className="text-xs text-emerald-600 font-mono">
+              {parseFloat(parts[0]).toFixed(5)}°, {parseFloat(parts[1]).toFixed(5)}°
+              {parts[2] ? ` · ±${parseFloat(parts[2]).toFixed(0)}m` : ''}
+            </p>
+          </div>
+        </div>
+      )}
+      <Button type="button" variant="outline" onClick={capture} disabled={loading} className="gap-2">
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+        {loading ? 'Getting location…' : value ? 'Update Location' : 'Capture GPS Location'}
+      </Button>
+      {gpsError && <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{gpsError}</p>}
+    </div>
+  );
+}
+
+function ImageCapture({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onChange(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div className="space-y-2">
+      {value && (
+        <img src={value} className="max-h-48 rounded-xl object-cover border border-slate-200 w-full" alt="Uploaded" />
+      )}
+      <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-colors">
+        <ImageIcon className="w-4 h-4 text-slate-400" />
+        <span className="text-sm text-slate-600">{value ? 'Change photo' : 'Take or upload a photo'}</span>
+        <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={handleFile} />
+      </label>
+    </div>
+  );
+}
+
+function FileAttachment({ value, onChange }: { value: string | null; onChange: (v: string) => void }) {
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onChange(JSON.stringify({ name: file.name, size: file.size, data: reader.result }));
+    reader.readAsDataURL(file);
+  };
+  const meta = value ? (() => { try { return JSON.parse(value); } catch { return null; } })() : null;
+  return (
+    <div className="space-y-2">
+      {meta && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-200 text-sm">
+          <Paperclip className="w-4 h-4 text-blue-600 shrink-0" />
+          <div>
+            <p className="font-medium text-blue-800">{meta.name}</p>
+            <p className="text-xs text-blue-600">{(meta.size / 1024).toFixed(1)} KB</p>
+          </div>
+        </div>
+      )}
+      <label className="flex items-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-colors">
+        <Paperclip className="w-4 h-4 text-slate-400" />
+        <span className="text-sm text-slate-600">{meta ? 'Replace file' : 'Attach a file'}</span>
+        <input type="file" className="sr-only" onChange={handleFile} />
+      </label>
+    </div>
+  );
+}
+
+// ── Main fill page ─────────────────────────────────────────────────────────────
 export default function SurveyFill() {
   const { id } = useParams<{ id: string }>();
   const { currentUser } = useUser();
@@ -128,11 +261,13 @@ export default function SurveyFill() {
     },
   });
 
+  // Visible questions (respects skip logic)
+  const visibleQuestions = questions.filter(q => isVisible(q, answers));
+
   const submitMutation = useMutation({
     mutationFn: async () => {
-      // Validate required
       const newErrors: Record<string, string> = {};
-      for (const q of questions.filter(q => q.required && q.type !== 'section_header')) {
+      for (const q of visibleQuestions.filter(q => q.required && q.type !== 'section_header')) {
         const val = answers[q.id];
         const missing = val === null || val === undefined || val === '' ||
           (Array.isArray(val) && val.length === 0);
@@ -144,7 +279,6 @@ export default function SurveyFill() {
       }
       setErrors({});
 
-      // Insert response
       const { data: resp, error: rErr } = await supabase.from('survey_responses').insert({
         survey_id: id,
         respondent_id: currentUser?.id ?? null,
@@ -153,12 +287,13 @@ export default function SurveyFill() {
       }).select().single();
       if (rErr || !resp) throw rErr ?? new Error('Failed to submit');
 
-      // Insert answers
-      const answerRows = questions
+      const jsonTypes = ['checkbox', 'rating', 'scale', 'image', 'file'];
+
+      const answerRows = visibleQuestions
         .filter(q => q.type !== 'section_header')
         .map(q => {
           const val = answers[q.id] ?? null;
-          const isJson = ['checkbox', 'rating', 'scale'].includes(q.type);
+          const isJson = jsonTypes.includes(q.type);
           return {
             response_id: resp.id,
             question_id: q.id,
@@ -192,16 +327,14 @@ export default function SurveyFill() {
     setAnswer(qid, next);
   };
 
-  const answeredCount = questions.filter(q => q.type !== 'section_header').filter(q => {
+  const visibleNonSection = visibleQuestions.filter(q => q.type !== 'section_header');
+  const requiredVisible = visibleNonSection.filter(q => q.required);
+  const answeredRequired = requiredVisible.filter(q => {
     const v = answers[q.id];
     return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0);
-  }).length;
-  const totalRequired = questions.filter(q => q.required && q.type !== 'section_header').length;
-  const progress = totalRequired > 0
-    ? Math.round((questions.filter(q => q.required && q.type !== 'section_header').filter(q => {
-        const v = answers[q.id];
-        return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0);
-      }).length / totalRequired) * 100)
+  });
+  const progress = requiredVisible.length > 0
+    ? Math.round((answeredRequired.length / requiredVisible.length) * 100)
     : 100;
 
   if (surveyLoading || qLoading) return (
@@ -259,7 +392,7 @@ export default function SurveyFill() {
           <ClipboardList className="w-5 h-5 text-indigo-600 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">{survey.title}</p>
-            {totalRequired > 0 && (
+            {requiredVisible.length > 0 && (
               <div className="flex items-center gap-2 mt-0.5">
                 <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
@@ -273,15 +406,14 @@ export default function SurveyFill() {
 
       {/* Content */}
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
-        {/* Survey description */}
         {survey.description && (
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <p className="text-slate-700 text-sm leading-relaxed">{survey.description}</p>
           </div>
         )}
 
-        {/* Questions */}
-        {questions.map(q => {
+        {/* Questions — only visible ones */}
+        {visibleQuestions.map(q => {
           if (q.type === 'section_header') {
             return (
               <div key={q.id} className="pt-4 pb-1">
@@ -289,7 +421,10 @@ export default function SurveyFill() {
               </div>
             );
           }
+
           const err = errors[q.id];
+          const hasSkip = !!(q.settings?.skip_logic as SkipLogic | undefined)?.condition_question_id;
+
           return (
             <div
               key={q.id}
@@ -300,32 +435,139 @@ export default function SurveyFill() {
               data-testid={`question-${q.id}`}
             >
               <div>
-                <div className="flex items-start gap-1">
-                  <p className="text-sm font-semibold text-slate-800 leading-snug">{q.label}</p>
-                  {q.required && <span className="text-red-500 text-sm leading-none shrink-0 mt-0.5">*</span>}
+                <div className="flex items-start gap-1 justify-between">
+                  <div className="flex items-start gap-1">
+                    <p className="text-sm font-semibold text-slate-800 leading-snug">{q.label}</p>
+                    {q.required && <span className="text-red-500 text-sm leading-none shrink-0 mt-0.5">*</span>}
+                  </div>
+                  {hasSkip && (
+                    <span className="flex items-center gap-0.5 text-[10px] text-amber-600 shrink-0 ml-2">
+                      <GitBranch className="w-2.5 h-2.5" />conditional
+                    </span>
+                  )}
                 </div>
                 {q.description && <p className="text-xs text-slate-500 mt-1">{q.description}</p>}
               </div>
 
-              {/* Text */}
+              {/* Short text */}
               {q.type === 'text' && (
                 <Input
                   value={(answers[q.id] as string) ?? ''}
                   onChange={e => setAnswer(q.id, e.target.value)}
-                  placeholder={(q.settings?.placeholder as string) ?? 'Your answer…'}
+                  placeholder="Your answer…"
                   data-testid={`input-answer-${q.id}`}
                 />
               )}
 
-              {/* Textarea */}
+              {/* Long text */}
               {q.type === 'textarea' && (
                 <Textarea
                   value={(answers[q.id] as string) ?? ''}
                   onChange={e => setAnswer(q.id, e.target.value)}
-                  placeholder={(q.settings?.placeholder as string) ?? 'Your answer…'}
+                  placeholder="Your answer…"
                   rows={4}
                   data-testid={`textarea-answer-${q.id}`}
                 />
+              )}
+
+              {/* Number */}
+              {q.type === 'number' && (
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="number"
+                    value={(answers[q.id] as string) ?? ''}
+                    onChange={e => setAnswer(q.id, e.target.value)}
+                    placeholder="0.00"
+                    className="pl-9"
+                    step="any"
+                    data-testid={`number-answer-${q.id}`}
+                  />
+                </div>
+              )}
+
+              {/* Integer */}
+              {q.type === 'integer' && (
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="number"
+                    value={(answers[q.id] as string) ?? ''}
+                    onChange={e => setAnswer(q.id, e.target.value)}
+                    placeholder="0"
+                    className="pl-9"
+                    step="1"
+                    data-testid={`integer-answer-${q.id}`}
+                  />
+                </div>
+              )}
+
+              {/* Phone */}
+              {q.type === 'phone' && (
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="tel"
+                    value={(answers[q.id] as string) ?? ''}
+                    onChange={e => setAnswer(q.id, e.target.value)}
+                    placeholder="+1 (000) 000-0000"
+                    className="pl-9"
+                    data-testid={`phone-answer-${q.id}`}
+                  />
+                </div>
+              )}
+
+              {/* Email */}
+              {q.type === 'email' && (
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="email"
+                    value={(answers[q.id] as string) ?? ''}
+                    onChange={e => setAnswer(q.id, e.target.value)}
+                    placeholder="email@example.com"
+                    className="pl-9"
+                    data-testid={`email-answer-${q.id}`}
+                  />
+                </div>
+              )}
+
+              {/* Date */}
+              {q.type === 'date' && (
+                <Input
+                  type="date"
+                  value={(answers[q.id] as string) ?? ''}
+                  onChange={e => setAnswer(q.id, e.target.value)}
+                  data-testid={`date-answer-${q.id}`}
+                />
+              )}
+
+              {/* Time */}
+              {q.type === 'time' && (
+                <div className="relative">
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="time"
+                    value={(answers[q.id] as string) ?? ''}
+                    onChange={e => setAnswer(q.id, e.target.value)}
+                    className="pl-9"
+                    data-testid={`time-answer-${q.id}`}
+                  />
+                </div>
+              )}
+
+              {/* Date & Time */}
+              {q.type === 'datetime' && (
+                <div className="relative">
+                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="datetime-local"
+                    value={(answers[q.id] as string) ?? ''}
+                    onChange={e => setAnswer(q.id, e.target.value)}
+                    className="pl-9"
+                    data-testid={`datetime-answer-${q.id}`}
+                  />
+                </div>
               )}
 
               {/* Radio */}
@@ -391,10 +633,7 @@ export default function SurveyFill() {
 
               {/* Star rating */}
               {q.type === 'rating' && (
-                <StarRating
-                  value={(answers[q.id] as number) ?? 0}
-                  onChange={v => setAnswer(q.id, v)}
-                />
+                <StarRating value={(answers[q.id] as number) ?? 0} onChange={v => setAnswer(q.id, v)} />
               )}
 
               {/* Scale */}
@@ -407,14 +646,38 @@ export default function SurveyFill() {
                 />
               )}
 
-              {/* Date */}
-              {q.type === 'date' && (
-                <Input
-                  type="date"
-                  value={(answers[q.id] as string) ?? ''}
-                  onChange={e => setAnswer(q.id, e.target.value)}
-                  data-testid={`date-answer-${q.id}`}
-                />
+              {/* GPS */}
+              {q.type === 'gps' && (
+                <GpsCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
+              )}
+
+              {/* Image / Photo */}
+              {q.type === 'image' && (
+                <ImageCapture value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
+              )}
+
+              {/* File upload */}
+              {q.type === 'file' && (
+                <FileAttachment value={(answers[q.id] as string) ?? null} onChange={v => setAnswer(q.id, v)} />
+              )}
+
+              {/* Barcode / QR */}
+              {q.type === 'barcode' && (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                      value={(answers[q.id] as string) ?? ''}
+                      onChange={e => setAnswer(q.id, e.target.value)}
+                      placeholder="Scan or type barcode / QR value…"
+                      className="pl-9"
+                      data-testid={`barcode-answer-${q.id}`}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 flex items-center gap-1">
+                    <ScanLine className="w-3 h-3" />Use your device camera or type the code manually
+                  </p>
+                </div>
               )}
 
               {err && (
@@ -444,9 +707,9 @@ export default function SurveyFill() {
               ? <><Loader2 className="w-4 h-4 animate-spin" />Submitting…</>
               : <><ChevronRight className="w-4 h-4" />Submit Response</>}
           </Button>
-          {totalRequired > 0 && (
+          {visibleNonSection.length > 0 && (
             <p className="text-center text-[11px] text-slate-400 mt-2">
-              {answeredCount} of {questions.filter(q => q.type !== 'section_header').length} questions answered
+              {answeredRequired.length} of {visibleNonSection.length} question{visibleNonSection.length !== 1 ? 's' : ''} answered
             </p>
           )}
         </div>
