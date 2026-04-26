@@ -60,10 +60,16 @@ BEGIN
   --   norm = lowercase, trimmed, with whitespace / _ / - removed.
   -- LIVE  = currently in the active workflow (after dispatch, before close).
   -- DONE  = terminal-success states.
+  --
+  -- Completion-time bucketing uses `completed_at` (Task #52), which is
+  -- stamped by trigger when a row first transitions into a done state and
+  -- preserved across later edits. Falling back to `updated_at` keeps any
+  -- legacy rows that escaped the backfill from disappearing from the trend.
   WITH normalized AS (
     SELECT
       created_at,
       updated_at,
+      completed_at,
       regexp_replace(lower(trim(coalesce(status::text, ''))), '[\s_-]+', '', 'g') AS s
     FROM public.mmp_site_entries
   ),
@@ -71,6 +77,7 @@ BEGIN
     SELECT
       created_at,
       updated_at,
+      COALESCE(completed_at, updated_at, created_at) AS done_at,
       (s IN ('dispatched','assigned','smartassigned','accepted',
              'inprogress','ongoing','started')) AS is_live,
       (s IN ('completed','verified','closed','cpverified')) AS is_done
@@ -85,11 +92,11 @@ BEGIN
     COUNT(*) FILTER (WHERE is_live
                        AND created_at >= v_60d_ago AND created_at < v_30d_ago),
     COUNT(*) FILTER (WHERE is_done
-                       AND COALESCE(updated_at, created_at) >= v_30d_ago
-                       AND COALESCE(updated_at, created_at) < v_now),
+                       AND done_at >= v_30d_ago
+                       AND done_at < v_now),
     COUNT(*) FILTER (WHERE is_done
-                       AND COALESCE(updated_at, created_at) >= v_60d_ago
-                       AND COALESCE(updated_at, created_at) < v_30d_ago),
+                       AND done_at >= v_60d_ago
+                       AND done_at < v_30d_ago),
     COUNT(*) FILTER (WHERE created_at >= v_30d_ago AND created_at < v_now),
     COUNT(*) FILTER (WHERE created_at >= v_60d_ago AND created_at < v_30d_ago)
   INTO
