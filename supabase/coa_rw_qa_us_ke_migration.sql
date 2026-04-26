@@ -13,6 +13,25 @@ ON CONFLICT (code) DO NOTHING;
 
 -- Kenya is already seeded (code = 'KE'), no action needed.
 
+-- ─── 1. Extend the acct_account_subtype enum ─────────────────
+-- The base enum has 13 values; we add richer COA-specific labels.
+-- ADD VALUE IF NOT EXISTS is idempotent — safe to run again.
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'header';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'fixed_asset';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'other_asset';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'investment';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'grant';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'other_income';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'personnel';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'travel';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'program';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'admin';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'supplies';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'indirect';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'unrestricted';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'restricted';
+ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'retained_earnings';
+
 -- ============================================================
 -- HELPER: insert parent then children using CTEs
 -- We use a DO block so we can reference UUIDs by variable name.
@@ -533,7 +552,7 @@ BEGIN
     ('KE-5103','Benefits & Allowances','المزايا والبدلات','expense','personnel',TRUE,ke_5100,id_ke),
     ('KE-5104','NSSF Employer Contribution','اشتراك صاحب العمل في NSSF','expense','personnel',TRUE,ke_5100,id_ke),
     ('KE-5105','NHIF Employer Contribution','اشتراك صاحب العمل في NHIF','expense','personnel',TRUE,ke_5100,id_ke),
-    ('KE-5106','Severance & Gratuity','مكافأة نهاية الخدمة','expense','personnel',TRUE,ke_5100,id_ke),
+    ('KE-5106','Severance Pay','مكافأة نهاية الخدمة','expense','personnel',TRUE,ke_5100,id_ke),
     ('KE-5201','In-Country Travel','السفر الداخلي','expense','travel',TRUE,ke_5200,id_ke),
     ('KE-5202','International Travel','السفر الدولي','expense','travel',TRUE,ke_5200,id_ke),
     ('KE-5203','Vehicle Fuel & Maintenance','وقود وصيانة المركبات','expense','travel',TRUE,ke_5200,id_ke),
@@ -547,7 +566,7 @@ BEGIN
     ('KE-5403','Communications & Internet','الاتصالات والإنترنت','expense','admin',TRUE,ke_5400,id_ke),
     ('KE-5404','Printing & Publications','الطباعة والمنشورات','expense','admin',TRUE,ke_5400,id_ke),
     ('KE-5405','Legal & Audit Fees','الرسوم القانونية والتدقيق','expense','admin',TRUE,ke_5400,id_ke),
-    ('KE-5406','Bank Charges','رسوم بنكية','expense','admin',TRUE,ke_5400,id_ke),
+    ('KE-5406','Bank & M-Pesa Charges','رسوم البنك و M-Pesa','expense','admin',TRUE,ke_5400,id_ke),
     ('KE-5407','Exchange Loss','خسارة صرف العملة','expense','admin',TRUE,ke_5400,id_ke),
     ('KE-5501','Computer & IT Equipment','معدات الحاسوب وتقنية المعلومات','expense','supplies',TRUE,ke_5500,id_ke),
     ('KE-5502','Office Furniture & Equipment','أثاث ومعدات مكتبية','expense','supplies',TRUE,ke_5500,id_ke),
@@ -555,16 +574,5 @@ BEGIN
     ('KE-5601','Indirect Cost Rate Charge','رسوم معدل التكاليف غير المباشرة','expense','indirect',TRUE,ke_5600,id_ke),
     ('KE-5602','Management Fee','رسوم الإدارة','expense','indirect',TRUE,ke_5600,id_ke);
 
+  RAISE NOTICE 'COA seeding complete: Rwanda, Qatar, USA, Kenya.';
 END $$;
-
--- ─── DONE ────────────────────────────────────────────────────
--- Summary of accounts created:
---   Rwanda (RW)  : ~70 accounts  — currency RWF, RSSB payroll taxes
---   Qatar  (QA)  : ~60 accounts  — currency QAR, End-of-Service benefits
---   USA    (US)  : ~85 accounts  — currency USD, NICRA/OMB-compliant, FICA/401k
---   Kenya  (KE)  : ~75 accounts  — currency KES, NHIF/NSSF/PAYE, M-Pesa float
--- All codes are prefixed (RW-, QA-, US-, KE-) to avoid collisions.
--- Safe to run multiple times only if acct_accounts has no UNIQUE constraint
--- on (code, country_id). Add one if needed:
---   ALTER TABLE acct_accounts ADD CONSTRAINT uq_acct_code_country
---     UNIQUE (code, country_id);

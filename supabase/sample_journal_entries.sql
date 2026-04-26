@@ -63,7 +63,14 @@ DECLARE
   ke_net_unrest  UUID;
 
   v_entry_id UUID;
+  v_admin_id UUID;
 BEGIN
+  -- ── Resolve an admin user id (v_admin_id = NULL in SQL editor) ──
+  SELECT id INTO v_admin_id FROM auth.users ORDER BY created_at LIMIT 1;
+  IF v_admin_id IS NULL THEN
+    RAISE EXCEPTION 'No users found in auth.users. Create at least one user first.';
+  END IF;
+
   -- ── Resolve period ──────────────────────────────────────────
   SELECT id, start_date::DATE INTO v_period_id, v_period_date
   FROM acct_fiscal_periods
@@ -108,7 +115,7 @@ BEGIN
 
     -- RW-JE-001: USAID Grant Receipt — Cash received from USAID Kigali
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, source_id, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 1, 'USAID Grant Receipt — Kigali Q1', 'استلام منحة USAID — كيغالي الربع الأول', 'manual', NULL, 'posted', 'sample-rw-je-001', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 1, 'USAID Grant Receipt — Kigali Q1', 'استلام منحة USAID — كيغالي الربع الأول', 'manual', NULL, 'posted', 'sample-rw-je-001', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -117,7 +124,7 @@ BEGIN
 
     -- RW-JE-002: Monthly Payroll — National Staff
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 2, 'Monthly Payroll — Rwanda National Staff', 'رواتب الموظفين الوطنيين — رواندا', 'payroll', 'posted', 'sample-rw-je-002', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 2, 'Monthly Payroll — Rwanda National Staff', 'رواتب الموظفين الوطنيين — رواندا', 'payroll', 'posted', 'sample-rw-je-002', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -127,7 +134,7 @@ BEGIN
 
     -- RW-JE-003: Office Rent — Kigali Q1
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 3, 'Office Rent — Kigali January', 'إيجار مكتب كيغالي يناير', 'manual', 'posted', 'sample-rw-je-003', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 3, 'Office Rent — Kigali January', 'إيجار مكتب كيغالي يناير', 'manual', 'posted', 'sample-rw-je-003', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -136,7 +143,7 @@ BEGIN
 
     -- RW-JE-004: Indirect Cost Charge
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 4, 'Indirect Cost Rate Charge — Rwanda Q1', 'رسوم معدل التكاليف غير المباشرة — رواندا', 'manual', 'posted', 'sample-rw-je-004', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 4, 'Indirect Cost Rate Charge — Rwanda Q1', 'رسوم معدل التكاليف غير المباشرة — رواندا', 'manual', 'posted', 'sample-rw-je-004', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -145,7 +152,7 @@ BEGIN
 
     -- RW-JE-005: Training Workshop — Beneficiaries
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 5, 'Farmers Training Workshop — Southern Province', 'ورشة تدريب المزارعين — المقاطعة الجنوبية', 'program', 'posted', 'sample-rw-je-005', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 5, 'Farmers Training Workshop — Southern Province', 'ورشة تدريب المزارعين — المقاطعة الجنوبية', 'program', 'posted', 'sample-rw-je-005', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -177,7 +184,7 @@ BEGIN
 
     -- QA-JE-001: USAID Grant Receipt — Doha
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 1, 'USAID Grant Receipt — Doha Office', 'استلام منحة USAID — مكتب الدوحة', 'manual', 'posted', 'sample-qa-je-001', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 1, 'USAID Grant Receipt — Doha Office', 'استلام منحة USAID — مكتب الدوحة', 'manual', 'posted', 'sample-qa-je-001', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -186,7 +193,7 @@ BEGIN
 
     -- QA-JE-002: Staff Payroll — Doha
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 2, 'Monthly Payroll — Qatar Staff', 'الرواتب الشهرية — موظفو قطر', 'payroll', 'posted', 'sample-qa-je-002', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 2, 'Monthly Payroll — Qatar Staff', 'الرواتب الشهرية — موظفو قطر', 'payroll', 'posted', 'sample-qa-je-002', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -196,7 +203,7 @@ BEGIN
 
     -- QA-JE-003: Office Rent — Doha
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 3, 'Office Rent — Doha January', 'إيجار مكتب الدوحة يناير', 'manual', 'posted', 'sample-qa-je-003', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 3, 'Office Rent — Doha January', 'إيجار مكتب الدوحة يناير', 'manual', 'posted', 'sample-qa-je-003', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -205,7 +212,7 @@ BEGIN
 
     -- QA-JE-004: GCC Humanitarian Training Event
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 4, 'GCC Humanitarian Coordination Training — Doha', 'تدريب التنسيق الإنساني الخليجي — الدوحة', 'program', 'posted', 'sample-qa-je-004', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 4, 'GCC Humanitarian Coordination Training — Doha', 'تدريب التنسيق الإنساني الخليجي — الدوحة', 'program', 'posted', 'sample-qa-je-004', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -214,7 +221,7 @@ BEGIN
 
     -- QA-JE-005: Indirect Cost Charge
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 5, 'Indirect Cost Rate Charge — Qatar Q1', 'رسوم معدل التكاليف غير المباشرة — قطر', 'manual', 'posted', 'sample-qa-je-005', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 5, 'Indirect Cost Rate Charge — Qatar Q1', 'رسوم معدل التكاليف غير المباشرة — قطر', 'manual', 'posted', 'sample-qa-je-005', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -248,7 +255,7 @@ BEGIN
 
     -- US-JE-001: USAID Prime Award — Cash Draw-Down
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 1, 'USAID Prime Award Draw-Down — Washington DC HQ', 'سحب منحة USAID الرئيسية — المقر الرئيسي واشنطن', 'manual', 'posted', 'sample-us-je-001', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 1, 'USAID Prime Award Draw-Down — Washington DC HQ', 'سحب منحة USAID الرئيسية — المقر الرئيسي واشنطن', 'manual', 'posted', 'sample-us-je-001', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -257,7 +264,7 @@ BEGIN
 
     -- US-JE-002: Payroll — Exempt + Fringe
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 2, 'HQ Payroll — Exempt Staff + Fringe Benefits', 'رواتب الموظفين المعفيين والمزايا الإضافية — المقر', 'payroll', 'posted', 'sample-us-je-002', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 2, 'HQ Payroll — Exempt Staff + Fringe Benefits', 'رواتب الموظفين المعفيين والمزايا الإضافية — المقر', 'payroll', 'posted', 'sample-us-je-002', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -268,7 +275,7 @@ BEGIN
 
     -- US-JE-003: Office Rent + Occupancy — DC
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 3, 'HQ Office Rent & Occupancy — January', 'إيجار مكتب المقر الرئيسي والإشغال يناير', 'manual', 'posted', 'sample-us-je-003', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 3, 'HQ Office Rent & Occupancy — January', 'إيجار مكتب المقر الرئيسي والإشغال يناير', 'manual', 'posted', 'sample-us-je-003', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -277,7 +284,7 @@ BEGIN
 
     -- US-JE-004: NICRA Indirect Cost Charge
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 4, 'NICRA Indirect Cost Rate Charge — USAID Award', 'رسوم معدل التكاليف غير المباشرة NICRA — منحة USAID', 'manual', 'posted', 'sample-us-je-004', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 4, 'NICRA Indirect Cost Rate Charge — USAID Award', 'رسوم معدل التكاليف غير المباشرة NICRA — منحة USAID', 'manual', 'posted', 'sample-us-je-004', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -286,7 +293,7 @@ BEGIN
 
     -- US-JE-005: Deferred Revenue Recognition — CDC Grant
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 5, 'Deferred CDC Grant Revenue Recognition — January', 'الاعتراف بإيرادات منحة CDC المؤجلة يناير', 'manual', 'posted', 'sample-us-je-005', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 5, 'Deferred CDC Grant Revenue Recognition — January', 'الاعتراف بإيرادات منحة CDC المؤجلة يناير', 'manual', 'posted', 'sample-us-je-005', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -295,7 +302,7 @@ BEGIN
 
     -- US-JE-006: Staff Training — Program
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 6, 'Partner Capacity Building Training — Quarterly', 'تدريب بناء قدرات الشركاء — ربع سنوي', 'program', 'posted', 'sample-us-je-006', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 6, 'Partner Capacity Building Training — Quarterly', 'تدريب بناء قدرات الشركاء — ربع سنوي', 'program', 'posted', 'sample-us-je-006', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -329,7 +336,7 @@ BEGIN
 
     -- KE-JE-001: USAID Grant Receipt — Nairobi
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 1, 'USAID Grant Receipt — Nairobi Office Q1', 'استلام منحة USAID — مكتب نيروبي الربع الأول', 'manual', 'posted', 'sample-ke-je-001', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 1, 'USAID Grant Receipt — Nairobi Office Q1', 'استلام منحة USAID — مكتب نيروبي الربع الأول', 'manual', 'posted', 'sample-ke-je-001', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -338,7 +345,7 @@ BEGIN
 
     -- KE-JE-002: Monthly Payroll with NHIF + NSSF + PAYE
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 2, 'Monthly Payroll — Kenya Staff (NHIF + NSSF + PAYE)', 'الرواتب الشهرية للموظفين كينيا (NHIF + NSSF + PAYE)', 'payroll', 'posted', 'sample-ke-je-002', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 2, 'Monthly Payroll — Kenya Staff (NHIF + NSSF + PAYE)', 'الرواتب الشهرية للموظفين كينيا (NHIF + NSSF + PAYE)', 'payroll', 'posted', 'sample-ke-je-002', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -350,7 +357,7 @@ BEGIN
 
     -- KE-JE-003: M-Pesa Disbursement — Beneficiaries
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 3, 'M-Pesa Cash Transfer to Beneficiaries — Turkana', 'تحويل M-Pesa النقدي للمستفيدين — توركانا', 'program', 'posted', 'sample-ke-je-003', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 3, 'M-Pesa Cash Transfer to Beneficiaries — Turkana', 'تحويل M-Pesa النقدي للمستفيدين — توركانا', 'program', 'posted', 'sample-ke-je-003', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -359,7 +366,7 @@ BEGIN
 
     -- KE-JE-004: Office Rent — Nairobi
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 4, 'Office Rent — Nairobi Westlands January', 'إيجار مكتب نيروبي ويستلاندز يناير', 'manual', 'posted', 'sample-ke-je-004', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 4, 'Office Rent — Nairobi Westlands January', 'إيجار مكتب نيروبي ويستلاندز يناير', 'manual', 'posted', 'sample-ke-je-004', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -368,7 +375,7 @@ BEGIN
 
     -- KE-JE-005: Indirect Cost Charge — Kenya
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 5, 'Indirect Cost Rate Charge — Kenya Q1', 'رسوم معدل التكاليف غير المباشرة — كينيا', 'manual', 'posted', 'sample-ke-je-005', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 5, 'Indirect Cost Rate Charge — Kenya Q1', 'رسوم معدل التكاليف غير المباشرة — كينيا', 'manual', 'posted', 'sample-ke-je-005', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
@@ -377,7 +384,7 @@ BEGIN
 
     -- KE-JE-006: Field Trip — Mombasa Site Visit
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
-    VALUES (v_period_id, v_period_date + 6, 'Field Site Visit — Mombasa Coastal Program', 'زيارة موقع ميداني — برنامج الساحل مومباسا', 'site_visit', 'posted', 'sample-ke-je-006', NOW(), auth.uid(), auth.uid())
+    VALUES (v_period_id, v_period_date + 6, 'Field Site Visit — Mombasa Coastal Program', 'زيارة موقع ميداني — برنامج الساحل مومباسا', 'site_visit', 'posted', 'sample-ke-je-006', NOW(), v_admin_id, v_admin_id)
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
