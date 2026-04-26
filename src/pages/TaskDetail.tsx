@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,9 +6,16 @@ import { useUser } from '@/context/user/UserContext';
 import {
   ArrowLeft, Calendar, Clock, User as UserIcon, Users, Tag, MessageSquare, FileText,
   MessageCircle, ListChecks, Plus, X, Check, Trash2, Send, History, Loader2,
-  PlayCircle, Lock, ShieldCheck, Target, CheckCircle2,
+  PlayCircle, Lock, ShieldCheck, Target, CheckCircle2, Minus,
 } from 'lucide-react';
 import { StartTaskDialog, type StartTaskPayload } from '@/components/tasks/StartTaskDialog';
+import { TaskOpenPrompt } from '@/components/tasks/TaskOpenPrompt';
+import { TaskWorkSessionCard } from '@/components/tasks/TaskWorkSessionCard';
+import {
+  useTaskWorkSession,
+  shouldShowOpenPrompt,
+  markOpenPromptShown,
+} from '@/hooks/useTaskWorkSession';
 import type { StartDependencyRecord } from '@/hooks/usePersonalTasks';
 import { useTaskNotifications } from '@/hooks/useTaskNotifications';
 import { format, parseISO } from 'date-fns';
@@ -45,11 +52,13 @@ type TimesheetRowProps = {
   pending: boolean;
   onChangeHours: (hours: number | null) => void;
   onConfirm: () => void;
+  /** Optional ref so the parent can focus this input from the open-prompt. */
+  inputRef?: React.Ref<HTMLInputElement>;
 };
 
 function TimesheetRow({
   row, taskStarted, isSelf, isAdmin, canConfirmHours,
-  confirmedByName, pending, onChangeHours, onConfirm,
+  confirmedByName, pending, onChangeHours, onConfirm, inputRef,
 }: TimesheetRowProps) {
   // Admins can edit at any time. Self-edits require the task to be started.
   const canEditActual = isAdmin || (isSelf && taskStarted);
@@ -76,6 +85,16 @@ function TimesheetRow({
     onChangeHours(next);
   };
 
+  // Step the actual-hours value by ±0.25h. Commits immediately so the server
+  // sees every click — gives the row a quick "counter" feel without forcing
+  // the user to type.
+  const stepBy = (delta: number) => {
+    const current = Number(draft) || 0;
+    const next = Math.max(0, Math.round((current + delta) * 100) / 100);
+    setDraft(String(next));
+    if (next !== row.actual) onChangeHours(next);
+  };
+
   const tooltip = !canEditActual
     ? (!taskStarted && isSelf ? 'Start the task before logging actual hours' : 'Only this person (or an admin) can edit their hours')
     : '';
@@ -87,13 +106,31 @@ function TimesheetRow({
             don't collapse to two characters in this narrow right-column card. */}
         <p className="text-sm font-medium text-slate-800 break-words leading-tight" title={row.name}>
           {row.name}
+          {isSelf && (
+            <span className="ml-1.5 inline-block text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1 py-px align-middle">
+              You
+            </span>
+          )}
         </p>
         <p className="text-[10px] text-slate-400 mt-0.5">
           {row.role} · planned {row.planned != null ? `${row.planned}h` : '—'}
         </p>
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-0.5">
+        {canEditActual && (
+          <button
+            type="button"
+            onClick={() => stepBy(-0.25)}
+            disabled={pending || (Number(draft) || 0) <= 0}
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="−15 min"
+            data-testid={`btn-hours-step-down-${row.id}`}
+          >
+            <Minus className="w-3 h-3" />
+          </button>
+        )}
         <input
+          ref={inputRef}
           type="number"
           min={0}
           step={0.25}
@@ -104,10 +141,22 @@ function TimesheetRow({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
-          className="w-16 px-2 py-1 text-xs text-right rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-300/50 disabled:bg-slate-50 disabled:text-slate-400"
+          className="w-14 px-1.5 py-1 text-xs text-right rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-300/50 disabled:bg-slate-50 disabled:text-slate-400 mx-0.5"
           data-testid={`input-actual-hours-${row.id}`}
         />
-        <span className="text-[10px] text-slate-400">h</span>
+        {canEditActual && (
+          <button
+            type="button"
+            onClick={() => stepBy(0.25)}
+            disabled={pending}
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="+15 min"
+            data-testid={`btn-hours-step-up-${row.id}`}
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+        )}
+        <span className="text-[10px] text-slate-400 ml-1">h</span>
       </div>
       <div className="w-24 flex items-center justify-end shrink-0">
         {confirmed ? (
@@ -155,6 +204,17 @@ export default function TaskDetail() {
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [outputDraft, setOutputDraft] = useState<string | null>(null);
   const [savingOutput, setSavingOutput] = useState(false);
+
+  // ---------- Refs for "jump to" actions from the open-prompt ----------
+  const hoursCardRef = useRef<HTMLDivElement | null>(null);
+  const outputCardRef = useRef<HTMLDivElement | null>(null);
+  const outputTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const ownHoursInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ---------- Open-prompt visibility ----------
+  // Shown once per browser session per (task, user) pair the first time a
+  // participant lands on a started task. Marked seen via sessionStorage.
+  const [openPromptOpen, setOpenPromptOpen] = useState(false);
 
   // ---------- Fetch task ----------
   const { data: task, isLoading } = useQuery({
@@ -616,6 +676,56 @@ export default function TaskDetail() {
     },
     onError: (e: Error) => toast({ title: 'Could not confirm', description: e.message, variant: 'destructive' }),
   });
+
+  // ---------- Work-session timer (live, per-user, persisted in localStorage) ----------
+  // Available only to participants on a started task. Drives the
+  // TaskWorkSessionCard inside the Hours & Timesheet panel and the
+  // "Welcome back" prompt that opens once per browser session.
+  const isParticipant = !!currentUser?.id && !!task && (
+    task.assigned_to === currentUser.id ||
+    task.user_id === currentUser.id ||
+    ((task.co_assignees as Array<{ id: string }> | undefined) ?? []).some(c => c.id === currentUser.id)
+  );
+  const sessionEnabled = !!task?.started_at && !!isParticipant;
+  const session = useTaskWorkSession(id, currentUser?.id, sessionEnabled);
+
+  // Show the open-prompt the first time a participant lands on a started
+  // task in this browser session. We watch task.started_at + currentUser.id
+  // so it fires after the task data finishes loading.
+  useEffect(() => {
+    if (!id || !currentUser?.id) return;
+    if (!sessionEnabled) return;
+    if (!shouldShowOpenPrompt(id, currentUser.id)) return;
+    setOpenPromptOpen(true);
+  }, [id, currentUser?.id, sessionEnabled]);
+
+  // Helpers used by the prompt's CTAs.
+  const dismissPrompt = () => {
+    if (id && currentUser?.id) markOpenPromptShown(id, currentUser.id);
+    setOpenPromptOpen(false);
+  };
+  const handlePromptStartTimer = () => {
+    session.start();
+    dismissPrompt();
+    // Scroll the Hours card into view so the live timer is visible immediately.
+    window.setTimeout(() => {
+      hoursCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+  const handlePromptJumpToHours = () => {
+    dismissPrompt();
+    window.setTimeout(() => {
+      hoursCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      ownHoursInputRef.current?.focus();
+    }, 50);
+  };
+  const handlePromptJumpToOutput = () => {
+    dismissPrompt();
+    window.setTimeout(() => {
+      outputCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      outputTextareaRef.current?.focus();
+    }, 50);
+  };
 
   // ---------- Save Output ----------
   const saveOutput = async (text: string) => {
@@ -1297,7 +1407,7 @@ export default function TaskDetail() {
             const draftValue = outputDraft ?? stored;
             const dirty = outputDraft !== null && outputDraft !== stored;
             return (
-              <div className="bg-white rounded-2xl border border-emerald-200 overflow-hidden" data-testid="card-output">
+              <div ref={outputCardRef} className="bg-white rounded-2xl border border-emerald-200 overflow-hidden scroll-mt-4" data-testid="card-output">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-emerald-100 bg-emerald-50/50">
                   <h2 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
                     <Target className="w-4 h-4" /> Output / Accomplishments
@@ -1313,6 +1423,7 @@ export default function TaskDetail() {
                         </p>
                       )}
                       <textarea
+                        ref={outputTextareaRef}
                         value={draftValue}
                         onChange={e => setOutputDraft(e.target.value)}
                         rows={5}
@@ -1786,17 +1897,63 @@ export default function TaskDetail() {
             if (rows.length === 0) return null;
             const totalPlanned = rows.reduce((s, r) => s + (r.planned ?? 0), 0);
             const totalActual = rows.reduce((s, r) => s + (r.actual ?? 0), 0);
+            const myRow = currentUser?.id ? rows.find(r => r.id === currentUser.id) : undefined;
+            const pct = totalPlanned > 0 ? Math.min(100, Math.round((totalActual / totalPlanned) * 100)) : 0;
             return (
-              <div className="bg-white rounded-2xl border border-slate-200 p-4" data-testid="card-timesheet">
+              <div ref={hoursCardRef} className="bg-white rounded-2xl border border-slate-200 p-4 scroll-mt-4" data-testid="card-timesheet">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5" /> Hours & Timesheet
                   </h3>
                   <span className="text-[11px] text-slate-500">
-                    Total: <span className="font-semibold text-slate-700">{totalActual.toFixed(1)}h</span>
+                    <span className="font-semibold text-slate-700">{totalActual.toFixed(2)}h</span>
                     {' / '}{totalPlanned.toFixed(1)}h planned
                   </span>
                 </div>
+                {/* Compact aggregate progress bar so the team can see at a glance how
+                    actual hours compare to planned across all assignees. */}
+                {totalPlanned > 0 && (
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mb-2" aria-hidden>
+                    <div
+                      className={`h-full ${pct > 100 ? 'bg-amber-500' : pct >= 90 ? 'bg-emerald-500' : 'bg-emerald-400'}`}
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+                )}
+                {/* Live work-session timer for the signed-in participant. Hidden for
+                    non-participants and on un-started tasks. */}
+                {sessionEnabled && myRow && (
+                  <TaskWorkSessionCard
+                    isRunning={session.isRunning}
+                    elapsedSec={session.elapsedSec}
+                    currentHours={myRow.actual}
+                    onStart={session.start}
+                    onPause={session.pause}
+                    onReset={session.reset}
+                    onApply={(addHours) => {
+                      // Read the freshest server-side actual from the query
+                      // cache (not the captured `myRow.actual`) so a manual
+                      // edit that landed between render and click doesn't
+                      // get reverted — addresses the stale-closure risk
+                      // flagged in code review.
+                      const fresh = qc.getQueryData<typeof task>(['task-detail', id]);
+                      let baseline = myRow.actual ?? 0;
+                      if (fresh) {
+                        if (myRow.id === (fresh.assigned_to as string | null)) {
+                          baseline = (fresh.actual_hours as number | null) ?? 0;
+                        } else {
+                          const co = ((fresh.co_assignees as Array<{ id: string; actual_hours?: number | null }> | undefined) ?? [])
+                            .find(c => c.id === myRow.id);
+                          baseline = (co?.actual_hours as number | null) ?? baseline;
+                        }
+                      }
+                      const next = Math.round((baseline + addHours) * 100) / 100;
+                      setActualHoursForUser.mutate({ targetUserId: myRow.id, hours: next });
+                      session.reset();
+                    }}
+                    pending={setActualHoursForUser.isPending}
+                  />
+                )}
                 <p className="text-[11px] text-slate-500 mb-2">
                   Each person edits only their own actual hours.
                   {canConfirmHours ? ' As task owner, confirm reported hours below.' : ''}
@@ -1835,6 +1992,7 @@ export default function TaskDetail() {
                       onChangeHours={(hours) => setActualHoursForUser.mutate({ targetUserId: r.id, hours })}
                       onConfirm={() => confirmActualHoursForUser.mutate(r.id)}
                       pending={setActualHoursForUser.isPending || confirmActualHoursForUser.isPending}
+                      inputRef={currentUser?.id === r.id ? ownHoursInputRef : undefined}
                     />
                   ))}
                 </ul>
@@ -1922,6 +2080,18 @@ export default function TaskDetail() {
         rewardDeductions={Array.isArray(task.reward_deductions) ? (task.reward_deductions as Array<{ name: string; type: 'fixed' | 'percent'; amount: number }>) : []}
         isPending={startTask.isPending}
         onConfirm={(payload) => startTask.mutateAsync(payload)}
+      />
+      {/* "Welcome back" prompt — fires once per browser session when a
+          participant opens a started task, offering to start the live timer
+          or jump straight to the hours / output editors. */}
+      <TaskOpenPrompt
+        open={openPromptOpen}
+        onOpenChange={(v) => { if (!v) dismissPrompt(); else setOpenPromptOpen(v); }}
+        taskTitle={(task.title as string) ?? 'this task'}
+        onStartTimer={handlePromptStartTimer}
+        onJumpToHours={handlePromptJumpToHours}
+        onJumpToOutput={handlePromptJumpToOutput}
+        onDismiss={dismissPrompt}
       />
     </div>
   );
