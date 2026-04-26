@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/supabase';
 import { dispatchNotification } from '@/lib/notify';
+import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';
 
 type TaskDependency = Database['public']['Tables']['task_dependencies']['Row'];
 type TaskSchedule = Database['public']['Tables']['task_schedules']['Row'];
@@ -96,6 +97,9 @@ export async function addTaskDependency(
       const desc = description?.trim() || `${dependencyType.replace(/_/g, ' ')}`;
 
       // Notify parent-task owners: "Someone is waiting on your task"
+      // Per task notification policy (src/lib/taskNotificationPolicy.ts):
+      // dependency events are mid-flow task changes → in-app + WhatsApp only,
+      // no email. The recipient still gets a real-time bell + WhatsApp ping.
       if (parentRecipients.length > 0 && parent && dependent) {
         await dispatchNotification({
           event: 'dependency_added',
@@ -108,7 +112,13 @@ export async function addTaskDependency(
           entityType: 'task',
           entityId: parent.id,
           actionUrl: `/my-tasks/${parent.id}`,
-          sendWhatsApp: true,
+          // sendWhatsApp:false because dispatch-notification edge function
+          // already fires WhatsApp internally for every notification (lines
+          // 859-901 of supabase/functions/dispatch-notification/index.ts).
+          // Setting sendWhatsApp:true would invoke send-whatsapp a second
+          // time and duplicate the WhatsApp message.
+          sendWhatsApp: false,
+          sendEmail: isTaskEmailEvent('dependency_added'), // false — gated by policy
           triggeredBy: userData.user.id,
           triggeredByName: actorName,
           metadata: {
@@ -123,6 +133,7 @@ export async function addTaskDependency(
       }
 
       // Notify dependent-task owners: "Your task now has a new blocker"
+      // Same policy: in-app only here (sendWhatsApp already false), no email.
       if (dependentRecipients.length > 0 && parent && dependent) {
         await dispatchNotification({
           event: 'dependency_blocked',
@@ -136,6 +147,7 @@ export async function addTaskDependency(
           entityId: dependent.id,
           actionUrl: `/my-tasks/${dependent.id}`,
           sendWhatsApp: false,
+          sendEmail: isTaskEmailEvent('dependency_blocked'), // false — gated by policy
           triggeredBy: userData.user.id,
           triggeredByName: actorName,
           metadata: {

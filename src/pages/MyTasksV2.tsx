@@ -4678,12 +4678,27 @@ export default function MyTasksV2() {
 
     try {
       await updateTask(task.id, { status: newStatus });
-      // Notify the task owner / assignee on completion
-      if (newStatus === 'done' && userId) {
-        notifySelf('task_completed', task.title, task.dueDate ?? null);
-        // If assigned by someone else, notify them too
-        if (task.assignedTo && task.assignedTo !== userId) {
-          notify({ event: 'task_completed', taskId: task.id, taskTitle: task.title, recipientUserId: task.assignedTo, dueDate: task.dueDate ?? null });
+      // Lifecycle notification for status change — fan out to ALL participants
+      // (owner + assignee + co-assignees). Mirrors the broadcast performed in
+      // handleSave for status mutations from the Kanban / Edit dialog so that
+      // quick-toggle Done from list/card views fires the same in-app +
+      // WhatsApp messages and (for terminal events) the same emails for every
+      // person on the task. The actor is filtered out inside notify().
+      if (userId) {
+        const event = statusToEvent(newStatus);
+        const recipients = new Set<string>();
+        if (task.userId) recipients.add(task.userId);
+        if (task.assignedTo) recipients.add(task.assignedTo);
+        (task.coAssignees ?? []).forEach(c => { if (c?.id) recipients.add(c.id); });
+        for (const recipientId of recipients) {
+          notify({
+            event,
+            taskId: task.id,
+            taskTitle: task.title,
+            recipientUserId: recipientId,
+            dueDate: task.dueDate ?? null,
+            priority: task.priority,
+          });
         }
       }
     } catch (err: unknown) {
@@ -4821,6 +4836,28 @@ export default function MyTasksV2() {
   const handleMarkPersonalDone = async (id: string, prevStatus: PersonalTaskStatus) => {
     const newStatus: PersonalTaskStatus = prevStatus === 'done' ? 'todo' : 'done';
     await updateTask(id, { status: newStatus });
+    // Same broadcast pattern as handleToggleDone / handleSave: fan out the
+    // lifecycle event to every task participant so the Planning view
+    // checkbox no longer silently swallows in-app + WhatsApp + (terminal)
+    // email notifications.
+    if (!userId) return;
+    const task = allTasks.find(t => t.id === id);
+    if (!task) return;
+    const event = statusToEvent(newStatus);
+    const recipients = new Set<string>();
+    if (task.userId) recipients.add(task.userId);
+    if (task.assignedTo) recipients.add(task.assignedTo);
+    (task.coAssignees ?? []).forEach(c => { if (c?.id) recipients.add(c.id); });
+    for (const recipientId of recipients) {
+      notify({
+        event,
+        taskId: task.id,
+        taskTitle: task.title,
+        recipientUserId: recipientId,
+        dueDate: task.dueDate ?? null,
+        priority: task.priority,
+      });
+    }
   };
 
   const handleMarkProjectDone = async (id: string) => {

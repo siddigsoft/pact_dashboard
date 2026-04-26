@@ -5,6 +5,7 @@ import { Users, CheckSquare, AlertTriangle, TrendingUp, Calendar, ChevronLeft, C
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/user/UserContext';
+import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -311,14 +312,29 @@ export default function TeamTaskMonitor() {
           type: 'success',
         });
       }
-      // Email notification via edge function
-      supabase.functions.invoke('dispatch-notification', {
+      // Email is intentionally NOT sent on task creation per the channel
+      // policy in src/lib/taskNotificationPolicy.ts — task_assigned is a
+      // mid-flow change, so it's covered by in-app + WhatsApp only. Emails
+      // are reserved for terminal events (task_completed / task_cancelled).
+      // The in-app notification above already fires; WhatsApp will fire
+      // through the unified usePersonalTasks dispatcher when the task is
+      // created via the standard create-task path. (No code here: this
+      // monitor's createTask only does an Insert without going through
+      // dispatchTaskMultiChannel, so add a WhatsApp ping for parity.)
+      supabase.functions.invoke('send-whatsapp', {
         body: {
-          event: 'task_assigned',
-          recipient_user_id: empId,
-          data: { task_title: taskForm.title, assigned_by: currentUser?.fullName ?? 'Manager', due_date: taskForm.due_date || 'No due date' },
+          user_ids: [empId],
+          event_type: 'task_assigned',
+          data: {
+            task_title: taskForm.title,
+            actor: currentUser?.fullName ?? 'Manager',
+            due_date: taskForm.due_date || 'No due date',
+            url: 'https://app.pactorg.com/my-tasks',
+            message: `${currentUser?.fullName ?? 'Manager'} assigned you: "${taskForm.title}"`,
+            message_ar: `عيّن لك ${currentUser?.fullName ?? 'المدير'} المهمة: "${taskForm.title}"`,
+          },
         },
-      }).catch(console.warn);
+      }).catch(() => { /* non-blocking — needs WASENDER_API_KEY */ });
       toast({ title: 'Task created', description: `Assigned to ${empName}`, variant: 'success' });
       setTaskForm({ title: '', description: '', notes: '', priority: 'medium', due_date: '', category: 'daily', status: 'todo' });
       setShowCreateTask(false);
@@ -331,20 +347,115 @@ export default function TeamTaskMonitor() {
   // ── Update task status mutation ─────────────────────────────────────────────
   const updateStatusMutation = useMutation({
     mutationFn: async ({ taskId, status, empId }: { taskId: string; status: string; empId: string }) => {
+      // Snapshot participants BEFORE update so we can fan out the notification
+      // to every user in the task (primary assignee + creator + co-assignees),
+      // per the task notification policy (src/lib/taskNotificationPolicy.ts).
+      const { data: taskRow } = await supabase
+        .from('personal_tasks')
+        .select('id, title, user_id, assigned_to, co_assignees')
+        .eq('id', taskId)
+        .maybeSingle();
       const { error } = await supabase.from('personal_tasks').update({ status, updated_at: new Date().toISOString() }).eq('id', taskId);
       if (error) throw error;
-      return { taskId, status, empId };
+      return { taskId, status, empId, taskRow };
     },
-    onSuccess: ({ status, empId }) => {
+    onSuccess: ({ taskId, status, empId, taskRow }) => {
       qc.invalidateQueries({ queryKey: ['team-task-monitor'] });
       const label = statusLabel(status);
-      addNotification({
-        userId: empId,
-        title: `Task ${label}`,
-        message: `Your task status was updated to "${label}" by ${currentUser?.fullName ?? 'a manager'}`,
-        type: status === 'done' || status === 'completed' ? 'success' : status === 'rejected' ? 'warning' : 'info',
-        link: '/my-tasks',
+      const taskTitle = (taskRow?.title as string | undefined) ?? 'Task';
+      const actor = currentUser?.fullName ?? 'a manager';
+
+      // Build the participant set: primary + creator + every co-assignee.
+      // co_assignees jsonb has shifted shape historically — older rows store
+      // `{ id }`, newer rows `{ user_id }`. Read both keys defensively so we
+      // don't silently drop participants. (See usePersonalTasks.ts line 637
+      // which queries with `[{ id: userId }]` — `id` is the canonical key.)
+      const coAssignees = Array.isArray(taskRow?.co_assignees)
+        ? (taskRow!.co_assignees as Array<{ id?: string; user_id?: string }>)
+            .map(c => c?.id ?? c?.user_id)
+            .filter((u): u is string => typeof u === 'string' && u.length > 0)
+        : [];
+      const participantSet = new Set<string>();
+      if (taskRow?.user_id) participantSet.add(taskRow.user_id as string);
+      if (taskRow?.assigned_to) participantSet.add(taskRow.assigned_to as string);
+      if (empId) participantSet.add(empId);
+      coAssignees.forEach(u => participantSet.add(u));
+      // Don't self-notify the actor.
+      if (currentUser?.id) participantSet.delete(currentUser.id);
+      const recipients = Array.from(participantSet);
+
+      if (recipients.length === 0) return;
+
+      // Map raw status → canonical task event for the channel policy.
+      const isTerminal = status === 'done' || status === 'completed' || status === 'cancelled';
+      const eventType  = status === 'cancelled'
+        ? 'task_cancelled'
+        : (status === 'done' || status === 'completed')
+          ? 'task_completed'
+          : 'task_status_changed';
+      const tone = isTerminal
+        ? 'success'
+        : status === 'rejected' ? 'warning' : 'info';
+
+      // Two delivery paths (mirror useTaskNotifications.notify):
+      //
+      // Terminal status (done / completed / cancelled) → route through ONLY
+      //   the dispatch-notification edge function so participants receive
+      //   the **terminal email** the user explicitly requires for those
+      //   events ("final emails when the task is completed or cancelled,
+      //   for all the users in the task"). The edge function also inserts
+      //   the in-app row and fires WhatsApp internally — adding a
+      //   standalone addNotification or send-whatsapp here would duplicate.
+      //
+      // Non-terminal status → keep the lightweight client-side path:
+      //   addNotification (in-app, persisted) + send-whatsapp invoke. NO
+      //   dispatch-notification call, so no email — matches the policy.
+      if (isTerminal && isTaskEmailEvent(eventType)) {
+        supabase.functions.invoke('dispatch-notification', {
+          body: {
+            event_type:        eventType,
+            entity_type:       'task',
+            entity_id:         taskId,
+            priority:          'normal',
+            recipient_ids:     recipients,
+            title_en:          `Task ${label}`,
+            title_ar:          `المهمة ${label}`,
+            message_en:        `"${taskTitle}" status was updated to "${label}" by ${actor}`,
+            message_ar:        `تم تحديث حالة "${taskTitle}" إلى "${label}" بواسطة ${actor}`,
+            triggered_by:      currentUser?.id,
+            triggered_by_name: actor,
+            action_url:        `https://app.pactorg.com/my-tasks/${taskId}`,
+            metadata:          { task_name: taskTitle, status: label },
+            send_email:        true,
+          },
+        }).catch(() => { /* non-blocking */ });
+        return;
+      }
+
+      // Non-terminal: in-app + WhatsApp only.
+      recipients.forEach(uid => {
+        addNotification({
+          userId: uid,
+          title: `Task ${label}`,
+          message: `"${taskTitle}" status was updated to "${label}" by ${actor}`,
+          type: tone,
+          link: `/my-tasks/${taskId}`,
+        });
       });
+      supabase.functions.invoke('send-whatsapp', {
+        body: {
+          user_ids: recipients,
+          event_type: eventType,
+          data: {
+            task_title: taskTitle,
+            actor,
+            status: label,
+            url: `https://app.pactorg.com/my-tasks/${taskId}`,
+            message: `"${taskTitle}" status was updated to "${label}" by ${actor}.`,
+            message_ar: `تم تحديث حالة "${taskTitle}" إلى "${label}" بواسطة ${actor}.`,
+          },
+        },
+      }).catch(() => { /* non-blocking — needs WASENDER_API_KEY */ });
     },
   });
 

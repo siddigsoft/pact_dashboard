@@ -1,18 +1,25 @@
 /**
  * useTaskNotifications
- * Fires in-app + email + WhatsApp (WasenderAPI) notifications on all
- * personal_task lifecycle events.
+ * Fires in-app + WhatsApp + email notifications on personal_task lifecycle
+ * events, with channel-specific gating.
  *
- * Channels:
- *  1. In-app  — via NotificationContext (instant)
- *  2. Email   — dispatch-notification edge function (bilingual HTML)
- *  3. WhatsApp — send-whatsapp edge function via WasenderAPI (bilingual)
- *     WhatsApp fires for high-priority events when WASENDER_API_KEY is set.
+ * Channel policy (per user request 2026-04-26):
+ *  1. In-app   — fires on EVERY change (instant feedback for all participants)
+ *  2. WhatsApp — fires on EVERY change (real-time push to all participants
+ *                via WasenderAPI when WASENDER_API_KEY is set)
+ *  3. Email    — fires ONLY on terminal events (task_completed / task_cancelled)
+ *                — keeps inboxes clean while still delivering a "final email"
+ *                summary to all participants when the task closes.
+ *
+ * "All participants" = primary assignee + task creator + every co-assignee.
+ * Each notify() call already excludes the actor themselves, so the actor
+ * doesn't get notified about their own change.
  */
 import { useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useUser } from '@/context/user/UserContext';
+import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';
 
 export type TaskEvent =
   | 'task_created'
@@ -129,20 +136,29 @@ function buildMessageAr(event: TaskEvent, taskTitle: string, actorName: string, 
 }
 
 /**
- * Events that also trigger WhatsApp.
- * Per user request: ALL status changes notify ALL channels (in-app + email + WhatsApp).
+ * WhatsApp covers EVERY task change — same as in-app — so participants get
+ * a real-time push on their phone for any movement on a task they're on.
+ * Requires WASENDER_API_KEY on the send-whatsapp edge function.
  */
 const WHATSAPP_EVENTS = new Set<TaskEvent>([
+  'task_created',
   'task_assigned',
+  'task_acknowledged',
   'task_started',
+  'task_status_changed',
   'task_completed',
   'task_cancelled',
   'task_rejected',
   'task_delayed',
   'task_overdue',
   'task_reminder_1day',
-  'task_status_changed',
+  'task_reminder_3day',
 ]);
+
+// Email gating now lives in src/lib/taskNotificationPolicy.ts so every
+// task-email call site (useTaskNotifications, usePersonalTasks,
+// TeamTaskMonitor, task-dependencies.service) reads from one source of
+// truth. To allow a new task email, edit TASK_EMAIL_EVENTS in that file.
 
 /** Map a status value to the appropriate TaskEvent */
 export function statusToEvent(status: string): TaskEvent {
@@ -188,7 +204,59 @@ export function useTaskNotifications() {
     // Don't notify the actor themselves about their own action
     if (actorId && actorId === recipientUserId) return;
 
-    // ── 1. In-app notification ────────────────────────────────────────────────
+    // Two delivery paths to avoid duplicates on terminal events:
+    //
+    // Terminal events (task_completed / task_cancelled, per
+    //   src/lib/taskNotificationPolicy.ts) → route through ONLY the
+    //   `dispatch-notification` edge function. The function:
+    //     • inserts a row into `notifications` (in-app delivery via
+    //       the recipient's realtime subscription)
+    //     • sends an SMTP email (because send_email defaults to true
+    //       inside the function and we don't suppress it here)
+    //     • fires a WhatsApp message internally (lines 859-901 of the
+    //       edge function — "fires for ALL notifications", auto-skipped
+    //       per `user_integrations.whatsapp_enabled`)
+    //   We deliberately skip the standalone `addNotification` and
+    //   `send-whatsapp` invokes for terminal events to avoid duplicate
+    //   in-app rows and duplicate WhatsApp messages.
+    //
+    // Non-terminal events → keep the lightweight client-side path:
+    //     • `addNotification` (which itself persists to the DB at
+    //       NotificationContext.tsx line 469) for in-app
+    //     • standalone `send-whatsapp` invoke for WhatsApp
+    //   The `dispatch-notification` edge function is NOT called, so
+    //   no email is sent for these events.
+    if (isTaskEmailEvent(event)) {
+      supabase.functions.invoke('dispatch-notification', {
+        body: {
+          event_type:        event,
+          entity_type:       'task',
+          entity_id:         taskId || undefined,
+          priority:          (event === 'task_overdue' || event === 'task_rejected') ? 'high' : 'normal',
+          recipient_ids:     [recipientUserId],
+          title_en:          titleEn,
+          title_ar:          titleAr,
+          message_en:        messageEn,
+          message_ar:        messageAr,
+          triggered_by:      actorId,
+          triggered_by_name: actorName,
+          action_url:        taskId
+                                ? `https://app.pactorg.com/tasks/${taskId}`
+                                : 'https://app.pactorg.com/my-tasks',
+          metadata: {
+            task_name:   taskTitle,
+            due_date:    dueDate ?? '',
+            priority:    priority ?? 'normal',
+            assigned_to: recipientName ?? '',
+            ...extra,
+          },
+          send_email: true,
+        },
+      }).catch(() => { /* non-blocking */ });
+      return;
+    }
+
+    // Non-terminal: in-app + WhatsApp only, no email.
     addNotification({
       userId: recipientUserId,
       title: titleEn,
@@ -197,34 +265,6 @@ export function useTaskNotifications() {
       link: taskId ? `/tasks/${taskId}` : '/my-tasks',
     });
 
-    // ── 2. Email via dispatch-notification (bilingual, fire-and-forget) ───────
-    supabase.functions.invoke('dispatch-notification', {
-      body: {
-        event_type:        event,
-        entity_type:       'task',
-        entity_id:         taskId || undefined,
-        priority:          (event === 'task_overdue' || event === 'task_rejected') ? 'high' : 'normal',
-        recipient_ids:     [recipientUserId],
-        title_en:          titleEn,
-        title_ar:          titleAr,
-        message_en:        messageEn,
-        message_ar:        messageAr,
-        triggered_by:      actorId,
-        triggered_by_name: actorName,
-        action_url:        taskId
-                              ? `https://app.pactorg.com/tasks/${taskId}`
-                              : 'https://app.pactorg.com/my-tasks',
-        metadata: {
-          task_name:   taskTitle,
-          due_date:    dueDate ?? '',
-          priority:    priority ?? 'normal',
-          assigned_to: recipientName ?? '',
-          ...extra,
-        },
-      },
-    }).catch(() => { /* non-blocking */ });
-
-    // ── 3. WhatsApp via WasenderAPI (fire-and-forget, high-urgency events) ───
     if (WHATSAPP_EVENTS.has(event)) {
       supabase.functions.invoke('send-whatsapp', {
         body: {

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { isToday, isBefore, parseISO, isValid, startOfDay, format } from 'date-fns';
 import type { RewardDeduction } from '@/utils/rewardCalc';
+import { isTaskEmailEvent } from '@/lib/taskNotificationPolicy';
 
 /** Detect Postgres "undefined_column" / PostgREST schema-cache misses so we can
  *  retry inserts/updates without optional columns when migrations are pending. */
@@ -458,8 +459,19 @@ async function sendTaskEmail(opts: {
   }
 }
 
-// Dispatch a task event through the central multi-channel router
-// (in-app + email + WhatsApp + push, bilingual). Fire-and-forget.
+// Dispatch a task event through the central multi-channel router.
+// Channel policy is centralised in src/lib/taskNotificationPolicy.ts:
+//   • In-app  → ALWAYS — the dispatch-notification edge function inserts
+//               the in-app row regardless of send_email.
+//   • Email   → ONLY for events in TASK_EMAIL_EVENTS (currently
+//               task_completed / task_cancelled). Every other change
+//               passes send_email:false so inboxes stay clean.
+//   • WhatsApp → ALWAYS — the dispatch-notification edge function fires
+//               WhatsApp internally (line 859-901, "fires for ALL
+//               notifications", auto-skipped per user_integrations.
+//               whatsapp_enabled). We deliberately do NOT also invoke
+//               send-whatsapp ourselves — that would duplicate every
+//               WhatsApp send.
 async function dispatchTaskMultiChannel(opts: {
   recipientId: string;
   taskId: string;
@@ -471,7 +483,6 @@ async function dispatchTaskMultiChannel(opts: {
   messageEn: string;
   messageAr: string;
 }) {
-  // 1. Central dispatcher (handles in-app + email + push + WhatsApp routing per user prefs)
   try {
     await supabase.functions.invoke('dispatch-notification', {
       body: {
@@ -489,27 +500,13 @@ async function dispatchTaskMultiChannel(opts: {
           ? `https://app.pactorg.com/tasks/${opts.taskId}`
           : 'https://app.pactorg.com/my-tasks',
         metadata: { task_name: opts.taskTitle },
+        // Email leg gated by policy. send_email=false suppresses SMTP only;
+        // the edge function still inserts the in-app row and still fires
+        // WhatsApp. send_email=true (terminal events) emails normally.
+        send_email: isTaskEmailEvent(opts.event),
       },
     });
   } catch { /* non-critical */ }
-
-  // 2. WhatsApp via send-whatsapp (auto-skips users without phone or opt-in)
-  try {
-    await supabase.functions.invoke('send-whatsapp', {
-      body: {
-        user_ids: [opts.recipientId],
-        event_type: opts.event,
-        data: {
-          task_title: opts.taskTitle,
-          message: opts.messageEn,
-          message_ar: opts.messageAr,
-          url: opts.taskId
-            ? `https://app.pactorg.com/tasks/${opts.taskId}`
-            : 'https://app.pactorg.com/my-tasks',
-        },
-      },
-    });
-  } catch { /* non-critical — needs WASENDER_API_KEY or Meta */ }
 }
 
 const KEY = ['personal_tasks'];
@@ -1055,11 +1052,25 @@ export function usePersonalTasks(userId: string | undefined) {
             const depPriority = (_taskPriority ?? updates.priority ?? preUpdateRowMeta.priority ?? 'medium') as PersonalTaskPriority;
             const recipientId = preUpdateRowMeta.assigned_to ?? preUpdateRowMeta.user_id;
             if (recipientId) {
+              // Per task notification policy (src/lib/taskNotificationPolicy.ts):
+              // dependency_added is a mid-flow task change → in-app + WhatsApp
+              // only, NO email. The previous direct sendTaskEmail() bypassed
+              // the policy and is intentionally removed; isTaskEmailEvent
+              // would return false for this event anyway.
               await sendTaskNotification({ userId: recipientId, taskId: id, title: depTitle, priority: depPriority, event: 'dependency_added' });
-              const { data: prof } = await supabase.from('profiles').select('email').eq('id', recipientId).maybeSingle();
-              if (prof?.email) {
-                await sendTaskEmail({ email: prof.email as string, titleEn: 'Task Dependency Added', body: `A dependency was added to your task "${depTitle}". View your tasks: https://app.pactorg.com/my-tasks` });
-              }
+              // WhatsApp parity for the recipient (auto-skipped if no phone / no opt-in).
+              supabase.functions.invoke('send-whatsapp', {
+                body: {
+                  user_ids: [recipientId],
+                  event_type: 'dependency_added',
+                  data: {
+                    task_title: depTitle,
+                    message: `A dependency was added to your task "${depTitle}".`,
+                    message_ar: `تمت إضافة اعتمادية إلى مهمتك "${depTitle}".`,
+                    url: `https://app.pactorg.com/my-tasks/${id}`,
+                  },
+                },
+              }).catch(() => { /* non-blocking */ });
             }
           }
         } catch { /* non-critical */ }
@@ -1082,11 +1093,22 @@ export function usePersonalTasks(userId: string | undefined) {
             if (!ownerIdResolved) continue;
             const dtTitle = (dt.title as string) ?? 'your task';
             const dtPriority = (dt.priority as PersonalTaskPriority) ?? 'medium';
+            // Per task notification policy: dependency_resolved is a mid-flow
+            // task change → in-app + WhatsApp only, NO email. Previous direct
+            // sendTaskEmail() removed.
             await sendTaskNotification({ userId: ownerIdResolved, taskId: dt.id as string, title: dtTitle, priority: dtPriority, event: 'dependency_resolved', extra: nowDoneTitle ?? undefined });
-            const { data: ownerProf } = await supabase.from('profiles').select('email').eq('id', ownerIdResolved).maybeSingle();
-            if (ownerProf?.email) {
-              await sendTaskEmail({ email: ownerProf.email as string, titleEn: 'Task Dependency Resolved', body: `A dependency on your task "${dtTitle}" has been resolved${nowDoneTitle ? ` (${nowDoneTitle} is now done)` : ''}. View your tasks: https://app.pactorg.com/my-tasks` });
-            }
+            supabase.functions.invoke('send-whatsapp', {
+              body: {
+                user_ids: [ownerIdResolved],
+                event_type: 'dependency_resolved',
+                data: {
+                  task_title: dtTitle,
+                  message: `A dependency on your task "${dtTitle}" has been resolved${nowDoneTitle ? ` (${nowDoneTitle} is now done)` : ''}.`,
+                  message_ar: `تم حل اعتمادية مهمتك "${dtTitle}"${nowDoneTitle ? ` (تمت ${nowDoneTitle})` : ''}.`,
+                  url: `https://app.pactorg.com/my-tasks/${dt.id as string}`,
+                },
+              },
+            }).catch(() => { /* non-blocking */ });
           }
         } catch { /* non-critical */ }
       }

@@ -26,6 +26,14 @@ export interface DispatchNotificationOptions {
   metadata?: Record<string, string | number | boolean | null | undefined>;
   /** When true, also dispatch a WhatsApp message via WasenderAPI. */
   sendWhatsApp?: boolean;
+  /**
+   * When false, the edge function still inserts the in-app notification
+   * row but skips the SMTP email leg. Defaults to true for backward
+   * compatibility — task call sites use this with isTaskEmailEvent() to
+   * keep inboxes clean for non-terminal lifecycle events
+   * (see src/lib/taskNotificationPolicy.ts).
+   */
+  sendEmail?: boolean;
   triggeredBy?: string;
   triggeredByName?: string;
 }
@@ -34,7 +42,11 @@ export async function dispatchNotification(opts: DispatchNotificationOptions): P
   const recipients = Array.from(new Set((opts.recipientIds ?? []).filter(Boolean)));
   if (recipients.length === 0) return;
 
-  // ── 1. In-app + email ────────────────────────────────────────────────────
+  // ── 1. In-app + (optionally) email ──────────────────────────────────────
+  // The edge function always inserts the in-app row; `send_email: false`
+  // suppresses the SMTP leg only. Default is true to stay backward-compatible
+  // with all existing non-task callers (cost / leave / payroll / approvals
+  // etc.) that rely on email on every event.
   supabase.functions
     .invoke('dispatch-notification', {
       body: {
@@ -51,6 +63,7 @@ export async function dispatchNotification(opts: DispatchNotificationOptions): P
         triggered_by_name: opts.triggeredByName,
         action_url: opts.actionUrl,
         metadata: opts.metadata ?? {},
+        send_email: opts.sendEmail ?? true,
       },
     })
     .catch((err) => console.warn('[notify] dispatch-notification failed:', err));
