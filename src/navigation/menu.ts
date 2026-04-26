@@ -28,6 +28,10 @@ import {
   Bell,
   Eye,
   Handshake,
+  ScrollText,
+  GitBranch,
+  FileSearch,
+  KeyRound,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
@@ -68,6 +72,7 @@ export const getWorkflowMenuGroups = (
   const isSupervisor = hasRole('supervisor');
   const isProjectManager = hasRole('projectManager');
   const isCountryDirector = hasRole('countryDirector');
+  const isHR = hasRole('hr');
 
   const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
   const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -208,6 +213,22 @@ export const getWorkflowMenuGroups = (
   if (crmItems.length) groups.push({ id: 'crm', label: 'CRM', order: 5.8, items: crmItems });
 
   if (adminItems.length) groups.push({ id: 'admin', label: 'Administration', order: 6, items: adminItems });
+
+  // Audit & Security — surfaces system-wide tracking pages that were previously hidden
+  const auditItems: MenuGroup['items'] = [];
+  if (!isHidden('/hierarchy-audit') && (isAdmin || isSuperAdmin || isHR)) {
+    auditItems.push({ id: 'hierarchy-audit', title: 'Hierarchy Changes', url: '/hierarchy-audit', icon: GitBranch, priority: 1, isPinned: isPinned('/hierarchy-audit') });
+  }
+  if (!isHidden('/audit-logs') && isSuperAdmin) {
+    auditItems.push({ id: 'audit-logs', title: 'System Audit Logs', url: '/audit-logs', icon: ScrollText, priority: 2, isPinned: isPinned('/audit-logs') });
+  }
+  if (!isHidden('/audit-compliance') && (isAdmin || isSuperAdmin || isFinancialAdmin || isHR)) {
+    auditItems.push({ id: 'audit-compliance', title: 'Audit & Compliance', url: '/audit-compliance', icon: FileSearch, priority: 3, isPinned: isPinned('/audit-compliance') });
+  }
+  if (!isHidden('/login-analytics') && (isAdmin || isICT || isProjectManager || isSuperAdmin)) {
+    auditItems.push({ id: 'login-analytics', title: 'Login Analytics', url: '/login-analytics', icon: KeyRound, priority: 4, isPinned: isPinned('/login-analytics') });
+  }
+  if (auditItems.length) groups.push({ id: 'audit', label: 'Audit & Security', order: 6.5, items: auditItems });
 
   groups.forEach(group => {
     group.items.sort((a, b) => {

@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { Navigate } from "react-router-dom";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,13 @@ const AuditCompliancePage = () => {
   const { toast } = useToast();
   const { logs, loading, getAuditStats, getAuditLogs } = useAudit();
   const { isSuperAdmin } = useSuperAdmin();
+  const { hasAnyRole } = useAuthorization();
+
+  // Page-level access guard — only admins, super admins, financial admins, and HR may view compliance data
+  const canView = isSuperAdmin || hasAnyRole(['super_admin', 'admin', 'financial_admin', 'hr']);
+  if (!canView) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const stats = useMemo(() => getAuditStats(), [logs]);
 

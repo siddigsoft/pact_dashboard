@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useUser } from '@/context/user/UserContext';
@@ -10,9 +11,12 @@ import { Button } from '@/components/ui/button';
 import {
   ScrollText, Loader2, Search, ArrowRight, Building2, GitBranch,
   Activity, Users, CalendarDays, Download, Crown, Sparkles, RefreshCw,
+  ChevronRight, ChevronDown, Hash, Clock, KeyRound, FileSearch, ExternalLink,
+  UserCircle2, BarChart3,
 } from 'lucide-react';
 import {
   format, parseISO, isToday, isYesterday, isThisWeek, isThisMonth, subDays, isAfter,
+  formatDistanceToNow, differenceInDays, startOfDay,
 } from 'date-fns';
 import { Navigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -101,28 +105,105 @@ function ValuePill({
 }
 
 function StatCard({
-  icon, label, value, accent, dataTestId,
-}: { icon: React.ReactNode; label: string; value: string | number; accent: string; dataTestId?: string }) {
+  icon, label, sublabel, value, accent, dataTestId,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  sublabel?: string;
+  value: string | number;
+  accent: string;
+  dataTestId?: string;
+}) {
   return (
     <Card className="border-0 shadow-sm" data-testid={dataTestId}>
       <CardContent className="p-4 flex items-center gap-3">
-        <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', accent)}>{icon}</div>
+        <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', accent)}>{icon}</div>
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{label}</p>
-          <p className="text-lg font-bold leading-tight truncate">{value}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">{label}</p>
+          {sublabel && <p className="text-[9px] text-muted-foreground/70 leading-tight" dir="rtl">{sublabel}</p>}
+          <p className="text-lg font-bold leading-tight truncate mt-0.5">{value}</p>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function dateBucket(iso: string): string {
+function dateBucket(iso: string): { en: string; ar: string } {
   const d = parseISO(iso);
-  if (isToday(d)) return 'Today';
-  if (isYesterday(d)) return 'Yesterday';
-  if (isThisWeek(d, { weekStartsOn: 1 })) return 'Earlier this week';
-  if (isThisMonth(d)) return 'Earlier this month';
-  return format(d, 'MMMM yyyy');
+  if (isToday(d)) return { en: 'Today', ar: 'اليوم' };
+  if (isYesterday(d)) return { en: 'Yesterday', ar: 'أمس' };
+  if (isThisWeek(d, { weekStartsOn: 1 })) return { en: 'Earlier this week', ar: 'هذا الأسبوع' };
+  if (isThisMonth(d)) return { en: 'Earlier this month', ar: 'هذا الشهر' };
+  return { en: format(d, 'MMMM yyyy'), ar: format(d, 'MMMM yyyy') };
+}
+
+// 14-day spark/bar chart of change frequency
+function ActivityChart({ rows }: { rows: AuditRow[] }) {
+  const data = useMemo(() => {
+    const today = startOfDay(new Date());
+    const buckets: { date: Date; count: number; label: string }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = subDays(today, i);
+      buckets.push({ date: d, count: 0, label: format(d, 'd MMM') });
+    }
+    for (const r of rows) {
+      const rd = startOfDay(parseISO(r.created_at));
+      const idx = buckets.findIndex(b => b.date.getTime() === rd.getTime());
+      if (idx >= 0) buckets[idx].count += 1;
+    }
+    return buckets;
+  }, [rows]);
+
+  const max = Math.max(1, ...data.map(d => d.count));
+  const total = data.reduce((s, d) => s + d.count, 0);
+
+  return (
+    <Card className="border-0 shadow-sm" data-testid="card-activity-chart">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Last 14 days</p>
+            <p className="text-[10px] text-muted-foreground/70" dir="rtl">آخر 14 يوماً</p>
+          </div>
+          <Badge variant="outline" className="text-[10px] font-medium">
+            <BarChart3 className="h-3 w-3 mr-1" />
+            {total} change{total === 1 ? '' : 's'}
+          </Badge>
+        </div>
+        <div className="flex items-end justify-between gap-1 h-16">
+          {data.map((b, i) => {
+            const h = b.count === 0 ? 4 : Math.max(8, (b.count / max) * 64);
+            return (
+              <div
+                key={i}
+                className="flex-1 flex flex-col items-center gap-1 group relative"
+                title={`${b.label}: ${b.count} change${b.count === 1 ? '' : 's'}`}
+              >
+                <div
+                  className={cn(
+                    'w-full rounded-sm transition-all',
+                    b.count === 0
+                      ? 'bg-slate-100 dark:bg-slate-800'
+                      : 'bg-gradient-to-t from-blue-500 to-indigo-500 group-hover:from-blue-600 group-hover:to-indigo-600',
+                  )}
+                  style={{ height: `${h}px` }}
+                />
+                {b.count > 0 && (
+                  <span className="absolute -top-4 text-[9px] font-bold text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {b.count}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-between mt-1.5 text-[9px] text-muted-foreground/70">
+          <span>{data[0].label}</span>
+          <span>{data[data.length - 1].label}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function HierarchyAuditLogPage() {
@@ -137,6 +218,7 @@ export default function HierarchyAuditLogPage() {
   const [search, setSearch] = useState('');
   const [fieldFilter, setFieldFilter] = useState<string>('all');
   const [rangeFilter, setRangeFilter] = useState<'all' | '7d' | '30d' | 'today'>('all');
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => { if (isAdmin) load(); /* eslint-disable-line */ }, [isAdmin]);
 
@@ -183,30 +265,34 @@ export default function HierarchyAuditLogPage() {
     const week = rows.filter(r => isThisWeek(parseISO(r.created_at), { weekStartsOn: 1 })).length;
     const reportingChanges = rows.filter(r => r.field === 'reports_to').length;
     const deptChanges = rows.filter(r => r.field === 'department_id').length;
+    const affectedPeople = new Set(rows.map(r => r.profile_id)).size;
+    const activeEditors = new Set(rows.filter(r => r.changed_by).map(r => r.changed_by)).size;
+    const systemChanges = rows.filter(r => !r.changed_by).length;
     const changerCounts: Record<string, number> = {};
     for (const r of rows) {
       if (r.changed_by) changerCounts[r.changed_by] = (changerCounts[r.changed_by] ?? 0) + 1;
     }
     const topEntry = Object.entries(changerCounts).sort((a, b) => b[1] - a[1])[0];
     const topChanger = topEntry ? { name: profiles[topEntry[0]] ?? topEntry[0].slice(0, 8), count: topEntry[1] } : null;
-    return { total, week, reportingChanges, deptChanges, topChanger };
+    return { total, week, reportingChanges, deptChanges, affectedPeople, activeEditors, systemChanges, topChanger };
   }, [rows, profiles]);
 
   // ── Group visible rows by date bucket ────────────────────────────────────
   const grouped = useMemo(() => {
-    const groups: Record<string, AuditRow[]> = {};
+    const groups: Record<string, { en: string; ar: string; rows: AuditRow[] }> = {};
     const order: string[] = [];
     for (const r of visible) {
       const k = dateBucket(r.created_at);
-      if (!groups[k]) { groups[k] = []; order.push(k); }
-      groups[k].push(r);
+      const key = k.en;
+      if (!groups[key]) { groups[key] = { en: k.en, ar: k.ar, rows: [] }; order.push(key); }
+      groups[key].rows.push(r);
     }
-    return order.map(k => ({ label: k, rows: groups[k] }));
+    return order.map(k => groups[k]);
   }, [visible]);
 
   // ── CSV export ───────────────────────────────────────────────────────────
   function exportCsv() {
-    const header = ['When', 'Person', 'Field', 'From', 'To', 'Changed by', 'Reason'];
+    const header = ['When', 'Person', 'Person ID', 'Field', 'From', 'From ID', 'To', 'To ID', 'Changed by', 'Changed by ID', 'Reason', 'Audit Row ID'];
     const fmtVal = (field: string, val: string | null) => {
       if (!val) return '';
       if (field === 'reports_to') return profiles[val] ?? val;
@@ -216,13 +302,18 @@ export default function HierarchyAuditLogPage() {
     const lines = [header.join(',')];
     for (const r of visible) {
       const cells = [
-        format(parseISO(r.created_at), 'yyyy-MM-dd HH:mm'),
-        profiles[r.profile_id] ?? r.profile_id,
+        format(parseISO(r.created_at), 'yyyy-MM-dd HH:mm:ss'),
+        profiles[r.profile_id] ?? '',
+        r.profile_id,
         r.field === 'reports_to' ? 'Manager' : 'Department',
         fmtVal(r.field, r.old_value),
+        r.old_value ?? '',
         fmtVal(r.field, r.new_value),
+        r.new_value ?? '',
         r.changed_by ? (profiles[r.changed_by] ?? 'Unknown') : 'System',
+        r.changed_by ?? '',
         r.reason ?? '',
+        r.id,
       ].map(c => `"${String(c).replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"`);
       lines.push(cells.join(','));
     }
@@ -235,6 +326,10 @@ export default function HierarchyAuditLogPage() {
     URL.revokeObjectURL(url);
   }
 
+  function toggleRow(id: string) {
+    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5" data-testid="page-hierarchy-audit">
 
@@ -245,7 +340,11 @@ export default function HierarchyAuditLogPage() {
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold leading-tight">Hierarchy Audit Log</h1>
-          <p className="text-xs text-muted-foreground">Every change to reporting line and department, tracked automatically.</p>
+          <p className="text-xs text-muted-foreground">
+            Every change to reporting line and department, tracked automatically.
+            <span className="mx-2 text-muted-foreground/40">·</span>
+            <span dir="rtl">سجل تغييرات التسلسل الإداري والأقسام</span>
+          </p>
         </div>
         <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={load} disabled={loading} data-testid="btn-refresh-audit">
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -257,11 +356,55 @@ export default function HierarchyAuditLogPage() {
         </Button>
       </header>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Cross-link banner — surfaces sibling audit pages */}
+      <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-800/40 p-3">
+        <div className="flex items-start gap-2 mb-2">
+          <FileSearch className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-blue-900 dark:text-blue-200">
+              Other audit pages
+              <span className="mx-1.5 text-blue-400/60">·</span>
+              <span dir="rtl" className="font-normal">صفحات التدقيق الأخرى</span>
+            </p>
+            <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">
+              You're viewing reporting-line and department changes only. Other tracking lives on its own page.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/audit-logs"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/40 text-[11px] font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100/40 dark:hover:bg-blue-950/40 transition-colors"
+            data-testid="link-audit-logs"
+          >
+            <ScrollText className="h-3 w-3" /> System Audit Logs
+            <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+          </Link>
+          <Link
+            to="/audit-compliance"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/40 text-[11px] font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100/40 dark:hover:bg-blue-950/40 transition-colors"
+            data-testid="link-audit-compliance"
+          >
+            <FileSearch className="h-3 w-3" /> Audit & Compliance
+            <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+          </Link>
+          <Link
+            to="/login-analytics"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/40 text-[11px] font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100/40 dark:hover:bg-blue-950/40 transition-colors"
+            data-testid="link-login-analytics"
+          >
+            <KeyRound className="h-3 w-3" /> Login Analytics
+            <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+          </Link>
+        </div>
+      </div>
+
+      {/* KPI strip — 6 tiles for richer at-a-glance picture */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard
           icon={<Activity className="h-5 w-5 text-blue-600" />}
           label="Total tracked"
+          sublabel="إجمالي التغييرات"
           value={stats.total}
           accent="bg-blue-100 dark:bg-blue-950/30"
           dataTestId="stat-total"
@@ -269,6 +412,7 @@ export default function HierarchyAuditLogPage() {
         <StatCard
           icon={<Sparkles className="h-5 w-5 text-emerald-600" />}
           label="This week"
+          sublabel="هذا الأسبوع"
           value={stats.week}
           accent="bg-emerald-100 dark:bg-emerald-950/30"
           dataTestId="stat-week"
@@ -276,6 +420,7 @@ export default function HierarchyAuditLogPage() {
         <StatCard
           icon={<GitBranch className="h-5 w-5 text-violet-600" />}
           label="Reporting line"
+          sublabel="تغيير المدير"
           value={stats.reportingChanges}
           accent="bg-violet-100 dark:bg-violet-950/30"
           dataTestId="stat-manager"
@@ -283,22 +428,64 @@ export default function HierarchyAuditLogPage() {
         <StatCard
           icon={<Building2 className="h-5 w-5 text-cyan-600" />}
           label="Department"
+          sublabel="تغيير القسم"
           value={stats.deptChanges}
           accent="bg-cyan-100 dark:bg-cyan-950/30"
           dataTestId="stat-dept"
         />
+        <StatCard
+          icon={<UserCircle2 className="h-5 w-5 text-rose-600" />}
+          label="People affected"
+          sublabel="عدد الموظفين"
+          value={stats.affectedPeople}
+          accent="bg-rose-100 dark:bg-rose-950/30"
+          dataTestId="stat-affected"
+        />
+        <StatCard
+          icon={<Users className="h-5 w-5 text-amber-600" />}
+          label="Active editors"
+          sublabel="عدد المعدّلين"
+          value={stats.activeEditors}
+          accent="bg-amber-100 dark:bg-amber-950/30"
+          dataTestId="stat-editors"
+        />
       </div>
 
-      {/* Most-active changer banner */}
-      {stats.topChanger && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 dark:border-amber-800/40">
-          <Crown className="h-4 w-4 text-amber-500 shrink-0" />
-          <p className="text-xs text-amber-900 dark:text-amber-200">
-            Most-active changer: <span className="font-semibold">{stats.topChanger.name}</span> with{' '}
-            <span className="font-semibold">{stats.topChanger.count}</span> change{stats.topChanger.count === 1 ? '' : 's'}.
-          </p>
+      {/* Activity chart + most-active changer side-by-side on wider screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-2">
+          <ActivityChart rows={rows} />
         </div>
-      )}
+        <Card className="border-0 shadow-sm" data-testid="card-top-changer">
+          <CardContent className="p-4 h-full flex flex-col justify-center">
+            {stats.topChanger ? (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <Crown className="h-4 w-4 text-amber-500" />
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Most-active editor</p>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70 mb-2" dir="rtl">المحرر الأكثر نشاطاً</p>
+                <div className="flex items-center gap-3">
+                  <div className={cn('w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0', avatarFor(stats.topChanger.name))}>
+                    {initials(stats.topChanger.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{stats.topChanger.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {stats.topChanger.count} change{stats.topChanger.count === 1 ? '' : 's'}
+                      {stats.systemChanges > 0 && (
+                        <span className="ml-1.5 text-muted-foreground/60">· {stats.systemChanges} by system</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center text-xs text-muted-foreground py-2">No editor activity yet.</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
@@ -325,6 +512,18 @@ export default function HierarchyAuditLogPage() {
         <Badge variant="outline" className="h-9 px-3 text-xs font-medium bg-white dark:bg-slate-900" data-testid="badge-result-count">
           {visible.length} of {rows.length} shown
         </Badge>
+        {(fieldFilter !== 'all' || rangeFilter !== 'all' || search.trim()) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-9 px-2 text-xs"
+            onClick={() => { setFieldFilter('all'); setRangeFilter('all'); setSearch(''); }}
+            data-testid="btn-reset-filters"
+            aria-label="Reset all filters"
+          >
+            Reset
+          </Button>
+        )}
         <div className="relative ml-auto">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -351,9 +550,10 @@ export default function HierarchyAuditLogPage() {
               <ScrollText className="h-6 w-6 text-slate-400" />
             </div>
             <p className="text-sm font-medium">No matching changes</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5" dir="rtl">لا توجد تغييرات مطابقة</p>
+            <p className="text-xs text-muted-foreground mt-2 max-w-md mx-auto">
               {rows.length === 0
-                ? "Once you change a profile's manager or department, it will appear here."
+                ? "Once you change a profile's manager or department, it will appear here automatically."
                 : 'Try clearing the filters or widening the time range.'}
             </p>
           </CardContent>
@@ -361,9 +561,10 @@ export default function HierarchyAuditLogPage() {
       ) : (
         <div className="space-y-5">
           {grouped.map(group => (
-            <div key={group.label}>
+            <div key={group.en}>
               <div className="flex items-center gap-2 mb-2 px-1">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{group.label}</h2>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{group.en}</h2>
+                <span className="text-[10px] text-muted-foreground/60" dir="rtl">{group.ar}</span>
                 <span className="text-[10px] text-muted-foreground/60">·</span>
                 <span className="text-[10px] text-muted-foreground/60">{group.rows.length} change{group.rows.length === 1 ? '' : 's'}</span>
                 <div className="flex-1 h-px bg-border ml-2" />
@@ -373,11 +574,12 @@ export default function HierarchyAuditLogPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 dark:bg-slate-900/40 text-[10px] uppercase tracking-wide text-muted-foreground border-b">
                       <tr>
-                        <th className="text-left px-4 py-2 font-semibold">When</th>
-                        <th className="text-left px-4 py-2 font-semibold">Person</th>
-                        <th className="text-left px-4 py-2 font-semibold w-[120px]">Type</th>
-                        <th className="text-left px-4 py-2 font-semibold">Change</th>
-                        <th className="text-left px-4 py-2 font-semibold">Changed by</th>
+                        <th className="text-left px-3 py-2 font-semibold w-8" />
+                        <th className="text-left px-3 py-2 font-semibold">When</th>
+                        <th className="text-left px-3 py-2 font-semibold">Person</th>
+                        <th className="text-left px-3 py-2 font-semibold w-[120px]">Type</th>
+                        <th className="text-left px-3 py-2 font-semibold">Change</th>
+                        <th className="text-left px-3 py-2 font-semibold">Changed by</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -385,60 +587,168 @@ export default function HierarchyAuditLogPage() {
                         const isYou = r.changed_by && r.changed_by === currentUser?.id;
                         const personName = profiles[r.profile_id] ?? r.profile_id.slice(0, 8);
                         const changerName = r.changed_by ? (profiles[r.changed_by] ?? 'Unknown user') : null;
+                        const isOpen = !!expanded[r.id];
+                        const ageDays = differenceInDays(new Date(), parseISO(r.created_at));
                         return (
-                          <tr
-                            key={r.id}
-                            className="border-t hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
-                            data-testid={`row-audit-${r.id}`}
-                          >
-                            <td className="px-4 py-3 align-top">
-                              <p className="text-xs font-medium whitespace-nowrap">{format(parseISO(r.created_at), 'HH:mm')}</p>
-                              <p className="text-[10px] text-muted-foreground whitespace-nowrap">{format(parseISO(r.created_at), 'dd MMM')}</p>
-                            </td>
-                            <td className="px-4 py-3 align-top">
-                              <PersonChip id={r.profile_id} name={personName} dataTestId={`person-${r.id}`} />
-                            </td>
-                            <td className="px-4 py-3 align-top">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  'text-[10px] gap-1 font-semibold',
-                                  r.field === 'reports_to'
-                                    ? 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-800/40'
-                                    : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40',
+                          <Fragment key={r.id}>
+                            <tr
+                              className={cn(
+                                'border-t cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40',
+                                isOpen
+                                  ? 'bg-blue-50/40 dark:bg-blue-950/20'
+                                  : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/30',
+                              )}
+                              data-testid={`row-audit-${r.id}`}
+                              role="button"
+                              tabIndex={0}
+                              aria-expanded={isOpen}
+                              aria-controls={`details-${r.id}`}
+                              aria-label={`${isOpen ? 'Collapse' : 'Expand'} change details for ${personName}`}
+                              onClick={() => toggleRow(r.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  toggleRow(r.id);
+                                }
+                              }}
+                            >
+                              <td className="px-3 py-3 align-top">
+                                {isOpen ? (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 )}
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                <p className="text-xs font-medium whitespace-nowrap">{format(parseISO(r.created_at), 'HH:mm')}</p>
+                                <p className="text-[10px] text-muted-foreground whitespace-nowrap">{format(parseISO(r.created_at), 'dd MMM')}</p>
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                <PersonChip id={r.profile_id} name={personName} dataTestId={`person-${r.id}`} />
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    'text-[10px] gap-1 font-semibold',
+                                    r.field === 'reports_to'
+                                      ? 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-800/40'
+                                      : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800/40',
+                                  )}
+                                >
+                                  {r.field === 'reports_to' ? <GitBranch className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
+                                  {r.field === 'reports_to' ? 'Manager' : 'Department'}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <ValuePill field={r.field} value={r.old_value} profiles={profiles} depts={depts} tone="old" />
+                                  <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  <ValuePill field={r.field} value={r.new_value} profiles={profiles} depts={depts} tone="new" />
+                                </div>
+                                {r.reason && !isOpen && (
+                                  <p className="text-[10px] text-muted-foreground italic mt-1.5 max-w-[400px] truncate" title={r.reason}>
+                                    Reason: {r.reason}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 align-top">
+                                {changerName ? (
+                                  <PersonChip
+                                    id={r.changed_by!}
+                                    name={changerName}
+                                    suffix={isYou ? <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 px-1.5 py-0.5 rounded-full">YOU</span> : null}
+                                    dataTestId={`changer-${r.id}`}
+                                  />
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                                    <Users className="h-3 w-3" /> System
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                            {isOpen && (
+                              <tr
+                                id={`details-${r.id}`}
+                                className="border-t border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-950/10"
+                                data-testid={`details-${r.id}`}
                               >
-                                {r.field === 'reports_to' ? <GitBranch className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
-                                {r.field === 'reports_to' ? 'Manager' : 'Department'}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3 align-top">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <ValuePill field={r.field} value={r.old_value} profiles={profiles} depts={depts} tone="old" />
-                                <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                                <ValuePill field={r.field} value={r.new_value} profiles={profiles} depts={depts} tone="new" />
-                              </div>
-                              {r.reason && (
-                                <p className="text-[10px] text-muted-foreground italic mt-1.5 max-w-[400px] truncate" title={r.reason}>
-                                  Reason: {r.reason}
-                                </p>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 align-top">
-                              {changerName ? (
-                                <PersonChip
-                                  id={r.changed_by!}
-                                  name={changerName}
-                                  suffix={isYou ? <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 px-1.5 py-0.5 rounded-full">YOU</span> : null}
-                                  dataTestId={`changer-${r.id}`}
-                                />
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                                  <Users className="h-3 w-3" /> System
-                                </span>
-                              )}
-                            </td>
-                          </tr>
+                                <td />
+                                <td colSpan={5} className="px-4 py-3">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                                    {/* Timestamp detail */}
+                                    <div className="flex items-start gap-2">
+                                      <Clock className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                                      <div className="min-w-0">
+                                        <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[9px]">Exact time</p>
+                                        <p className="font-mono">{format(parseISO(r.created_at), 'yyyy-MM-dd HH:mm:ss')}</p>
+                                        <p className="text-muted-foreground">
+                                          {formatDistanceToNow(parseISO(r.created_at), { addSuffix: true })}
+                                          {ageDays >= 1 && <span className="ml-1.5">· {ageDays} day{ageDays === 1 ? '' : 's'} ago</span>}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {/* Audit row id */}
+                                    <div className="flex items-start gap-2">
+                                      <Hash className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                                      <div className="min-w-0">
+                                        <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[9px]">Audit row ID</p>
+                                        <p className="font-mono text-[10px] break-all">{r.id}</p>
+                                      </div>
+                                    </div>
+                                    {/* Person ID */}
+                                    <div className="flex items-start gap-2">
+                                      <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                                      <div className="min-w-0">
+                                        <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[9px]">Profile ID</p>
+                                        <p className="font-mono text-[10px] break-all">{r.profile_id}</p>
+                                      </div>
+                                    </div>
+                                    {/* Changed by ID */}
+                                    {r.changed_by && (
+                                      <div className="flex items-start gap-2">
+                                        <KeyRound className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[9px]">Changed by ID</p>
+                                          <p className="font-mono text-[10px] break-all">{r.changed_by}</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {/* From ID */}
+                                    {r.old_value && (
+                                      <div className="flex items-start gap-2">
+                                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0 rotate-180" />
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[9px]">From ({r.field === 'reports_to' ? 'manager' : 'department'}) ID</p>
+                                          <p className="font-mono text-[10px] break-all">{r.old_value}</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {/* To ID */}
+                                    {r.new_value && (
+                                      <div className="flex items-start gap-2">
+                                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[9px]">To ({r.field === 'reports_to' ? 'manager' : 'department'}) ID</p>
+                                          <p className="font-mono text-[10px] break-all">{r.new_value}</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {/* Full reason text */}
+                                    {r.reason && (
+                                      <div className="md:col-span-2 flex items-start gap-2 pt-2 mt-1 border-t border-blue-100 dark:border-blue-900/30">
+                                        <ScrollText className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[9px]">Reason</p>
+                                          <p className="whitespace-pre-wrap leading-relaxed">{r.reason}</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
                         );
                       })}
                     </tbody>

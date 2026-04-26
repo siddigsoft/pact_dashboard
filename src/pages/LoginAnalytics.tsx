@@ -16,11 +16,13 @@ import {
 import { formatDistanceToNow, format, differenceInMinutes } from 'date-fns';
 import { getLoginHistory, getLoginStats, getActiveSessions, type LoginEvent } from '@/lib/login-tracking';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const LoginAnalytics = () => {
   const navigate = useNavigate();
   const { currentUser } = useAppContext();
   const { users } = useUser();
+  const { hasAnyRole } = useAuthorization();
   const [loginEvents, setLoginEvents] = useState<LoginEvent[]>([]);
   const [activeSessions, setActiveSessions] = useState<LoginEvent[]>([]);
   const [stats, setStats] = useState<{
@@ -36,14 +38,12 @@ const LoginAnalytics = () => {
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
 
-  // Check if user has admin access
+  // Check if user has admin access — uses centralized role normalization
+  // (handles both currentUser.role and currentUser.roles, plus naming variants)
   const hasAccess = useMemo(() => {
     if (!currentUser) return false;
-    const userRoles = currentUser.roles?.map(r => r.toLowerCase()) || [];
-    return userRoles.includes('admin') || 
-           userRoles.includes('ict') || 
-           userRoles.includes('projectmanager');
-  }, [currentUser]);
+    return hasAnyRole(['admin', 'super_admin', 'ict', 'projectManager']);
+  }, [currentUser, hasAnyRole]);
 
   // Fetch data
   useEffect(() => {
