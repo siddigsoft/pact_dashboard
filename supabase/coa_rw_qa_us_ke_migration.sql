@@ -92,27 +92,27 @@ BEGIN
 
   -- Level-1 headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-1000','Assets','الأصول','asset','header',FALSE,id_rw) RETURNING id INTO rw_1000;
+  VALUES ('RW-1000','Assets','الأصول','asset','header',FALSE,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-2000','Liabilities','الالتزامات','liability','header',FALSE,id_rw) RETURNING id INTO rw_2000;
+  VALUES ('RW-2000','Liabilities','الالتزامات','liability','header',FALSE,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_rw) RETURNING id INTO rw_3000;
+  VALUES ('RW-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_rw) RETURNING id INTO rw_4000;
+  VALUES ('RW-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-5000','Expenses','المصروفات','expense','header',FALSE,id_rw) RETURNING id INTO rw_5000;
+  VALUES ('RW-5000','Expenses','المصروفات','expense','header',FALSE,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_5000;
 
   -- Asset sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,rw_1000,id_rw) RETURNING id INTO rw_1100;
+  VALUES ('RW-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,rw_1000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_1100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,rw_1000,id_rw) RETURNING id INTO rw_1200;
+  VALUES ('RW-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,rw_1000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_1200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,rw_1000,id_rw) RETURNING id INTO rw_1300;
+  VALUES ('RW-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,rw_1000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_1300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-1400','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,rw_1000,id_rw) RETURNING id INTO rw_1400;
+  VALUES ('RW-1400','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,rw_1000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_1400;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-1500','Other Assets','أصول أخرى','asset','other_asset',FALSE,rw_1000,id_rw) RETURNING id INTO rw_1500;
+  VALUES ('RW-1500','Other Assets','أصول أخرى','asset','other_asset',FALSE,rw_1000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_1500;
 
   -- Cash & Bank leaf accounts
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
@@ -142,11 +142,11 @@ BEGIN
 
   -- Liability sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,rw_2000,id_rw) RETURNING id INTO rw_2100;
+  VALUES ('RW-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,rw_2000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_2100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,rw_2000,id_rw) RETURNING id INTO rw_2200;
+  VALUES ('RW-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,rw_2000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_2200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-2300','Deferred Revenue','الإيرادات المؤجلة','liability','current_liability',FALSE,rw_2000,id_rw) RETURNING id INTO rw_2300;
+  VALUES ('RW-2300','Deferred Revenue','الإيرادات المؤجلة','liability','current_liability',FALSE,rw_2000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_2300;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('RW-2101','Accounts Payable — Vendors','ذمم الموردين الدائنة','liability','current_liability',TRUE,rw_2100,id_rw),
@@ -165,9 +165,9 @@ BEGIN
 
   -- Revenue sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,rw_4000,id_rw) RETURNING id INTO rw_4100;
+  VALUES ('RW-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,rw_4000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_4100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-4200','Other Income','إيرادات أخرى','revenue','other_income',FALSE,rw_4000,id_rw) RETURNING id INTO rw_4200;
+  VALUES ('RW-4200','Other Income','إيرادات أخرى','revenue','other_income',FALSE,rw_4000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_4200;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('RW-4101','USAID Grant Revenue','إيرادات منحة USAID','revenue','grant',TRUE,rw_4100,id_rw),
@@ -180,17 +180,17 @@ BEGIN
 
   -- Expense sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,rw_5000,id_rw) RETURNING id INTO rw_5100;
+  VALUES ('RW-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,rw_5000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_5100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-5200','Travel & Transport','السفر والنقل','expense','travel',FALSE,rw_5000,id_rw) RETURNING id INTO rw_5200;
+  VALUES ('RW-5200','Travel & Transport','السفر والنقل','expense','travel',FALSE,rw_5000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_5200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-5300','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,rw_5000,id_rw) RETURNING id INTO rw_5300;
+  VALUES ('RW-5300','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,rw_5000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_5300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-5400','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,rw_5000,id_rw) RETURNING id INTO rw_5400;
+  VALUES ('RW-5400','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,rw_5000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_5400;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-5500','Equipment & Supplies','معدات ومستلزمات','expense','supplies',FALSE,rw_5000,id_rw) RETURNING id INTO rw_5500;
+  VALUES ('RW-5500','Equipment & Supplies','معدات ومستلزمات','expense','supplies',FALSE,rw_5000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_5500;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('RW-5600','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,rw_5000,id_rw) RETURNING id INTO rw_5600;
+  VALUES ('RW-5600','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,rw_5000,id_rw) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO rw_5600;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('RW-5101','Salaries — National Staff','رواتب الكوادر الوطنية','expense','personnel',TRUE,rw_5100,id_rw),
@@ -224,24 +224,24 @@ BEGIN
   -- ================================================================
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-1000','Assets','الأصول','asset','header',FALSE,id_qa) RETURNING id INTO qa_1000;
+  VALUES ('QA-1000','Assets','الأصول','asset','header',FALSE,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-2000','Liabilities','الالتزامات','liability','header',FALSE,id_qa) RETURNING id INTO qa_2000;
+  VALUES ('QA-2000','Liabilities','الالتزامات','liability','header',FALSE,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_qa) RETURNING id INTO qa_3000;
+  VALUES ('QA-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_qa) RETURNING id INTO qa_4000;
+  VALUES ('QA-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-5000','Expenses','المصروفات','expense','header',FALSE,id_qa) RETURNING id INTO qa_5000;
+  VALUES ('QA-5000','Expenses','المصروفات','expense','header',FALSE,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_5000;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,qa_1000,id_qa) RETURNING id INTO qa_1100;
+  VALUES ('QA-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,qa_1000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_1100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,qa_1000,id_qa) RETURNING id INTO qa_1200;
+  VALUES ('QA-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,qa_1000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_1200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,qa_1000,id_qa) RETURNING id INTO qa_1300;
+  VALUES ('QA-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,qa_1000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_1300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-1400','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,qa_1000,id_qa) RETURNING id INTO qa_1400;
+  VALUES ('QA-1400','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,qa_1000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_1400;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('QA-1101','Petty Cash — Doha','النقد الصغير دوحة','asset','current_asset',TRUE,qa_1100,id_qa),
@@ -260,9 +260,9 @@ BEGIN
     ('QA-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,qa_1400,id_qa);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,qa_2000,id_qa) RETURNING id INTO qa_2100;
+  VALUES ('QA-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,qa_2000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_2100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,qa_2000,id_qa) RETURNING id INTO qa_2200;
+  VALUES ('QA-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,qa_2000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_2200;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('QA-2101','Accounts Payable — Vendors','ذمم الموردين الدائنة','liability','current_liability',TRUE,qa_2100,id_qa),
@@ -278,9 +278,9 @@ BEGIN
     ('QA-3003','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,qa_3000,id_qa);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,qa_4000,id_qa) RETURNING id INTO qa_4100;
+  VALUES ('QA-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,qa_4000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_4100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-4200','Other Income','إيرادات أخرى','revenue','other_income',FALSE,qa_4000,id_qa) RETURNING id INTO qa_4200;
+  VALUES ('QA-4200','Other Income','إيرادات أخرى','revenue','other_income',FALSE,qa_4000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_4200;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('QA-4101','USAID Grant Revenue','إيرادات منحة USAID','revenue','grant',TRUE,qa_4100,id_qa),
@@ -291,15 +291,15 @@ BEGIN
     ('QA-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,qa_4200,id_qa);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,qa_5000,id_qa) RETURNING id INTO qa_5100;
+  VALUES ('QA-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,qa_5000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_5100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-5200','Travel & Transport','السفر والنقل','expense','travel',FALSE,qa_5000,id_qa) RETURNING id INTO qa_5200;
+  VALUES ('QA-5200','Travel & Transport','السفر والنقل','expense','travel',FALSE,qa_5000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_5200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-5300','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,qa_5000,id_qa) RETURNING id INTO qa_5300;
+  VALUES ('QA-5300','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,qa_5000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_5300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-5400','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,qa_5000,id_qa) RETURNING id INTO qa_5400;
+  VALUES ('QA-5400','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,qa_5000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_5400;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('QA-5500','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,qa_5000,id_qa) RETURNING id INTO qa_5500;
+  VALUES ('QA-5500','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,qa_5000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_5500;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('QA-5101','Salaries — National Staff','رواتب الكوادر الوطنية','expense','personnel',TRUE,qa_5100,id_qa),
@@ -329,26 +329,26 @@ BEGIN
   -- ================================================================
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-1000','Assets','الأصول','asset','header',FALSE,id_us) RETURNING id INTO us_1000;
+  VALUES ('US-1000','Assets','الأصول','asset','header',FALSE,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-2000','Liabilities','الالتزامات','liability','header',FALSE,id_us) RETURNING id INTO us_2000;
+  VALUES ('US-2000','Liabilities','الالتزامات','liability','header',FALSE,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_us) RETURNING id INTO us_3000;
+  VALUES ('US-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_us) RETURNING id INTO us_4000;
+  VALUES ('US-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-5000','Expenses','المصروفات','expense','header',FALSE,id_us) RETURNING id INTO us_5000;
+  VALUES ('US-5000','Expenses','المصروفات','expense','header',FALSE,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5000;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,us_1000,id_us) RETURNING id INTO us_1100;
+  VALUES ('US-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,us_1000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_1100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,us_1000,id_us) RETURNING id INTO us_1200;
+  VALUES ('US-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,us_1000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_1200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,us_1000,id_us) RETURNING id INTO us_1300;
+  VALUES ('US-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,us_1000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_1300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-1400','Investments','الاستثمارات','asset','investment',FALSE,us_1000,id_us) RETURNING id INTO us_1400;
+  VALUES ('US-1400','Investments','الاستثمارات','asset','investment',FALSE,us_1000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_1400;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-1500','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,us_1000,id_us) RETURNING id INTO us_1500;
+  VALUES ('US-1500','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,us_1000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_1500;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('US-1101','Petty Cash — HQ','النقد الصغير المقر الرئيسي','asset','current_asset',TRUE,us_1100,id_us),
@@ -371,11 +371,11 @@ BEGIN
     ('US-1504','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,us_1500,id_us);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,us_2000,id_us) RETURNING id INTO us_2100;
+  VALUES ('US-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,us_2000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_2100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,us_2000,id_us) RETURNING id INTO us_2200;
+  VALUES ('US-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,us_2000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_2200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-2300','Deferred Revenue','الإيرادات المؤجلة','liability','current_liability',FALSE,us_2000,id_us) RETURNING id INTO us_2300;
+  VALUES ('US-2300','Deferred Revenue','الإيرادات المؤجلة','liability','current_liability',FALSE,us_2000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_2300;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('US-2101','Accounts Payable — Vendors','ذمم الموردين الدائنة','liability','current_liability',TRUE,us_2100,id_us),
@@ -397,11 +397,11 @@ BEGIN
     ('US-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,us_3000,id_us);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-4100','Federal Grant Revenue','إيرادات المنح الفيدرالية','revenue','grant',FALSE,us_4000,id_us) RETURNING id INTO us_4100;
+  VALUES ('US-4100','Federal Grant Revenue','إيرادات المنح الفيدرالية','revenue','grant',FALSE,us_4000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_4100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-4200','Foundation & Private Grants','منح المؤسسات والجهات الخاصة','revenue','grant',FALSE,us_4000,id_us) RETURNING id INTO us_4200;
+  VALUES ('US-4200','Foundation & Private Grants','منح المؤسسات والجهات الخاصة','revenue','grant',FALSE,us_4000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_4200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-4300','Other Income','إيرادات أخرى','revenue','other_income',FALSE,us_4000,id_us) RETURNING id INTO us_4300;
+  VALUES ('US-4300','Other Income','إيرادات أخرى','revenue','other_income',FALSE,us_4000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_4300;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('US-4101','USAID — Prime Award Revenue','إيرادات USAID — منحة رئيسية','revenue','grant',TRUE,us_4100,id_us),
@@ -416,17 +416,17 @@ BEGIN
     ('US-4303','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,us_4300,id_us);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,us_5000,id_us) RETURNING id INTO us_5100;
+  VALUES ('US-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,us_5000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-5200','Fringe Benefits','المزايا الإضافية','expense','personnel',FALSE,us_5000,id_us) RETURNING id INTO us_5200;
+  VALUES ('US-5200','Fringe Benefits','المزايا الإضافية','expense','personnel',FALSE,us_5000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-5300','Travel & Transport','السفر والنقل','expense','travel',FALSE,us_5000,id_us) RETURNING id INTO us_5300;
+  VALUES ('US-5300','Travel & Transport','السفر والنقل','expense','travel',FALSE,us_5000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-5400','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,us_5000,id_us) RETURNING id INTO us_5400;
+  VALUES ('US-5400','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,us_5000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5400;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-5500','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,us_5000,id_us) RETURNING id INTO us_5500;
+  VALUES ('US-5500','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,us_5000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5500;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('US-5600','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,us_5000,id_us) RETURNING id INTO us_5600;
+  VALUES ('US-5600','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,us_5000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5600;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('US-5101','Salaries — Exempt Employees','رواتب الموظفين المعفيين','expense','personnel',TRUE,us_5100,id_us),
@@ -463,26 +463,26 @@ BEGIN
   -- ================================================================
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-1000','Assets','الأصول','asset','header',FALSE,id_ke) RETURNING id INTO ke_1000;
+  VALUES ('KE-1000','Assets','الأصول','asset','header',FALSE,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-2000','Liabilities','الالتزامات','liability','header',FALSE,id_ke) RETURNING id INTO ke_2000;
+  VALUES ('KE-2000','Liabilities','الالتزامات','liability','header',FALSE,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_ke) RETURNING id INTO ke_3000;
+  VALUES ('KE-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_ke) RETURNING id INTO ke_4000;
+  VALUES ('KE-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-5000','Expenses','المصروفات','expense','header',FALSE,id_ke) RETURNING id INTO ke_5000;
+  VALUES ('KE-5000','Expenses','المصروفات','expense','header',FALSE,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5000;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,ke_1000,id_ke) RETURNING id INTO ke_1100;
+  VALUES ('KE-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,ke_1000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_1100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,ke_1000,id_ke) RETURNING id INTO ke_1200;
+  VALUES ('KE-1200','Receivables','الذمم المدينة','asset','current_asset',FALSE,ke_1000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_1200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,ke_1000,id_ke) RETURNING id INTO ke_1300;
+  VALUES ('KE-1300','Prepaid & Advances','المدفوعات المقدمة والسلف','asset','current_asset',FALSE,ke_1000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_1300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-1400','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,ke_1000,id_ke) RETURNING id INTO ke_1400;
+  VALUES ('KE-1400','Fixed Assets','الأصول الثابتة','asset','fixed_asset',FALSE,ke_1000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_1400;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-1500','Other Assets','أصول أخرى','asset','other_asset',FALSE,ke_1000,id_ke) RETURNING id INTO ke_1500;
+  VALUES ('KE-1500','Other Assets','أصول أخرى','asset','other_asset',FALSE,ke_1000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_1500;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('KE-1101','Petty Cash — Nairobi','النقد الصغير نيروبي','asset','current_asset',TRUE,ke_1100,id_ke),
@@ -503,11 +503,11 @@ BEGIN
     ('KE-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,ke_1400,id_ke);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,ke_2000,id_ke) RETURNING id INTO ke_2100;
+  VALUES ('KE-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,ke_2000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_2100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,ke_2000,id_ke) RETURNING id INTO ke_2200;
+  VALUES ('KE-2200','Accrued Liabilities','الالتزامات المستحقة','liability','current_liability',FALSE,ke_2000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_2200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-2300','Deferred Revenue','الإيرادات المؤجلة','liability','current_liability',FALSE,ke_2000,id_ke) RETURNING id INTO ke_2300;
+  VALUES ('KE-2300','Deferred Revenue','الإيرادات المؤجلة','liability','current_liability',FALSE,ke_2000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_2300;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('KE-2101','Accounts Payable — Vendors','ذمم الموردين الدائنة','liability','current_liability',TRUE,ke_2100,id_ke),
@@ -527,9 +527,9 @@ BEGIN
     ('KE-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,ke_3000,id_ke);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,ke_4000,id_ke) RETURNING id INTO ke_4100;
+  VALUES ('KE-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,ke_4000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_4100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-4200','Other Income','إيرادات أخرى','revenue','other_income',FALSE,ke_4000,id_ke) RETURNING id INTO ke_4200;
+  VALUES ('KE-4200','Other Income','إيرادات أخرى','revenue','other_income',FALSE,ke_4000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_4200;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('KE-4101','USAID Grant Revenue','إيرادات منحة USAID','revenue','grant',TRUE,ke_4100,id_ke),
@@ -541,17 +541,17 @@ BEGIN
     ('KE-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,ke_4200,id_ke);
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,ke_5000,id_ke) RETURNING id INTO ke_5100;
+  VALUES ('KE-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,ke_5000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5100;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-5200','Travel & Transport','السفر والنقل','expense','travel',FALSE,ke_5000,id_ke) RETURNING id INTO ke_5200;
+  VALUES ('KE-5200','Travel & Transport','السفر والنقل','expense','travel',FALSE,ke_5000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5200;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-5300','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,ke_5000,id_ke) RETURNING id INTO ke_5300;
+  VALUES ('KE-5300','Program & Activity Costs','تكاليف البرامج والأنشطة','expense','program',FALSE,ke_5000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5300;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-5400','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,ke_5000,id_ke) RETURNING id INTO ke_5400;
+  VALUES ('KE-5400','Office & Administrative','مكتب وإدارة','expense','admin',FALSE,ke_5000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5400;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-5500','Equipment & Supplies','معدات ومستلزمات','expense','supplies',FALSE,ke_5000,id_ke) RETURNING id INTO ke_5500;
+  VALUES ('KE-5500','Equipment & Supplies','معدات ومستلزمات','expense','supplies',FALSE,ke_5000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5500;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('KE-5600','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,ke_5000,id_ke) RETURNING id INTO ke_5600;
+  VALUES ('KE-5600','Indirect Costs / Overhead','التكاليف غير المباشرة','expense','indirect',FALSE,ke_5000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5600;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('KE-5101','Salaries — National Staff','رواتب الكوادر الوطنية','expense','personnel',TRUE,ke_5100,id_ke),
