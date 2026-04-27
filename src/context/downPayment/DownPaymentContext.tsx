@@ -1178,11 +1178,34 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         balances: { SDG: 0 },
         total_earned: 0,
       }));
-      const { error: walletCreateError } = await supabase
+
+      const { error: walletUpsertError } = await supabase
         .from('wallets')
         .upsert(walletInserts, { onConflict: 'user_id', ignoreDuplicates: true });
-      if (walletCreateError) {
-        console.warn('[BulkApprove] Wallet pre-creation warning (non-fatal):', walletCreateError.message);
+
+      if (walletUpsertError) {
+        // Bulk upsert blocked by RLS (admin creating wallets for other users).
+        // Fall back to the SECURITY DEFINER RPC for each user individually.
+        console.warn('[BulkApprove] Wallet bulk upsert blocked, trying RPC fallback:', walletUpsertError.message);
+        const rpcResults = await Promise.allSettled(
+          allAffectedUserIds.map(uid =>
+            supabase.rpc('create_wallet_for_user', { target_user_id: uid })
+          )
+        );
+        const rpcFailed = rpcResults.filter(r => r.status === 'rejected' ||
+          (r.status === 'fulfilled' && (r.value as any).error));
+        if (rpcFailed.length > 0) {
+          // RPC not yet deployed → SQL migration hasn't been applied.
+          // Surface a clear message rather than letting the DB trigger crash silently.
+          toastRef.current({
+            title: 'Database Setup Required / مطلوب إعداد قاعدة البيانات',
+            description: 'Apply the wallet fix SQL migration in Supabase SQL editor before approving. ' +
+              'File: supabase/migrations/20260427_wallet_fix_complete.sql',
+            variant: 'destructive',
+          });
+          await refreshRequests();
+          return { success: 0, failed: data.requestIds.length };
+        }
       }
     }
     // ───────────────────────────────────────────────────────────────────────
