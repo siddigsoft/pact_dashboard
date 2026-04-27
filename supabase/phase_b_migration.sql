@@ -177,8 +177,7 @@ SELECT
   crl.repayment_status
 FROM public.mmp_site_entries e
 LEFT JOIN public.down_payment_requests d
-  ON (d.mmp_id = e.mmp_file_id::text OR d.mmp_id = e.mmp_file_id::varchar)
-  AND (d.site_entry_id = e.id::text OR d.site_entry_id = e.id::varchar)
+  ON (d.site_entry_id = e.id::text OR d.site_entry_id = e.id::varchar)
   AND LOWER(d.status) IN ('approved', 'paid')
 LEFT JOIN public.cost_recovery_log crl
   ON crl.site_entry_id = e.id
