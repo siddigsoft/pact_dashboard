@@ -2401,13 +2401,14 @@ const MMP = () => {
             const uniqueIds = [...new Set(withId.map((dp: any) => dp.mmp_site_entry_id))];
             const dpIdMap = new Map<string, any>();
             withId.forEach((dp: any) => { if (dp.mmp_site_entry_id) dpIdMap.set(dp.mmp_site_entry_id, dp); });
-            const { data: idEntries } = await supabase
-              .from('mmp_site_entries')
-              .select('*')
-              .in('id', uniqueIds)
-              .limit(1000);
-            if (idEntries) {
-              dpSiteEntries.push(...idEntries.map(entry => {
+            let idEntries: any[] = [];
+            for (let _from = 0; ; _from += 1000) {
+              const { data: _page } = await supabase.from('mmp_site_entries').select('*').in('id', uniqueIds).range(_from, _from + 999);
+              if (!_page) break;
+              idEntries = [...idEntries, ..._page];
+              if (_page.length < 1000) break;
+            }
+            dpSiteEntries.push(...idEntries.map(entry => {
                 const dpReq = dpIdMap.get(entry.id);
                 const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
                 const dpAmount = dpReq?.requested_amount || dpReq?.total_transportation_budget;
@@ -2419,7 +2420,6 @@ const MMP = () => {
                   transport_fee: entry.transport_fee != null ? entry.transport_fee : 0,
                 };
               }));
-            }
           }
           
           // Fallback: match by site_name
@@ -2430,12 +2430,14 @@ const MMP = () => {
             const alreadyFound = new Set([...acceptedIds, ...dpSiteEntries.map(e => e.id)]);
             for (let i = 0; i < siteNames.length; i += 50) {
               const batch = siteNames.slice(i, i + 50);
-              const { data: nameEntries } = await supabase
-                .from('mmp_site_entries')
-                .select('*')
-                .in('site_name', batch)
-                .limit(500);
-              if (nameEntries) {
+              let nameEntries: any[] = [];
+              for (let _nf = 0; ; _nf += 1000) {
+                const { data: _np } = await supabase.from('mmp_site_entries').select('*').in('site_name', batch).range(_nf, _nf + 999);
+                if (!_np) break;
+                nameEntries = [...nameEntries, ..._np];
+                if (_np.length < 1000) break;
+              }
+              if (nameEntries.length > 0) {
                 nameEntries
                   .filter(e => !alreadyFound.has(e.id))
                   .forEach(e => {
@@ -3967,15 +3969,15 @@ const MMP = () => {
               for (let i = 0; i < siteNames.length; i += 50) {
                 if (cancelled) return;
                 const batch = siteNames.slice(i, i + 50);
-                const { data: nameMatches } = await supabase
-                  .from('mmp_site_entries')
-                  .select(selectColumns)
-                  .in('mmp_file_id', verifiedMmpIds)
-                  .in('site_name', batch)
-                  .in('status', acceptedStatuses)
-                  .limit(500);
+                let nameMatches: any[] = [];
+                for (let _mf = 0; ; _mf += 1000) {
+                  const { data: _mp } = await supabase.from('mmp_site_entries').select(selectColumns).in('mmp_file_id', verifiedMmpIds).in('site_name', batch).in('status', acceptedStatuses).range(_mf, _mf + 999);
+                  if (!_mp) break;
+                  nameMatches = [...nameMatches, ..._mp];
+                  if (_mp.length < 1000) break;
+                }
 
-                if (nameMatches) {
+                if (nameMatches.length > 0) {
                   nameMatches
                     .filter(entry => !alreadyFoundIds.has(entry.id))
                     .forEach(entry => {
@@ -5784,14 +5786,15 @@ const MMP = () => {
                             }
                             // Reload the entries after update with database-level filtering
                             // Filter by 'Approved and Costed' status, not 'verified'
-                            const { data: approvedCostedEntries, error } = await supabase
-                              .from('mmp_site_entries')
-                              .select('*')
-                              .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%')
-                              .order('created_at', { ascending: false })
-                              .limit(1000);
+                            let approvedCostedEntries: any[] = [];
+                            for (let _af = 0; ; _af += 1000) {
+                              const { data: _ap } = await supabase.from('mmp_site_entries').select('*').or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%').order('created_at', { ascending: false }).range(_af, _af + 999);
+                              if (!_ap) break;
+                              approvedCostedEntries = [...approvedCostedEntries, ..._ap];
+                              if (_ap.length < 1000) break;
+                            }
 
-                            if (!error && approvedCostedEntries) {
+                            if (approvedCostedEntries.length >= 0) {
                               
                               const formattedEntries = approvedCostedEntries.map(entry => {
                                 const additionalData = entry.additional_data || {};
@@ -6349,15 +6352,15 @@ const MMP = () => {
                                       }
                                     }
                                     // Reload available sites data
-                                    const { data: updatedEntries } = await supabase
-                                      .from('mmp_site_entries')
-                                      .select('*')
-                                      .or('status.ilike.dispatched,dispatched_at.not.is.null')
-                                      .or(`state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}`)
-                                      .order('created_at', { ascending: false })
-                                      .limit(1000);
+                                    let updatedEntries: any[] = [];
+                                    for (let _uf = 0; ; _uf += 1000) {
+                                      const { data: _up } = await supabase.from('mmp_site_entries').select('*').or('status.ilike.dispatched,dispatched_at.not.is.null').or(`state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}`).order('created_at', { ascending: false }).range(_uf, _uf + 999);
+                                      if (!_up) break;
+                                      updatedEntries = [...updatedEntries, ..._up];
+                                      if (_up.length < 1000) break;
+                                    }
                                     
-                                    if (updatedEntries) {
+                                    if (updatedEntries.length >= 0) {
                                       const formattedEntries = updatedEntries.map(entry => {
                                         const additionalData = entry.additional_data || {};
                                         return {
@@ -6564,33 +6567,12 @@ const MMP = () => {
                                     .eq('id', site.id);
                                 }
                               }
-                              // Reload available sites data as well
-                              const smartAssignedQ = supabase
-                                .from('mmp_site_entries')
-                                .select('*')
-                                .eq('accepted_by', currentUser?.id)
-                                .order('created_at', { ascending: false })
-                                .limit(1000);
-
-                              const mySitesQ = supabase
-                                .from('mmp_site_entries')
-                                .select('*')
-                                .or(`accepted_by.eq.${currentUser?.id},and(status.ilike.dispatched,accepted_by.is.null,or(state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}))`)
-                                .order('created_at', { ascending: false })
-                                .limit(1000);
-
-                              const availableQ = supabase
-                                .from('mmp_site_entries')
-                                .select('*')
-                                .or('status.ilike.dispatched,dispatched_at.not.is.null')
-                                .or(`state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}`)
-                                .order('created_at', { ascending: false })
-                                .limit(1000);
-
-                              const [smartRes, myRes, availableRes] = await Promise.all([smartAssignedQ, mySitesQ, availableQ]);
-                              const smartData = smartRes.data || [];
-                              const myData = myRes.data || [];
-                              const availableData = availableRes.data || [];
+                              // Reload available sites data as well (paginated)
+                              const [smartData, myData, availableData] = await Promise.all([
+                                (async () => { let all: any[] = []; for (let f = 0; ; f += 1000) { const { data: p } = await supabase.from('mmp_site_entries').select('*').eq('accepted_by', currentUser?.id).order('created_at', { ascending: false }).range(f, f + 999); if (!p) break; all = [...all, ...p]; if (p.length < 1000) break; } return all; })(),
+                                (async () => { let all: any[] = []; for (let f = 0; ; f += 1000) { const { data: p } = await supabase.from('mmp_site_entries').select('*').or(`accepted_by.eq.${currentUser?.id},and(status.ilike.dispatched,accepted_by.is.null,or(state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}))`).order('created_at', { ascending: false }).range(f, f + 999); if (!p) break; all = [...all, ...p]; if (p.length < 1000) break; } return all; })(),
+                                (async () => { let all: any[] = []; for (let f = 0; ; f += 1000) { const { data: p } = await supabase.from('mmp_site_entries').select('*').or('status.ilike.dispatched,dispatched_at.not.is.null').or(`state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}`).order('created_at', { ascending: false }).range(f, f + 999); if (!p) break; all = [...all, ...p]; if (p.length < 1000) break; } return all; })(),
+                              ]);
 
                               // Format and set
                               const format = (entries: any[]) => entries.map((entry: any) => {
@@ -6683,15 +6665,15 @@ const MMP = () => {
             onDispatched={async () => {
               await refreshMMPFiles();
               if (verifiedSubTab === 'dispatched') {
-                const { data: dispatchedEntries, error: allError } = await supabase
-                  .from('mmp_site_entries')
-                  .select('*')
-                  .in('status', ['Dispatched', 'dispatched'])
-                  .is('accepted_by', null)
-                  .order('dispatched_at', { ascending: false })
-                  .limit(1000);
+                let dispatchedEntries: any[] = [];
+                for (let _df = 0; ; _df += 1000) {
+                  const { data: _dp } = await supabase.from('mmp_site_entries').select('*').in('status', ['Dispatched', 'dispatched']).is('accepted_by', null).order('dispatched_at', { ascending: false }).range(_df, _df + 999);
+                  if (!_dp) break;
+                  dispatchedEntries = [...dispatchedEntries, ..._dp];
+                  if (_dp.length < 1000) break;
+                }
 
-                if (!allError && dispatchedEntries) {
+                if (dispatchedEntries.length >= 0) {
 
                   const formattedEntries = dispatchedEntries.map(entry => {
                     const additionalData = entry.additional_data || {};
@@ -6731,14 +6713,15 @@ const MMP = () => {
               // Reload approved and costed entries after dispatch
               // Filter by 'Approved and Costed' status, not 'verified'
               if (verifiedSubTab === 'approvedCosted') {
-                const { data: approvedCostedEntries, error } = await supabase
-                  .from('mmp_site_entries')
-                  .select('*')
-                  .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%')
-                  .order('created_at', { ascending: false })
-                  .limit(1000);
+                let approvedCostedEntries: any[] = [];
+                for (let _acf = 0; ; _acf += 1000) {
+                  const { data: _acp } = await supabase.from('mmp_site_entries').select('*').or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%').order('created_at', { ascending: false }).range(_acf, _acf + 999);
+                  if (!_acp) break;
+                  approvedCostedEntries = [...approvedCostedEntries, ..._acp];
+                  if (_acp.length < 1000) break;
+                }
 
-                if (!error && approvedCostedEntries) {
+                if (approvedCostedEntries.length >= 0) {
                   const formattedEntries = approvedCostedEntries.map(entry => {
                     const additionalData = entry.additional_data || {};
                     const enumeratorFee = entry.enumerator_fee;
@@ -7007,45 +6990,44 @@ const MMP = () => {
                           ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
                           : undefined;
 
-                        // Load available sites (Dispatched, not accepted, matching location)
-                        let availableSitesQuery = supabase
-                          .from('mmp_site_entries')
-                          .select('*')
-                          .in('status', ['Dispatched', 'dispatched'])
-                          .is('accepted_by', null)
-                          .order('created_at', { ascending: false })
-                          .limit(1000);
-
-                        if (collectorStateName || collectorLocalityName) {
-                          const conditions: string[] = [];
-                          if (collectorStateName) conditions.push(`state.ilike.${collectorStateName}`);
-                          if (collectorLocalityName) conditions.push(`locality.ilike.${collectorLocalityName}`);
-                          if (conditions.length > 0) {
-                            availableSitesQuery = availableSitesQuery.or(conditions.join(','));
-                          }
-                        }
-
-                        // Load smart assigned sites (status = 'Assigned' only)
-                        const smartAssignedQuery = supabase
-                          .from('mmp_site_entries')
-                          .select('*')
-                          .in('status', ['Assigned', 'assigned'])
-                          .eq('accepted_by', currentUser.id)
-                          .order('created_at', { ascending: false })
-                          .limit(1000);
-
-                        // Load my sites (all sites accepted by this collector)
-                        const mySitesQuery = supabase
-                          .from('mmp_site_entries')
-                          .select('*')
-                          .eq('accepted_by', currentUser.id)
-                          .order('created_at', { ascending: false })
-                          .limit(1000);
+                        // Load available sites, smart assigned, my sites — all paginated
+                        const locationConditions: string[] = [];
+                        if (collectorStateName) locationConditions.push(`state.ilike.${collectorStateName}`);
+                        if (collectorLocalityName) locationConditions.push(`locality.ilike.${collectorLocalityName}`);
 
                         const [availableRes, smartRes, mySitesRes] = await Promise.all([
-                          availableSitesQuery,
-                          smartAssignedQuery,
-                          mySitesQuery
+                          (async () => {
+                            let all: any[] = [];
+                            for (let f = 0; ; f += 1000) {
+                              let q = supabase.from('mmp_site_entries').select('*').in('status', ['Dispatched', 'dispatched']).is('accepted_by', null).order('created_at', { ascending: false });
+                              if (locationConditions.length > 0) q = q.or(locationConditions.join(','));
+                              const { data: p } = await q.range(f, f + 999);
+                              if (!p) break;
+                              all = [...all, ...p];
+                              if (p.length < 1000) break;
+                            }
+                            return { data: all };
+                          })(),
+                          (async () => {
+                            let all: any[] = [];
+                            for (let f = 0; ; f += 1000) {
+                              const { data: p } = await supabase.from('mmp_site_entries').select('*').in('status', ['Assigned', 'assigned']).eq('accepted_by', currentUser.id).order('created_at', { ascending: false }).range(f, f + 999);
+                              if (!p) break;
+                              all = [...all, ...p];
+                              if (p.length < 1000) break;
+                            }
+                            return { data: all };
+                          })(),
+                          (async () => {
+                            let all: any[] = [];
+                            for (let f = 0; ; f += 1000) {
+                              const { data: p } = await supabase.from('mmp_site_entries').select('*').eq('accepted_by', currentUser.id).order('created_at', { ascending: false }).range(f, f + 999);
+                              if (!p) break;
+                              all = [...all, ...p];
+                              if (p.length < 1000) break;
+                            }
+                            return { data: all };
+                          })(),
                         ]);
 
                         console.log('🔄 Reload after acknowledgment:', {

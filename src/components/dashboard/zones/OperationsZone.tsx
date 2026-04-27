@@ -238,19 +238,14 @@ export const OperationsZone: React.FC = () => {
         
         console.log(`[OperationsZone] Loading dispatched sites for state: ${stateName}`);
         
-        const { data: sites, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .eq('status', 'Dispatched')
-          .is('accepted_by', null)
-          .ilike('state', `%${stateName}%`)
-          .limit(500);
-        
-        if (error) {
-          console.error('[OperationsZone] Error loading dispatched sites:', error);
-          return;
+        let sites: any[] = [];
+        for (let _of = 0; ; _of += 1000) {
+          const { data: _op, error } = await supabase.from('mmp_site_entries').select('*').eq('status', 'Dispatched').is('accepted_by', null).ilike('state', `%${stateName}%`).range(_of, _of + 999);
+          if (error) { console.error('[OperationsZone] Error loading dispatched sites:', error); break; }
+          if (!_op) break;
+          sites = [...sites, ..._op];
+          if (_op.length < 1000) break;
         }
-        
         console.log(`📊 [OperationsZone] Loaded ${sites?.length || 0} dispatched sites from DB`);
         
         if (sites && sites.length > 0) {

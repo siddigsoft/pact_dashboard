@@ -236,12 +236,14 @@ async function fetchHubNames(): Promise<Map<string, string>> {
 }
 
 async function fetchCoordinators(): Promise<CoordRow[]> {
-  const { data, error } = await supabase
-    .from('mmp_site_entries')
-    .select('id, accepted_by, status, hub_office, verified_at, completed_at, updated_at, dispatched_at')
-    .not('accepted_by', 'is', null)
-    .limit(8000);
-  if (error || !data) return [];
+  let data: any[] = [];
+  for (let _cf = 0; ; _cf += 1000) {
+    const { data: _cp, error: _ce } = await supabase.from('mmp_site_entries').select('id, accepted_by, status, hub_office, verified_at, completed_at, updated_at, dispatched_at').not('accepted_by', 'is', null).range(_cf, _cf + 999);
+    if (_ce || !_cp) break;
+    data = [...data, ..._cp];
+    if (_cp.length < 1000) break;
+  }
+  if (!data.length) return [];
 
   const map = new Map<string, CoordRow>();
   for (const e of data) {
@@ -307,12 +309,13 @@ async function fetchCoordinators(): Promise<CoordRow[]> {
 }
 
 async function fetchDownPayments(): Promise<DPRow[]> {
-  const { data } = await supabase
-    .from('down_payment_requests')
-    .select('id, status, hub_name, requested_by, metadata, requester_role, created_at')
-    .in('status', ['pending_supervisor', 'pending_admin'])
-    .order('created_at', { ascending: true })
-    .limit(500);
+  let data: any[] = [];
+  for (let _dpaf = 0; ; _dpaf += 1000) {
+    const { data: _dpap } = await supabase.from('down_payment_requests').select('id, status, hub_name, requested_by, metadata, requester_role, created_at').in('status', ['pending_supervisor', 'pending_admin']).order('created_at', { ascending: true }).range(_dpaf, _dpaf + 999);
+    if (!_dpap) break;
+    data = [...data, ..._dpap];
+    if (_dpap.length < 1000) break;
+  }
 
   return (data || []).map((d: any) => ({
     id: d.id,

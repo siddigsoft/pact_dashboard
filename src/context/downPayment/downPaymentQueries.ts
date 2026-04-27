@@ -84,7 +84,7 @@ function transformFromDB(data: any): DownPaymentRequest {
 async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownPaymentRequest[]> {
   const userRole = user.role?.toLowerCase();
 
-  let query = supabase.from('down_payment_requests').select(`
+  const DP_SELECT_JOIN = `
     id, site_visit_id, mmp_site_entry_id, site_name, metadata, requested_by, requested_at, requester_role, hub_id, hub_name, total_transportation_budget, requested_amount, payment_type, installment_plan, paid_installments, justification, supporting_documents, supervisor_id, supervisor_status, supervisor_approved_by, supervisor_approved_at, supervisor_notes, supervisor_rejection_reason, admin_status, admin_processed_by, admin_processed_at, admin_notes, admin_rejection_reason, status, total_paid_amount, remaining_amount, wallet_transaction_ids, created_at, updated_at, payment_proof_url, payment_proof_notes, payment_proof_uploaded_at,
     mmp_site_entries (
       state,
@@ -93,9 +93,10 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       activity_type,
       mmp_file_id
     )
-  `);
+  `;
+  const DP_SELECT_PLAIN = 'id, site_visit_id, mmp_site_entry_id, site_name, metadata, requested_by, requested_at, requester_role, hub_id, hub_name, total_transportation_budget, requested_amount, payment_type, installment_plan, paid_installments, justification, supporting_documents, supervisor_id, supervisor_status, supervisor_approved_by, supervisor_approved_at, supervisor_notes, supervisor_rejection_reason, admin_status, admin_processed_by, admin_processed_at, admin_notes, admin_rejection_reason, status, total_paid_amount, remaining_amount, wallet_transaction_ids, created_at, updated_at, payment_proof_url, payment_proof_notes, payment_proof_uploaded_at';
 
-  const applyRoleFilter = (q: typeof query) => {
+  const applyRoleFilter = (q: any) => {
     if (userRole === 'datacollector' || userRole === 'coordinator') {
       return q.eq('requested_by', user.id);
     }
@@ -116,18 +117,30 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     return q;
   };
 
-  let { data, error } = await applyRoleFilter(query)
-    .order('created_at', { ascending: false })
-    .limit(1000);
+  let allData: any[] = [];
+  let error: any = null;
+  for (let _dpf = 0; ; _dpf += 1000) {
+    const { data: _dpp, error: _dpe } = await applyRoleFilter(supabase.from('down_payment_requests').select(DP_SELECT_JOIN)).order('created_at', { ascending: false }).range(_dpf, _dpf + 999);
+    if (_dpe) { error = _dpe; break; }
+    if (!_dpp) break;
+    allData = [...allData, ..._dpp];
+    if (_dpp.length < 1000) break;
+  }
+  let data: any[] | null = allData.length > 0 ? allData : null;
 
   if (error) {
     console.warn('[DownPayment] Join query failed, retrying without join:', error.message);
-    const plain = applyRoleFilter(supabase.from('down_payment_requests').select('id, site_visit_id, mmp_site_entry_id, site_name, metadata, requested_by, requested_at, requester_role, hub_id, hub_name, total_transportation_budget, requested_amount, payment_type, installment_plan, paid_installments, justification, supporting_documents, supervisor_id, supervisor_status, supervisor_approved_by, supervisor_approved_at, supervisor_notes, supervisor_rejection_reason, admin_status, admin_processed_by, admin_processed_at, admin_notes, admin_rejection_reason, status, total_paid_amount, remaining_amount, wallet_transaction_ids, created_at, updated_at, payment_proof_url, payment_proof_notes, payment_proof_uploaded_at'));
-    const fallback = await plain
-      .order('created_at', { ascending: false })
-      .limit(1000);
-    data = fallback.data;
-    error = fallback.error;
+    let fallbackData: any[] = [];
+    let fallbackError: any = null;
+    for (let _ff = 0; ; _ff += 1000) {
+      const { data: _fp, error: _fe } = await applyRoleFilter(supabase.from('down_payment_requests').select(DP_SELECT_PLAIN)).order('created_at', { ascending: false }).range(_ff, _ff + 999);
+      if (_fe) { fallbackError = _fe; break; }
+      if (!_fp) break;
+      fallbackData = [...fallbackData, ..._fp];
+      if (_fp.length < 1000) break;
+    }
+    data = fallbackData.length > 0 ? fallbackData : null;
+    error = fallbackError;
   }
 
   if (error) {

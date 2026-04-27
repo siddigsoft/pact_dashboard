@@ -324,23 +324,25 @@ const MMPCycleClose = () => {
         return;
       }
 
-      let query = supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
-        .in('mmp_file_id', mmpIds)
-        .limit(10000);
-
-      if (closingMmps.length > 0) {
-        query = query.eq('not_covered_flag', true);
-      } else {
-        query = query.in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+      const PAGE = 1000;
+      let allData: any[] = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
+          .in('mmp_file_id', mmpIds);
+        if (closingMmps.length > 0) {
+          q = q.eq('not_covered_flag', true);
+        } else {
+          q = q.in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+        }
+        const { data: pageData, error } = await q.range(from, from + PAGE - 1);
+        if (error) throw error;
+        allData = [...allData, ...(pageData || [])];
+        if (!pageData || pageData.length < PAGE) break;
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      const sites: UncoveredSite[] = (data || []).map(s => {
+      const sites: UncoveredSite[] = allData.map(s => {
         const mmpFileId = (s as any).mmp_file_id;
         const mmp = mmpFiles?.find(m => m.id === mmpFileId);
         return {
@@ -766,29 +768,33 @@ const MMPCycleClose = () => {
       }));
 
       if (records.length > 0) {
-        const cycleIds = records.map(r => r.id);
-        const { data: siteStats } = await supabase
-          .from('mmp_site_entries')
-          .select('mmp_file_id, status, not_covered_flag, not_covered_reason')
-          .in('mmp_file_id', cycleIds)
-          .limit(10000);
-
-        if (siteStats) {
-          records.forEach(r => {
-            const cycleSites = siteStats.filter((s: any) => s.mmp_file_id === r.id);
-            r.totalSites = cycleSites.length;
-            r.uncoveredSites = cycleSites.filter((s: any) => s.not_covered_flag).length;
-            // Phase A: count submitted + wfp_confirmed + completed (legacy) as covered
-            r.completedSites = cycleSites.filter((s: any) => {
-              const st = (s.status ?? '').toLowerCase().trim();
-              return st === 'submitted' || st === 'wfp_confirmed' || st === 'completed' || st === 'verified';
-            }).length;
-            r.reasonBreakdown = {};
-            cycleSites.filter(s => s.not_covered_flag && s.not_covered_reason).forEach(s => {
-              r.reasonBreakdown![s.not_covered_reason!] = (r.reasonBreakdown![s.not_covered_reason!] || 0) + 1;
+        const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified'];
+        await Promise.all(records.map(async (r) => {
+          const [totalRes, completedRes, uncoveredRes] = await Promise.all([
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id).in('status', coveredStatuses),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', r.id).eq('not_covered_flag', true),
+          ]);
+          r.totalSites = totalRes.count ?? 0;
+          r.completedSites = completedRes.count ?? 0;
+          r.uncoveredSites = uncoveredRes.count ?? 0;
+          r.reasonBreakdown = {};
+          // paginate reason breakdown for not-covered sites
+          const PAGE = 1000;
+          for (let from = 0; ; from += PAGE) {
+            const { data: reasons } = await supabase
+              .from('mmp_site_entries')
+              .select('not_covered_reason')
+              .eq('mmp_file_id', r.id)
+              .eq('not_covered_flag', true)
+              .not('not_covered_reason', 'is', null)
+              .range(from, from + PAGE - 1);
+            (reasons || []).forEach((s: any) => {
+              r.reasonBreakdown![s.not_covered_reason] = (r.reasonBreakdown![s.not_covered_reason] || 0) + 1;
             });
-          });
-        }
+            if (!reasons || reasons.length < PAGE) break;
+          }
+        }));
       }
 
       setClosedCycles(records);
@@ -1013,27 +1019,25 @@ const MMPCycleClose = () => {
       }).map(m => m.id);
       if (mmpIds.length === 0) return;
       try {
-        const { data } = await supabase
-          .from('mmp_site_entries')
-          .select('mmp_file_id, status')
-          .in('mmp_file_id', mmpIds)
-          .limit(10000);
-        if (data) {
-          const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }> = {};
-          data.forEach((sv: any) => {
-            const mid = sv.mmp_file_id;
-            if (!mid) return;
-            if (!counts[mid]) counts[mid] = { total: 0, completed: 0, pending: 0, assigned: 0, dispatched: 0 };
-            counts[mid].total++;
-            const st = (sv.status ?? '').toLowerCase().trim();
-            // Phase A: 'submitted' and 'wfp_confirmed' both count as covered
-            if (st === 'submitted' || st === 'wfp_confirmed' || st === 'completed' || st === 'verified') counts[mid].completed++;
-            else if (st === 'pending') counts[mid].pending++;
-            else if (st === 'assigned') counts[mid].assigned++;
-            else if (st === 'dispatched') counts[mid].dispatched++;
-          });
-          setSiteVisitCounts(counts);
-        }
+        const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified'];
+        const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }> = {};
+        await Promise.all(mmpIds.map(async (mmpId) => {
+          const [totalRes, completedRes, pendingRes, assignedRes, dispatchedRes] = await Promise.all([
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).in('status', coveredStatuses),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'pending'),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'assigned'),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'dispatched'),
+          ]);
+          counts[mmpId] = {
+            total: totalRes.count ?? 0,
+            completed: completedRes.count ?? 0,
+            pending: pendingRes.count ?? 0,
+            assigned: assignedRes.count ?? 0,
+            dispatched: dispatchedRes.count ?? 0,
+          };
+        }));
+        setSiteVisitCounts(counts);
       } catch (err) {
         console.error('Error fetching site visit counts:', err);
       }
@@ -1050,13 +1054,19 @@ const MMPCycleClose = () => {
   useEffect(() => {
     const fetchQualityData = async () => {
       try {
-        const { data } = await supabase
-          .from('mmp_site_entries')
-          .select('mmp_file_id, additional_data')
-          .limit(10000);
-        if (data && data.length > 0) {
+        const PAGE = 1000;
+        let allQuality: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data: pageData } = await supabase
+            .from('mmp_site_entries')
+            .select('mmp_file_id, additional_data')
+            .range(from, from + PAGE - 1);
+          allQuality = [...allQuality, ...(pageData || [])];
+          if (!pageData || pageData.length < PAGE) break;
+        }
+        if (allQuality.length > 0) {
           const hubScores: Record<string, { total: number; count: number }> = {};
-          data.forEach((s: any) => {
+          allQuality.forEach((s: any) => {
             const qualityScore = Number(s?.additional_data?.quality_score);
             if (!Number.isFinite(qualityScore)) return;
             const mmp = mmpFiles?.find(m => m.id === s.mmp_file_id);
