@@ -1,336 +1,498 @@
-# Cycle Close & Site Visit Status — Design Document
+# Cycle Close & Site Visit Status — Full Design & Build Plan
 
-**Status:** Discussion / Planning — Ready for Build Approval
+**Status:** Design Finalized — Ready for Build Approval
 **Last updated:** 2026-04-27
 **Participants:** Product Owner, Engineering
 
 ---
 
-## 1. The Core Problem
+## PART 1 — WHAT THE SYSTEM DOES TODAY (BASELINE)
 
-The current status `completed` on a site visit means the enumerator finished entering data in the PACT app. It does NOT mean WFP's ODK server actually received it. Only WFP's cleaned data Excel export can prove that.
+### Current Site Visit Status Values
+`assigned` → `dispatched` → `completed` → `verified` → `not_covered`
 
-We need two separate facts to live as two separate statuses.
+**Problem:** `completed` means the enumerator finished in the PACT app. It says nothing about whether WFP's ODK server received the data. The system has no way to know.
 
----
+### Current Cycle Close Page (`/mmp/cycle-close`)
+The page has five tabs:
+| Tab | What it does today |
+|---|---|
+| Active | Shows all active MMPs with their coverage stats |
+| Uncovered | Shows sites with no visit — supervisor assigns Not Covered reasons |
+| Reports | Exports and reports for the cycle |
+| Comparison | Compares two cycles side by side |
+| Scorecard | Quality scores per hub/enumerator |
 
-## 2. New Site Visit Status Chain
-
-| Status | Set By | Meaning |
-|---|---|---|
-| `assigned` | Supervisor | Site allocated to enumerator for this cycle |
-| `dispatched` | Supervisor | Enumerator sent to field |
-| `submitted` | Enumerator (self-report) | Claims form was filled and sent to WFP ODK |
-| `confirmed` | Cycle Close — WFP file match | WFP cleaned data file proves submission received |
-| `rejected` | Cycle Close — WFP file match | Site not found in WFP file — needs resolution |
-| `not_covered` | Supervisor (with mandatory reason) | Site not visited — officially documented |
-
-**`submitted` fully replaces `completed`.** All existing `completed` records migrate to `submitted`.
-
-Key principle:
-- `submitted` = enumerator's claim (their accountability)
-- `confirmed` = WFP's evidence (external proof)
+There is also a **Pre-Close Checklist** (above the tabs) that checks four gates before allowing cycle close:
+1. All site visits resolved (checks for `completed`, `approved`, `cancelled`, or `not_covered`)
+2. No pending cost submissions
+3. All transport advances reconciled
+4. All withdrawal requests processed
 
 ---
 
-## 3. How "Submitted" Works
+## PART 2 — ALL DESIGN DECISIONS (FINALIZED)
 
-The enumerator:
-1. Goes to the field, collects data, submits the XLSForm to WFP ODK Central
-2. Opens the PACT app → marks the site **Submitted**
-3. Optionally notes an ODK submission reference or uploads a screenshot as evidence
+### 2.1 New Status: `submitted` Replaces `completed`
 
-This is a self-report recorded with timestamp + user ID. No external check happens here.
+| Old Status | New Status | Who Sets It | What It Means |
+|---|---|---|---|
+| `completed` | **`submitted`** | Enumerator (self-report in app) | "I filled the XLSForm and sent it to WFP ODK" |
+| *(new)* | **`confirmed`** | System (WFP file match) | WFP cleaned data file proves submission received |
+| *(new)* | **`rejected`** | System (WFP file match) | Not found in WFP file — needs resolution |
+| `not_covered` | `not_covered` | Supervisor (with mandatory reason) | Site not visited — officially documented |
 
-The Pre-Close Checklist gate "All site visits resolved" accepts `submitted` (or `not_covered`) as resolved — just like `completed` was before.
+All existing `completed` records become `submitted` via a one-time SQL update.
 
----
+**Why keep `submitted` separate from `confirmed`?**
+Because you cannot control the WFP server. The enumerator's claim and WFP's proof are two different facts and must live as two different statuses. `confirmed` is the only status that means "WFP has the data."
 
-## 4. How "Confirmed" Works — WFP Cleaned Data File Upload
+### 2.2 Roll-to-Next-MMP (Q1 — More Explanation)
 
-### The WFP File (from real file analysis)
+When a site is marked Not Covered and money was already approved, one resolution option is to roll the money forward to the same enumerator in a future MMP.
 
-WFP sends back a cleaned Excel file after every cycle (e.g., `February_2026_cleaned_data_PACT.xlsx`). From the actual file examined, the relevant columns are:
+**What "Roll to Next MMP" means exactly:**
+- The approved amount stays with the same enumerator (not lost, not returned)
+- It gets pre-allocated to a specific future site in a specific future MMP
+- The enumerator does NOT need to submit a new request — the money is already there
+- The pre-allocation shows up in the target MMP's down-payment view as "Pre-approved (Rolled Over)"
+- A link back to the source MMP and reason is always visible
 
-| WFP Column Name | Maps to PACT field | Role in matching |
+**How the system finds eligible MMPs:**
+The dropdown shows only MMPs where ALL of the following are true:
+- Same **state** as the not-covered site
+- Same **data collector** (the `accepted_by` user)
+- MMP status is `active` or `draft` (not already closed)
+- The site exists in the target MMP site list OR (if not, see below)
+
+**Q1 answered — Does the site need to exist in the target MMP?**
+It is preferred that the site already exists in the target MMP's list. If it does not, the admin sees a warning ("Site not in target MMP") and can still proceed — the system will add the site entry to the target MMP automatically. This keeps the process flexible while flagging the edge case.
+
+### 2.3 Return Required — Repayment Options (Q2 Answered)
+
+When money must come back, the following repayment methods are available (admin selects one or more):
+
+| Method | How It Works |
+|---|---|
+| **Cash Return** | Enumerator physically returns cash to the office. Finance records receipt. |
+| **Deduction from Next Payment** | Amount is deducted automatically from the enumerator's next approved down-payment. System holds a deduction flag. |
+| **Move to Enumerator Fees** | Amount is reclassified from transport/site cost to enumerator fee in the accounting records. |
+| **Reuse for Other Sites** | Amount is re-allocated to a different site (same or different MMP) — admin selects target site. |
+
+Admin picks which method applies. Finance tracks the status: `pending → in_progress → settled`.
+
+### 2.4 Enumerator Sees Rejection in the App (Q3 Answered)
+Yes. In the PACT mobile app and web app, when an enumerator's site is moved to `rejected` status, they see:
+- Site card shows a red **"Not Confirmed by WFP"** badge
+- A short message: "Your submission for [Site Name] was not found in the WFP data. Your supervisor has been notified."
+- They can see any evidence they previously uploaded
+- They cannot change the status themselves — only the admin can resolve it
+
+### 2.5 Write-Off Requires Digital Signature (Q4 Answered)
+Yes. Write-off approval follows the same digital signature flow as existing cost approvals. Finance signs off. Super Admin can override and sign solo. The signed record is stored and visible in the audit trail.
+
+### 2.6 One Reviewer for Weak WFP Matches (Q5 Answered)
+One admin reviewer is sufficient to confirm or reject a weak/fuzzy match from the WFP file. Their name, timestamp, and note are recorded in the audit log.
+
+### 2.7 WFP File Matching Keys (from Real File Analysis)
+The WFP cleaned data Excel (`February_2026_cleaned_data_PACT.xlsx`) has no P Code / Site Code column. Matching is done by:
+
+| WFP Column | PACT Field | Role |
 |---|---|---|
 | `SECTION_1/sitename` | `site_name` | **Primary match key** |
-| `1.9. State of the site/where the site is located` | `state` | **Supporting match** |
-| `1.10. Locality of the site/where the site is located` | `locality` | **Supporting match** |
-| `1.15 Name of Implementing Partner` | `cp_name` / partner | **Supporting match** |
-| `1.16.What kind of process monitoring are you going to conduct?` | `main_activity` / `activity_at_site` | **Supporting match** |
-| `SECTION_1/fullsitename` | display only | For human review of match results |
-| `1.4. Name of interviewer (or ID)` | `accepted_by_name` | Informational — not used for matching |
-| `1:1.2. Monitoring cycle month` | cycle month | Sanity check — should match the cycle |
-| `1:1.Monitoring cycle year` | cycle year | Sanity check |
-| `Geographic Coordinates` | GPS | Informational |
+| `1.9. State of the site/where the site is located` | `state` | Supporting |
+| `1.10. Locality of the site/where the site is located` | `locality` | Supporting |
+| `1.15 Name of Implementing Partner` | `cp_name` | Supporting |
+| `1.16.What kind of process monitoring are you going to conduct?` | `main_activity` | Supporting |
 
-**There is no P Code / Site Code column in the WFP file.** Matching is done on site name + location.
-
-### Matching Algorithm
-
-**Step 1 — Exact name + state + locality**
-`SECTION_1/sitename` matches `mmp_site_entries.site_name` (case-insensitive, trimmed)
-AND `1.9 State` matches `state`
-AND `1.10 Locality` matches `locality`
-
-→ If all three match: **Strong Match → Confirmed**
-
-**Step 2 — Name + state only (locality mismatch)**
-Site name and state match but locality differs slightly.
-→ **Weak Match → Needs human review** — shown to admin for manual confirm/reject
-
-**Step 3 — Name only (fuzzy)**
-Site name matches but state or locality don't.
-→ **Fuzzy Match → Always needs human review**
-
-**Step 4 — No match**
-Site is in PACT as `submitted` but has no row in WFP file at all.
-→ **No Match → status becomes `rejected`** (goes to Exceptions)
-
-**Step 5 — WFP row has no PACT site**
-A row in the WFP file has no matching site in the cycle.
-→ Logged as an **anomaly** — could mean a site submitted under a wrong MMP.
-
-### Who Uploads the WFP File
-Admin and super admin only.
-
-### Match Outcomes Summary
-
-| Result | Condition | PACT Status Update |
-|---|---|---|
-| Strong Match | Name + State + Locality all match | `submitted` → `confirmed` (auto) |
-| Weak/Fuzzy Match | Partial match | Stays `submitted` — admin reviews |
-| No Match | Nothing in WFP file | `submitted` → `rejected` |
-| Not Covered | Site is `not_covered` | No change |
-| WFP anomaly row | Row in WFP, no PACT site | Logged, no status change |
-
-### Partial Confirmation is Allowed
-A cycle can close with some sites still `rejected` or in `exceptions`. These are tracked in the Exceptions tab and handled via the resolution workflow below. The cycle field window is permanently closed after cycle close.
+**Match tiers:**
+- **Strong:** site name + state + locality all match → auto-confirmed
+- **Weak:** site name + state match, locality differs → admin reviews manually (one reviewer)
+- **Fuzzy:** site name matches but location differs → admin reviews manually
+- **No match:** site not found in WFP file at all → `rejected`
+- **WFP anomaly:** row in WFP file with no matching PACT site → logged, no status change
 
 ---
 
-## 5. Scenario C — Not Covered Sites With Approved Money
+## PART 3 — PAGE-BY-PAGE CHANGE PLAN
 
-This is the highest-risk case. An enumerator received approved payment (down-payment, transport advance) but the site was never visited.
-
-When a supervisor marks a site `not_covered` and an associated cost exists, the system immediately opens a **Cost Recovery Decision** dialog.
-
-### The Three Resolution Options
-
-#### Option 1 — Roll to Next MMP (preferred)
-The approved amount is pre-allocated to the same enumerator for the same site in a future MMP.
-
-**Eligibility filter for the MMP selection list shown to admin:**
-- Same state as the not-covered site
-- Same data collector (same `accepted_by` user)
-- Target MMP status is `active` or `draft` (not closed)
-- Site exists in the target MMP's site list OR can be matched by name+location
-
-The enumerator does not re-request — the money is already pre-allocated.
-
-**Record created in `cost_recovery_log`:**
-- Source MMP + site + amount
-- Target MMP + site
-- Decision: `rolled_over`
-- Made by + timestamp
-
-#### Option 2 — Return Required
-Enumerator must return the money. Finance tracks repayment.
-
-**Record:** Decision `return_required`, recovery amount, deadline (default 30 days), repayment status `pending → partially_repaid → repaid`.
-
-#### Option 3 — Write-Off / Waiver
-Amount written off with mandatory written justification. Requires Finance approval (or Super Admin override).
-
-**Record:** Decision `written_off`, justification text (required), authorized by.
-
-### Who Can Make Each Decision
-
-| Decision | Supervisor | Admin | Finance | Super Admin |
-|---|---|---|---|---|
-| Roll to Next MMP | Propose | Approve | Approve | Approve |
-| Return Required | Yes | Yes | Yes | Yes |
-| Write-Off | Propose only | Propose | Approve (joint) | Approve solo |
-
-### New Pre-Close Gate
-> **All not-covered cost recoveries addressed**
-> Every not-covered site that had an approved cost must have a resolution decision on record.
-
-This gate blocks cycle close unless every such site has a decision (any option counts).
+This section describes every page that changes, what it does now, what changes, and what stays the same.
 
 ---
 
-## 6. Scenario B — Submitted But Rejected (Not in WFP File)
+### PAGE 1: MMP Cycle Close (`/mmp/cycle-close`)
 
-The enumerator claimed to submit but WFP has no record.
+**What this page does:**
+This is the command center for officially ending a monitoring cycle. Supervisors and admins use it to check that all sites are accounted for, all money is settled, and the cycle is ready to close. It is where the MMP transitions from "active field work" to "officially closed and archived."
 
-### Resolution Options in Exceptions Tab
+**Current state:**
+- Pre-Close Checklist above tabs with 4 gates
+- 5 tabs: Active, Uncovered, Reports, Comparison, Scorecard
 
-| Option | Who | Result |
-|---|---|---|
-| Evidence Provided | Enumerator provides ODK submission ID / screenshot | Admin reviews → manually override to `confirmed` with note |
-| Accept Rejection | Admin accepts the gap | Status stays `rejected_final`, cost reviewed by finance |
-| Dispute | Finance flags if enumerator did not go | Cost goes to `disputed` state for recovery decision |
+#### Changes — Pre-Close Checklist (partial change)
 
-**Key principle:** Cost is NOT automatically clawed back on rejection — the enumerator made the field visit. Finance reviews case by case.
+**Gate 1 — Site Visits Resolved:**
+Change: currently checks for `completed` as a resolved state. Update to accept `submitted` instead of `completed`. Logic otherwise identical.
 
-Rejected sites do NOT block cycle close — they go to Exceptions.
+**Gate 5 — NEW: Not-Covered Cost Recoveries Addressed:**
+A fifth gate is added to the checklist. It only appears when at least one site in the cycle is `not_covered` AND has an associated approved cost. It checks that every such site has a cost recovery decision on record (Roll / Return / Write-Off).
+- If none of the not-covered sites have approved costs → gate auto-passes (hidden or shown as N/A)
+- If any such site has no decision → gate blocks cycle close
+- Resolve link → jumps to the Exceptions tab
+
+#### Changes — Existing Tabs
+
+**Tab: Active** — Partial change
+- Site visit status badges: rename `completed` → `submitted` everywhere
+- Add two new badges: `confirmed` (green, checkmark) and `rejected` (red, warning)
+- Progress bars and coverage stats now count `submitted` + `confirmed` as "visited"
+- Coverage % formula: (submitted + confirmed + not_covered_with_reason) / total
+
+**Tab: Uncovered** — Partial change
+- When supervisor marks a site Not Covered AND there is an associated approved cost:
+  - A warning banner appears on the site card: "This site has an approved cost of SDG X. A resolution is required."
+  - Clicking "Set Resolution" opens the Cost Recovery Dialog (see below)
+- No change to the Not Covered reason dropdown or existing bulk-reason logic
+
+**Tab: Reports** — No change
+
+**Tab: Comparison** — No change
+
+**Tab: Scorecard** — No change
+
+#### Changes — New Tabs Added
+
+**New Tab: WFP Confirmation**
+This is Phase 2 of the cycle close process. It only becomes active after the Pre-Close Checklist passes (or Super Admin Override is used).
+
+Purpose: Upload the WFP cleaned data Excel file and match it against the cycle's submitted sites to produce `confirmed` or `rejected` outcomes.
+
+What it shows:
+- A page guide explaining the process (see Guide section below)
+- Upload area: drag-and-drop or click to upload the WFP Excel file
+- Cycle selector: which MMP this file belongs to
+- After upload: a match results table showing:
+  - Strong matches (auto-confirmed) — shown in green
+  - Weak/fuzzy matches — shown in amber, with "Confirm" / "Reject" buttons and a note field
+  - No matches / rejected sites — shown in red
+  - WFP anomaly rows (in file but not in PACT) — shown separately
+- Summary counts: X Confirmed, Y Needs Review, Z Rejected, W Anomalies
+- "Apply Results" button: applies all auto-confirmed and manually reviewed decisions in bulk
+- Audit note field: admin adds a note that goes into the history log with the upload
+
+**In-page guide for WFP Confirmation tab:**
+> "This tab is used to verify which sites' data was actually received by WFP. Upload the cleaned data Excel file that WFP sends after processing ODK submissions. The system will automatically match sites by name, state, and locality. Strong matches are confirmed automatically. Weaker matches need your review — you can confirm or reject each one with a note. Rejected sites will appear in the Exceptions tab for follow-up. This step is optional if you choose to close without WFP confirmation, but it is recommended for full accountability."
+
+**New Tab: Exceptions**
+A holding area for all unresolved issues that don't block cycle close but need follow-up.
+
+Purpose: Give admin and finance a single place to see and resolve all outstanding issues from a cycle — rejected WFP matches, disputed costs, unresolved cost recoveries.
+
+What it shows — three sections:
+
+Section A — Rejected Sites (WFP not confirmed):
+- Table of sites in `rejected` status
+- Columns: Site Name, State, Locality, Enumerator, Submitted At, Resolution
+- Resolution options per row:
+  - "Evidence Provided" → admin uploads/enters ODK submission ID → manually override to `confirmed`
+  - "Accept Rejection" → status becomes `rejected_final`, cost flagged for finance review
+  - "Dispute" → marks cost as `disputed` → triggers cost recovery dialog
+
+Section B — Not-Covered Cost Recoveries:
+- Table of not-covered sites that have an approved cost and a decision recorded
+- Shows: Decision type, amount, target MMP (if rolled), repayment status, authorized by
+- Finance can update repayment status here
+
+Section C — Disputed Costs:
+- Sites where cost is under dispute
+- Finance resolves via the same digital signature flow as cost approvals
+
+**In-page guide for Exceptions tab:**
+> "This tab shows all sites and costs from this cycle that need follow-up but did not block the cycle from closing. Rejected sites are ones where WFP's data file had no matching submission — work with the enumerator or accept the gap. Not-covered cost recoveries show how approved money was handled when a site was not visited. Resolve each item here to keep the cycle fully clean."
+
+**New Tab: History**
+A complete audit log of everything that happened during the cycle close process.
+
+What it shows:
+- Chronological list of events: who did what, when, with what note/justification
+- Event types logged: gate checks, overrides, WFP file uploads, match results, cost recovery decisions, status changes, digital signatures
+- Filter by: date, user, event type
+- Export to PDF/Excel
+
+**In-page guide for History tab:**
+> "This tab is a full audit trail of the cycle close process. Every action taken — from checking the readiness gates to uploading the WFP file to approving write-offs — is recorded here with the person's name and timestamp. This is the record of accountability for the cycle."
 
 ---
 
-## 7. Cycle Close Page — Full Revised Structure
+### PAGE 2: Site Visits (wherever site visit status is displayed)
 
-### Phase 1 — Pre-Close Checklist (revised)
+This covers all pages and components that show or filter by site visit status.
 
-| Gate | Change | Notes |
-|---|---|---|
-| All site visits resolved | Updated | Now accepts `submitted` or `not_covered` as resolved (was `completed`) |
-| No pending cost submissions | No change | |
-| All transport advances reconciled | No change | |
-| All withdrawal requests processed | No change | |
-| All not-covered cost recoveries addressed | **NEW** | Only appears if any not-covered sites have associated costs |
+**Files affected:**
+- `src/pages/MMPCycleClose.tsx` — status badges in the Active tab
+- `src/components/superAdmin/SuperAdminDataManagement.tsx` — Claimed Sites tab status filter
+- Any site visit cards, tables, or status dropdowns elsewhere
 
-### Phase 2 — WFP Data Confirmation (new)
+**Changes:**
+- Add `submitted` as a recognized status everywhere `completed` was shown
+- Add `confirmed` status: green badge with checkmark icon, label "WFP Confirmed"
+- Add `rejected` status: red badge with warning icon, label "Not in WFP File"
+- Status filter dropdowns: add `submitted`, `confirmed`, `rejected` options
+- Coverage calculations: count both `submitted` and `confirmed` as "visited"
 
-Unlocks after Phase 1 passes (or Super Admin Override).
-
-1. Upload WFP cleaned data Excel file
-2. System reads file → matches by site name + state + locality
-3. Admin reviews match results:
-   - Strong matches: auto-confirmed
-   - Weak/fuzzy: admin manually approves or rejects each
-   - No match: flagged as rejected
-4. Admin clicks "Apply Results" → bulk status updates
-5. Anomaly rows (WFP data with no PACT site) shown separately
-
-### Tab Structure
-
-| Tab | Content |
-|---|---|
-| **Readiness** | Pre-close checklist (Phase 1) |
-| **Sites** | All cycle sites — filterable by status, bulk mark actions |
-| **WFP Confirmation** | Upload WFP file, match results, apply (Phase 2) |
-| **Finance Review** | Existing reconciliation summary (no change) |
-| **Exceptions** | Rejected sites + not-covered cost resolutions + disputed costs |
-| **History** | Full audit log — who did what, when, with justification |
+**No change to:** the visit assignment, dispatch, not-covered, or recall workflows.
 
 ---
 
-## 8. WFP File Column Mapping (Confirmed from Real File)
+### PAGE 3: Enumerator App View (My Sites / Field View)
 
+**What this page does:**
+The enumerator's view of their assigned sites for the current cycle. They use it to see which sites they need to visit, mark progress, and report submission.
+
+**Changes:**
+
+When the enumerator marks a site as Submitted:
+- Site card status changes from the dispatch icon to a "Submitted" badge
+- Timestamp recorded
+- Optional: upload screenshot or enter ODK reference number as evidence
+
+When a site becomes `rejected` (after admin runs WFP match):
+- Site card shows red **"Not Confirmed by WFP"** badge
+- Message shown: "Your submission for [Site Name] was not found in the WFP data. Your supervisor has been notified."
+- Enumerator can see any evidence they uploaded
+- Enumerator CANNOT change the status — it is read-only at this point
+- A notification is also sent to the enumerator (in-app + WhatsApp if opted in)
+
+When a site becomes `confirmed`:
+- Site card shows green **"WFP Confirmed"** badge
+- No action needed — this is good news
+
+---
+
+### PAGE 4: Down-Payment Approval (`/down-payment`)
+
+**What this page does:**
+Admins and finance use this page to approve, reject, and track transport advances and enumerator down-payments. It shows all requests with their approval status.
+
+**Changes — Cost Recovery Display:**
+When a cost has a recovery decision (from the Cycle Close Exceptions resolution), a new badge appears on that cost's row:
+- **"Rolled Over →"** with the target MMP name (if rolled)
+- **"Return Required"** with repayment status (if return)
+- **"Written Off"** with authorization info (if write-off)
+- **"Deducted from Next"** badge if deduction method was selected
+
+**Changes — Pre-Approved Rolled Costs:**
+When a cost was rolled from a previous cycle, it appears in the down-payment list with:
+- A "Pre-Approved (Rolled from [Source MMP])" label
+- No "Pending Approval" step — it is already approved
+- Finance can see the source MMP and original reason
+
+**What stays the same:** The approval workflow for new requests is unchanged. The existing approval tiers, bulk approve, admin approve — all unchanged.
+
+---
+
+### PAGE 5: Cost Recovery Dialog (New UI Component)
+
+This is not a page — it is a dialog that appears in two places:
+1. On the Uncovered tab of Cycle Close when a not-covered site has approved costs
+2. On the Exceptions tab when admin resolves a rejected site
+
+**What it shows:**
+- Site name, state, locality, enumerator name
+- Cost details: amount, cost type (transport/down-payment), approval date, approved by
+- Three resolution sections (only one can be selected):
+
+**Section A — Roll to Next MMP**
+- Explanation text: "The approved amount stays with this enumerator but is pre-allocated to a future site."
+- Dropdown: "Select target MMP" — shows only eligible MMPs (same state + same enumerator + active/draft)
+- Warning if site not in target MMP: "Site not found in target MMP — it will be added automatically"
+- Confirm button
+
+**Section B — Return Required**
+- Explanation text: "The enumerator must return the funds."
+- Checkbox group: select repayment method(s) — Cash Return / Deduction from Next Payment / Move to Enumerator Fees / Reuse for Other Sites
+- If "Reuse for Other Sites": additional field to select target site/MMP
+- Recovery deadline date field (default: 30 days from today)
+- Confirm button
+
+**Section C — Write-Off / Waiver**
+- Explanation text: "The amount is written off with justification. Requires Finance digital signature."
+- Justification text field (required, minimum 50 characters)
+- Digital signature component (same as existing cost approval signatures)
+- Authorization levels shown: Finance approval needed, or Super Admin can override
+- Confirm button (triggers signature flow)
+
+---
+
+### PAGE 6: Finance / Reconciliation (reference only, no structural changes)
+
+The existing Finance and Reconciliation pages gain:
+- Visibility of `cost_recovery_log` records in relevant views
+- Repayment tracking for Return Required decisions
+- Write-off records appear in the audit trail with digital signatures
+
+No tab changes, no page restructuring.
+
+---
+
+### DATABASE CHANGES REQUIRED
+
+The following new SQL objects are needed (to be written as migration files):
+
+**1. Status value migration:**
+```sql
+-- Rename all completed site visits to submitted
+UPDATE mmp_site_entries SET status = 'submitted' WHERE status = 'completed';
+UPDATE site_visits SET status = 'submitted' WHERE status = 'completed';
 ```
-WFP Column                                          → PACT Field Used
-──────────────────────────────────────────────────────────────────────
-SECTION_1/sitename                                  → site_name (primary match)
-1.9. State of the site/where the site is located    → state (supporting match)
-1.10. Locality of the site/where the site is located → locality (supporting match)
-1.15 Name of Implementing Partner                   → cp_name (supporting)
-1.16.What kind of process monitoring...             → main_activity (supporting)
-SECTION_1/fullsitename                              → display only
-1.4. Name of interviewer (or ID)                    → enumerator name (informational)
-1:1.Monitoring cycle year                           → cycle year (sanity check)
-1:1.2. Monitoring cycle month                       → cycle month (sanity check)
+
+**2. New table: `cost_recovery_log`**
+```
+id (uuid, pk)
+source_mmp_id (uuid, fk mmp_files)
+source_site_id (uuid, fk mmp_site_entries)
+cost_type (text: 'down_payment' | 'transport_advance' | 'enumerator_fee')
+cost_amount (numeric)
+cost_reference_id (uuid — ID of the original down_payment_request or similar)
+decision (text: 'rolled_over' | 'return_required' | 'written_off' | 'deducted' | 'reused')
+target_mmp_id (uuid, nullable — for rolled_over and reused)
+target_site_id (uuid, nullable)
+repayment_method (text[], nullable — for return_required)
+repayment_status (text: 'pending' | 'in_progress' | 'settled', nullable)
+repayment_deadline (date, nullable)
+justification (text, nullable — required for written_off)
+signature_id (uuid, nullable — for written_off)
+resolved_by (uuid, fk profiles)
+resolved_at (timestamptz)
+notes (text, nullable)
 ```
 
-No P Code / Site Code exists in the WFP file. Name + state + locality is the match key.
+**3. New table: `wfp_confirmation_uploads`**
+```
+id (uuid, pk)
+mmp_id (uuid, fk mmp_files)
+uploaded_by (uuid, fk profiles)
+uploaded_at (timestamptz)
+filename (text)
+storage_path (text)
+total_rows (int)
+strong_matches (int)
+weak_matches (int)
+no_matches (int)
+anomalies (int)
+status (text: 'pending_review' | 'applied')
+applied_at (timestamptz, nullable)
+applied_by (uuid, nullable)
+notes (text, nullable)
+```
+
+**4. New table: `wfp_match_results`**
+```
+id (uuid, pk)
+upload_id (uuid, fk wfp_confirmation_uploads)
+site_entry_id (uuid, fk mmp_site_entries)
+match_tier (text: 'strong' | 'weak' | 'fuzzy' | 'none')
+wfp_site_name (text)
+wfp_state (text)
+wfp_locality (text)
+wfp_partner (text)
+wfp_activity (text)
+admin_decision (text: 'confirmed' | 'rejected' | null — null until reviewed)
+admin_note (text, nullable)
+reviewed_by (uuid, nullable)
+reviewed_at (timestamptz, nullable)
+```
 
 ---
 
-## 9. Answered Design Decisions
+## PART 4 — BUILD PHASES
 
-| Decision | Answer |
-|---|---|
-| Who uploads WFP file | Admin and Super Admin only |
-| Who makes cost recovery decisions | Supervisor (propose), Admin, Finance, Super Admin |
-| Cycle can close with some rejected sites | Yes — they go to Exceptions |
-| Rejected sites re-openable | No — once cycle closed, field window is permanently closed |
-| `submitted` replaces `completed` | Yes, fully |
-| Roll-to-Next-MMP filter | Same state + same data collector + target MMP active/draft |
-| Write-off authorization | Finance approval or Super Admin solo |
+### Phase A — Status Rename (1 day)
+**Scope:** Rename `completed` → `submitted` everywhere.
+- SQL migration: update existing records
+- Update status badges, filters, dropdowns on all affected pages
+- Update `useCycleCloseReadiness.ts`: accept `submitted` as resolved
+- Update `MMPCycleClose.tsx`: coverage counts, display labels
+- Update `SuperAdminDataManagement.tsx`: status filter options
 
----
-
-## 10. Open Questions (Still Pending)
-
-| # | Question |
-|---|---|
-| Q1 | For Roll-to-Next-MMP: does the site need to already exist in the target MMP's site list, or can the system add it if not present? |
-| Q2 | For Return Required: repayment mechanism — cash return, deduction from next payment, or both options available? |
-| Q3 | Should the enumerator see their own rejection/exception status in the app, or is this admin-only? |
-| Q4 | Write-off: is a text justification sufficient, or does Finance need to digitally sign (like existing approval signatures)? |
-| Q5 | When admin does manual review of weak/fuzzy WFP matches, is one reviewer enough or does it need a second sign-off? |
+**Pages touched:** Cycle Close, Super Admin Data, any status dropdowns
+**Can deploy independently:** Yes
 
 ---
 
-## 11. Implementation Plan — Four Phases
+### Phase B — Not-Covered Cost Recovery Gate (3–4 days)
+**Scope:** Track and resolve approved costs for not-covered sites.
+- Create `cost_recovery_log` table (SQL migration file)
+- Build Cost Recovery Dialog component
+- Trigger dialog when site marked Not Covered + cost exists
+- Add 5th gate to Pre-Close Checklist
+- Add "Section B" to Exceptions tab
+- Finance sign-off flow for write-offs
 
-### Phase A — Status Rename (Lowest Risk, Fastest)
-**What:** Rename `completed` → `submitted` across the system.
-**Scope:**
-- Add `submitted` to all status dropdowns, badges, and filters
-- Update `useCycleCloseReadiness.ts`: accept `submitted` as a resolved state (currently accepts `completed`)
-- Update `MMPCycleClose.tsx`: all references to `completed` status
-- Update `SuperAdminDataManagement.tsx` status filter options
-- SQL migration: `UPDATE mmp_site_entries SET status = 'submitted' WHERE status = 'completed'`
-
-**Impact:** Zero data loss. Purely a rename. Does not change any logic.
-**Effort:** Small — 1 day
+**Pages touched:** Cycle Close (Uncovered tab + new Exceptions tab), Down-Payment Approval
+**Can deploy independently:** Yes (after Phase A)
 
 ---
 
-### Phase B — Not-Covered Cost Recovery Gate
-**What:** Track and resolve approved costs for not-covered sites.
-**Scope:**
-- New DB table: `cost_recovery_log` (source_mmp_id, source_site_id, cost_amount, decision, target_mmp_id, target_site_id, resolved_by, resolved_at, justification, repayment_status)
-- When a site is marked `not_covered` AND has associated approved costs → trigger resolution dialog
-- Build resolution dialog with three options (Roll / Return / Write-Off)
-- Roll option: query eligible MMPs (same state + same collector + active/draft)
-- New checklist gate in `useCycleCloseReadiness.ts`
-- Exceptions tab: show all not-covered sites with unresolved costs
+### Phase C — WFP Data Confirmation Tab (4–5 days)
+**Scope:** Upload WFP cleaned Excel, match, apply results.
+- Create `wfp_confirmation_uploads` and `wfp_match_results` tables
+- Build WFP Confirmation tab on Cycle Close page
+- File upload + xlsx.js parsing (reuse existing MMP upload engine)
+- Column mapping with synonym system (same pattern as MMP upload)
+- Three-tier matching logic
+- Weak/fuzzy match manual review UI
+- Bulk "Apply Results" action
+- Add `confirmed` and `rejected` statuses to all status displays
+- Add "Section A — Rejected Sites" to Exceptions tab
+- Add History tab
 
-**Effort:** Medium — 3–4 days
-
----
-
-### Phase C — WFP Data Confirmation (XLS Upload + Matching)
-**What:** Upload WFP cleaned data file and auto-match against cycle sites.
-**Scope:**
-- New "WFP Confirmation" tab on Cycle Close page
-- File upload using existing xlsx.js parser
-- Column mapping using flexible synonym system (same pattern as MMP upload)
-- Three-tier matching: Strong (auto) / Weak (manual review) / No match (rejected)
-- Anomaly detection: WFP rows with no PACT site
-- Bulk status update: `submitted → confirmed` or `submitted → rejected`
-- Manual override for weak/fuzzy matches with admin note
-- Exceptions tab: show all `rejected` sites with resolution options
-
-**Effort:** Medium-Large — 4–5 days
+**Pages touched:** Cycle Close (new WFP Confirmation tab, Exceptions tab, History tab), Enumerator view
+**Can deploy independently:** Yes (after Phase A)
 
 ---
 
-### Phase D — Roll-to-Next-MMP Full Flow
-**What:** Complete the pre-allocated advance flow when rolling money forward.
-**Scope:**
-- Eligibility query: available MMPs for same state + same data collector
-- Link rolled cost to target MMP as pre-approved advance (no new request needed)
+### Phase D — Roll-to-Next-MMP Full Flow (3 days)
+**Scope:** Complete the pre-allocated advance flow.
+- Eligibility query: active MMPs matching same state + collector
+- Auto-add site to target MMP if not present (with warning)
+- Mark cost as pre-approved in target MMP down-payment view
 - Notify supervisor and enumerator of the roll-over
-- Show pre-allocated amounts in target MMP's finance view
-- Badge on target MMP: "Includes rolled-over advance from [cycle]"
+- Show rolled-from badge in target MMP finance view
 
-**Effort:** Medium — 3 days
-
----
-
-### Suggested Build Order
-```
-Phase A → Phase B → Phase C → Phase D
-  │           │          │         │
-  Week 1    Week 1-2   Week 2-3  Week 3-4
-```
-
-Phase A can go live immediately. Each phase is independently deployable.
+**Pages touched:** Down-Payment Approval, Cycle Close Exceptions tab
+**Can deploy independently:** Yes (after Phase B)
 
 ---
 
-*Document is live — updated as decisions are finalized. Implementation begins after owner approval.*
+### Suggested Order and Timeline
+```
+Week 1:   Phase A (status rename)        — 1 day
+Week 1-2: Phase B (cost recovery gate)   — 3-4 days
+Week 2-3: Phase C (WFP confirmation)     — 4-5 days
+Week 3-4: Phase D (roll-to-next-MMP)     — 3 days
+```
+
+Each phase is independently deployable. Phase A should go live first as it has zero risk and unblocks everything else visually.
+
+---
+
+## PART 5 — IN-PAGE GUIDES
+
+Each new section/tab will have a "How this works" collapsible guide. Here are the exact texts:
+
+**Cycle Close page (top of page):**
+> "The cycle close process has two phases. Phase 1 is the Pre-Close Checklist — all gates must pass before closing. Phase 2 is WFP Confirmation — upload the cleaned data file from WFP to verify which sites were actually received. You can close the cycle after Phase 1 and handle Phase 2 afterwards, but Phase 2 is required for full accountability."
+
+**WFP Confirmation tab:**
+> "Upload the cleaned data Excel file that WFP sends after processing ODK submissions (e.g., 'February_2026_cleaned_data_PACT.xlsx'). The system matches sites using the site name, state, and locality columns. Strong matches are confirmed automatically. Amber rows need your review — confirm or reject each one. Red rows (no match) will be moved to Exceptions. Once you are satisfied, click 'Apply Results' to update all site statuses."
+
+**Exceptions tab:**
+> "This tab tracks all unresolved issues from this cycle. It does not block the cycle from being closed, but every item here should be resolved before the next cycle begins. Rejected sites need evidence or acceptance. Not-covered cost resolutions track how approved money was handled. Disputed costs require Finance sign-off."
+
+**Cost Recovery Dialog:**
+> "This site was not visited but has an approved payment. Choose how to handle the funds: roll them to the same enumerator's next assignment in the same state, require a return, or write off the amount with justification. All decisions are recorded and visible to Finance."
+
+---
+
+*This document is the single source of truth for this feature set. Implementation begins on Phase A after owner approval.*
