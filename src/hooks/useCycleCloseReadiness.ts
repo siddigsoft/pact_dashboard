@@ -63,9 +63,9 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
 
       const [siteVisitsRes, costSubsRes, advancesRes, withdrawalsRes] = await Promise.all([
         supabase
-          .from('site_visits')
+          .from('mmp_site_entries')
           .select('id, status, not_covered_flag, not_covered_reason')
-          .eq('mmp_id', mmpId),
+          .eq('mmp_file_id', mmpId),
         costSubsQuery,
         supabase
           .from('down_payment_requests')
@@ -85,11 +85,22 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
 
       const siteVisits = siteVisitsRes.data || [];
       const totalSites = siteVisits.length;
+      // Phase A: 'completed' renamed to 'submitted'; 'wfp_confirmed' and 'not_covered' added.
+      // All of these count as resolved for the Pre-Close Checklist gate.
+      const RESOLVED_STATUSES = new Set([
+        'submitted',      // enumerator self-reported (Phase A)
+        'wfp_confirmed',  // WFP confirmed (Phase C)
+        'rejected',       // WFP rejected — still needs resolution but counts as processed
+        'not_covered',    // officially not visited
+        'approved',       // legacy
+        'cancelled',      // cancelled during close
+        'completed',      // legacy pre-Phase A records
+        'verified',       // legacy permit-verified
+      ]);
+
       const resolvedSites = siteVisits.filter(
         (s: { status: string; not_covered_flag: boolean | null; not_covered_reason: string | null }) =>
-          s.status === 'completed' ||
-          s.status === 'approved' ||
-          s.status === 'cancelled' ||
+          RESOLVED_STATUSES.has((s.status ?? '').toLowerCase().trim()) ||
           s.not_covered_flag === true ||
           Boolean(s.not_covered_reason),
       ).length;

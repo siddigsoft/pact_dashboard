@@ -270,9 +270,9 @@ const MMPCycleClose = () => {
       }
 
       let query = supabase
-        .from('site_visits')
-        .select('id, site_name, site_code, state, locality, status, mmp_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
-        .in('mmp_id', mmpIds);
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
+        .in('mmp_file_id', mmpIds);
 
       if (closingMmps.length > 0) {
         query = query.eq('not_covered_flag', true);
@@ -285,7 +285,8 @@ const MMPCycleClose = () => {
       if (error) throw error;
 
       const sites: UncoveredSite[] = (data || []).map(s => {
-        const mmp = mmpFiles?.find(m => m.id === s.mmp_id);
+        const mmpFileId = (s as any).mmp_file_id;
+        const mmp = mmpFiles?.find(m => m.id === mmpFileId);
         return {
           id: s.id,
           site_name: s.site_name,
@@ -293,7 +294,7 @@ const MMPCycleClose = () => {
           state: s.state || '',
           locality: s.locality || '',
           status: s.status,
-          mmp_id: s.mmp_id || '',
+          mmp_id: mmpFileId || '',
           mmp_name: mmp?.name || 'Unknown MMP',
           hub: mmp?.hub || mmp?.region || '',
           not_covered_reason: s.not_covered_reason as NotCoveredReason | null,
@@ -339,16 +340,20 @@ const MMPCycleClose = () => {
       if (records.length > 0) {
         const cycleIds = records.map(r => r.id);
         const { data: siteStats } = await supabase
-          .from('site_visits')
-          .select('mmp_id, status, not_covered_flag, not_covered_reason')
-          .in('mmp_id', cycleIds);
+          .from('mmp_site_entries')
+          .select('mmp_file_id, status, not_covered_flag, not_covered_reason')
+          .in('mmp_file_id', cycleIds);
 
         if (siteStats) {
           records.forEach(r => {
-            const cycleSites = siteStats.filter(s => s.mmp_id === r.id);
+            const cycleSites = siteStats.filter((s: any) => s.mmp_file_id === r.id);
             r.totalSites = cycleSites.length;
-            r.uncoveredSites = cycleSites.filter(s => s.not_covered_flag).length;
-            r.completedSites = cycleSites.filter(s => s.status === 'completed').length;
+            r.uncoveredSites = cycleSites.filter((s: any) => s.not_covered_flag).length;
+            // Phase A: count submitted + wfp_confirmed + completed (legacy) as covered
+            r.completedSites = cycleSites.filter((s: any) => {
+              const st = (s.status ?? '').toLowerCase().trim();
+              return st === 'submitted' || st === 'wfp_confirmed' || st === 'completed' || st === 'verified';
+            }).length;
             r.reasonBreakdown = {};
             cycleSites.filter(s => s.not_covered_flag && s.not_covered_reason).forEach(s => {
               r.reasonBreakdown![s.not_covered_reason!] = (r.reasonBreakdown![s.not_covered_reason!] || 0) + 1;
@@ -466,18 +471,19 @@ const MMPCycleClose = () => {
         return;
       }
 
+      // Phase A: site_visits table is dropped — mark not_covered directly on mmp_site_entries
       const { data: matchedVisits } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .select('id')
-        .eq('mmp_id', mmpId)
-        .in('mmp_site_entry_id', siteEntryIds)
+        .eq('mmp_file_id', mmpId)
+        .in('id', siteEntryIds)
         .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
 
       const visitIds = (matchedVisits || []).map((v: any) => v.id);
 
       if (visitIds.length > 0) {
         const { error: svError } = await supabase
-          .from('site_visits')
+          .from('mmp_site_entries')
           .update({ not_covered_flag: true } as any)
           .in('id', visitIds);
         if (svError) throw svError;
@@ -575,20 +581,22 @@ const MMPCycleClose = () => {
       if (mmpIds.length === 0) return;
       try {
         const { data } = await supabase
-          .from('site_visits')
-          .select('mmp_id, status')
-          .in('mmp_id', mmpIds);
+          .from('mmp_site_entries')
+          .select('mmp_file_id, status')
+          .in('mmp_file_id', mmpIds);
         if (data) {
           const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }> = {};
-          data.forEach(sv => {
-            const mid = sv.mmp_id;
+          data.forEach((sv: any) => {
+            const mid = sv.mmp_file_id;
             if (!mid) return;
             if (!counts[mid]) counts[mid] = { total: 0, completed: 0, pending: 0, assigned: 0, dispatched: 0 };
             counts[mid].total++;
-            if (sv.status === 'completed') counts[mid].completed++;
-            else if (sv.status === 'pending') counts[mid].pending++;
-            else if (sv.status === 'assigned') counts[mid].assigned++;
-            else if (sv.status === 'dispatched') counts[mid].dispatched++;
+            const st = (sv.status ?? '').toLowerCase().trim();
+            // Phase A: 'submitted' and 'wfp_confirmed' both count as covered
+            if (st === 'submitted' || st === 'wfp_confirmed' || st === 'completed' || st === 'verified') counts[mid].completed++;
+            else if (st === 'pending') counts[mid].pending++;
+            else if (st === 'assigned') counts[mid].assigned++;
+            else if (st === 'dispatched') counts[mid].dispatched++;
           });
           setSiteVisitCounts(counts);
         }
@@ -609,14 +617,14 @@ const MMPCycleClose = () => {
     const fetchQualityData = async () => {
       try {
         const { data } = await supabase
-          .from('site_visits')
-          .select('mmp_id, additional_data');
+          .from('mmp_site_entries')
+          .select('mmp_file_id, additional_data');
         if (data && data.length > 0) {
           const hubScores: Record<string, { total: number; count: number }> = {};
           data.forEach((s: any) => {
             const qualityScore = Number(s?.additional_data?.quality_score);
             if (!Number.isFinite(qualityScore)) return;
-            const mmp = mmpFiles?.find(m => m.id === s.mmp_id);
+            const mmp = mmpFiles?.find(m => m.id === s.mmp_file_id);
             const hub = mmp?.hub || mmp?.region || 'Unknown';
             if (!hubScores[hub]) hubScores[hub] = { total: 0, count: 0 };
             hubScores[hub].total += qualityScore;
@@ -683,9 +691,9 @@ const MMPCycleClose = () => {
     setClosingCycle(true);
     try {
       const { data: affectedVisits } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .select('id')
-        .eq('mmp_id', mmpId)
+        .eq('mmp_file_id', mmpId)
         .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
 
       const affectedCount = affectedVisits?.length || 0;
@@ -718,9 +726,9 @@ const MMPCycleClose = () => {
       if (error) throw error;
 
       const { error: svError } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .update({ not_covered_flag: true } as any)
-        .eq('mmp_id', mmpId)
+        .eq('mmp_file_id', mmpId)
         .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
 
       if (svError) throw svError;
@@ -845,7 +853,7 @@ const MMPCycleClose = () => {
       };
 
       const { error } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .update(updateData)
         .eq('id', siteId);
 
@@ -943,7 +951,7 @@ const MMPCycleClose = () => {
       };
 
       const { error } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .update(updateData)
         .in('id', siteIds);
 
@@ -1194,9 +1202,9 @@ const MMPCycleClose = () => {
       if (error) throw error;
 
       await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .update({ status: 'cancelled' })
-        .eq('mmp_id', mmpId)
+        .eq('mmp_file_id', mmpId)
         .eq('not_covered_flag', true)
         .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
 

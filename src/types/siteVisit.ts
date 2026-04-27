@@ -3,7 +3,7 @@ export interface SiteVisit {
   name?: string;
   siteName: string;
   siteCode: string;
-  status: 'pending' | 'completed' | 'cancelled' | 'permitVerified' | 'assigned' | 'inProgress' | 'canceled' | 'dispatched' | 'accepted';
+  status: 'pending' | 'submitted' | 'cancelled' | 'permitVerified' | 'assigned' | 'inProgress' | 'canceled' | 'dispatched' | 'accepted' | 'wfp_confirmed' | 'rejected' | 'not_covered' | 'completed';
   locality: string;
   state: string;
   activity: string;
