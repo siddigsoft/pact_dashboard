@@ -83,6 +83,11 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
     in_progress: 'bg-blue-50/80 dark:bg-blue-900/15 border-blue-100 dark:border-blue-900/30',
     pending: 'bg-muted/50 border-border',
   };
+  const statusRowOverrides: Record<string, string> = {
+    submitted: 'bg-indigo-50/80 dark:bg-indigo-900/15 border-indigo-100 dark:border-indigo-900/30',
+    wfp_confirmed: 'bg-cyan-50/80 dark:bg-cyan-900/15 border-cyan-100 dark:border-cyan-900/30',
+    not_covered: 'bg-orange-50/80 dark:bg-orange-900/15 border-orange-100 dark:border-orange-900/30',
+  };
   const badgeColors: Record<string, string> = {
     verified: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     returned: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
@@ -90,6 +95,13 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
     in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
     pending: 'bg-muted text-muted-foreground',
   };
+  const statusBadgeOverrides: Record<string, string> = {
+    submitted: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+    wfp_confirmed: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+    not_covered: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  };
+  const rowColor = statusRowOverrides[site.status] ?? categoryColors[site.statusCategory] ?? 'bg-muted/50 border-border';
+  const badgeColor = statusBadgeOverrides[site.status] ?? badgeColors[site.statusCategory] ?? 'bg-muted text-muted-foreground';
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
@@ -109,12 +121,12 @@ function SiteDetailRow({ site, userNames, advance, onRequestFund, onEditFund }: 
   const advanceCfg = advance ? ADVANCE_STATUS_CONFIG[advance.status] : null;
 
   return (
-    <div className={`flex items-start gap-2 p-1.5 rounded border text-xs ${categoryColors[site.statusCategory]}`}>
+    <div className={`flex items-start gap-2 p-1.5 rounded border text-xs ${rowColor}`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium">{site.name}</span>
           {site.siteCode && <span className="text-muted-foreground">({site.siteCode})</span>}
-          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${badgeColors[site.statusCategory]}`}>
+          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${badgeColor}`}>
             {site.statusLabel}
           </Badge>
           {advance && advanceCfg ? (
@@ -379,6 +391,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       'verified', 'approved', 'approved and costed', 'costed',
       'dispatched', 'completed', 'partially_paid', 'fully_paid',
       'pending_admin', 'pending_supervisor',
+      'submitted', 'wfp_confirmed', 'not_covered',
     ]);
     const returnedStatuses = new Set([
       'returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom',
@@ -415,6 +428,9 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
       forwarded_to_fom: 'With FOM',
       forwarded_to_coordinator: 'With Coordinator',
       forwarded_to_coordinators: 'With Coordinators',
+      submitted: 'Submitted',
+      wfp_confirmed: 'WFP Confirmed',
+      not_covered: 'Not Covered',
       pending: 'Pending',
     };
 

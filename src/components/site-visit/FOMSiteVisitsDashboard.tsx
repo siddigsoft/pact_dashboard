@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SiteVisit } from '@/types';
 import { MapPin, Clock, CheckCircle, AlertCircle, CalendarClock, AlertTriangle, ChevronRight } from 'lucide-react';
 import { isOverdue } from '@/utils/siteVisitUtils';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { sudanStates } from '@/data/sudanStates';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from 'react-router-dom';
@@ -48,7 +49,7 @@ const FOMSiteVisitsDashboard: FC<FOMSiteVisitsDashboardProps> = ({ visits }) => 
         total: stateVisits.length,
         pending: stateVisits.filter(v => v.status?.toLowerCase() === 'pending').length,
         inProgress: stateVisits.filter(v => v.status?.toLowerCase() === 'inprogress' || v.status?.toLowerCase() === 'in_progress').length,
-        completed: stateVisits.filter(v => v.status?.toLowerCase() === 'completed').length,
+        completed: stateVisits.filter(v => isTerminalCompletionRawStatus(v.status?.toLowerCase() || '')).length,
         assigned: stateVisits.filter(v => v.status?.toLowerCase() === 'assigned').length,
         scheduled: stateVisits.filter(v => ['assigned', 'permitverified'].includes(v.status?.toLowerCase() || '')).length,
         overdue: stateVisits.filter(v => isOverdue(v.dueDate, v.status)).length,
@@ -154,7 +155,7 @@ const FOMSiteVisitsDashboard: FC<FOMSiteVisitsDashboardProps> = ({ visits }) => 
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Completed</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {visits.filter(v => v.status?.toLowerCase() === 'completed').length}
+                  {visits.filter(v => isTerminalCompletionRawStatus(v.status?.toLowerCase() || '')).length}
                 </p>
               </div>
               <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
