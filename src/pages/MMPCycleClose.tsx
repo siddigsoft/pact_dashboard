@@ -327,7 +327,8 @@ const MMPCycleClose = () => {
       let query = supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
-        .in('mmp_file_id', mmpIds);
+        .in('mmp_file_id', mmpIds)
+        .limit(10000);
 
       if (closingMmps.length > 0) {
         query = query.eq('not_covered_flag', true);
@@ -377,7 +378,8 @@ const MMPCycleClose = () => {
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, mmp_file_id, accepted_by, not_covered_reason')
         .eq('mmp_file_id', mmpId)
-        .or('not_covered_flag.eq.true,status.eq.not_covered');
+        .or('not_covered_flag.eq.true,status.eq.not_covered')
+        .limit(10000);
 
       if (ncErr) throw ncErr;
       if (!notCoveredEntries || notCoveredEntries.length === 0) {
@@ -497,7 +499,8 @@ const MMPCycleClose = () => {
             const { data: sites } = await supabase
               .from('mmp_site_entries')
               .select('id, site_name, site_code, state, locality')
-              .in('id', siteIds);
+              .in('id', siteIds)
+              .limit(10000);
             (sites || []).forEach((s: any) => { siteMap[s.id] = s; });
           }
 
@@ -558,7 +561,8 @@ const MMPCycleClose = () => {
       const { data: siteEntries } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality')
-        .eq('mmp_file_id', mmpId);
+        .eq('mmp_file_id', mmpId)
+        .limit(10000);
 
       const sites = (siteEntries || []) as { id: string; site_name: string; site_code: string | null; state: string | null; locality: string | null }[];
 
@@ -766,7 +770,8 @@ const MMPCycleClose = () => {
         const { data: siteStats } = await supabase
           .from('mmp_site_entries')
           .select('mmp_file_id, status, not_covered_flag, not_covered_reason')
-          .in('mmp_file_id', cycleIds);
+          .in('mmp_file_id', cycleIds)
+          .limit(10000);
 
         if (siteStats) {
           records.forEach(r => {
@@ -797,7 +802,8 @@ const MMPCycleClose = () => {
       const { data: entries } = await supabase
         .from('mmp_site_entries')
         .select('hub_office, state, main_activity, activity_at_site')
-        .eq('mmp_file_id', mmpId);
+        .eq('mmp_file_id', mmpId)
+        .limit(10000);
 
       const hubs = new Set<string>();
       const states = new Set<string>();
@@ -855,14 +861,16 @@ const MMPCycleClose = () => {
           .from('mmp_site_entries')
           .select('id')
           .eq('mmp_file_id', mmpId)
-          .eq('hub_office', scopeValue);
+          .eq('hub_office', scopeValue)
+          .limit(10000);
         siteEntryIds = (entries || []).map((e: any) => e.id);
       } else if (scope === 'state') {
         const { data: entries } = await supabase
           .from('mmp_site_entries')
           .select('id')
           .eq('mmp_file_id', mmpId)
-          .eq('state', scopeValue);
+          .eq('state', scopeValue)
+          .limit(10000);
         siteEntryIds = (entries || []).map((e: any) => e.id);
       } else if (scope === 'activity') {
         let activityName = scopeValue;
@@ -885,7 +893,7 @@ const MMPCycleClose = () => {
         if (subFilterField && subFilterValue) {
           query = query.eq(subFilterField, subFilterValue);
         }
-        const { data: entries } = await query;
+        const { data: entries } = await query.limit(10000);
         siteEntryIds = (entries || []).map((e: any) => e.id);
       }
 
@@ -901,7 +909,8 @@ const MMPCycleClose = () => {
         .select('id')
         .eq('mmp_file_id', mmpId)
         .in('id', siteEntryIds)
-        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+        .in('status', ['pending', 'assigned', 'dispatched', 'accepted'])
+        .limit(10000);
 
       const visitIds = (matchedVisits || []).map((v: any) => v.id);
 
@@ -1007,7 +1016,8 @@ const MMPCycleClose = () => {
         const { data } = await supabase
           .from('mmp_site_entries')
           .select('mmp_file_id, status')
-          .in('mmp_file_id', mmpIds);
+          .in('mmp_file_id', mmpIds)
+          .limit(10000);
         if (data) {
           const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }> = {};
           data.forEach((sv: any) => {
@@ -1042,7 +1052,8 @@ const MMPCycleClose = () => {
       try {
         const { data } = await supabase
           .from('mmp_site_entries')
-          .select('mmp_file_id, additional_data');
+          .select('mmp_file_id, additional_data')
+          .limit(10000);
         if (data && data.length > 0) {
           const hubScores: Record<string, { total: number; count: number }> = {};
           data.forEach((s: any) => {
@@ -1118,7 +1129,8 @@ const MMPCycleClose = () => {
         .from('mmp_site_entries')
         .select('id')
         .eq('mmp_file_id', mmpId)
-        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+        .in('status', ['pending', 'assigned', 'dispatched', 'accepted'])
+        .limit(10000);
 
       const affectedCount = affectedVisits?.length || 0;
 

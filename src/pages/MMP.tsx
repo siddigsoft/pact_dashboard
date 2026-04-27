@@ -1915,7 +1915,7 @@ const MMP = () => {
               .select('*')
               .eq('accepted_by', currentUser.id)
               .order('created_at', { ascending: false })
-              .limit(1000);
+              .limit(10000);
 
             if (!mySitesError && mySitesData) {
               const excludeStatuses = new Set(['rejected']);
@@ -2305,7 +2305,7 @@ const MMP = () => {
         
         const { data: dispatchedSites, error } = await query
           .order('created_at', { ascending: false })
-          .limit(500);
+          .limit(10000);
 
         if (error) {
           console.error('[MMP Direct Load] DB Error:', error);
@@ -2369,7 +2369,7 @@ const MMP = () => {
           .eq('accepted_by', currentUser.id)
           .or('status.is.null,status.not.in.("Rejected","rejected")')
           .order('created_at', { ascending: false })
-          .limit(1000);
+          .limit(10000);
 
         const mySitesData: any[] = acceptedData || [];
 

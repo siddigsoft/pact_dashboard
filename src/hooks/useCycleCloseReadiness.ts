@@ -86,7 +86,8 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         supabase
           .from('mmp_site_entries')
           .select('id, status, not_covered_flag, not_covered_reason')
-          .eq('mmp_file_id', mmpId),
+          .eq('mmp_file_id', mmpId)
+          .limit(10000),
         costSubsQuery,
         supabase
           .from('down_payment_requests')

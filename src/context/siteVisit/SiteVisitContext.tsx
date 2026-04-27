@@ -660,13 +660,15 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             .from('mmp_site_entries')
             .select('id')
             .eq('hub_office', hubId)
-            .eq('main_activity', activityName);
+            .eq('main_activity', activityName)
+            .limit(10000);
           
           const { data: totalByActivityAtSite } = await supabase
             .from('mmp_site_entries')
             .select('id')
             .eq('hub_office', hubId)
-            .eq('activity_at_site', activityName);
+            .eq('activity_at_site', activityName)
+            .limit(10000);
           
           // Merge and deduplicate
           const allIds = new Set([
@@ -681,14 +683,16 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             .select('id')
             .eq('hub_office', hubId)
             .eq('main_activity', activityName)
-            .eq('status', 'completed');
+            .eq('status', 'completed')
+            .limit(10000);
           
           const { data: completedByActivityAtSite } = await supabase
             .from('mmp_site_entries')
             .select('id')
             .eq('hub_office', hubId)
             .eq('activity_at_site', activityName)
-            .eq('status', 'completed');
+            .eq('status', 'completed')
+            .limit(10000);
           
           const completedIds = new Set([
             ...(completedByMainActivity || []).map(s => s.id),

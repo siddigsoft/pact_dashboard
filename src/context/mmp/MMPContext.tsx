@@ -177,7 +177,8 @@ export const useMMPProvider = () => {
               .from('mmp_site_entries')
               .select('id, site_code, hub_office, state, locality, site_name, cp_name, visit_type, visit_date, main_activity, activity_at_site, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, comments, cost, enumerator_fee, transport_fee, verified_by, verified_at, verification_notes, dispatched_by, dispatched_at, accepted_by, accepted_at, cost_acknowledged, additional_data, status, forwarded_to_user_id, mmp_file_id, created_at')
               .eq('mmp_file_id', mmpId)
-              .order('created_at', { ascending: true });
+              .order('created_at', { ascending: true })
+              .limit(10000);
 
             if (error) {
               console.error('Background load error for MMP:', mmpId, error);
