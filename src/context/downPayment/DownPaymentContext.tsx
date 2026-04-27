@@ -723,19 +723,28 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       if (!request) throw new Error('Request not found');
 
       // Fetch or create wallet — advance does NOT change balance (it is deducted from the site visit fee at completion)
+      // NOTE: Use .limit(1) everywhere before .maybeSingle() / .single() to guard against
+      // duplicate wallet rows (e.g. from a DB trigger) causing "Cannot coerce the result
+      // to a single JSON object" (PostgREST PGRST100).
       let walletData: any;
-      const { data: existingWallet, error: walletError } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', request.requestedBy)
-        .maybeSingle();
 
-      if (walletError) throw walletError;
+      const fetchWallet = async () => {
+        const { data: rows, error } = await supabase
+          .from('wallets')
+          .select('*')
+          .eq('user_id', request.requestedBy)
+          .order('created_at', { ascending: true })
+          .limit(1);
+        if (error) throw error;
+        return rows?.[0] ?? null;
+      };
+
+      const existingWallet = await fetchWallet();
 
       if (!existingWallet) {
         // Try direct INSERT first; if RLS blocks it (admin creating for another user)
         // fall back to the SECURITY DEFINER RPC which bypasses the policy safely.
-        const { data: newWallet, error: createError } = await supabase
+        const { data: newWalletRows, error: createError } = await supabase
           .from('wallets')
           .insert({
             user_id: request.requestedBy,
@@ -747,8 +756,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
             balances: { SDG: 0 },
             total_earned: 0,
           })
-          .select()
-          .single();
+          .select();
 
         if (createError) {
           // RLS violation → use admin RPC
@@ -757,22 +765,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
               target_user_id: request.requestedBy,
             });
             if (rpcError) throw new Error(`Wallet creation failed: ${rpcError.message}`);
-            const { data: rpcWallet, error: refetchError } = await supabase
-              .from('wallets')
-              .select('*')
-              .eq('user_id', request.requestedBy)
-              .single();
-            if (refetchError) throw refetchError;
-            walletData = rpcWallet;
+            walletData = await fetchWallet();
+            if (!walletData) throw new Error('Wallet still not found after RPC creation');
           } else {
             throw createError;
           }
         } else {
-          walletData = newWallet;
+          walletData = Array.isArray(newWalletRows) ? newWalletRows[0] : newWalletRows;
         }
       } else {
         walletData = existingWallet;
       }
+
+      if (!walletData) throw new Error('Could not load wallet for this user');
 
       // Balance is unchanged — advance is a pre-payment deducted from the site visit fee
       const currentBalance = Number(walletData.balances?.['SDG'] ?? 0);
@@ -793,7 +798,9 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       if (request.mmpSiteEntryId) advanceMetadata.mmp_site_entry_id = request.mmpSiteEntryId;
 
       const projectLabel = request.projectName || 'WFP TPM';
-      const { data: transactionData, error: transactionError } = await supabase
+      // Use .select() without .single() — a DB trigger on wallet_transactions may produce
+      // extra rows, which causes PGRST100 ("Cannot coerce the result to a single JSON object").
+      const { data: transactionRows, error: transactionError } = await supabase
         .from('wallet_transactions')
         .insert({
           wallet_id: walletData.id,
@@ -808,10 +815,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           created_by: data.processedBy,
           metadata: advanceMetadata,
         })
-        .select()
-        .single();
+        .select();
 
       if (transactionError) throw transactionError;
+      const transactionData = Array.isArray(transactionRows) ? transactionRows[0] : transactionRows;
+      if (!transactionData) throw new Error('Failed to record wallet transaction');
 
       const newPaidAmount = request.totalPaidAmount + data.amount;
       const effectiveApprovedAmount = request.approvedAmount || request.requestedAmount;
