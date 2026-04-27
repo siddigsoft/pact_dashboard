@@ -733,13 +733,43 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       if (walletError) throw walletError;
 
       if (!existingWallet) {
+        // Try direct INSERT first; if RLS blocks it (admin creating for another user)
+        // fall back to the SECURITY DEFINER RPC which bypasses the policy safely.
         const { data: newWallet, error: createError } = await supabase
           .from('wallets')
-          .insert({ user_id: request.requestedBy, balances: { SDG: 0 }, total_earned: 0 })
+          .insert({
+            user_id: request.requestedBy,
+            currency: 'SDG',
+            balance_cents: 0,
+            total_earned_cents: 0,
+            total_paid_out_cents: 0,
+            pending_payout_cents: 0,
+            balances: { SDG: 0 },
+            total_earned: 0,
+          })
           .select()
           .single();
-        if (createError) throw createError;
-        walletData = newWallet;
+
+        if (createError) {
+          // RLS violation → use admin RPC
+          if (createError.code === '42501' || createError.message?.includes('row-level security')) {
+            const { error: rpcError } = await supabase.rpc('create_wallet_for_user', {
+              target_user_id: request.requestedBy,
+            });
+            if (rpcError) throw new Error(`Wallet creation failed: ${rpcError.message}`);
+            const { data: rpcWallet, error: refetchError } = await supabase
+              .from('wallets')
+              .select('*')
+              .eq('user_id', request.requestedBy)
+              .single();
+            if (refetchError) throw refetchError;
+            walletData = rpcWallet;
+          } else {
+            throw createError;
+          }
+        } else {
+          walletData = newWallet;
+        }
       } else {
         walletData = existingWallet;
       }
