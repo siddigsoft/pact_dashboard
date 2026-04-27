@@ -757,6 +757,280 @@ Each phase is independently deployable. Phase A goes first — it creates the sh
 
 ---
 
+## PART 4B — DEEP REVIEW: GAPS, ISSUES & ENHANCEMENTS
+
+*This section documents a full codebase review conducted before build start. Every issue below is resolved and incorporated into the build phases above.*
+
+---
+
+### GAP 1 — Wrong Table Name Throughout (CRITICAL)
+**Found:** The plan says `site_visits` in several places.
+**Reality:** The `site_visits` table was dropped in migration `20250125_drop_site_visits_table.sql`. The real table is `mmp_site_entries`.
+**Fix:** All SQL migration statements in this plan now use `mmp_site_entries`. Every code reference must use `mmp_site_entries`.
+
+---
+
+### GAP 2 — `visit_status` Table Already Exists (CRITICAL — DO NOT CREATE DUPLICATE)
+**Found:** The plan proposes creating a new `site_visit_status_log` table.
+**Reality:** A `visit_status` table already exists in `supabase/schema.sql` (line 430) with columns: `id`, `site_visit_id` (→ `mmp_site_entries.id`), `status`, `updated_at`, `updated_by`, `is_synced`, `last_modified`.
+**Fix:** Do NOT create a separate `site_visit_status_log`. Instead:
+- **Extend** `visit_status` by adding columns: `old_status`, `change_source`, `note`, `mmp_id`, `mmp_name`, `site_name`, `changed_by_name`, `changed_by_role`
+- The existing `updated_by` = `changed_by`, `updated_at` = `changed_at`, `status` = `new_status`
+- Rename in plan: everywhere `site_visit_status_log` appears → `visit_status` (extended)
+- This preserves existing data and mobile sync (`sync_status_indicator.dart` line 392 already handles `visit_status`)
+
+---
+
+### GAP 3 — Mixed-Case Status Values in Database (CRITICAL)
+**Found:** The database stores status values in inconsistent case: `Pending`, `Dispatched`, `Assigned`, `Completed`, `verified`, `Rejected`, `In Progress`.
+**Reality:** Most code already uses `LOWER(status)` comparisons (see `claim_site_visit` RPC).
+**Fix:**
+- Migration SQL must use: `WHERE LOWER(status) = 'completed'` not `WHERE status = 'completed'`
+- After migration, normalize ALL status values to lowercase as part of Phase A
+- Add SQL: `UPDATE mmp_site_entries SET status = LOWER(TRIM(status));`
+- After normalization, all new status values are lowercase: `submitted`, `confirmed`, `rejected`
+
+---
+
+### GAP 4 — `siteCompletionStatus.ts` Will Break (HIGH)
+**Found:** `src/utils/siteCompletionStatus.ts` defines terminal completion statuses as `['completed', 'verified']` for raw DB and `['completed', 'permitVerified']` for app layer.
+**Impact:** After renaming `completed` → `submitted`, coverage stats, analytics, and any "is this done?" check will break — sites will appear uncovered even after enumerators submit.
+**Fix in Phase A:**
+```typescript
+// TERMINAL_COMPLETION_RAW_STATUSES becomes:
+new Set(['submitted', 'confirmed', 'verified'])
+
+// TERMINAL_COMPLETION_APP_STATUSES becomes:
+new Set(['submitted', 'confirmed', 'permitVerified'])
+```
+Both `submitted` and `confirmed` count as visited for analytics purposes.
+
+---
+
+### GAP 5 — `confirmation_status` Naming Confusion
+**Found:** `mmp_site_entries` has a separate column `confirmation_status` with values `pending`, `confirmed`, `auto_released`. This is for the 2-day claim confirmation window — NOT related to WFP confirmation.
+**Risk:** Calling our WFP-based status `confirmed` could confuse developers and future maintainers.
+**Fix (naming clarity):**
+- Rename the WFP confirmation status to `wfp_confirmed` in the DB column value BUT keep displaying it as "WFP Confirmed" in the UI
+- The `confirmation_status` column (claim confirmation) is completely separate and untouched
+- Add a code comment everywhere `status = 'wfp_confirmed'` clarifying the distinction
+- In this document: update all instances of `confirmed` status value → `wfp_confirmed`
+
+---
+
+### GAP 6 — `completed_at` Column Needs Handling
+**Found:** `mmp_site_entries` has a `completed_at` timestamptz column.
+**Impact:** When status changes from `completed` → `submitted`, `completed_at` contains the old "marked complete" timestamp. This column now semantically means "submitted_at".
+**Fix in Phase A:**
+- Rename column: `completed_at` → `submitted_at` (migration: `ALTER TABLE mmp_site_entries RENAME COLUMN completed_at TO submitted_at`)
+- Any code that reads `completed_at` must be updated to `submitted_at`
+- Add new column: `wfp_confirmed_at` timestamptz (set when status → `wfp_confirmed`)
+- Add new column: `wfp_rejected_at` timestamptz (set when status → `rejected`)
+
+---
+
+### GAP 7 — No RLS Policies Defined for New Tables
+**Found:** The plan creates 4 new tables but defines no Row Level Security policies.
+**Reality:** All Supabase tables need RLS or they are blocked to all users.
+**Fix — RLS policies for each new table:**
+
+`visit_status` (extended — existing policy is too permissive):
+- Enumerator: SELECT own records only (`updated_by = auth.uid()`)
+- Supervisor/Admin/Finance/Super Admin: SELECT all in their scope
+
+`payment_event_log` (new):
+- Enumerator: SELECT where `triggered_by = auth.uid()` OR `site_entry_id IN (their assigned sites)`
+- Admin/Finance/Super Admin: SELECT all
+- INSERT: service role only (via server-side functions) — no direct client inserts
+
+`cost_recovery_log` (new):
+- Supervisor: SELECT + INSERT (propose only)
+- Admin/Finance: SELECT + INSERT + UPDATE (full access)
+- Super Admin: full access
+- Enumerator: SELECT own records only (where source site was theirs)
+
+`wfp_confirmation_uploads` + `wfp_match_results` (new):
+- Admin/Super Admin: full access
+- Finance: SELECT only
+- Enumerator: no access
+
+---
+
+### GAP 8 — No Supabase Storage Bucket for WFP Files or Evidence
+**Found:** The plan handles WFP file uploads and enumerator evidence uploads but never defines where the files are stored.
+**Fix:** Two new Supabase Storage buckets are needed:
+- `wfp-confirmation-files` — admin uploads, private bucket, admin/super_admin access only
+- `site-submission-evidence` — enumerator evidence uploads (screenshots, references), private, accessible to enumerator + their supervisor + admin
+
+Add these to Phase A infrastructure setup.
+
+---
+
+### GAP 9 — Arabic / Bilingual Labels Missing from Plan
+**Found:** The system is fully bilingual (English + Arabic, with RTL support). The plan describes all new UI in English only.
+**Fix:** Every new label, badge, message, notification, and guide text needs an Arabic translation. This is added to each phase's scope:
+- Status badge labels: `submitted` → "مُقدَّم", `wfp_confirmed` → "مؤكد من WFP", `rejected` → "غير مؤكد"
+- Money Timeline events: all 20 event types need Arabic labels
+- Cost Recovery Dialog: all 3 options with Arabic text
+- Guide texts: all 4 guide texts need Arabic versions
+- Notifications: all new notification templates need Arabic variants
+
+---
+
+### GAP 10 — Mobile App Status: What Changes and What Doesn't
+**Found by user question:** "Will the mobile be affected or should we copy to local?"
+
+**Answer:** The Flutter mobile app (`PACT_mobile/`) IS in this repository. You do not need to copy anything — any file changes here are already local. Deployment to users happens via Shorebird OTA (over-the-air update) without app store submission.
+
+**What AUTOMATICALLY works** (database-driven, no Flutter code change needed):
+- New status values in the DB are just text strings — they flow through to mobile immediately
+- New tables (`payment_event_log`, `cost_recovery_log`) are readable by existing Supabase Flutter client
+
+**What NEEDS Flutter code changes:**
+1. Status display widgets — need cases for `submitted`, `wfp_confirmed`, `rejected` with correct colors and Arabic labels
+2. "Mark as Submitted" button — replaces "Mark as Completed" in field agent screens. Needs a guided checklist flow:
+   > "Before marking submitted, confirm: (1) Did you open ODK Collect? (2) Did you fill the form? (3) Did you press Submit in ODK? Then tap 'Mark as Submitted' below."
+3. **Money Timeline panel** — new widget showing `payment_event_log` entries for the enumerator's site
+4. **WFP Rejection badge** — when `status = 'rejected'`, show red "Not Confirmed by WFP" card with the explanation message
+5. **Offline handling** — the Hive cache (used for offline) stores site entry models. After Phase A migration, the cached `status` field will show `submitted` once synced. No Hive schema change needed — it's just a text string.
+6. **Sync** — `visit_status` is already in the sync engine (`sync_status_indicator.dart` line 392). Extended columns will sync automatically once added.
+
+**What is WEB ONLY (no Flutter needed):**
+- WFP file upload and matching
+- Cost Recovery Dialog (admin action)
+- Cycle Close page management
+- Exceptions tab
+- History tab
+- Write-off digital signature
+
+---
+
+### GAP 11 — Deduplication for WFP File Uploads
+**Found:** No protection against an admin uploading the same WFP file twice.
+**Risk:** If uploaded twice, all `submitted` sites would be double-confirmed, and the match results table would have duplicates.
+**Fix:** Before processing, check `wfp_confirmation_uploads` for:
+- Same `mmp_id` + same `filename` → warn: "A file with this name has already been uploaded for this cycle. Are you sure you want to upload again?"
+- Same `mmp_id` + status = `applied` → warn: "WFP confirmation has already been applied for this cycle. Uploading again will override the previous results."
+
+---
+
+### GAP 12 — What Happens to Transport Fee Submission Logic
+**Found:** `supabase/migrations/20251123_remove_transport_from_fee_structures.sql` (line 78) blocks transport fee submissions unless `status IN ('approved', 'approved_stage_one', 'approved_stage_two', 'completed', 'closed')`.
+**Impact:** After rename, a site in `submitted` status will NOT be able to have transport fees submitted — the old check won't match.
+**Fix in Phase A migration:** Update this check to include `submitted`, `wfp_confirmed`:
+```sql
+IF LOWER(visit_status) NOT IN ('approved', 'approved_stage_one', 'approved_stage_two',
+                                'completed', 'submitted', 'wfp_confirmed', 'closed') THEN
+```
+
+---
+
+### GAP 13 — Cycle Status Gating Not Fully Defined
+**Found:** The plan says "WFP Confirmation tab unlocks after Phase 1 passes." But the exact mechanism is not defined.
+**Fix:** The `mmp_files` table has a `cycle_status` column. Define the transition clearly:
+- `active` → `closing` (when admin initiates close, after Phase 1 checklist passes)
+- `closing` → `wfp_pending` (new intermediate state, after Phase 1 passed but before WFP upload)
+- `wfp_pending` → `wfp_reviewed` (after WFP file uploaded and results applied)
+- `wfp_reviewed` → `closed` (after all exceptions resolved or accepted)
+
+The WFP Confirmation tab is enabled when `cycle_status IN ('wfp_pending', 'wfp_reviewed', 'closed')`.
+
+---
+
+### GAP 14 — No Plan for Enumerator's ODK Reference Number Storage
+**Found:** The plan mentions the enumerator can "enter an ODK reference number as evidence" but there's no field or table for it.
+**Fix:** Add to `mmp_site_entries`:
+- `submitted_odk_reference` (text, nullable) — the ODK submission UUID entered by the enumerator
+- `submitted_evidence_urls` (text[], nullable) — URLs to uploaded screenshots in `site-submission-evidence` bucket
+
+These are set when the enumerator marks the site as `submitted`. Displayed in the Exceptions tab when a site is rejected (as evidence for the admin to review).
+
+---
+
+### GAP 15 — Repayment Overdue Escalation Missing from Notification Table
+**Found:** Section 2B.8 notification table mentions "Repayment overdue" but Phase B doesn't define the escalation schedule.
+**Fix:** Add to Phase B scope:
+- At deadline day: notify enumerator + finance (first warning)
+- At deadline + 7 days: notify admin (escalation)
+- At deadline + 14 days: notify super admin (critical escalation)
+- Use a Supabase Edge Function scheduled job (cron) to check daily
+
+---
+
+### GAP 16 — Money Trail Export / PDF Not in Build Phases
+**Found:** Section 2B mentions the History tab can "export to PDF/Excel" but no Phase explicitly builds this.
+**Fix:** Add to Phase C scope — export the full `visit_status` + `payment_event_log` audit trail for a selected cycle as:
+- Excel export (using existing xlsx library)
+- PDF export (using existing jspdf library)
+Available to: Admin, Finance, Super Admin only.
+
+---
+
+### GAP 17 — Bulk Resolution for Rejected Sites
+**Found:** The Exceptions tab shows rejected sites one by one. If 30 sites are rejected at once (from one WFP file upload), resolving them one by one is impractical.
+**Fix:** Add to Phase C scope — bulk actions on the Exceptions tab:
+- "Accept All Rejections" → marks all as `rejected_final` with one admin note for all
+- "Send Evidence Request to All" → sends one notification to each affected enumerator asking for ODK reference
+- Individual resolution still available for complex cases
+
+---
+
+### GAP 18 — "Mark as Submitted" Flow on Mobile Needs a Confirmation Step
+**Found:** Mobile enumerators might accidentally tap "Mark as Submitted" before actually sending to WFP.
+**Fix:** The mobile "Mark as Submitted" action must show a 3-step confirmation:
+1. "Have you opened ODK Collect on your phone?" [Yes / Not yet]
+2. "Have you filled all required questions in the form?" [Yes / Not yet]
+3. "Have you pressed the Submit button in ODK?" [Yes / Not yet]
+Only when all three are confirmed does the "Mark as Submitted" button become active. This checklist is the built-in accountability mechanism before self-reporting.
+
+---
+
+### ENHANCEMENT 1 — Confidence Score for WFP Matches
+Show a percentage confidence on each match result row. Strong match = 100%, weak match = 60–80%, fuzzy = 30–59%. Helps admin prioritize which weak matches to review first.
+
+### ENHANCEMENT 2 — Download WFP Match Results Report
+After applying WFP results, generate an Excel report with all match outcomes (confirmed, rejected, anomalies) that admin can download for their records and share with WFP.
+
+### ENHANCEMENT 3 — Bundled Rejection Notification to Enumerator
+Instead of one notification per rejected site, bundle all rejections from one WFP upload into a single WhatsApp/in-app message: "3 of your sites were not found in the WFP data: ALMATAR, OCTOBER, ALRAD. Contact your supervisor for next steps."
+
+### ENHANCEMENT 4 — Cross-Cycle Money Trail Navigation
+When an enumerator's Money Timeline shows a rolled-over payment from a previous cycle, clicking on it navigates to that cycle's site detail — so the full chain is traceable even across cycles.
+
+### ENHANCEMENT 5 — Super Admin Cycle Health Dashboard
+A single view for super admin showing, across ALL active cycles:
+- Total sites: submitted / wfp_confirmed / rejected / not_covered
+- Total money: approved / sent / under recovery / written off
+- Cycles ready for WFP upload vs. already confirmed
+This gives leadership a real-time accountability view without clicking into each cycle.
+
+---
+
+### SUMMARY — RESOLVED GAPS BY PHASE
+
+| Gap # | Issue | Fixed In |
+|---|---|---|
+| 1 | Wrong table name (`site_visits`) | Phase A |
+| 2 | `visit_status` already exists | Phase A — extend, don't recreate |
+| 3 | Mixed-case status values | Phase A — normalize to lowercase |
+| 4 | `siteCompletionStatus.ts` breaks | Phase A |
+| 5 | `confirmation_status` naming conflict | Phase A — use `wfp_confirmed` as status value |
+| 6 | `completed_at` column rename | Phase A |
+| 7 | RLS policies missing | Each phase adds RLS for its tables |
+| 8 | No storage buckets | Phase A |
+| 9 | Arabic labels missing | Each phase |
+| 10 | Mobile impact unclear | Phase A (status display) + Phase B (Money Timeline + Submit flow) |
+| 11 | WFP file dedup | Phase C |
+| 12 | Transport fee check breaks | Phase A |
+| 13 | Cycle status gating undefined | Phase A — define `mmp_files.cycle_status` transitions |
+| 14 | ODK reference storage | Phase A (add columns) + Phase B (mobile UI) |
+| 15 | Overdue escalation schedule | Phase B |
+| 16 | Money trail export | Phase C |
+| 17 | Bulk rejection handling | Phase C |
+| 18 | Mobile submit confirmation checklist | Phase B (mobile) |
+
+---
+
 ## PART 5 — IN-PAGE GUIDES
 
 Each new section/tab will have a "How this works" collapsible guide. Here are the exact texts:
