@@ -132,9 +132,9 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, rw_salary,      v_fund_id, 'admin',   'DR', 8500000,  'RWF', 8500000,  'RWF', 1),
-      (v_entry_id, 2, rw_rssb,        v_fund_id, 'admin',   'DR', 765000,   'RWF', 765000,   'RWF', 1),
-      (v_entry_id, 3, rw_accrued_pay, v_fund_id, 'admin',   'CR', 9265000,  'RWF', 9265000,  'RWF', 1);
+      (v_entry_id, 1, rw_salary,      v_fund_id, 'mng',   'DR', 8500000,  'RWF', 8500000,  'RWF', 1),
+      (v_entry_id, 2, rw_rssb,        v_fund_id, 'mng',   'DR', 765000,   'RWF', 765000,   'RWF', 1),
+      (v_entry_id, 3, rw_accrued_pay, v_fund_id, 'mng',   'CR', 9265000,  'RWF', 9265000,  'RWF', 1);
 
     -- RW-JE-003: Office Rent — Kigali Q1
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -142,8 +142,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, rw_rent,       v_fund_id, 'admin',   'DR', 1200000, 'RWF', 1200000, 'RWF', 1),
-      (v_entry_id, 2, rw_ap_vendor,  v_fund_id, 'admin',   'CR', 1200000, 'RWF', 1200000, 'RWF', 1);
+      (v_entry_id, 1, rw_rent,       v_fund_id, 'mng',   'DR', 1200000, 'RWF', 1200000, 'RWF', 1),
+      (v_entry_id, 2, rw_ap_vendor,  v_fund_id, 'mng',   'CR', 1200000, 'RWF', 1200000, 'RWF', 1);
 
     -- RW-JE-004: Indirect Cost Charge
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -151,8 +151,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, rw_idc,         v_fund_id, 'indirect', 'DR', 2550000, 'RWF', 2550000, 'RWF', 1),
-      (v_entry_id, 2, rw_net_unrest,  v_fund_id, 'indirect', 'CR', 2550000, 'RWF', 2550000, 'RWF', 1);
+      (v_entry_id, 1, rw_idc,         v_fund_id, 'mng', 'DR', 2550000, 'RWF', 2550000, 'RWF', 1),
+      (v_entry_id, 2, rw_net_unrest,  v_fund_id, 'mng', 'CR', 2550000, 'RWF', 2550000, 'RWF', 1);
 
     -- RW-JE-005: Training Workshop — Beneficiaries
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -206,9 +206,9 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, qa_salary,      v_fund_id, 'admin',   'DR', 45000,  'QAR', 45000,  'QAR', 1),
-      (v_entry_id, 2, qa_eos,         v_fund_id, 'admin',   'DR', 3750,   'QAR', 3750,   'QAR', 1),
-      (v_entry_id, 3, qa_accrued_pay, v_fund_id, 'admin',   'CR', 48750,  'QAR', 48750,  'QAR', 1);
+      (v_entry_id, 1, qa_salary,      v_fund_id, 'mng',   'DR', 45000,  'QAR', 45000,  'QAR', 1),
+      (v_entry_id, 2, qa_eos,         v_fund_id, 'mng',   'DR', 3750,   'QAR', 3750,   'QAR', 1),
+      (v_entry_id, 3, qa_accrued_pay, v_fund_id, 'mng',   'CR', 48750,  'QAR', 48750,  'QAR', 1);
 
     -- QA-JE-003: Office Rent — Doha
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -216,8 +216,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, qa_rent,      v_fund_id, 'admin',   'DR', 18000, 'QAR', 18000, 'QAR', 1),
-      (v_entry_id, 2, qa_ap_vendor, v_fund_id, 'admin',   'CR', 18000, 'QAR', 18000, 'QAR', 1);
+      (v_entry_id, 1, qa_rent,      v_fund_id, 'mng',   'DR', 18000, 'QAR', 18000, 'QAR', 1),
+      (v_entry_id, 2, qa_ap_vendor, v_fund_id, 'mng',   'CR', 18000, 'QAR', 18000, 'QAR', 1);
 
     -- QA-JE-004: GCC Humanitarian Training Event
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -234,8 +234,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, qa_idc,        v_fund_id, 'indirect', 'DR', 13500, 'QAR', 13500, 'QAR', 1),
-      (v_entry_id, 2, qa_net_unrest, v_fund_id, 'indirect', 'CR', 13500, 'QAR', 13500, 'QAR', 1);
+      (v_entry_id, 1, qa_idc,        v_fund_id, 'mng', 'DR', 13500, 'QAR', 13500, 'QAR', 1),
+      (v_entry_id, 2, qa_net_unrest, v_fund_id, 'mng', 'CR', 13500, 'QAR', 13500, 'QAR', 1);
 
     RAISE NOTICE 'Qatar: 5 journal entries created.';
     END IF; -- close COA-accounts guard
@@ -282,10 +282,10 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, us_salary_ex,  v_fund_id, 'admin',   'DR', 92000.00, 'USD', 92000.00, 'USD', 1),
-      (v_entry_id, 2, us_health,     v_fund_id, 'admin',   'DR', 9200.00,  'USD', 9200.00,  'USD', 1),
-      (v_entry_id, 3, us_fica_oasdi, v_fund_id, 'admin',   'DR', 5704.00,  'USD', 5704.00,  'USD', 1),
-      (v_entry_id, 4, us_accrued_pay, v_fund_id, 'admin',  'CR', 106904.00,'USD', 106904.00,'USD', 1);
+      (v_entry_id, 1, us_salary_ex,  v_fund_id, 'mng',   'DR', 92000.00, 'USD', 92000.00, 'USD', 1),
+      (v_entry_id, 2, us_health,     v_fund_id, 'mng',   'DR', 9200.00,  'USD', 9200.00,  'USD', 1),
+      (v_entry_id, 3, us_fica_oasdi, v_fund_id, 'mng',   'DR', 5704.00,  'USD', 5704.00,  'USD', 1),
+      (v_entry_id, 4, us_accrued_pay, v_fund_id, 'mng',    'CR', 106904.00,'USD', 106904.00,'USD', 1);
 
     -- US-JE-003: Office Rent + Occupancy — DC
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -293,8 +293,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, us_rent,      v_fund_id, 'admin',   'DR', 28000.00, 'USD', 28000.00, 'USD', 1),
-      (v_entry_id, 2, us_ap_vendor, v_fund_id, 'admin',   'CR', 28000.00, 'USD', 28000.00, 'USD', 1);
+      (v_entry_id, 1, us_rent,      v_fund_id, 'mng',   'DR', 28000.00, 'USD', 28000.00, 'USD', 1),
+      (v_entry_id, 2, us_ap_vendor, v_fund_id, 'mng',   'CR', 28000.00, 'USD', 28000.00, 'USD', 1);
 
     -- US-JE-004: NICRA Indirect Cost Charge
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -302,8 +302,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, us_nicra,       v_fund_id, 'indirect', 'DR', 51000.00, 'USD', 51000.00, 'USD', 1),
-      (v_entry_id, 2, us_net_donor,   v_fund_id, 'indirect', 'CR', 51000.00, 'USD', 51000.00, 'USD', 1);
+      (v_entry_id, 1, us_nicra,       v_fund_id, 'mng', 'DR', 51000.00, 'USD', 51000.00, 'USD', 1),
+      (v_entry_id, 2, us_net_donor,   v_fund_id, 'mng', 'CR', 51000.00, 'USD', 51000.00, 'USD', 1);
 
     -- US-JE-005: Deferred Revenue Recognition — CDC Grant
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -370,11 +370,11 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, ke_salary,      v_fund_id, 'admin',   'DR', 620000, 'KES', 620000, 'KES', 1),
-      (v_entry_id, 2, ke_nhif,        v_fund_id, 'admin',   'DR', 31000,  'KES', 31000,  'KES', 1),
-      (v_entry_id, 3, ke_nssf,        v_fund_id, 'admin',   'DR', 12400,  'KES', 12400,  'KES', 1),
-      (v_entry_id, 4, ke_accrued_pay, v_fund_id, 'admin',   'CR', 525200, 'KES', 525200, 'KES', 1),
-      (v_entry_id, 5, ke_paye,        v_fund_id, 'admin',   'CR', 138200, 'KES', 138200, 'KES', 1);
+      (v_entry_id, 1, ke_salary,      v_fund_id, 'mng',   'DR', 620000, 'KES', 620000, 'KES', 1),
+      (v_entry_id, 2, ke_nhif,        v_fund_id, 'mng',   'DR', 31000,  'KES', 31000,  'KES', 1),
+      (v_entry_id, 3, ke_nssf,        v_fund_id, 'mng',   'DR', 12400,  'KES', 12400,  'KES', 1),
+      (v_entry_id, 4, ke_accrued_pay, v_fund_id, 'mng',   'CR', 525200, 'KES', 525200, 'KES', 1),
+      (v_entry_id, 5, ke_paye,        v_fund_id, 'mng',   'CR', 138200, 'KES', 138200, 'KES', 1);
 
     -- KE-JE-003: M-Pesa Disbursement — Beneficiaries
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -391,8 +391,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, ke_rent,      v_fund_id, 'admin',   'DR', 180000, 'KES', 180000, 'KES', 1),
-      (v_entry_id, 2, ke_ap_vendor, v_fund_id, 'admin',   'CR', 180000, 'KES', 180000, 'KES', 1);
+      (v_entry_id, 1, ke_rent,      v_fund_id, 'mng',   'DR', 180000, 'KES', 180000, 'KES', 1),
+      (v_entry_id, 2, ke_ap_vendor, v_fund_id, 'mng',   'CR', 180000, 'KES', 180000, 'KES', 1);
 
     -- KE-JE-005: Indirect Cost Charge — Kenya
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -400,8 +400,8 @@ BEGIN
     RETURNING id INTO v_entry_id;
     INSERT INTO acct_journal_lines (entry_id, line_no, account_id, fund_id, function, debit_credit, functional_amount, functional_currency, original_amount, original_currency, fx_rate)
     VALUES
-      (v_entry_id, 1, ke_idc,        v_fund_id, 'indirect', 'DR', 186000, 'KES', 186000, 'KES', 1),
-      (v_entry_id, 2, ke_net_unrest, v_fund_id, 'indirect', 'CR', 186000, 'KES', 186000, 'KES', 1);
+      (v_entry_id, 1, ke_idc,        v_fund_id, 'mng', 'DR', 186000, 'KES', 186000, 'KES', 1),
+      (v_entry_id, 2, ke_net_unrest, v_fund_id, 'mng', 'CR', 186000, 'KES', 186000, 'KES', 1);
 
     -- KE-JE-006: Field Trip — Mombasa Site Visit
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
