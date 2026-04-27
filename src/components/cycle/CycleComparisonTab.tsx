@@ -139,8 +139,18 @@ export function CycleComparisonTab({
             );
           })()}
 
-          {(!comparisonCycle1 || !comparisonCycle2) && closedCycles.length < 2 && (
-            <p className="text-gray-500 text-sm text-center py-4">At least two closed cycles are needed for comparison.</p>
+          {closedCycles.length === 0 && (
+            <p className="text-gray-500 text-sm text-center py-4">
+              No closed cycles yet. Once you fully close an MMP cycle it will appear here.
+            </p>
+          )}
+          {closedCycles.length === 1 && (
+            <p className="text-gray-500 text-sm text-center py-4">
+              Only one closed cycle available ({closedCycles[0].name}). Close a second MMP cycle to enable side-by-side comparison.
+            </p>
+          )}
+          {closedCycles.length >= 2 && (!comparisonCycle1 || !comparisonCycle2) && (
+            <p className="text-gray-500 text-sm text-center py-4">Select two cycles above to see the comparison.</p>
           )}
         </CardContent>
       </Card>

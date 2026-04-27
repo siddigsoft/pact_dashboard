@@ -2856,13 +2856,28 @@ const MMPCycleClose = () => {
         <TabsContent value="exceptions" className="space-y-4">
           {!checklistMmpId ? (
             <Card>
-              <CardContent className="py-12 text-center">
+              <CardContent className="py-10 text-center">
                 <AlertTriangle className="h-12 w-12 mx-auto text-amber-400 mb-4" />
-                <h3 className="text-lg font-medium">Select a Cycle First</h3>
-                <p className="text-muted-foreground text-sm mt-1">
-                  Open the Pre-Close Checklist for an MMP from the Active Cycles tab, then come back here.
+                <h3 className="text-lg font-medium mb-1">Select a Cycle</h3>
+                <p className="text-muted-foreground text-sm mb-4">
+                  Choose an active MMP to review its cost-recovery exceptions.
                 </p>
-                <p dir="rtl" className="text-muted-foreground text-xs mt-1">اختر دورة من تبويب الدورات النشطة أولاً.</p>
+                {activeMmps.length > 0 ? (
+                  <div className="max-w-xs mx-auto">
+                    <Select onValueChange={(val) => setChecklistMmpId(val)}>
+                      <SelectTrigger data-testid="select-exceptions-mmp">
+                        <SelectValue placeholder="Select MMP…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeMmps.map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">No active MMP cycles found.</p>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -3057,10 +3072,26 @@ const MMPCycleClose = () => {
         <TabsContent value="wfp" className="space-y-4">
           {!checklistMmpId ? (
             <Card>
-              <CardContent className="py-12 text-center">
+              <CardContent className="py-10 text-center">
                 <Shield className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium">Select an MMP</h3>
-                <p className="text-sm text-muted-foreground mt-1">Choose an active MMP from the Pre-Close Checklist tab to upload WFP confirmation data.</p>
+                <h3 className="text-lg font-medium mb-1">Select an MMP</h3>
+                <p className="text-sm text-muted-foreground mb-4">Choose an active MMP to upload and review WFP confirmation data.</p>
+                {activeMmps.length > 0 ? (
+                  <div className="max-w-xs mx-auto">
+                    <Select onValueChange={(val) => setChecklistMmpId(val)}>
+                      <SelectTrigger data-testid="select-wfp-mmp">
+                        <SelectValue placeholder="Select MMP…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeMmps.map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">No active MMP cycles found.</p>
+                )}
               </CardContent>
             </Card>
           ) : loadingWFP ? (
