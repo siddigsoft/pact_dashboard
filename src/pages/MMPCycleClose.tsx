@@ -42,6 +42,7 @@ import type { CostRecoverySite } from '@/components/cycle/CostRecoveryDialog';
 import { MoneyTrailPanel } from '@/components/cycle/MoneyTrailPanel';
 import { WFPUploadZone } from '@/components/cycle/WFPUploadZone';
 import { WFPMatchReviewTable } from '@/components/cycle/WFPMatchReviewTable';
+import { WFPBulkActions } from '@/components/cycle/WFPBulkActions';
 import { RolledAllocationsPanel } from '@/components/cycle/RolledAllocationsPanel';
 import { parseWFPRow, matchAll, summarise } from '@/utils/wfpMatcher';
 import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
@@ -3111,6 +3112,15 @@ const MMPCycleClose = () => {
                     </Card>
                   ))}
                 </div>
+              )}
+
+              {/* Bulk actions — evidence requests for unconfirmed sites (pre-apply) */}
+              {wfpResults.length > 0 && !wfpAppliedUpload && (
+                <WFPBulkActions
+                  results={wfpResults}
+                  mmpId={checklistMmpId}
+                  mmpName={activeMmps.find(m => m.id === checklistMmpId)?.name || null}
+                />
               )}
 
               {/* Match review table */}

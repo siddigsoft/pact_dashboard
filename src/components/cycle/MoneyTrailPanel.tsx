@@ -14,8 +14,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DollarSign, RotateCcw, AlertTriangle, Trash2, CheckCircle2,
-  Clock, ArrowDown, ArrowUp, Loader2, RefreshCw, Info, ArrowRightLeft,
+  Clock, ArrowDown, ArrowUp, Loader2, RefreshCw, Info, ArrowRightLeft, Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import {
   fetchPaymentTrail, fetchMmpPaymentTrail,
   paymentEventLabel, PaymentEventType,
@@ -96,6 +97,46 @@ export function MoneyTrailPanel({
     }
   };
 
+  const handleExport = () => {
+    if (rows.length === 0) return;
+
+    const sheetData = rows.map(r => {
+      const label = paymentEventLabel(r.event_type as PaymentEventType);
+      const ts = new Date(r.created_at);
+      const meta = r.metadata
+        ? Object.entries(r.metadata)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' | ')
+        : '';
+      return {
+        'Date':           ts.toLocaleDateString(),
+        'Time':           ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        'Event (EN)':     label.en,
+        'Event (AR)':     label.ar,
+        'Amount':         r.amount ?? '',
+        'Currency':       r.amount_currency || 'SDG',
+        'Performed By':   r.performed_by_name || '',
+        'Role':           r.performed_by_role || '',
+        'Note':           r.note || '',
+        'Metadata':       meta,
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetData);
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 8 }, { wch: 30 }, { wch: 32 },
+      { wch: 12 }, { wch: 8 }, { wch: 22 }, { wch: 16 }, { wch: 30 }, { wch: 40 },
+    ];
+
+    const sheetName = mode === 'site' ? 'Site Trail' : 'MMP Trail';
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+    const id = mode === 'site' ? (siteEntryId || 'site') : (mmpId || 'mmp');
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `money-trail-${id.slice(0, 8)}-${dateStr}.xlsx`);
+  };
+
   useEffect(() => {
     load();
   }, [mode, siteEntryId, mmpId]);
@@ -113,9 +154,21 @@ export function MoneyTrailPanel({
               {mode === 'site' ? 'جدول المال' : 'مسار الأموال'}
             </span>
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={load} disabled={loading} data-testid="button-refresh-trail">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleExport}
+              disabled={loading || rows.length === 0}
+              title="Export to Excel"
+              data-testid="button-export-trail"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={load} disabled={loading} data-testid="button-refresh-trail">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
