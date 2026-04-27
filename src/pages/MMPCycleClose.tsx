@@ -40,6 +40,12 @@ import { CycleScorecardTab } from '@/components/cycle/CycleScorecardTab';
 import { CostRecoveryDialog } from '@/components/cycle/CostRecoveryDialog';
 import type { CostRecoverySite } from '@/components/cycle/CostRecoveryDialog';
 import { MoneyTrailPanel } from '@/components/cycle/MoneyTrailPanel';
+import { WFPUploadZone } from '@/components/cycle/WFPUploadZone';
+import { WFPMatchReviewTable } from '@/components/cycle/WFPMatchReviewTable';
+import { parseWFPRow, matchAll, summarise } from '@/utils/wfpMatcher';
+import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
+import { logPaymentEvent } from '@/services/paymentEventLogger';
+import { dispatchNotification } from '@/lib/notify';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed', labelAr: 'لم يتم التوزيع' },
@@ -236,6 +242,13 @@ const MMPCycleClose = () => {
       setShowMoneyTrailMmpId(checklistMmpId);
     }
   }, [activeTab, checklistMmpId, loadExceptionsData]);
+
+  // Phase C: load WFP tab data when wfp tab is active and a MMP is selected
+  useEffect(() => {
+    if (activeTab === 'wfp' && checklistMmpId) {
+      loadWFPTab(checklistMmpId);
+    }
+  }, [activeTab, checklistMmpId, loadWFPTab]);
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
     issues: string[];
@@ -260,6 +273,16 @@ const MMPCycleClose = () => {
     amount: number;
   } | null>(null);
   const [showMoneyTrailMmpId, setShowMoneyTrailMmpId] = useState<string | null>(null);
+
+  // Phase C — WFP Confirmation tab
+  const [wfpResults, setWfpResults] = useState<MatchResult[]>([]);
+  const [wfpSummary, setWfpSummary] = useState<MatchSummary | null>(null);
+  const [wfpUploadId, setWfpUploadId] = useState<string | null>(null);
+  const [wfpFilename, setWfpFilename] = useState<string | null>(null);
+  const [wfpApplying, setWfpApplying] = useState(false);
+  const [wfpSaving, setWfpSaving] = useState(false);
+  const [loadingWFP, setLoadingWFP] = useState(false);
+  const [wfpAppliedUpload, setWfpAppliedUpload] = useState<{ filename: string; applied_at: string } | null>(null);
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
   const isSuperAdmin = hasAnyRole(['super_admin', 'Super Admin']);
@@ -453,6 +476,248 @@ const MMPCycleClose = () => {
       setLoadingExceptions(false);
     }
   }, [mmpFiles]);
+
+  // Phase C: load existing WFP upload state for a MMP
+  const loadWFPTab = useCallback(async (mmpId: string) => {
+    setLoadingWFP(true);
+    try {
+      // Check for an already-applied upload
+      const { data: uploads } = await supabase
+        .from('wfp_confirmation_uploads')
+        .select('id, filename, status, applied_at, matched_count, weak_count, unmatched_count, row_count')
+        .eq('mmp_id', mmpId)
+        .order('uploaded_at', { ascending: false })
+        .limit(10);
+
+      const applied = (uploads || []).find((u: any) => u.status === 'applied');
+      setWfpAppliedUpload(applied ? { filename: applied.filename, applied_at: applied.applied_at } : null);
+
+      // If there's a 'ready' upload (not yet applied), restore its results
+      const ready = (uploads || []).find((u: any) => u.status === 'ready');
+      if (ready && wfpResults.length === 0) {
+        const { data: matchRows } = await supabase
+          .from('wfp_match_results')
+          .select('*')
+          .eq('upload_id', ready.id)
+          .order('wfp_row_number', { ascending: true });
+
+        if (matchRows && matchRows.length > 0) {
+          // Fetch site entries to reconstruct matched_site
+          const siteIds = matchRows.filter((r: any) => r.site_entry_id).map((r: any) => r.site_entry_id);
+          let siteMap: Record<string, { id: string; site_name: string; site_code: string | null; state: string | null; locality: string | null }> = {};
+          if (siteIds.length > 0) {
+            const { data: sites } = await supabase
+              .from('mmp_site_entries')
+              .select('id, site_name, site_code, state, locality')
+              .in('id', siteIds);
+            (sites || []).forEach((s: any) => { siteMap[s.id] = s; });
+          }
+
+          const restored: MatchResult[] = matchRows.map((r: any) => ({
+            wfp_site_name: r.wfp_site_name || '',
+            wfp_state: r.wfp_state || '',
+            wfp_locality: r.wfp_locality || '',
+            wfp_partner: r.wfp_partner || '',
+            wfp_activity: r.wfp_activity || '',
+            wfp_row_number: r.wfp_row_number,
+            site_entry_id: r.site_entry_id || null,
+            match_tier: r.match_tier || 'none',
+            match_score: r.match_score || 0,
+            match_notes: r.match_notes || '',
+            outcome: r.outcome || 'pending',
+            review_note: r.review_note || '',
+            matched_site: r.site_entry_id ? siteMap[r.site_entry_id] : undefined,
+          }));
+
+          setWfpResults(restored);
+          setWfpSummary(summarise(restored));
+          setWfpUploadId(ready.id);
+          setWfpFilename(ready.filename);
+        }
+      }
+    } catch (err) {
+      console.warn('[WFP] loadWFPTab error:', err);
+    } finally {
+      setLoadingWFP(false);
+    }
+  }, [wfpResults.length]);
+
+  // Phase C: parse file → run matching → show review table
+  const handleWFPFileParsed = useCallback(async (rawRows: Record<string, unknown>[], filename: string, mmpId: string) => {
+    setWfpSaving(true);
+    try {
+      // 1. Parse WFP rows
+      const wfpRows = rawRows
+        .map((r, i) => parseWFPRow(r, i + 2)) // row 1 = headers
+        .filter(Boolean) as ReturnType<typeof parseWFPRow>[];
+
+      // 2. Fetch all site entries for this MMP
+      const { data: siteEntries } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code, state, locality')
+        .eq('mmp_file_id', mmpId);
+
+      const sites = (siteEntries || []) as { id: string; site_name: string; site_code: string | null; state: string | null; locality: string | null }[];
+
+      // 3. Run matching
+      const results = matchAll(wfpRows as NonNullable<typeof wfpRows[0]>[], sites);
+      const summary = summarise(results);
+
+      // 4. Save upload record
+      const { data: uploadData, error: uploadErr } = await supabase
+        .from('wfp_confirmation_uploads')
+        .insert({
+          mmp_id: mmpId,
+          filename,
+          row_count: results.length,
+          matched_count: summary.strong,
+          weak_count: summary.weak + summary.fuzzy,
+          unmatched_count: summary.none,
+          status: 'ready',
+        })
+        .select('id')
+        .single();
+
+      if (uploadErr || !uploadData) throw uploadErr || new Error('Failed to save upload');
+      const uploadId = uploadData.id;
+
+      // 5. Save match rows
+      const matchInserts = results.map(r => ({
+        upload_id: uploadId,
+        mmp_id: mmpId,
+        wfp_site_name: r.wfp_site_name,
+        wfp_state: r.wfp_state,
+        wfp_locality: r.wfp_locality,
+        wfp_partner: r.wfp_partner,
+        wfp_activity: r.wfp_activity,
+        wfp_row_number: r.wfp_row_number,
+        site_entry_id: r.site_entry_id,
+        match_tier: r.match_tier,
+        match_score: r.match_score,
+        match_notes: r.match_notes,
+        outcome: r.outcome,
+      }));
+
+      await supabase.from('wfp_match_results').insert(matchInserts);
+
+      setWfpResults(results);
+      setWfpSummary(summary);
+      setWfpUploadId(uploadId);
+      setWfpFilename(filename);
+
+      toast({
+        title: 'WFP file parsed',
+        description: `${summary.strong} auto-confirmed, ${summary.weak + summary.fuzzy} need review, ${summary.none} no match`,
+      });
+    } catch (err) {
+      console.error('[WFP] handleWFPFileParsed error:', err);
+      toast({ title: 'Error', description: 'Failed to save WFP match data', variant: 'destructive' });
+    } finally {
+      setWfpSaving(false);
+    }
+  }, [toast]);
+
+  // Phase C: save manual review decisions then apply all outcomes to mmp_site_entries
+  const handleWFPApply = useCallback(async (mmpId: string) => {
+    if (!wfpUploadId) return;
+    setWfpApplying(true);
+    try {
+      const userId = currentUser?.id;
+
+      // 1. Update manual review decisions in DB
+      const manualRows = wfpResults.filter(r => r.match_tier === 'weak' || r.match_tier === 'fuzzy');
+      for (const r of manualRows) {
+        await supabase.from('wfp_match_results')
+          .update({ outcome: r.outcome, review_note: r.review_note || null, reviewed_by: userId || null, reviewed_at: new Date().toISOString() })
+          .eq('upload_id', wfpUploadId)
+          .eq('wfp_row_number', r.wfp_row_number);
+      }
+
+      // 2. Apply outcomes to mmp_site_entries + log events
+      const confirmed = wfpResults.filter(r => r.outcome === 'confirmed' && r.site_entry_id);
+      const rejected  = wfpResults.filter(r => r.outcome === 'rejected'  && r.site_entry_id);
+
+      for (const r of confirmed) {
+        await supabase.from('mmp_site_entries')
+          .update({ status: 'wfp_confirmed' })
+          .eq('id', r.site_entry_id!);
+
+        await logPaymentEvent({
+          eventType: 'site_confirmed',
+          siteEntryId: r.site_entry_id!,
+          mmpId,
+          performedBy: userId,
+          metadata: { wfp_upload_id: wfpUploadId, match_tier: r.match_tier, match_score: r.match_score, wfp_site_name: r.wfp_site_name },
+        });
+
+        // Notify enumerator of confirmation
+        const { data: entry } = await supabase
+          .from('mmp_site_entries')
+          .select('accepted_by, site_name')
+          .eq('id', r.site_entry_id!)
+          .single();
+
+        if (entry?.accepted_by) {
+          await dispatchNotification({
+            recipientId: entry.accepted_by,
+            eventType: 'site_confirmed',
+            title: 'Site Visit WFP Confirmed ✓',
+            body: `Your visit to ${entry.site_name || r.wfp_site_name} has been confirmed by WFP.`,
+            metadata: { site_entry_id: r.site_entry_id, mmp_id: mmpId },
+          });
+        }
+      }
+
+      for (const r of rejected) {
+        await supabase.from('mmp_site_entries')
+          .update({ status: 'rejected' })
+          .eq('id', r.site_entry_id!);
+
+        await logPaymentEvent({
+          eventType: 'site_rejected',
+          siteEntryId: r.site_entry_id!,
+          mmpId,
+          performedBy: userId,
+          metadata: { wfp_upload_id: wfpUploadId, match_tier: r.match_tier, match_score: r.match_score, wfp_site_name: r.wfp_site_name },
+        });
+
+        // Notify enumerator + supervisor of rejection
+        const { data: entry } = await supabase
+          .from('mmp_site_entries')
+          .select('accepted_by, site_name')
+          .eq('id', r.site_entry_id!)
+          .single();
+
+        if (entry?.accepted_by) {
+          await dispatchNotification({
+            recipientId: entry.accepted_by,
+            eventType: 'site_rejected',
+            title: 'Site Visit Not Found in WFP Data',
+            body: `Your visit to ${entry.site_name || r.wfp_site_name} was not found in the WFP confirmation file.`,
+            metadata: { site_entry_id: r.site_entry_id, mmp_id: mmpId },
+          });
+        }
+      }
+
+      // 3. Mark upload as applied
+      await supabase.from('wfp_confirmation_uploads')
+        .update({ status: 'applied', applied_at: new Date().toISOString(), applied_by: userId || null })
+        .eq('id', wfpUploadId);
+
+      setWfpAppliedUpload({ filename: wfpFilename || '', applied_at: new Date().toISOString() });
+      cycleReadiness.refresh();
+
+      toast({
+        title: 'WFP results applied',
+        description: `${confirmed.length} confirmed, ${rejected.length} rejected. Status updated on all sites.`,
+      });
+    } catch (err) {
+      console.error('[WFP] handleWFPApply error:', err);
+      toast({ title: 'Error', description: 'Failed to apply WFP results', variant: 'destructive' });
+    } finally {
+      setWfpApplying(false);
+    }
+  }, [wfpUploadId, wfpResults, wfpFilename, currentUser, cycleReadiness, toast]);
 
   const fetchClosedCycles = useCallback(async () => {
     try {
@@ -2148,6 +2413,17 @@ const MMPCycleClose = () => {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="wfp" data-testid="tab-wfp" className="gap-1.5 px-3 py-2">
+            <Shield className="h-3.5 w-3.5 text-blue-500" />
+            <span>WFP Confirmation</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">تأكيد WFP</span>
+            {wfpAppliedUpload && (
+              <Badge className="ml-0.5 text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-700">Applied</Badge>
+            )}
+            {!wfpAppliedUpload && wfpSummary && wfpSummary.pendingReview > 0 && (
+              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="archive" data-testid="tab-archive" className="gap-1.5 px-3 py-2">
             <BookOpen className="h-3.5 w-3.5" />
             <span>Closed Cycles</span>
@@ -2739,6 +3015,139 @@ const MMPCycleClose = () => {
                   title="MMP Money Trail"
                   maxRows={10}
                 />
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── WFP CONFIRMATION TAB (Phase C) ── */}
+        <TabsContent value="wfp" className="space-y-4">
+          {!checklistMmpId ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Shield className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium">Select an MMP</h3>
+                <p className="text-sm text-muted-foreground mt-1">Choose an active MMP from the Pre-Close Checklist tab to upload WFP confirmation data.</p>
+              </CardContent>
+            </Card>
+          ) : loadingWFP ? (
+            <Card>
+              <CardContent className="py-12 flex justify-center items-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="text-muted-foreground">Loading WFP data…</span>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {/* Already Applied banner */}
+              {wfpAppliedUpload && (
+                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800 p-4">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-300">WFP Results Applied</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 truncate">
+                      {wfpAppliedUpload.filename} · Applied {new Date(wfpAppliedUpload.applied_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setWfpAppliedUpload(null);
+                    setWfpResults([]);
+                    setWfpSummary(null);
+                    setWfpUploadId(null);
+                    setWfpFilename(null);
+                  }} data-testid="button-wfp-reupload">
+                    Re-upload
+                  </Button>
+                </div>
+              )}
+
+              {/* Upload zone (hidden after applied) */}
+              {!wfpAppliedUpload && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-blue-500" />
+                      Upload WFP Cleaned Excel
+                      <span dir="rtl" className="text-xs font-normal text-muted-foreground">رفع ملف WFP</span>
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Upload the WFP monthly monitoring confirmation file. Column headers are automatically recognised across any WFP format variant.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <WFPUploadZone
+                      disabled={wfpSaving}
+                      onFileParsed={(rows, filename) => handleWFPFileParsed(rows, filename, checklistMmpId)}
+                    />
+                    {wfpSaving && (
+                      <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Matching {wfpFilename || 'file'} against MMP sites…
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Summary KPI cards */}
+              {wfpSummary && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total WFP Rows', labelAr: 'إجمالي الصفوف', value: wfpSummary.total, color: 'text-foreground', bg: 'bg-muted/40' },
+                    { label: 'Auto-Confirmed', labelAr: 'مؤكد تلقائياً', value: wfpSummary.strong, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
+                    { label: 'Need Review', labelAr: 'يحتاج مراجعة', value: wfpSummary.pendingReview, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
+                    { label: 'No Match', labelAr: 'لا تطابق', value: wfpSummary.none, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/30' },
+                  ].map(card => (
+                    <Card key={card.label} className={`${card.bg} border-0 shadow-none`}>
+                      <CardContent className="pt-4 pb-3 px-4">
+                        <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+                        <p className="text-xs font-medium mt-0.5">{card.label}</p>
+                        <p dir="rtl" className="text-[10px] text-muted-foreground">{card.labelAr}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Match review table */}
+              {wfpResults.length > 0 && !wfpAppliedUpload && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <CardTitle className="text-base">Review Matches</CardTitle>
+                      <div className="flex gap-2 items-center">
+                        {wfpSummary && wfpSummary.pendingReview > 0 && (
+                          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            {wfpSummary.pendingReview} pending decisions
+                          </Badge>
+                        )}
+                        <Button
+                          size="sm"
+                          disabled={wfpApplying || (wfpSummary?.pendingReview ?? 0) > 0}
+                          onClick={() => handleWFPApply(checklistMmpId)}
+                          data-testid="button-wfp-apply"
+                        >
+                          {wfpApplying ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                          Apply Results
+                        </Button>
+                      </div>
+                    </div>
+                    <CardDescription className="text-xs">
+                      Strong matches are auto-confirmed. Review weak and fuzzy matches manually before applying.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <WFPMatchReviewTable
+                      results={wfpResults}
+                      onChange={updated => {
+                        setWfpResults(updated);
+                        setWfpSummary(summarise(updated));
+                      }}
+                      disabled={wfpApplying}
+                    />
+                  </CardContent>
+                </Card>
               )}
             </div>
           )}

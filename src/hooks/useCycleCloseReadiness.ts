@@ -47,6 +47,27 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       setCycleMonth(month);
       setCycleYear(year);
 
+      // Gate 6: WFP confirmation upload applied
+      let wfpApplied = false;
+      let wfpError = false;
+      let submittedCount = 0;
+      try {
+        const [wfpRes, submittedRes] = await Promise.all([
+          supabase.from('wfp_confirmation_uploads').select('id, status').eq('mmp_id', mmpId).eq('status', 'applied').limit(1),
+          supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'submitted'),
+        ]);
+        if (wfpRes.error && wfpRes.error.code !== '42P01') {
+          wfpError = true;
+        } else if (wfpRes.error && wfpRes.error.code === '42P01') {
+          wfpError = true; // table not yet created → notConfigured
+        } else {
+          wfpApplied = (wfpRes.data || []).length > 0;
+          submittedCount = submittedRes.count ?? 0;
+        }
+      } catch {
+        wfpError = true;
+      }
+
       let costSubsQuery = supabase
         .from('operational_cost_submissions')
         .select('id, tier1_status, tier2_status, expense_date')
@@ -239,6 +260,18 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           total: costRecoveryPending,
           link: '/mmp/cycle-close?tab=exceptions',
           notConfigured: costRecoveryError,
+        },
+        {
+          id: 'wfp_confirmation',
+          label: 'WFP confirmation file applied',
+          description:
+            'Upload and apply the WFP cleaned Excel to confirm or reject each submitted site visit before closing the cycle.',
+          // Table unavailable (Phase C migration not applied): treat as passed with notConfigured warning
+          passed: wfpError || submittedCount === 0 || wfpApplied,
+          count: wfpApplied ? submittedCount : 0,
+          total: submittedCount,
+          link: '/mmp/cycle-close?tab=wfp',
+          notConfigured: wfpError,
         },
       ];
 
