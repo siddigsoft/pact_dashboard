@@ -471,7 +471,7 @@ export default function DownPaymentApproval() {
       map[k].totalRequested += req.requestedAmount;
       map[k].totalPaid += req.totalPaidAmount || 0;
       map[k].items.push(req);
-      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) map[k].totalApproved += req.requestedAmount;
+      if (['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'].includes(req.status)) map[k].totalApproved += (req.approvedAmount || req.requestedAmount);
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) map[k].pending++;
     });
     return Object.values(map).sort((a, b) => b.totalRequested - a.totalRequested);

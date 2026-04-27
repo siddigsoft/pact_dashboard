@@ -161,8 +161,11 @@ export function exportToCSV(requests: DownPaymentRequest[], filename: string = '
 export function exportToExcel(requests: DownPaymentRequest[], filename: string = 'down-payments', tabLabel: string = 'All'): void {
   const wb = XLSX.utils.book_new();
 
+  const XLS_APPROVED_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'];
   const totalRequested = requests.reduce((s, r) => s + r.requestedAmount, 0);
-  const totalApproved = requests.reduce((s, r) => s + (r.approvedAmount || 0), 0);
+  const totalApproved = requests
+    .filter(r => XLS_APPROVED_STATUSES.includes(r.status))
+    .reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
   const totalPaid = requests.reduce((s, r) => s + r.totalPaidAmount, 0);
   const totalRemaining = requests.reduce((s, r) => s + r.remainingAmount, 0);
 
@@ -317,8 +320,11 @@ export function exportToPDF(
     doc.text(`Notes: ${config.reportNotes}`, 14, 34);
   }
 
+  const PDF_APPROVED_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'];
   const totalRequested = requests.reduce((sum, r) => sum + r.requestedAmount, 0);
-  const totalApproved = requests.reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
+  const totalApproved = requests
+    .filter(r => PDF_APPROVED_STATUSES.includes(r.status))
+    .reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
   const totalPaid = requests.reduce((sum, r) => sum + r.totalPaidAmount, 0);
   const totalRemaining = requests.reduce((sum, r) => sum + r.remainingAmount, 0);
 
@@ -457,8 +463,11 @@ export function getDownPaymentStats(requests: DownPaymentRequest[]) {
   const partiallyPaid = requests.filter(r => r.status === 'partially_paid').length;
   const fullyPaid = requests.filter(r => r.status === 'fully_paid').length;
 
+  const APPROVED_STATUSES = ['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'];
   const totalRequested = requests.reduce((sum, r) => sum + r.requestedAmount, 0);
-  const totalApproved = requests.reduce((sum, r) => sum + (r.approvedAmount || (r.status !== 'rejected' ? r.requestedAmount : 0)), 0);
+  const totalApproved = requests
+    .filter(r => APPROVED_STATUSES.includes(r.status))
+    .reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
   const paidStatuses = ['partially_paid', 'fully_paid', 'completed'];
   const totalPaid = requests.filter(r => paidStatuses.includes(r.status)).reduce((sum, r) => sum + r.totalPaidAmount, 0);
   const totalRemaining = requests.filter(r => paidStatuses.includes(r.status)).reduce((sum, r) => sum + r.remainingAmount, 0);
