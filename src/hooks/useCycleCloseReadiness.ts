@@ -23,6 +23,22 @@ export interface CycleCloseReadiness {
   cycleYear: number | null;
 }
 
+async function fetchAllSiteEntries(mmpId: string) {
+  const PAGE = 1000;
+  let all: Array<{ id: string; status: string; not_covered_flag: boolean | null; not_covered_reason: string | null }> = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('mmp_site_entries')
+      .select('id, status, not_covered_flag, not_covered_reason')
+      .eq('mmp_file_id', mmpId)
+      .range(from, from + PAGE - 1);
+    if (error || !data) break;
+    all = [...all, ...data];
+    if (data.length < PAGE) break;
+  }
+  return all;
+}
+
 export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadiness {
   const [items, setItems] = useState<CycleChecklistItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,6 +51,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
     setLoading(true);
     setError(null);
     try {
+      // ── Phase 1: Fetch MMP metadata + site entries + cost submissions in parallel
       const mmpRes = await supabase
         .from('mmp_files')
         .select('id, month, year')
@@ -46,27 +63,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       const year = mmpRow?.year ?? null;
       setCycleMonth(month);
       setCycleYear(year);
-
-      // Gate 6: WFP confirmation upload applied
-      let wfpApplied = false;
-      let wfpError = false;
-      let submittedCount = 0;
-      try {
-        const [wfpRes, submittedRes] = await Promise.all([
-          supabase.from('wfp_confirmation_uploads').select('id, status').eq('mmp_id', mmpId).eq('status', 'applied').limit(1),
-          supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'submitted'),
-        ]);
-        if (wfpRes.error && wfpRes.error.code !== '42P01') {
-          wfpError = true;
-        } else if (wfpRes.error && wfpRes.error.code === '42P01') {
-          wfpError = true; // table not yet created → notConfigured
-        } else {
-          wfpApplied = (wfpRes.data || []).length > 0;
-          submittedCount = submittedRes.count ?? 0;
-        }
-      } catch {
-        wfpError = true;
-      }
 
       let costSubsQuery = supabase
         .from('operational_cost_submissions')
@@ -82,121 +78,129 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           .lte('expense_date', endDate);
       }
 
-      const [siteVisitsRes, costSubsRes, advancesRes, withdrawalsRes] = await Promise.all([
-        supabase
-          .from('mmp_site_entries')
-          .select('id, status, not_covered_flag, not_covered_reason')
-          .eq('mmp_file_id', mmpId)
-          .limit(10000),
+      // Fetch site entries (paginated) and cost submissions in parallel
+      const [siteVisits, costSubsRes] = await Promise.all([
+        fetchAllSiteEntries(mmpId),
         costSubsQuery,
-        supabase
-          .from('down_payment_requests')
-          .select('id, status, metadata')
-          .eq('mmp_id', mmpId),
-        supabase
-          .from('withdrawal_requests')
-          .select('id, status')
-          .eq('mmp_id', mmpId),
       ]);
 
-      // ── Gate 5: Cost Recovery — all not-covered sites with approved advances
-      // must have a decision in cost_recovery_log before cycle can close.
-      // Gracefully handles Phase B migration not yet applied (shows notConfigured).
-      let costRecoveryPending = 0;
-      let costRecoveryError = false;
-      try {
-        // Find not-covered site ids for this MMP
-        const notCoveredIds = (siteVisitsRes.data || [])
-          .filter((s: { status: string; not_covered_flag: boolean | null }) =>
-            (s.not_covered_flag === true) || (s.status ?? '').toLowerCase() === 'not_covered',
-          )
-          .map((s: { id: string }) => s.id);
+      if (costSubsRes.error) throw new Error(costSubsRes.error.message);
 
-        if (notCoveredIds.length > 0) {
-          // Find which of those have approved/paid advances but no recovery log entry
-          const [advNotCoveredRes, recoveryLogRes] = await Promise.all([
-            supabase
-              .from('down_payment_requests')
-              .select('id, mmp_site_entry_id')
-              .in('status', ['approved', 'partially_paid', 'fully_paid'])
-              .in('mmp_site_entry_id', notCoveredIds),
-            supabase
-              .from('cost_recovery_log')
-              .select('site_entry_id')
-              .eq('mmp_id', mmpId),
-          ]);
+      const siteEntryIds = siteVisits.map(s => s.id);
 
-          if (advNotCoveredRes.error || recoveryLogRes.error) {
-            costRecoveryError = true;
-          } else {
-            const advancedSiteIds = new Set(
-              (advNotCoveredRes.data || [])
-                .map((d: { mmp_site_entry_id: string | null }) => d.mmp_site_entry_id)
-                .filter(Boolean),
-            );
-            const resolvedSiteIds = new Set(
-              (recoveryLogRes.data || [])
-                .map((r: { site_entry_id: string }) => r.site_entry_id),
-            );
-            // Sites that are not-covered AND have an advance AND have NO recovery decision
-            costRecoveryPending = notCoveredIds.filter(
-              id => advancedSiteIds.has(id) && !resolvedSiteIds.has(id),
-            ).length;
-          }
-        }
-      } catch {
-        costRecoveryError = true;
+      // ── Phase 2: Fetch advances, withdrawals, cost recovery, WFP — all parallel
+      // Transport advances: filter via mmp_site_entry_id (the actual FK on down_payment_requests)
+      const advancesPromise = siteEntryIds.length > 0
+        ? (async () => {
+            const PAGE = 1000;
+            let all: Array<{ id: string; status: string; metadata: Record<string, unknown> | null }> = [];
+            for (let from = 0; ; from += PAGE) {
+              const { data, error } = await supabase
+                .from('down_payment_requests')
+                .select('id, status, metadata')
+                .in('mmp_site_entry_id', siteEntryIds)
+                .range(from, from + PAGE - 1);
+              if (error) return { data: null, error };
+              if (!data) break;
+              all = [...all, ...data];
+              if (data.length < PAGE) break;
+            }
+            return { data: all, error: null };
+          })()
+        : Promise.resolve({ data: [] as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>, error: null });
+
+      const [advancesRes, withdrawalsRes, wfpRes, submittedRes, advNotCoveredRes, recoveryLogRes] = await Promise.all([
+        advancesPromise,
+        supabase.from('withdrawal_requests').select('id, status').eq('mmp_id', mmpId),
+        supabase.from('wfp_confirmation_uploads').select('id, status').eq('mmp_id', mmpId).eq('status', 'applied').limit(1),
+        supabase.from('mmp_site_entries').select('id', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'submitted'),
+        (() => {
+          const notCoveredIds = siteVisits
+            .filter(s => s.not_covered_flag === true || (s.status ?? '').toLowerCase() === 'not_covered')
+            .map(s => s.id);
+          return notCoveredIds.length > 0
+            ? supabase.from('down_payment_requests').select('id, mmp_site_entry_id').in('status', ['approved', 'partially_paid', 'fully_paid']).in('mmp_site_entry_id', notCoveredIds)
+            : Promise.resolve({ data: [], error: null });
+        })(),
+        supabase.from('cost_recovery_log').select('site_entry_id').eq('mmp_id', mmpId),
+      ]);
+
+      // ── WFP confirmation gate
+      let wfpApplied = false;
+      let wfpError = false;
+      const submittedCount = submittedRes.count ?? 0;
+      if (wfpRes.error && wfpRes.error.code !== '42P01') {
+        wfpError = true;
+      } else if (wfpRes.error) {
+        wfpError = true;
+      } else {
+        wfpApplied = (wfpRes.data || []).length > 0;
       }
 
-      // Fail readiness on critical query errors to prevent false-green states
-      if (siteVisitsRes.error) throw new Error(siteVisitsRes.error.message);
-      if (costSubsRes.error) throw new Error(costSubsRes.error.message);
-      // down_payment_requests and withdrawal_requests may not exist in all environments;
-      // treat their errors as empty (handled gracefully rather than blocking)
+      // ── Cost recovery gate
+      let costRecoveryPending = 0;
+      let costRecoveryError = false;
+      if (advNotCoveredRes.error || recoveryLogRes.error) {
+        costRecoveryError = true;
+      } else {
+        const advancedSiteIds = new Set(
+          (advNotCoveredRes.data || [])
+            .map((d: { mmp_site_entry_id: string | null }) => d.mmp_site_entry_id)
+            .filter(Boolean),
+        );
+        const resolvedSiteIds = new Set(
+          (recoveryLogRes.data || [])
+            .map((r: { site_entry_id: string }) => r.site_entry_id),
+        );
+        const notCoveredIds = siteVisits
+          .filter(s => s.not_covered_flag === true || (s.status ?? '').toLowerCase() === 'not_covered')
+          .map(s => s.id);
+        costRecoveryPending = notCoveredIds.filter(
+          id => advancedSiteIds.has(id) && !resolvedSiteIds.has(id),
+        ).length;
+      }
 
-      const siteVisits = siteVisitsRes.data || [];
+      // ── Resolved sites gate
       const totalSites = siteVisits.length;
-      // Phase A: 'completed' renamed to 'submitted'; 'wfp_confirmed' and 'not_covered' added.
-      // All of these count as resolved for the Pre-Close Checklist gate.
       const RESOLVED_STATUSES = new Set([
-        'submitted',      // enumerator self-reported (Phase A)
-        'wfp_confirmed',  // WFP confirmed (Phase C)
-        'rejected',       // WFP rejected — still needs resolution but counts as processed
-        'not_covered',    // officially not visited
-        'approved',       // legacy
-        'cancelled',      // cancelled during close
-        'completed',      // legacy pre-Phase A records
-        'verified',       // legacy permit-verified
+        'submitted',
+        'wfp_confirmed',
+        'rejected',
+        'not_covered',
+        'approved',
+        'cancelled',
+        'completed',
+        'verified',
       ]);
-
       const resolvedSites = siteVisits.filter(
-        (s: { status: string; not_covered_flag: boolean | null; not_covered_reason: string | null }) =>
+        s =>
           RESOLVED_STATUSES.has((s.status ?? '').toLowerCase().trim()) ||
           s.not_covered_flag === true ||
           Boolean(s.not_covered_reason),
       ).length;
       const unresolvedSites = totalSites - resolvedSites;
 
+      // ── Cost submissions gate
       const pendingCostSubs = (costSubsRes.data || []).length;
 
-      // Advances: gracefully handle missing tables — show notConfigured warning
-      const advancesError = !advancesRes.error ? false : true;
-      const advances = (!advancesRes.error && advancesRes.data || []) as Array<{
-        id: string;
-        status: string;
-        metadata: Record<string, unknown> | null;
-      }>;
+      // ── Transport advances gate
+      const advancesError = Boolean(advancesRes.error);
+      const advances = advancesError
+        ? []
+        : (advancesRes.data || []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
       const totalAdvances = advances.length;
       const unreconciledAdvances = advances.filter(a => {
-        const isTerminal = a.status === 'approved' || a.status === 'paid';
+        const isTerminal = a.status === 'approved' || a.status === 'paid' || a.status === 'fully_paid';
         const meta = a.metadata ?? {};
         const isReconciled = meta['reconciled'] === true || Boolean(meta['reconciled_at']);
         return isTerminal && !isReconciled;
       }).length;
 
-      // Withdrawals: gracefully handle missing tables — show notConfigured warning
-      const withdrawalsError = !withdrawalsRes.error ? false : true;
-      const withdrawals = (!withdrawalsRes.error && withdrawalsRes.data || []) as Array<{ id: string; status: string }>;
+      // ── Withdrawal requests gate
+      const withdrawalsError = Boolean(withdrawalsRes.error);
+      const withdrawals = withdrawalsError
+        ? []
+        : (withdrawalsRes.data || []) as Array<{ id: string; status: string }>;
       const totalWithdrawals = withdrawals.length;
       const pendingWithdrawals = withdrawals.filter(
         w => !['approved', 'rejected', 'completed', 'paid'].includes(w.status ?? ''),
@@ -232,7 +236,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           id: 'transport_advances',
           label: 'All transport advances reconciled',
           description: 'Approved transport advances for this cycle must be reconciled.',
-          // Table unavailable: passed=true with notConfigured warning (informational; server gate enforces)
           passed: advancesError || unreconciledAdvances === 0,
           count: totalAdvances - unreconciledAdvances,
           total: totalAdvances,
@@ -243,7 +246,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           id: 'withdrawal_requests',
           label: 'All withdrawal requests processed',
           description: 'All withdrawal requests must be approved, rejected, or completed.',
-          // Table unavailable: passed=true with notConfigured warning (informational; server gate enforces)
           passed: withdrawalsError || pendingWithdrawals === 0,
           count: totalWithdrawals - pendingWithdrawals,
           total: totalWithdrawals,
@@ -255,7 +257,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           label: 'All not-covered cost recoveries addressed',
           description:
             'Every not-covered site that received an advance payment must have a recovery decision: Roll to Next MMP, Return Required, or Write-Off.',
-          // Table unavailable (Phase B migration not applied): treat as passed with notConfigured warning
           passed: costRecoveryError || costRecoveryPending === 0,
           count: 0,
           total: costRecoveryPending,
@@ -267,7 +268,6 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           label: 'WFP confirmation file applied',
           description:
             'Upload and apply the WFP cleaned Excel to confirm or reject each submitted site visit before closing the cycle.',
-          // Table unavailable (Phase C migration not applied): treat as passed with notConfigured warning
           passed: wfpError || submittedCount === 0 || wfpApplied,
           count: wfpApplied ? submittedCount : 0,
           total: submittedCount,

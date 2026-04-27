@@ -139,17 +139,21 @@ export function CloseReadinessChecklist({
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {item.description}
-                      {isWarning && ' Set the required status field to enable this gate.'}
+                      {isWarning && (
+                        <span className="block mt-0.5 text-amber-700 dark:text-amber-400">
+                          This gate is inactive — the required database table has not been created yet. Run the SQL migration in <code className="font-mono text-xs">supabase/withdrawal_requests_migration.sql</code> to enable it.
+                        </span>
+                      )}
                     </p>
-                    {!item.passed && item.link && (
+                    {!item.passed && item.link && !isWarning && (
                       <Button
                         variant="link"
                         size="sm"
-                        className={`px-0 h-auto text-xs mt-1 ${isWarning ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}
+                        className="px-0 h-auto text-xs mt-1 text-red-700 dark:text-red-400"
                         onClick={() => navigate(item.link!)}
                         data-testid={`link-resolve-${item.id}`}
                       >
-                        {isWarning ? 'Configure' : 'Resolve'} <ExternalLink className="h-3 w-3 ml-1" />
+                        Resolve <ExternalLink className="h-3 w-3 ml-1" />
                       </Button>
                     )}
                   </div>
