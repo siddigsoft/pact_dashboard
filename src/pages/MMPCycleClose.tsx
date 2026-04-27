@@ -2210,21 +2210,25 @@ const MMPCycleClose = () => {
 
       <PageInfoBanner
         title="MMP Cycle Close - Coverage Management"
-        description="This page manages the full lifecycle of Monthly Monitoring Plan (MMP) cycles. When a monitoring period ends, you use this page to: (1) Review which sites were visited and which were not, (2) Assign reasons for uncovered sites (security, access, budget, etc.), (3) Start the cycle closing process, (4) Get approval from FOM/Country Director, and (5) Finalize and archive the cycle with full coverage reports. The page also shows trend analysis, performance scorecards, and historical comparisons across closed cycles."
-        descriptionAr="تدير هذه الصفحة دورة حياة خطط المراقبة الشهرية (MMP) بالكامل. عند انتهاء فترة المراقبة، تستخدم هذه الصفحة لـ: (١) مراجعة المواقع التي تمت زيارتها والتي لم تتم زيارتها، (٢) تعيين أسباب عدم تغطية المواقع (أمنية، وصول، ميزانية، إلخ)، (٣) بدء عملية إغلاق الدورة، (٤) الحصول على موافقة مدير العمليات الميدانية / المدير القطري، و(٥) إنهاء وأرشفة الدورة مع تقارير التغطية الكاملة. تعرض الصفحة أيضاً تحليل الاتجاهات وبطاقات أداء ومقارنات تاريخية عبر الدورات المغلقة."
+        description="This page manages the complete end-of-cycle process for Monthly Monitoring Plans (MMPs). After each monitoring month ends, teams use this page to account for every site — visited or not — resolve all finance obligations tied to that cycle, and formally archive the period. The six tabs guide you from reviewing live coverage stats → assigning reasons to missed sites → passing a readiness checklist → submitting for approval → and finally archiving with full reports. Closed cycles are permanently stored for trend analysis, scorecard benchmarking, and cross-cycle comparison."
+        descriptionAr="تُدير هذه الصفحة عملية إغلاق دورة خطط المراقبة الشهرية (MMP) من البداية إلى النهاية. بعد انتهاء كل شهر مراقبة، تستخدم الفرق هذه الصفحة لمحاسبة كل موقع — سواء تمت زيارته أم لا — وحسم جميع الالتزامات المالية المرتبطة بالدورة، وأرشفة الفترة رسمياً. تقودك الأجزاء الستة من مراجعة إحصائيات التغطية المباشرة → تعيين أسباب المواقع التي لم تُزَر → اجتياز قائمة الجاهزية → تقديم الدورة للموافقة → وأخيراً الأرشفة مع التقارير الكاملة. تُحفظ الدورات المغلقة بشكل دائم لتحليل الاتجاهات والمقارنة عبر الدورات."
         workflowSteps={[
-          { step: 1, role: 'Admin', action: 'Starts Cycle Close', description: 'Admin initiates the closing process for an MMP. The system auto-flags all sites that were not visited during this monitoring period.' },
-          { step: 2, role: 'Supervisor', action: 'Assigns reasons for uncovered sites', description: 'Supervisors review each uncovered site and assign a reason (security, access denied, budget, time constraints, etc.). Bulk assignment is available.' },
-          { step: 3, role: 'Admin', action: 'Reviews and finalizes', description: 'Admin reviews all reason assignments, checks the coverage report, and submits the cycle for approval.' },
-          { step: 4, role: 'FOM', action: 'Approves cycle close', description: 'Field Operations Manager reviews the final report and approves or rejects the cycle close. Comments can be added.' },
-          { step: 5, role: 'System', action: 'Archives the cycle', description: 'Once approved, the cycle is archived with full statistics, reason breakdowns, and performance data for historical analysis.' },
+          { step: 1, role: 'Admin', action: 'Initiate cycle close', description: 'On the Active Cycles tab, find the MMP for the completed month. Click "Start Close". The system immediately auto-flags every site that was not completed or officially cancelled.' },
+          { step: 2, role: 'Supervisor', action: 'Assign reasons to uncovered sites', description: 'Switch to the Uncovered Sites tab. Assign a reason to each flagged site (security incident, access denied, flooding, budget cut, data collector absent, etc.). Use Bulk Assign to apply one reason to many sites at once.' },
+          { step: 3, role: 'Admin', action: 'Pass the readiness checklist', description: 'Click the MMP row to open the Cycle Close panel. The Readiness Checklist must show all green ticks: site visits resolved, no pending cost submissions, transport advances reconciled, withdrawal requests processed, cost recoveries addressed, and WFP file applied.' },
+          { step: 4, role: 'Admin', action: 'Resolve finance blocks', description: 'If any finance gate is red: go to Finance → Cost Submissions to approve/reject pending items; go to Reconciliation to mark advances as reconciled. If a gate shows amber "(not configured)", see the guide below for what SQL migration to run.' },
+          { step: 5, role: 'Admin', action: 'Submit for approval', description: 'Once the checklist score reaches 100%, click "Submit for Approval". A notification is sent to the FOM and Country Director.' },
+          { step: 6, role: 'FOM', action: 'Approve or reject', description: 'FOM reviews the final coverage report, quality scores, and finance summary. They click Approve (with optional comment) or Reject with a reason to send back to the admin.' },
+          { step: 7, role: 'System', action: 'Archive the cycle', description: 'On approval the cycle status becomes Closed. All stats (coverage %, COMPLETED, UNCOVERED, OVERDUE counts, reason breakdowns, quality scores) are permanently archived and appear in the Closed Cycles and Comparison tabs.' },
         ]}
         workflowStepsAr={[
-          { step: 1, role: 'المدير', action: 'يبدأ إغلاق الدورة', description: 'يبدأ المدير عملية الإغلاق لخطة المراقبة. يقوم النظام تلقائياً بتحديد جميع المواقع التي لم تتم زيارتها خلال فترة المراقبة.' },
-          { step: 2, role: 'المشرف', action: 'يعين أسباب المواقع غير المغطاة', description: 'يراجع المشرفون كل موقع غير مغطى ويعينون سبباً (أمني، وصول مرفوض، ميزانية، قيود وقت، إلخ). التعيين الجماعي متاح.' },
-          { step: 3, role: 'المدير', action: 'يراجع ويُنهي', description: 'يراجع المدير جميع تعيينات الأسباب، ويتحقق من تقرير التغطية، ويقدم الدورة للموافقة.' },
-          { step: 4, role: 'المشرف والمدير', action: 'يوافق على إغلاق الدورة', description: 'يراجع مدير العمليات الميدانية التقرير النهائي ويوافق أو يرفض إغلاق الدورة. يمكن إضافة تعليقات.' },
-          { step: 5, role: 'النظام', action: 'يؤرشف الدورة', description: 'بمجرد الموافقة، تتم أرشفة الدورة مع الإحصائيات الكاملة وتفاصيل الأسباب وبيانات الأداء للتحليل التاريخي.' },
+          { step: 1, role: 'المدير', action: 'بدء إغلاق الدورة', description: 'في تبويب الدورات النشطة، ابحث عن خطة المراقبة الشهرية للشهر المكتمل. انقر "بدء الإغلاق". يقوم النظام فوراً بتحديد كل موقع لم يُكتمل أو يُلغَ رسمياً.' },
+          { step: 2, role: 'المشرف', action: 'تعيين أسباب المواقع غير المغطاة', description: 'انتقل إلى تبويب المواقع غير المغطاة. عيّن سبباً لكل موقع (حادث أمني، رفض الوصول، فيضانات، تخفيضات الميزانية، غياب جامع البيانات، إلخ). استخدم "التعيين الجماعي" لتطبيق سبب واحد على مواقع متعددة دفعةً واحدة.' },
+          { step: 3, role: 'المدير', action: 'اجتياز قائمة جاهزية الإغلاق', description: 'انقر على صف خطة المراقبة لفتح لوحة إغلاق الدورة. يجب أن تظهر قائمة الجاهزية بعلامات خضراء: المواقع محسومة، لا توجد تقديمات تكلفة معلقة، تسوية السلف المالية، معالجة طلبات السحب، معالجة استرداد التكاليف، وتطبيق ملف WFP.' },
+          { step: 4, role: 'المدير', action: 'حسم إشكاليات المالية', description: 'إذا كان أي بند مالي أحمر: اذهب إلى المالية → تقديمات التكاليف لاعتماد أو رفض البنود المعلقة؛ اذهب إلى التسوية لتحديد السلف كمسوّاة. إذا كان البند يعرض تحذير "(غير مُهيَّأ)" بالأصفر، راجع الدليل أدناه لمعرفة الترحيل المطلوب.' },
+          { step: 5, role: 'المدير', action: 'تقديم للموافقة', description: 'بمجرد وصول نسبة القائمة إلى 100%، انقر "تقديم للموافقة". يُرسَل إشعار إلى مدير العمليات الميدانية والمدير القُطري.' },
+          { step: 6, role: 'المشرف والمدير', action: 'موافقة أو رفض', description: 'يراجع مدير العمليات الميدانية تقرير التغطية النهائي ودرجات الجودة والملخص المالي. ينقر موافقة (مع تعليق اختياري) أو رفض مع سبب لإعادتها إلى المدير.' },
+          { step: 7, role: 'النظام', action: 'أرشفة الدورة', description: 'عند الموافقة، يصبح وضع الدورة "مغلقة". تُؤرشَف جميع الإحصائيات (نسبة التغطية، الأعداد، تفاصيل الأسباب، درجات الجودة) بشكل دائم وتظهر في تبويبي الدورات المغلقة والمقارنة.' },
         ]}
       />
 
@@ -2243,67 +2247,182 @@ const MMPCycleClose = () => {
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="px-4 pb-4 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2" data-testid="guide-tabs-section">
+            <div className="px-4 pb-5 space-y-5 text-sm">
+
+              {/* ── Section 1: Tab Overview ── */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* English */}
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">Understanding Each Tab</h4>
-                  <div className="space-y-1.5 text-sm text-muted-foreground">
-                    <div className="flex items-start gap-2">
-                      <Badge variant="secondary">Active Cycles</Badge>
-                      <span>View all current MMPs with their coverage status, site visit counts, and start the closing process.</span>
+                  <div className="space-y-2 text-muted-foreground">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5"><Badge variant="secondary" className="text-[10px]">Active Cycles</Badge></div>
+                      <p className="text-xs leading-snug">Shows every MMP currently open or in the closing process. Each row displays the MMP name, month/year, coverage %, and live counts of COMPLETED / UNCOVERED / OVERDUE site visits. This is where you click <strong>"Start Close"</strong> to begin the cycle-close workflow for an MMP.</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="secondary">Uncovered Sites</Badge>
-                      <span>List of all sites not visited during the cycle. Assign reasons individually or in bulk.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5"><Badge variant="secondary" className="text-[10px]">Uncovered Sites</Badge></div>
+                      <p className="text-xs leading-snug">All sites the system auto-flagged as not visited during the cycle. You must assign a <strong>reason</strong> to every site before the cycle can be closed. Reasons include: Security Incident, Access Denied, Flooding / Road Damage, Budget Cut, Data Collector Absent, Site Relocated, Duplicate Site, Weather, or Other. Use <strong>Bulk Assign</strong> to apply one reason to many sites instantly.</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="secondary">Reports</Badge>
-                      <span>Coverage statistics, reason breakdowns by hub, follow-up actions for high-priority gaps, and quality scores.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5"><Badge variant="secondary" className="text-[10px]">Reports</Badge></div>
+                      <p className="text-xs leading-snug">Coverage analytics for any active or recently closed MMP: overall coverage %, per-hub breakdowns, reason-frequency charts, follow-up action queue for high-priority gaps (e.g. sites missed 2+ consecutive cycles), and data quality scores per data collector.</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="secondary">Comparison</Badge>
-                      <span>Compare two closed cycles side-by-side to spot coverage trends and recurring issues.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5"><Badge variant="secondary" className="text-[10px]">Comparison</Badge></div>
+                      <p className="text-xs leading-snug">Select any two closed cycles and compare them side-by-side. The view highlights coverage trend (improving / declining), recurring uncovered sites, reason-pattern shifts, and hubs that improved or regressed between cycles.</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="secondary">Scorecard</Badge>
-                      <span>Performance metrics per hub showing coverage trends, gap patterns, and improvement areas.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5"><Badge variant="secondary" className="text-[10px]">Scorecard</Badge></div>
+                      <p className="text-xs leading-snug">A performance matrix per hub across the last N cycles. Shows coverage trend lines, average gap size, most frequent uncovered-reason, and an overall performance colour (green / amber / red). Used by Country Directors to identify which hubs need intervention.</p>
                     </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="secondary">Closed Cycles</Badge>
-                      <span>Archive of past cycles with full statistics, reason breakdowns, trend analysis, and export options.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5"><Badge variant="secondary" className="text-[10px]">Closed Cycles</Badge></div>
+                      <p className="text-xs leading-snug">Permanent archive of every fully closed cycle. Each entry shows final coverage %, total sites, reason breakdown, quality scores, who approved it, and the approval date. You can export individual cycles as PDF or Excel for donor reporting.</p>
                     </div>
                   </div>
                 </div>
+                {/* Arabic */}
                 <div className="space-y-2" dir="rtl">
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">فهم كل تبويب</h4>
-                  <div className="space-y-1.5 text-sm text-muted-foreground">
-                    <div className="flex items-start gap-2 flex-row-reverse text-right">
-                      <Badge variant="secondary">الدورات النشطة</Badge>
-                      <span>عرض جميع خطط المراقبة الحالية مع حالة التغطية وعدد زيارات المواقع وبدء عملية الإغلاق.</span>
+                  <div className="space-y-2 text-muted-foreground">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-row-reverse"><Badge variant="secondary" className="text-[10px]">الدورات النشطة</Badge></div>
+                      <p className="text-xs leading-snug text-right">يعرض جميع خطط المراقبة الشهرية المفتوحة أو قيد الإغلاق. يُظهر كل صف اسم الخطة والشهر والسنة ونسبة التغطية وعدد الزيارات (مكتملة / غير مغطاة / متأخرة). من هنا تنقر <strong>"بدء الإغلاق"</strong> لبدء سير عمل إغلاق الدورة.</p>
                     </div>
-                    <div className="flex items-start gap-2 flex-row-reverse text-right">
-                      <Badge variant="secondary">المواقع غير المغطاة</Badge>
-                      <span>قائمة بجميع المواقع التي لم تتم زيارتها. تعيين الأسباب فردياً أو بالجملة.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-row-reverse"><Badge variant="secondary" className="text-[10px]">المواقع غير المغطاة</Badge></div>
+                      <p className="text-xs leading-snug text-right">جميع المواقع التي حددها النظام تلقائياً على أنها لم تُزَر خلال الدورة. يجب تعيين <strong>سبب</strong> لكل موقع قبل إغلاق الدورة. الأسباب تشمل: حادث أمني، رفض الوصول، فيضانات / تلف الطريق، تخفيضات الميزانية، غياب جامع البيانات، نقل الموقع، موقع مكرر، طقس سيئ، أو أخرى. استخدم <strong>التعيين الجماعي</strong> لتطبيق سبب واحد على عدة مواقع دفعةً.</p>
                     </div>
-                    <div className="flex items-start gap-2 flex-row-reverse text-right">
-                      <Badge variant="secondary">التقارير</Badge>
-                      <span>إحصائيات التغطية وتفاصيل الأسباب حسب المحور والإجراءات المتابعة ودرجات الجودة.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-row-reverse"><Badge variant="secondary" className="text-[10px]">التقارير</Badge></div>
+                      <p className="text-xs leading-snug text-right">تحليلات التغطية لأي خطة نشطة أو مغلقة حديثاً: نسبة التغطية الإجمالية، التفاصيل حسب المحور، مخططات تكرار الأسباب، قائمة الإجراءات المتابعة للفجوات ذات الأولوية العالية، ودرجات جودة البيانات لكل جامع بيانات.</p>
                     </div>
-                    <div className="flex items-start gap-2 flex-row-reverse text-right">
-                      <Badge variant="secondary">المقارنة</Badge>
-                      <span>مقارنة دورتين مغلقتين جنباً إلى جنب لرصد اتجاهات التغطية والمشاكل المتكررة.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-row-reverse"><Badge variant="secondary" className="text-[10px]">المقارنة</Badge></div>
+                      <p className="text-xs leading-snug text-right">اختر أي دورتين مغلقتين وقارن بينهما جنباً إلى جنب. تُبرز الواجهة اتجاه التغطية (تحسّن / تراجع)، والمواقع المتكررة في عدم التغطية، وتحولات أنماط الأسباب، والمحاور التي تحسّنت أو تراجعت بين الدورتين.</p>
                     </div>
-                    <div className="flex items-start gap-2 flex-row-reverse text-right">
-                      <Badge variant="secondary">بطاقة الأداء</Badge>
-                      <span>مقاييس الأداء لكل محور تعرض اتجاهات التغطية وأنماط الفجوات ومجالات التحسين.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-row-reverse"><Badge variant="secondary" className="text-[10px]">بطاقة الأداء</Badge></div>
+                      <p className="text-xs leading-snug text-right">مصفوفة أداء لكل محور عبر آخر N دورات. تُظهر منحنيات اتجاه التغطية ومتوسط الفجوات وأكثر أسباب غياب التغطية تكراراً ولون أداء إجمالي (أخضر / أصفر / أحمر). يستخدمها المديرون القُطريون لتحديد المحاور التي تحتاج تدخلاً.</p>
                     </div>
-                    <div className="flex items-start gap-2 flex-row-reverse text-right">
-                      <Badge variant="secondary">الدورات المغلقة</Badge>
-                      <span>أرشيف الدورات السابقة مع إحصائيات كاملة وتحليل الاتجاهات وخيارات التصدير.</span>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-0.5 flex-row-reverse"><Badge variant="secondary" className="text-[10px]">الدورات المغلقة</Badge></div>
+                      <p className="text-xs leading-snug text-right">أرشيف دائم لكل دورة مغلقة بالكامل. يُظهر كل إدخال نسبة التغطية النهائية وإجمالي المواقع وتفصيل الأسباب ودرجات الجودة ومن وافق ومتى. يمكنك تصدير كل دورة كملف PDF أو Excel لتقارير المانحين.</p>
                     </div>
                   </div>
                 </div>
               </div>
+
+              {/* ── Section 2: Step-by-step cycle close ── */}
+              <div className="border-t border-green-200/60 dark:border-green-800/60 pt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">How to Close a Cycle — Step by Step</h4>
+                  <ol className="space-y-2 text-xs text-muted-foreground list-none">
+                    {[
+                      { n: 1, title: 'Go to Active Cycles tab', body: 'Find the MMP whose monitoring month has ended. Check the COMPLETED / UNCOVERED / OVERDUE counts are accurate. If numbers look wrong, click Refresh.' },
+                      { n: 2, title: 'Click "Start Close"', body: 'The button appears on the MMP row (Admin / FOM only). The system auto-flags every site that is not in a terminal status (completed, approved, cancelled, not-covered). The MMP status changes to "Closing".' },
+                      { n: 3, title: 'Assign reasons — Uncovered Sites tab', body: 'Every flagged site needs a reason. Click a site to assign individually, or tick multiple sites and use "Bulk Assign". Reasons are required before the site-visits gate can go green.' },
+                      { n: 4, title: 'Open the Cycle Close panel', body: 'Click the MMP row or the "Close Cycle" button to open the slide-out panel. This shows the Readiness Checklist, Finance Reconciliation Review, and the Submit button.' },
+                      { n: 5, title: 'Check the Readiness Checklist', body: 'Six gates must all be green (✓) before you can submit. A red (✗) means action is required now. An amber warning means the feature needs a database table created — see the guide below.' },
+                      { n: 6, title: 'Resolve finance blocks', body: 'Red "cost submissions" gate → go to Finance → Cost Submissions, approve or reject all pending items for this cycle month. Red "transport advances" gate → go to Reconciliation Dashboard, mark the relevant advances as reconciled.' },
+                      { n: 7, title: 'Finance Reconciliation Review', body: 'Below the checklist you see Total / Pending / Cleared counts for cost submissions. "Pending" items block closing — resolve them in Finance before returning here.' },
+                      { n: 8, title: 'Submit for Approval', body: 'Once checklist score = 100%, the Submit button becomes active. Click it. A notification goes to the FOM and Country Director with a link to review.' },
+                      { n: 9, title: 'FOM / Country Director Approves', body: 'They review the coverage report, quality scores, and finance summary on this same panel. They click Approve (optionally add a note) or Reject with a reason. Rejection sends the cycle back to you for corrections.' },
+                      { n: 10, title: 'Cycle is Archived', body: 'Approved cycles move to the Closed Cycles tab with a permanent record. The MMP is unlocked for the next cycle. Export PDF or Excel for donor reports.' },
+                    ].map(s => (
+                      <li key={s.n} className="flex gap-2 items-start">
+                        <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-green-600 dark:bg-green-500 text-white text-[10px] font-bold mt-0.5">{s.n}</span>
+                        <span><strong className="text-foreground">{s.title}:</strong> {s.body}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                {/* Arabic steps */}
+                <div className="space-y-2" dir="rtl">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">كيفية إغلاق دورة — خطوة بخطوة</h4>
+                  <ol className="space-y-2 text-xs text-muted-foreground list-none">
+                    {[
+                      { n: 1, title: 'انتقل إلى تبويب الدورات النشطة', body: 'ابحث عن خطة المراقبة الشهرية التي انتهى شهر مراقبتها. تحقق من دقة أعداد المواقع (مكتملة / غير مغطاة / متأخرة). إذا بدت الأرقام غير صحيحة، انقر "تحديث".' },
+                      { n: 2, title: 'انقر "بدء الإغلاق"', body: 'تظهر الزر على صف خطة المراقبة (للمدير ومدير العمليات فقط). يحدد النظام تلقائياً كل موقع ليس في وضع نهائي (مكتمل، معتمد، ملغى، غير مغطى). يتغير وضع الخطة إلى "قيد الإغلاق".' },
+                      { n: 3, title: 'تعيين الأسباب — تبويب المواقع غير المغطاة', body: 'كل موقع محدد يحتاج إلى سبب. انقر على موقع للتعيين الفردي، أو حدد مواقع متعددة واستخدم "التعيين الجماعي". الأسباب مطلوبة قبل أن يتحول بند المواقع إلى أخضر.' },
+                      { n: 4, title: 'افتح لوحة إغلاق الدورة', body: 'انقر على صف خطة المراقبة أو زر "إغلاق الدورة" لفتح اللوحة الجانبية. تعرض هذه اللوحة قائمة الجاهزية ومراجعة التسوية المالية وزر التقديم.' },
+                      { n: 5, title: 'تحقق من قائمة جاهزية الإغلاق', body: 'ستة بنود يجب أن تكون خضراء (✓) قبل التقديم. الأحمر (✗) يعني إجراءً مطلوباً الآن. التحذير الأصفر يعني أن الميزة تحتاج إنشاء جدول في قاعدة البيانات — راجع الدليل أدناه.' },
+                      { n: 6, title: 'حسم إشكاليات المالية', body: 'بند "تقديمات التكلفة" أحمر → اذهب إلى المالية → تقديمات التكاليف، اعتمد أو ارفض جميع البنود المعلقة لشهر الدورة. بند "السلف المالية" أحمر → اذهب إلى لوحة التسوية وحدّد السلف ذات الصلة كمسوّاة.' },
+                      { n: 7, title: 'مراجعة التسوية المالية', body: 'أسفل القائمة ترى أعداد الإجمالي / المعلق / المسوّى لتقديمات التكاليف. البنود "المعلقة" تمنع الإغلاق — حسمها في المالية قبل العودة هنا.' },
+                      { n: 8, title: 'تقديم للموافقة', body: 'حين تبلغ نسبة القائمة 100%، يصبح زر التقديم نشطاً. انقر عليه. يُرسَل إشعار إلى مدير العمليات الميدانية والمدير القُطري مع رابط المراجعة.' },
+                      { n: 9, title: 'موافقة مدير العمليات / المدير القُطري', body: 'يراجعون تقرير التغطية ودرجات الجودة والملخص المالي في نفس اللوحة. ينقرون موافقة (مع ملاحظة اختيارية) أو رفض مع سبب. الرفض يُعيد الدورة إليك للتصحيح.' },
+                      { n: 10, title: 'أرشفة الدورة', body: 'تنتقل الدورات المعتمدة إلى تبويب الدورات المغلقة مع سجل دائم. يُفتح خطة المراقبة للدورة التالية. صدّر PDF أو Excel لتقارير المانحين.' },
+                    ].map(s => (
+                      <li key={s.n} className="flex gap-2 items-start flex-row-reverse">
+                        <span className="flex-shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-green-600 dark:bg-green-500 text-white text-[10px] font-bold mt-0.5">{s.n}</span>
+                        <span className="text-right"><strong className="text-foreground">{s.title}:</strong> {s.body}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+
+              {/* ── Section 3: Readiness Checklist gates explained ── */}
+              <div className="border-t border-green-200/60 dark:border-green-800/60 pt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">Readiness Checklist — What Each Gate Means</h4>
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    {[
+                      { gate: 'All site visits resolved', meaning: 'Every entry in the MMP must be in a terminal status: Completed, Approved, Cancelled, or Not Covered (with a reason). Sites still in Draft / Assigned / In Progress / Submitted / Overdue block this gate.' },
+                      { gate: 'No pending cost submissions', meaning: 'All operational cost submissions whose expense date falls in this cycle\'s month must be approved or rejected by both finance tiers. Go to Finance → Cost Submissions, filter by month, and resolve each pending item.' },
+                      { gate: 'All transport advances reconciled', meaning: 'Every down-payment advance linked to a site visit in this MMP that has been approved or paid must be marked as reconciled (receipts matched). Go to Reconciliation Dashboard to complete this.' },
+                      { gate: 'All withdrawal requests processed', meaning: 'All cash withdrawal requests tied to this MMP must reach a terminal status (approved, rejected, completed, or paid). This gate requires the withdrawal_requests database table — run supabase/withdrawal_requests_migration.sql if it shows amber "(not configured)".' },
+                      { gate: 'All not-covered cost recoveries addressed', meaning: 'If any not-covered site received an advance payment, you must decide: Roll to Next MMP, Return Required, or Write-Off. Sites with an advance but no recovery decision block this gate. Go to the Exceptions tab to resolve.' },
+                      { gate: 'WFP confirmation file applied', meaning: 'If any site visit is in "Submitted" status, you must upload the WFP-cleaned Excel file and apply it. This confirms or rejects each submitted visit per WFP records. Go to the WFP tab inside the Cycle Close panel.' },
+                    ].map(g => (
+                      <div key={g.gate}>
+                        <p className="font-medium text-foreground">{g.gate}</p>
+                        <p className="leading-snug">{g.meaning}</p>
+                      </div>
+                    ))}
+                    <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 mt-1">
+                      <p className="font-medium text-amber-800 dark:text-amber-300">Amber "(not configured)" warning</p>
+                      <p className="text-amber-700 dark:text-amber-400">Means the database table for that gate has not been created yet. The gate is inactive — it will not block closing. To activate it, run the corresponding SQL migration file from the <code className="font-mono">supabase/</code> folder in your Supabase SQL Editor. Currently: <code className="font-mono">withdrawal_requests_migration.sql</code>.</p>
+                    </div>
+                  </div>
+                </div>
+                {/* Arabic */}
+                <div className="space-y-2" dir="rtl">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">قائمة الجاهزية — معنى كل بند</h4>
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    {[
+                      { gate: 'تسوية جميع زيارات المواقع', meaning: 'يجب أن يكون كل إدخال في خطة المراقبة في وضع نهائي: مكتمل، معتمد، ملغى، أو غير مغطى (مع سبب). المواقع في وضع مسودة / مُعيَّن / قيد التنفيذ / مُقدَّم / متأخر تمنع هذا البند.' },
+                      { gate: 'لا توجد تقديمات تكلفة معلقة', meaning: 'جميع تقديمات التكاليف التشغيلية التي يقع تاريخ نفقتها في شهر هذه الدورة يجب أن تكون معتمدة أو مرفوضة من كلا المستويين الماليين. اذهب إلى المالية → تقديمات التكاليف، صفّي حسب الشهر وحسم كل بند معلق.' },
+                      { gate: 'تسوية جميع سلف المواصلات', meaning: 'كل سلفة دفع مسبق مرتبطة بزيارة موقع في هذه الخطة وتمت الموافقة عليها أو صرفها يجب تحديدها كمسوّاة (مطابقة الإيصالات). اذهب إلى لوحة التسوية لإتمام ذلك.' },
+                      { gate: 'معالجة جميع طلبات السحب', meaning: 'يجب أن تصل جميع طلبات سحب النقد المرتبطة بهذه الخطة إلى وضع نهائي (معتمد، مرفوض، مكتمل، أو مدفوع). هذا البند يتطلب جدول withdrawal_requests في قاعدة البيانات — قم بتشغيل withdrawal_requests_migration.sql إذا ظهر تحذير أصفر "(غير مُهيَّأ)".' },
+                      { gate: 'معالجة جميع استردادات تكاليف المواقع غير المغطاة', meaning: 'إذا تلقّى أي موقع غير مغطى دفعة سلفة، يجب اتخاذ قرار: ترحيل إلى الخطة التالية، أو استرداد مطلوب، أو شطب. المواقع التي لديها سلفة بلا قرار استرداد تمنع هذا البند. اذهب إلى تبويب الاستثناءات للحل.' },
+                      { gate: 'تطبيق ملف تأكيد WFP', meaning: 'إذا كان أي موقع في وضع "مُقدَّم"، يجب تحميل ملف Excel المُنقَّح من WFP وتطبيقه. يؤكد ذلك أو يرفض كل زيارة مُقدَّمة وفق سجلات WFP. اذهب إلى تبويب WFP داخل لوحة إغلاق الدورة.' },
+                    ].map(g => (
+                      <div key={g.gate}>
+                        <p className="font-medium text-foreground text-right">{g.gate}</p>
+                        <p className="leading-snug text-right">{g.meaning}</p>
+                      </div>
+                    ))}
+                    <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 mt-1">
+                      <p className="font-medium text-amber-800 dark:text-amber-300 text-right">تحذير أصفر "(غير مُهيَّأ)"</p>
+                      <p className="text-amber-700 dark:text-amber-400 text-right">يعني أن جدول قاعدة البيانات الخاص بهذا البند لم يُنشَأ بعد. البند غير نشط ولن يمنع الإغلاق. لتفعيله، شغّل ملف الترحيل SQL المقابل من مجلد <code className="font-mono">supabase/</code> في محرر SQL لـ Supabase. حالياً: <code className="font-mono">withdrawal_requests_migration.sql</code>.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Section 4: Finance Reconciliation Review ── */}
+              <div className="border-t border-green-200/60 dark:border-green-800/60 pt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">Finance Reconciliation Review Card</h4>
+                  <p className="text-xs text-muted-foreground leading-snug">Shown below the checklist, this card gives a real-time finance snapshot for the cycle. <strong className="text-foreground">Total</strong> = all cost submissions for the cycle month. <strong className="text-foreground">Pending</strong> = items still awaiting tier-1 or tier-2 approval (these block closing). <strong className="text-foreground">Cleared</strong> = fully approved or rejected submissions. Click <em>Open Reconciliation Dashboard</em> to go directly to the finance tool and clear pending items.</p>
+                </div>
+                <div className="space-y-1.5" dir="rtl">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">بطاقة مراجعة التسوية المالية</h4>
+                  <p className="text-xs text-muted-foreground leading-snug text-right">تظهر أسفل القائمة وتعرض لقطة مالية فورية للدورة. <strong className="text-foreground">الإجمالي</strong> = جميع تقديمات التكاليف لشهر الدورة. <strong className="text-foreground">المعلق</strong> = البنود التي لا تزال تنتظر اعتماد المستوى الأول أو الثاني (تمنع الإغلاق). <strong className="text-foreground">المسوّى</strong> = التقديمات المعتمدة أو المرفوضة بالكامل. انقر على <em>فتح لوحة التسوية</em> للانتقال مباشرةً إلى أداة المالية وحسم البنود المعلقة.</p>
+                </div>
+              </div>
+
             </div>
           </CollapsibleContent>
         </div>
