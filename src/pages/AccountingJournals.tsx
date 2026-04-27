@@ -14,6 +14,7 @@ import { Loader2, Search, Download, RefreshCw, FileText, Eye, Plus, Trash2 } fro
 import { format, parseISO } from 'date-fns';
 import { ACCT_STATUS_TONE, formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { useAccountingCountry } from '@/hooks/use-accounting-country';
 
 interface Period { id: string; period_no: number; start_date: string; end_date: string; status: string; fiscal_year_id: string }
 interface FiscalYear { id: string; code: string }
@@ -76,6 +77,7 @@ export default function AccountingJournals() {
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canPost   = hasAnyRole(['super_admin', 'finance', 'accountant']);
   const { toast } = useToast();
+  const { countryId: defaultCountryId } = useAccountingCountry();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -112,7 +114,7 @@ export default function AccountingJournals() {
     setNewDate(new Date().toISOString().slice(0, 10));
     setNewDescEn('');
     setNewDescAr('');
-    setNewCountryId('all');
+    setNewCountryId(defaultCountryId);
     setNewLines([BLANK_LINE(), BLANK_LINE()]);
     setNewOpen(true);
   };

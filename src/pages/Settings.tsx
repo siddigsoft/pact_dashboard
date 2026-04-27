@@ -533,6 +533,11 @@ const Settings = () => {
   const [broadcastResult, setBroadcastResult] = useState<{ sent: number; skipped: number } | null>(null);
   const [broadcastOnlyMissing, setBroadcastOnlyMissing] = useState(true);
 
+  interface WCountry { id: string; code: string; name_en: string; currency_code: string; currency_symbol: string; flag_emoji: string | null; }
+  const [wCountries, setWCountries] = useState<WCountry[]>([]);
+  const [wCountryId, setWCountryId] = useState<string>('all');
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
+
   const isAdminUser = ['admin', 'superadmin', 'ict', 'financialadmin'].includes(
     (currentUser?.role || '').toLowerCase()
   );
@@ -551,6 +556,47 @@ const Settings = () => {
       .maybeSingle()
       .then(({ data }) => setHasMonitoringAccess(!!data));
   }, [currentUser?.id, isSuperAdminUser]);
+
+  useEffect(() => {
+    supabase
+      .from('countries')
+      .select('id,code,name_en,currency_code,currency_symbol,flag_emoji')
+      .eq('is_active', true)
+      .order('name_en')
+      .then(({ data }) => setWCountries((data ?? []) as WCountry[]));
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const stored = localStorage.getItem(`pact-acct-country-${currentUser.id}`);
+    supabase
+      .from('profiles')
+      .select('default_country_id')
+      .eq('id', currentUser.id)
+      .single()
+      .then(({ data }) => {
+        const dbId: string = (data as { default_country_id?: string | null } | null)?.default_country_id ?? 'all';
+        setWCountryId(stored ?? dbId);
+      });
+  }, [currentUser?.id]);
+
+  const handleSaveWorkspace = async () => {
+    if (!currentUser?.id) return;
+    setSavingWorkspace(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ default_country_id: wCountryId === 'all' ? null : wCountryId })
+        .eq('id', currentUser.id);
+      if (error) throw error;
+      localStorage.removeItem(`pact-acct-country-${currentUser.id}`);
+      toast({ title: 'Workspace saved', description: 'Your default accounting country has been updated.' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Could not save workspace settings.', variant: 'destructive' });
+    } finally {
+      setSavingWorkspace(false);
+    }
+  };
 
   const handleBroadcastBankAccountReminder = async () => {
     setBroadcastSending(true);
@@ -1171,6 +1217,14 @@ const Settings = () => {
           >
             <Eye className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Privacy</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="workspace"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-workspace"
+          >
+            <Globe className="h-4 w-4" />
+            <span className="hidden xs:inline sm:inline">Workspace</span>
           </TabsTrigger>
         </TabsList>
 
@@ -2012,6 +2066,98 @@ const Settings = () => {
                 >
                   <Save className="mr-2 h-4 w-4" />
                   Save Changes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="workspace" className="space-y-4">
+          <Card className="border shadow-sm">
+            <CardHeader className="bg-gradient-to-r from-teal-50 to-teal-100 dark:from-teal-900/20 dark:to-teal-800/20 border-b p-4 sm:p-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-teal-500 rounded-lg">
+                  <Globe className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Workspace & Country</CardTitle>
+                  <CardDescription>
+                    Set your default country for accounting modules (COA, Journals, Trial Balance).
+                    You can still switch per-session on any accounting page.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
+              <div className="space-y-3">
+                <Label className="text-base font-medium">Default Accounting Country</Label>
+                <p className="text-sm text-muted-foreground">
+                  All accounting pages will auto-filter to this country when you open them.
+                  Admins can still switch to any country on the fly.
+                </p>
+                <Select value={wCountryId} onValueChange={setWCountryId}>
+                  <SelectTrigger className="w-full sm:w-[320px] h-11" data-testid="select-workspace-country">
+                    <SelectValue placeholder="Select a country…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      <span className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-muted-foreground" />
+                        All countries (no default)
+                      </span>
+                    </SelectItem>
+                    {wCountries.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        <span className="flex items-center gap-2">
+                          {c.flag_emoji && <span>{c.flag_emoji}</span>}
+                          {c.name_en}
+                          <span className="text-muted-foreground text-xs ml-1">
+                            {c.currency_code} {c.currency_symbol}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {wCountryId && wCountryId !== 'all' && (() => {
+                const c = wCountries.find((x) => x.id === wCountryId);
+                if (!c) return null;
+                return (
+                  <div className="p-4 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-200 dark:border-teal-800 flex items-center gap-4">
+                    <div className="text-4xl">{c.flag_emoji ?? '🌍'}</div>
+                    <div>
+                      <p className="font-semibold text-teal-800 dark:text-teal-200">{c.name_en}</p>
+                      <p className="text-sm text-teal-600 dark:text-teal-400">
+                        Currency: <span className="font-medium">{c.currency_code} ({c.currency_symbol})</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        All new journal entries will default to {c.currency_code} when this country is selected.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex justify-end pt-2 border-t">
+                <Button
+                  onClick={handleSaveWorkspace}
+                  disabled={savingWorkspace}
+                  className="min-h-[44px] px-8"
+                  data-testid="button-save-workspace"
+                >
+                  {savingWorkspace ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Save Workspace
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>

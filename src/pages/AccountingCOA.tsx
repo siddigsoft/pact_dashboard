@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ACCT_TYPE_LABELS, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
+import { useAccountingCountry } from '@/hooks/use-accounting-country';
 
 interface Account {
   id: string;
@@ -73,6 +74,7 @@ export default function AccountingCOA() {
   const allowed   = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
   const canManage = hasAnyRole(['super_admin', 'admin']);
   const { toast } = useToast();
+  const { countryId: defaultCountryId, loading: acctCountryLoading } = useAccountingCountry();
 
   const [rows, setRows]               = useState<Account[]>([]);
   const [countries, setCountries]     = useState<Country[]>([]);
@@ -83,7 +85,15 @@ export default function AccountingCOA() {
   const [activeFilter, setActiveFilter]     = useState<string>('all');
   const [postableFilter, setPostableFilter] = useState<string>('all');
   const [countryFilter, setCountryFilter]   = useState<string>('all');
+  const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
   const [expanded, setExpanded]       = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!acctCountryLoading && !countryFilterInitialized) {
+      setCountryFilter(defaultCountryId);
+      setCountryFilterInitialized(true);
+    }
+  }, [acctCountryLoading, defaultCountryId, countryFilterInitialized]);
 
   // ── dialog states ─────────────────────────────────────────
   const [formOpen, setFormOpen]       = useState(false);

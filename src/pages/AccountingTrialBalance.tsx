@@ -12,6 +12,7 @@ import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ACCT_TYPE_LABELS, formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { useAccountingCountry } from '@/hooks/use-accounting-country';
 import { ensureArabicFont, setArabicFont, setLatinFont, ARABIC_FONT_NAME } from '@/lib/jspdfArabic';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +34,7 @@ interface AccountMeta { id: string; account_type: string; subtype: string; count
 export default function AccountingTrialBalance() {
   const { hasAnyRole, loading: authLoading } = useAuthorization();
   const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const { countryId: defaultCountryId, loading: acctCountryLoading } = useAccountingCountry();
 
   const [years, setYears] = useState<FiscalYear[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -42,6 +44,14 @@ export default function AccountingTrialBalance() {
   const [periodId, setPeriodId] = useState<string>('');
   const [fundId, setFundId] = useState<string>('all');
   const [countryFilter, setCountryFilter] = useState<string>('all');
+  const [countryFilterInitialized, setCountryFilterInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!acctCountryLoading && !countryFilterInitialized) {
+      setCountryFilter(defaultCountryId);
+      setCountryFilterInitialized(true);
+    }
+  }, [acctCountryLoading, defaultCountryId, countryFilterInitialized]);
   const [search, setSearch] = useState('');
 
   const [tb, setTb] = useState<TbRow[]>([]);
