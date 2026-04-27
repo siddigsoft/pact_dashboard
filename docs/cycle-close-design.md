@@ -1,7 +1,7 @@
 # Cycle Close & Site Visit Status — Full Design & Build Plan
 
 **Status:** Design Finalized — Ready for Build Approval
-**Last updated:** 2026-04-27 (rev 2 — full money tracking + timestamps added)
+**Last updated:** 2026-04-27 (rev 3 — post-cycle fee settlement system + tracker integration added)
 **Participants:** Product Owner, Engineering
 
 ---
@@ -1382,3 +1382,399 @@ Each new section/tab will have a "How this works" collapsible guide. Here are th
 ---
 
 *This document is the single source of truth for this feature set. Implementation begins on Phase A after owner approval.*
+
+---
+
+## PART 6 — POST-CYCLE FEE SETTLEMENT SYSTEM
+
+*This part was added based on the question: "How do we pay enumerators their fees after cycle close, even if they never requested payment themselves?"*
+
+---
+
+### 6.1 — The Core Problem
+
+Today, enumerators must actively submit a down-payment request to receive their fees. This creates two gaps:
+
+1. **Forgotten requests** — An enumerator completes 8 sites but never submits a request. They are owed money but nothing prompts the system to pay them. Finance has no visibility that payment is outstanding.
+
+2. **Partial advance, outstanding balance** — An enumerator requested SDG 1,200 as an advance before visiting, but the fee for all 6 confirmed sites is SDG 2,100. The remaining SDG 900 sits as "earned but unpaid" with no record in the system.
+
+Both cases are silent financial obligations that should be visible, trackable, and clearable by admin.
+
+---
+
+### 6.2 — How Fees Work Today (What We Build On)
+
+When a site is assigned, the system already calculates and locks:
+- `mmp_site_entries.enumerator_fee` — base fee × complexity multiplier (calculated from classification level at assignment time)
+- `mmp_site_entries.transport_fee` — transport allowance
+- `mmp_site_entries.cost` — total of both (used when present, else falls back to fee + transport)
+
+When a site is completed, a database trigger credits the enumerator's wallet automatically. Down-payment advances are deducted from the wallet at disbursement. The wallet balance = earned fees − disbursed advances.
+
+**So the data is already there.** The fee per site is already stored. We need to surface it as a settlement view and add the "request on behalf" action.
+
+---
+
+### 6.3 — Fee Settlement States (Per Site Per Enumerator)
+
+After cycle close, every site in a closed cycle falls into one of these settlement states:
+
+| State | Badge | Meaning |
+|---|---|---|
+| `fee_earned_paid` | Green — Settled | Fee was earned. A payment request exists and has been disbursed. |
+| `fee_earned_advance_only` | Blue — Advance Only | Advance was paid but no final settlement yet. May have a balance. |
+| `fee_earned_unpaid` | Amber — Not Requested | Site confirmed/submitted. Fee earned. No payment request exists at all. |
+| `fee_not_earned` | Grey — Not Applicable | Site not covered or rejected. No fee owed. |
+| `fee_partial_balance` | Orange — Balance Due | Advance paid < fee earned. Positive balance owed to enumerator. |
+| `fee_overpaid` | Red — Overpaid | Advance paid > fee earned (rare). Triggers cost recovery. |
+
+These states are computed dynamically at query time — not stored as a column. They are derived from:
+- `mmp_site_entries.enumerator_fee` (earned)
+- `down_payment_requests` for that site (advance paid)
+- `wallet_transactions` linked to that site (credits/debits)
+
+---
+
+### 6.4 — The Fee Settlement View
+
+#### Where It Lives
+
+Two places:
+1. **Tracker Preparation Plan** (`/tracker-preparation-plan`) — new **"Fee Settlement"** tab (see 6.7 below)
+2. **Cycle Close Page** (`/mmp/cycle-close`) — new **"Fee Settlement"** sub-section at the bottom of the History tab, visible after cycle is closed
+
+#### What It Shows
+
+The fee settlement view is structured in three tiers — all three are visible simultaneously:
+
+---
+
+**TIER 1 — Summary Cards (top of view)**
+
+Six KPI cards shown instantly after selecting the cycle:
+
+| Card | Value |
+|---|---|
+| Total Earned | SDG X — sum of all `enumerator_fee` for confirmed/submitted sites |
+| Total Advanced | SDG Y — sum of all disbursed down payments for this cycle |
+| Outstanding Balance | SDG Z = Earned − Advanced (if positive: owed to enumerators) |
+| Sites Unsettled | N — count of sites with `fee_earned_unpaid` or `fee_partial_balance` |
+| Enumerators Pending | N — count of distinct enumerators with any outstanding balance |
+| Overpaid Amount | SDG X — if any, flagged for cost recovery |
+
+---
+
+**TIER 2 — Breakdown Table (filterable by Hub / State / Locality)**
+
+A collapsible table grouped by: **Hub → State → Locality → Enumerator → Sites**
+
+Each row shows:
+- Enumerator name + classification level
+- Sites confirmed in this cycle (count)
+- Fee earned (SDG)
+- Advance paid (SDG)
+- **Balance = Earned − Advance** (colour-coded: green = 0 settled, amber = positive owed, red = overpaid)
+- Settlement status badge
+- Action button
+
+Example row:
+```
+Ahmed Osman (Level B) | 6 sites | Earned: SDG 1,800 | Advance: SDG 1,200 | Balance: SDG 600 | [Request Payment]
+```
+
+Filters available:
+- Hub dropdown
+- State dropdown  
+- Locality dropdown
+- Settlement status filter: All / Unsettled / Settled / Advance Only
+- Search by enumerator name
+
+---
+
+**TIER 3 — Per-Site Detail (expandable row)**
+
+Clicking an enumerator row expands to show each individual site with:
+- Site name, state, locality
+- Visit status (wfp_confirmed / submitted)
+- Fee earned for this site (SDG)
+- Down payment linked to this site (SDG, or "None")
+- Balance for this specific site
+- Evidence uploaded (ODK reference)
+
+---
+
+### 6.5 — "Request on Behalf" — The Admin Action
+
+This is the core new capability. Admin can initiate a fee payment for an enumerator without the enumerator doing anything.
+
+#### How It Works
+
+**Single enumerator — "Request Payment" button:**
+1. Admin clicks "Request Payment" next to an enumerator row
+2. A dialog opens showing:
+   - Enumerator name and photo
+   - Sites being covered (list with fees)
+   - Total amount being requested
+   - Payment method (default: wallet credit / transfer to existing method)
+   - A note field: "Admin-initiated request on behalf of [Name]"
+   - Confirm button
+3. On confirm:
+   - A `down_payment_request` record is created with `requested_by = admin_user_id`, `on_behalf_of = enumerator_user_id`, `is_admin_request = true`
+   - The request is auto-approved (no approval needed — admin already approved it by initiating)
+   - Status jumps to `approved` immediately
+   - A `payment_event_log` entry is written: event `admin_fee_request_on_behalf`
+   - Notification sent to enumerator: EVENT 17 (see 6.9 below)
+   - Notification sent to finance to disburse: EVENT 18
+
+**Bulk — "Clear All Outstanding" button (top of view):**
+1. Admin clicks "Clear All Outstanding" at the top of the Fee Settlement view
+2. A confirmation dialog shows:
+   - "You are about to request payment for [N] enumerators totalling SDG [X]. Each request will be auto-approved and sent to Finance for disbursement. Are you sure?"
+   - A list of all affected enumerators with amounts
+   - Confirm button
+3. On confirm: same as single, but processed for all unsettled enumerators in one operation
+4. One notification to finance listing all (bundled): EVENT 19
+
+---
+
+### 6.6 — Financial Accountability Alignment
+
+Every "request on behalf" action is fully logged:
+
+**In `payment_event_log`:**
+```
+event_type:         admin_fee_request_on_behalf
+amount:             SDG 600
+site_entry_id:      [uuid]
+site_name:          ALMATAR
+mmp_id:             [uuid]
+mmp_name:           February 2026 — Gedaref
+triggered_by:       [admin user id]
+triggered_by_name:  Sara Ali
+triggered_by_role:  admin
+triggered_at:       2026-02-28T10:30:00Z
+note:               "Admin-initiated settlement request after cycle close"
+metadata: {
+  on_behalf_of_user_id: [enumerator user id],
+  on_behalf_of_name: "Ahmed Osman",
+  down_payment_request_id: [uuid],
+  settlement_type: "post_cycle_clearance"
+}
+```
+
+This means:
+- The enumerator can see in their Money Timeline: "SDG 600 fee settlement requested on your behalf by Sara Ali (Admin) — 28 Feb 2026"
+- Finance sees it in the payment queue with the `on_behalf` label
+- Super Admin sees the full trail in the History tab
+- The `site_visit_status_log` does NOT change (site status stays as `wfp_confirmed`) — only the payment layer is affected
+
+**Overpaid detection:**
+If Earned < Advance (enumerator received more than they earned), the system:
+- Shows the row in red with "Overpaid — SDG X"
+- Flags the linked `down_payment_request` with `overpaid = true` and the excess amount
+- Writes a `payment_event_log` entry: `overpayment_detected`
+- Creates a cost recovery record automatically: type `return`, amount = excess
+- Notifies finance: EVENT 20
+
+---
+
+### 6.7 — Tracker Preparation Plan — Changes
+
+Looking at the screenshot (the current Tracker Preparation Plan at `app.pactorg.com/tracker-preparation-plan`):
+
+**Current tabs:** Overview | Site Details | By State | By Hub | Enumerators
+
+**What Changes:**
+
+#### Add New Tab: "Fee Settlement"
+
+This new tab shows the full fee settlement view described in 6.4 above, but filtered to whichever month/year/project is selected in the page-level filters.
+
+The tab is only enabled when:
+- The selected cycle's `mmp_files.cycle_status` is `closed` or `wfp_reviewed`
+- Or Super Admin can toggle "Show for active cycles" for preview
+
+**What the tab shows (same as 6.4):**
+- Tier 1: 6 KPI summary cards
+- Tier 2: Hub → State → Locality → Enumerator breakdown table with balances
+- Tier 3: Per-site expandable detail rows
+- "Clear All Outstanding" bulk button (admin/super_admin only)
+- Per-row "Request Payment" buttons
+
+#### Enhance Existing "Enumerators" Tab
+
+The existing Enumerators tab currently shows performance stats. Add a financial column:
+
+| New Column | Description |
+|---|---|
+| Fee Earned | Total SDG earned across confirmed sites this cycle |
+| Advance Received | Total SDG received as advance |
+| Balance | Earned − Advance (colour-coded) |
+| Settlement | Green tick (settled) or Amber clock (pending) |
+
+This gives at-a-glance visibility without needing to switch to the Fee Settlement tab.
+
+#### Enhance Existing "By State" and "By Hub" Tabs
+
+Add financial summary rows to these tabs:
+
+**By State tab additions:**
+- Total earned by all enumerators in that state
+- Total advanced in that state
+- Outstanding balance for that state
+- Count of unsettled enumerators in that state
+
+**By Hub tab additions:**
+- Same financial summary as by state, but grouped by hub
+
+#### Update the KPI Cards (top of page)
+
+The current six cards: Total Planned | Completed | Coverage % | Pending | Budget (SDG) | Actual (SDG)
+
+Add two new cards:
+- **Outstanding Fees** (SDG) — fees earned but not yet settled
+- **Settlement %** — percentage of earned fees that have been requested/disbursed
+
+---
+
+### 6.8 — Mobile (Flutter App) Changes
+
+The mobile enumerator does not manage fee settlement — that is an admin/finance function. However, the enumerator sees the result in their app:
+
+**In the enumerator's Money Timeline (already planned):**
+When an admin requests payment on their behalf, a new entry appears:
+```
+💰 SDG 600 fee settlement requested by Admin: Sara Ali — 28 Feb 2026, 10:30 AM
+   "Settlement for February 2026 cycle — 6 sites confirmed"
+```
+
+**In the enumerator's wallet screen:**
+- After disbursement, wallet balance increases
+- The transaction shows type: "Fee Settlement — February 2026"
+- Tapping it shows the list of sites included
+
+**No new buttons or flows are needed in the mobile app for fee settlement** — it is entirely admin-driven on the web. The enumerator only sees the outcome.
+
+---
+
+### 6.9 — New Notification Events for Fee Settlement
+
+Three new notification events added to Part 4C:
+
+#### EVENT 17 — `admin_fee_request_on_behalf`
+**When:** Admin requests payment on behalf of one enumerator
+**Who:** Enumerator
+**Channels:** In-App + WhatsApp
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Fee Settlement Requested for You | تم طلب تسوية رسومك |
+| Message | SDG [Amount] has been requested on your behalf for [N] sites in [MMP Name]. The amount will be processed by Finance soon. | تم طلب [المبلغ] جنيه سوداني نيابةً عنك لـ [N] موقع في خطة [اسم الخطة]. سيتم معالجة المبلغ من قِبَل المالية قريباً. |
+
+---
+
+#### EVENT 18 — `fee_settlement_awaiting_disbursement`
+**When:** Admin-initiated payment request is created (single or bulk)
+**Who:** Finance Officer
+**Channels:** In-App + Email
+**Priority:** `high`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Fee Settlement Pending Disbursement — [N] Enumerators | تسوية رسوم بانتظار الصرف — [N] عداد |
+| Message | [N] fee settlement requests totalling SDG [Total] have been approved by [Admin Name] for the [MMP Name] cycle. Please disburse. | تمت الموافقة على [N] طلب تسوية رسوم بإجمالي [المبلغ] جنيه سوداني من قِبَل [اسم المدير] لدورة [اسم الخطة]. يرجى الصرف. |
+
+---
+
+#### EVENT 19 — `fee_settlement_bulk_cleared`
+**When:** "Clear All Outstanding" bulk action is executed
+**Who:** Finance Officer + Super Admin
+**Channels:** In-App + Email
+**Priority:** `high`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Bulk Fee Settlement Initiated — [MMP Name] | بدء تسوية رسوم جماعية — [اسم الخطة] |
+| Message | [Admin Name] has initiated bulk fee settlement for [N] enumerators totalling SDG [X] for the [MMP Name] cycle. All requests are pre-approved. | بدأ [اسم المدير] تسوية رسوم جماعية لـ [N] عداد بإجمالي [المبلغ] جنيه سوداني لدورة [اسم الخطة]. جميع الطلبات معتمدة مسبقاً. |
+
+---
+
+#### EVENT 20 — `overpayment_detected`
+**When:** System detects an enumerator received more in advance than their earned fee
+**Who:** Finance Officer + Admin
+**Channels:** In-App + Email
+**Priority:** `urgent`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Overpayment Detected — [Enumerator Name] | تم اكتشاف دفع زائد — [اسم العداد] |
+| Message | [Enumerator Name] received SDG [Advance] as advance for [MMP Name] but only earned SDG [Earned] (excess: SDG [Excess]). A cost recovery record has been created automatically. | استلم [اسم العداد] [المبلغ المقدَّم] جنيه سوداني كدفعة مقدمة لخطة [اسم الخطة] لكنه أنجز ما يستحق [المبلغ المكتسب] جنيه سوداني (الزيادة: [الزيادة] جنيه سوداني). تم إنشاء سجل استرداد تلقائياً. |
+
+---
+
+### 6.10 — Build Phase: Phase E
+
+Fee Settlement is a standalone, independently deployable phase — Phase E.
+
+**Phase E — Post-Cycle Fee Settlement**
+
+*Depends on: Phase A (log tables), Phase B (cost recovery logic), Phase C (WFP confirmed status)*
+
+**Scope:**
+1. New computed query `getCycleFeeSummary(mmp_id)` — returns all enumerators with earned, advanced, balance, and settlement state for a cycle
+2. New `down_payment_requests` flag columns: `is_admin_request`, `on_behalf_of` (uuid, fk profiles), `is_admin_request` (boolean), `settlement_type` (text: `post_cycle_clearance` / `partial_balance` / `full_fee`)
+3. New Tracker Preparation Plan tab: "Fee Settlement" (Tier 1 + 2 + 3 as described)
+4. "Request Payment" per-enumerator button → creates auto-approved `down_payment_request` + logs to `payment_event_log`
+5. "Clear All Outstanding" bulk button with confirmation dialog
+6. Overpayment detection: flag + auto cost recovery + notification
+7. Enhance Enumerators, By State, By Hub tabs in Tracker Preparation Plan with financial columns
+8. Add two new KPI cards to page header
+9. Add Fee Settlement sub-section to Cycle Close History tab
+10. EVENT 17, 18, 19, 20 notifications
+11. Mobile: wallet screen shows settlement transactions with MMP label
+
+**New SQL needed:**
+- Add columns to `down_payment_requests`: `is_admin_request`, `on_behalf_of`, `settlement_type`
+- No new tables required — uses `payment_event_log` from Phase A and `down_payment_requests`
+
+**RLS for new columns:**
+- `on_behalf_of`: enumerator can read their own; admin/finance/super_admin can read all; INSERT by admin/super_admin only
+- `is_admin_request`: readable by all authenticated; INSERT by admin/super_admin only
+
+---
+
+### 6.11 — The Full Picture After All Five Phases
+
+After Phases A → E, the complete lifecycle of a site visit and its money looks like this:
+
+```
+SITE LIFECYCLE:
+assigned → dispatched → submitted → [wfp_confirmed | rejected | not_covered]
+
+MONEY LIFECYCLE:
+1. Fee locked at assignment (enumerator_fee in mmp_site_entries)
+2. Advance requested by enumerator OR skipped
+3. Advance approved (Tier 1 + Tier 2)
+4. Advance disbursed → wallet deducted
+5. Site submitted to WFP
+6. WFP file uploaded → site confirmed or rejected
+7. After cycle close:
+   a. If advance = earned fee → SETTLED (no action)
+   b. If advance < earned fee → BALANCE DUE → admin requests remaining on behalf
+   c. If advance > earned fee → OVERPAID → cost recovery
+   d. If no advance at all → FULL FEE DUE → admin requests full amount on behalf
+8. Finance disburses settlement amount → wallet credited
+9. Enumerator sees settlement in Money Timeline and Wallet screen
+
+FULL ACCOUNTABILITY:
+Every step above writes to payment_event_log and is visible to:
+- Enumerator (their own data in Money Timeline)
+- Supervisor (their team's data)
+- Finance (all payments and settlements)
+- Admin (full cycle view in Tracker Preparation Plan + Cycle Close)
+- Super Admin (cross-cycle view in Admin dashboard)
+```
+
+This is a closed-loop system where no money is unaccounted for, no enumerator is forgotten, and no cycle closes with silent financial obligations.
