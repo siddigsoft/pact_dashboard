@@ -166,7 +166,7 @@ SELECT
   e.site_code,
   e.state,
   e.locality,
-  e.hub,
+  e.hub_office              AS hub,
   e.not_covered_reason,
   e.not_covered_at,
   e.accepted_by     AS enumerator_id,
@@ -186,7 +186,7 @@ WHERE
   OR LOWER(e.status) = 'not_covered'
 GROUP BY
   e.id, e.mmp_file_id, e.site_name, e.site_code, e.state,
-  e.locality, e.hub, e.not_covered_reason, e.not_covered_at,
+  e.locality, e.hub_office, e.not_covered_reason, e.not_covered_at,
   e.accepted_by, crl.id, crl.decision, crl.repayment_status;
 
 DO $$ BEGIN
