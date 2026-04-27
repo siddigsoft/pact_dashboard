@@ -44,6 +44,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
@@ -354,7 +355,7 @@ export const FOMZone: React.FC = () => {
         if (!cancelled) {
           const totalVisitsCost = visitsData.reduce((sum: number, v: any) => sum + (Number(v.cost) || 0), 0);
           const totalMMPCost = mmpData.reduce((sum: number, m: any) => sum + (Number(m.cost) || 0), 0);
-          const completedVisits = visitsData.filter((v: any) => v.status === 'completed').length;
+          const completedVisits = visitsData.filter((v: any) => isTerminalCompletionRawStatus(v.status)).length;
           
           setFinancialData({
             totalVisitsCost,
@@ -409,7 +410,7 @@ export const FOMZone: React.FC = () => {
   
   // Site visit metrics
   const totalVisits = siteVisits.length;
-  const completedVisits = siteVisits.filter(v => v.status === 'completed').length;
+  const completedVisits = siteVisits.filter(v => isTerminalCompletionRawStatus(v.status)).length;
   const pendingVisits = siteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
   const assignedVisits = siteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;

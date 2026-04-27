@@ -98,7 +98,7 @@ export const DashboardCalendar: FC<DashboardCalendarProps> = ({ siteVisits: prop
                   >
                     <span className="font-medium">{visit.siteName}</span>
                     <Badge 
-                      variant={visit.status === 'completed' ? 'secondary' : 'outline'}
+                      variant={['completed','submitted','wfp_confirmed','not_covered'].includes(visit.status) ? 'secondary' : 'outline'}
                       className="capitalize"
                     >
                       {visit.status}

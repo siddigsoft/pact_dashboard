@@ -25,6 +25,7 @@ import {
   ClipboardList // Add icon for the new section
 } from 'lucide-react';
 import type { MMPStatus } from '@/types';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 
 export const DashboardStatsOverview = () => {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
@@ -113,12 +114,12 @@ export const DashboardStatsOverview = () => {
   }, [siteVisits, hubFilter, regionFilter, monthFilter]);
 
   const totalVisits = filteredSiteVisits.length;
-  const completedCount = filteredSiteVisits.filter(v => v.status === 'completed').length;
+  const completedCount = filteredSiteVisits.filter(v => isTerminalCompletionRawStatus(v.status)).length;
   const ongoingCount = filteredSiteVisits.filter(v => ['assigned', 'inProgress'].includes(v.status)).length;
   const scheduledCount = filteredSiteVisits.filter(v => {
     if (!v.dueDate) return false;
     const d = new Date(v.dueDate);
-    return !isNaN(d.getTime()) && isAfter(d, new Date()) && v.status !== 'completed';
+    return !isNaN(d.getTime()) && isAfter(d, new Date()) && !isTerminalCompletionRawStatus(v.status);
   }).length;
 
   const assignedCount = filteredSiteVisits.filter(v => v.assignedTo && ['assigned', 'inProgress'].includes(v.status)).length;
@@ -127,7 +128,7 @@ export const DashboardStatsOverview = () => {
   const costTotals = useMemo(() => {
     const all = filteredSiteVisits || [];
     const total = all.reduce((s, v) => s + (v.fees?.total || 0), 0);
-    const completed = all.filter(v => v.status === 'completed').reduce((s, v) => s + (v.fees?.total || 0), 0);
+    const completed = all.filter(v => isTerminalCompletionRawStatus(v.status)).reduce((s, v) => s + (v.fees?.total || 0), 0);
     const ongoing = all.filter(v => ['assigned', 'inProgress'].includes(v.status)).reduce((s, v) => s + (v.fees?.total || 0), 0);
     return { total, completed, ongoing };
   }, [filteredSiteVisits]);

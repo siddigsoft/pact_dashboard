@@ -7,6 +7,7 @@ import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow, format } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -375,7 +376,10 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
         
         if (lat && lng) {
         const getColor = () => {
-          if (visit.status === 'completed') return '#10b981';
+          if (visit.status === 'wfp_confirmed') return '#0891b2';
+          if (visit.status === 'submitted') return '#6366f1';
+          if (visit.status === 'not_covered') return '#ea580c';
+          if (isTerminalCompletionRawStatus(visit.status)) return '#10b981';
           if (visit.status === 'inProgress') return '#3b82f6';
           if (visit.priority === 'high') return '#ef4444';
           if (visit.priority === 'medium') return '#f59e0b';
@@ -602,7 +606,10 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
           
           if (lat && lng) {
             const getColor = () => {
-              if (visit.status === 'completed') return '#10b981';
+              if (visit.status === 'wfp_confirmed') return '#0891b2';
+              if (visit.status === 'submitted') return '#6366f1';
+              if (visit.status === 'not_covered') return '#ea580c';
+              if (isTerminalCompletionRawStatus(visit.status)) return '#10b981';
               if (visit.status === 'inProgress') return '#3b82f6';
               if (visit.priority === 'high') return '#ef4444';
               if (visit.priority === 'medium') return '#f59e0b';

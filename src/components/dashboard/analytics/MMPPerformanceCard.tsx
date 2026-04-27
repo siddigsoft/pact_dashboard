@@ -26,6 +26,7 @@ import {
   Legend,
 } from 'recharts';
 import { cn } from '@/lib/utils';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import type { MMPFile } from '@/types';
 
 interface SiteVisit {
@@ -75,13 +76,13 @@ export const MMPPerformanceCard: React.FC<MMPPerformanceCardProps> = ({
   const metrics: PerformanceMetrics = useMemo(() => {
     const now = new Date();
     
-    const completed = mmpVisits.filter(v => v.status === 'completed');
+    const completed = mmpVisits.filter(v => isTerminalCompletionRawStatus(v.status));
     const inProgress = mmpVisits.filter(v => 
       ['assigned', 'inProgress'].includes(v.status)
     );
     const pending = mmpVisits.filter(v => v.status === 'pending');
     const overdue = mmpVisits.filter(v => {
-      if (v.status === 'completed') return false;
+      if (isTerminalCompletionRawStatus(v.status)) return false;
       if (!v.dueDate) return false;
       return new Date(v.dueDate) < now;
     });

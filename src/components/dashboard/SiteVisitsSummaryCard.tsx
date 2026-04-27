@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 
 interface SiteVisit {
   id: string;
@@ -41,13 +42,13 @@ export const SiteVisitsSummaryCard: React.FC<{ showOngoingBreakdown?: boolean }>
   if (date) filtered = filtered.filter(v => (v.dueDate || '').startsWith(date));
 
   const now = new Date();
-  const completed = filtered.filter(v => v.status === 'completed');
+  const completed = filtered.filter(v => isTerminalCompletionRawStatus(v.status));
   const ongoing = filtered.filter(v => ['assigned', 'inProgress'].includes(v.status));
-  // scheduled = future dueDate and not completed
+  // scheduled = future dueDate and not in a terminal state
   const scheduled = filtered.filter(v => {
     if (!v.dueDate) return false;
     const d = new Date(v.dueDate);
-    return !isNaN(d.getTime()) && d.getTime() > now.getTime() && v.status !== 'completed';
+    return !isNaN(d.getTime()) && d.getTime() > now.getTime() && !isTerminalCompletionRawStatus(v.status);
   });
 
   const unassigned = filtered.filter(v => !v.assignedTo && ['pending', 'permitVerified', 'assigned'].includes(v.status));

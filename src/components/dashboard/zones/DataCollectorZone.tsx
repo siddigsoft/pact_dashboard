@@ -47,6 +47,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { format, isToday, isPast, addDays, differenceInDays, parseISO, isValid } from 'date-fns';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
@@ -205,7 +206,7 @@ export const DataCollectorZone: React.FC = () => {
     return myVisits.filter(visit => {
       if (!visit.dueDate) return false;
       const dueDate = parseISO(visit.dueDate);
-      return isValid(dueDate) && isPast(dueDate) && visit.status !== 'completed';
+      return isValid(dueDate) && isPast(dueDate) && !isTerminalCompletionRawStatus(visit.status);
     });
   }, [myVisits]);
 
@@ -214,7 +215,7 @@ export const DataCollectorZone: React.FC = () => {
   }, [myVisits]);
 
   const completedVisits = useMemo(() => {
-    return myVisits.filter(visit => visit.status === 'completed');
+    return myVisits.filter(visit => isTerminalCompletionRawStatus(visit.status));
   }, [myVisits]);
 
   const assignedVisits = useMemo(() => {

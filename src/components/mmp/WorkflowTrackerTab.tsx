@@ -51,7 +51,7 @@ interface StateBreakdown {
   localities: LocalityBreakdown[];
 }
 
-const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'costed', 'dispatched', 'completed'];
+const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'costed', 'dispatched', 'completed', 'submitted', 'wfp_confirmed', 'not_covered'];
 const inProgressStatuses = ['in_progress', 'accepted', 'forwarded', 'forwarded_to_fom', 'forwarded_to_coordinator', 'forwarded_to_coordinators'];
 const returnedStatuses = ['returned_to_fom', 'returned', 'recalled', 'sent_back', 'sent_back_to_fom'];
 const rejectedStatuses = ['rejected'];

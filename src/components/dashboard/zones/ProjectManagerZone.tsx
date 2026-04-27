@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -275,7 +276,7 @@ export const ProjectManagerZone: React.FC = () => {
 
   const siteVisitStats = useMemo(() => {
     const total = filteredSiteVisits.length;
-    const completed = filteredSiteVisits.filter(v => v.status === 'completed').length;
+    const completed = filteredSiteVisits.filter(v => isTerminalCompletionRawStatus(v.status)).length;
     const pending = filteredSiteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
     const inProgress = filteredSiteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;

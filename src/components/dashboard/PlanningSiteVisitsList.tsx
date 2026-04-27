@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Calendar, MapPin, User, AlertCircle, Clock, Filter } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -87,7 +88,7 @@ const PlanningSiteVisitsList: React.FC<PlanningSiteVisitsListProps> = ({ siteVis
   };
 
   const isOverdue = (visit: SiteVisit) => {
-    if (!visit.scheduledDate || visit.status === 'completed') return false;
+    if (!visit.scheduledDate || isTerminalCompletionRawStatus(visit.status)) return false;
     return isPast(new Date(visit.scheduledDate));
   };
 

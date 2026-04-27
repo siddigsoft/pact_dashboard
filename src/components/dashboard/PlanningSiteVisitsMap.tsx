@@ -62,6 +62,10 @@ const createSiteIcon = (status: string, priority: string) => {
   if (status === 'pending') color = '#f97316';
   else if (status === 'assigned') color = '#06b6d4';
   else if (status === 'completed') color = '#10b981';
+  else if (status === 'submitted') color = '#6366f1';
+  else if (status === 'wfp_confirmed') color = '#0891b2';
+  else if (status === 'not_covered') color = '#ea580c';
+  else if (status === 'rejected' || status === 'declined') color = '#e11d48';
   else if (priority === 'high') color = '#ef4444';
   
   return new Icon({
@@ -314,6 +318,18 @@ const PlanningSiteVisitsMap: FC<PlanningSiteVisitsMapProps> = ({ siteVisits, tea
             <MapPin className="h-4 w-4 text-green-500" />
             <span>Completed ({visitsWithCoords.filter(v => v.status === 'completed').length})</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-4 w-4 text-indigo-500" />
+            <span>Submitted ({visitsWithCoords.filter(v => v.status === 'submitted').length})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-4 w-4 text-cyan-600" />
+            <span>WFP Confirmed ({visitsWithCoords.filter(v => v.status === 'wfp_confirmed').length})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-4 w-4 text-orange-500" />
+            <span>Not Covered ({visitsWithCoords.filter(v => v.status === 'not_covered').length})</span>
+          </div>
           <div className="h-4 border-l mx-1" />
           <div className="font-semibold text-foreground">Team:</div>
           <div className="flex items-center gap-1.5">
@@ -372,8 +388,9 @@ const PlanningSiteVisitsMap: FC<PlanningSiteVisitsMapProps> = ({ siteVisits, tea
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">Status:</span>
                         <Badge variant={
-                          visit.status === 'completed' ? 'default' :
+                          visit.status === 'completed' || visit.status === 'submitted' || visit.status === 'wfp_confirmed' ? 'default' :
                           visit.status === 'assigned' ? 'secondary' :
+                          visit.status === 'not_covered' || visit.status === 'rejected' ? 'destructive' :
                           'outline'
                         } className="text-xs h-5">
                           {visit.status}

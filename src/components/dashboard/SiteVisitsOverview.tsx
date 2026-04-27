@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { format } from 'date-fns';
 import { Clock, CheckCircle, UserCheck, DollarSign, Loader2 } from "lucide-react";
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { SiteVisit } from '@/types/siteVisit';
 
@@ -45,7 +46,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
 
     const pending = filteredVisits.filter((visit) => pendingStatuses.has((visit.status || '').toLowerCase()));
     const assigned = filteredVisits.filter((visit) => assignedStatuses.has((visit.status || '').toLowerCase()));
-    const completed = filteredVisits.filter((visit) => (visit.status || '').toLowerCase() === 'completed');
+    const completed = filteredVisits.filter((visit) => isTerminalCompletionRawStatus(visit.status));
     const total = filteredVisits.length;
     const rate = total > 0 ? Math.round((completed.length / total) * 100) : 0;
 

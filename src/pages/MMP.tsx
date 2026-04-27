@@ -3127,7 +3127,7 @@ const MMP = () => {
       }).length,
       completed: allEntries.filter(e => {
         const status = String(e.status || '').toLowerCase();
-        return status === 'completed';
+        return status === 'completed' || status === 'submitted' || status === 'wfp_confirmed' || status === 'not_covered';
       }).length,
       rejected: allEntries.filter(e => {
         const status = String(e.status || '').toLowerCase();
@@ -4674,7 +4674,7 @@ const MMP = () => {
           if (status === 'assigned') map[mmpId].hasAssigned = true;
           if (status === 'accepted' || (entry as any).accepted_by) map[mmpId].hasAccepted = true;
           if (status === 'inprogress' || status === 'in_progress') map[mmpId].hasInProgress = true;
-          if (status === 'completed') map[mmpId].hasCompleted = true;
+          if (status === 'completed' || status === 'submitted' || status === 'wfp_confirmed' || status === 'not_covered') map[mmpId].hasCompleted = true;
           if (status === 'rejected' || status === 'declined') map[mmpId].hasRejected = true;
           if (status === 'dispatched' || (entry as any).dispatched_at) map[mmpId].hasDispatched = true;
           

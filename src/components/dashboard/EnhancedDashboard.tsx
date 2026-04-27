@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { format, isWithinInterval, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
@@ -238,7 +239,7 @@ export const EnhancedDashboard: React.FC<EnhancedDashboardProps> = ({
                           v => v.mmpDetails?.mmpId === mmp.id
                         );
                         const completed = mmpVisits.filter(
-                          v => v.status === 'completed'
+                          v => isTerminalCompletionRawStatus(v.status)
                         ).length;
                         const rate = mmpVisits.length > 0 
                           ? Math.round((completed / mmpVisits.length) * 100)

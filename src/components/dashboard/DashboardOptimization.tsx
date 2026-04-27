@@ -1,4 +1,5 @@
 import React from 'react';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import type { Variants } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProjectContext } from '@/context/project/ProjectContext';
@@ -78,7 +79,7 @@ export const useDashboardStats = () => {
   const approvedMmps = mmpFiles?.filter(mmp => mmp.status === 'approved').length || 0;
   
   // Count completed site visits
-  const completedVisits = siteVisits?.filter(visit => visit.status === 'completed').length || 0;
+  const completedVisits = siteVisits?.filter(visit => isTerminalCompletionRawStatus(visit.status)).length || 0;
   
   // Count pending site visits
   const pendingSiteVisits = siteVisits?.filter(visit => ['pending', 'assigned', 'inProgress'].includes(visit.status)).length || 0;

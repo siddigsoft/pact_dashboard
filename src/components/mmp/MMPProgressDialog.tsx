@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { MMPFile } from '@/types';
 import { format } from 'date-fns';
+import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { CheckCircle2, AlertCircle, Clock, FileText, Shield, MapPin, Calendar, User, DollarSign, ListChecks, TrendingUp } from 'lucide-react';
 import PermitPreviewDialog from '@/components/permits/PermitPreviewDialog';
 import { useAppContext } from '@/context/AppContext';
@@ -824,25 +825,25 @@ const MMPProgressDialog: FC<MMPProgressDialogProps> = ({ open, onOpenChange, mmp
 
                     <div className="flex items-center justify-between p-3 border rounded">
                       <div className="flex items-center gap-2">
-                        {selectedSite.status === 'completed' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-amber-600" />}
+                        {isTerminalCompletionRawStatus(selectedSite.status) ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-amber-600" />}
                         <div>
                           <span className="text-sm font-medium">Site Visit Status</span>
                           <p className="text-xs text-muted-foreground">Overall site status</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <Badge variant={selectedSite.status === 'completed' ? 'default' : 'secondary'}>
-                          {selectedSite.status === 'completed' ? 'Completed' : 'Pending'}
+                        <Badge variant={isTerminalCompletionRawStatus(selectedSite.status) ? 'default' : 'secondary'}>
+                          {isTerminalCompletionRawStatus(selectedSite.status) ? 'Completed' : 'Pending'}
                         </Badge>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Responsible: {selectedSite.status === 'completed' ? 'Coordinator Team' : 'Coordinator Team'}
+                          Responsible: Coordinator Team
                         </p>
-                        {selectedSite.status !== 'completed' && (selectedSite as any).visitDate && (
+                        {!isTerminalCompletionRawStatus(selectedSite.status) && (selectedSite as any).visitDate && (
                           <p className="text-xs text-muted-foreground">
                             Days to Visit: {Math.max(0, Math.floor((new Date((selectedSite as any).visitDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} days
                           </p>
                         )}
-                        {selectedSite.status === 'completed' && (selectedSite as any).completedAt && (
+                        {isTerminalCompletionRawStatus(selectedSite.status) && (selectedSite as any).completedAt && (
                           <p className="text-xs text-muted-foreground">
                             Completed: {format(new Date((selectedSite as any).completedAt), 'MMM d, yyyy \'at\' h:mm a')}
                           </p>
