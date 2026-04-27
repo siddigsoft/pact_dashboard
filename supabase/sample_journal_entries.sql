@@ -113,6 +113,10 @@ BEGIN
     SELECT id INTO rw_idc        FROM acct_accounts WHERE code = 'RW-5601' AND country_id = id_rw LIMIT 1;
     SELECT id INTO rw_net_unrest FROM acct_accounts WHERE code = 'RW-3001' AND country_id = id_rw LIMIT 1;
 
+    IF rw_bank IS NULL OR rw_grant_rev IS NULL OR rw_salary IS NULL THEN
+      RAISE WARNING 'Rwanda COA accounts not found. Run coa_rw_qa_us_ke_migration.sql first. Skipping Rwanda entries.';
+    ELSE
+
     -- RW-JE-001: USAID Grant Receipt — Cash received from USAID Kigali
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, source_id, status, idempotency_key, posted_at, created_by, posted_by)
     VALUES (v_period_id, v_period_date + 1, 'USAID Grant Receipt — Kigali Q1', 'استلام منحة USAID — كيغالي الربع الأول', 'manual', NULL, 'posted', 'sample-rw-je-001', NOW(), v_admin_id, v_admin_id)
@@ -160,6 +164,7 @@ BEGIN
       (v_entry_id, 2, rw_ap_vendor,  v_fund_id, 'program', 'CR', 3800000, 'RWF', 3800000, 'RWF', 1);
 
     RAISE NOTICE 'Rwanda: 5 journal entries created.';
+    END IF; -- close COA-accounts guard
   ELSE
     RAISE WARNING 'Rwanda country not found; skipping Rwanda entries.';
   END IF;
@@ -181,6 +186,10 @@ BEGIN
     SELECT id INTO qa_rent       FROM acct_accounts WHERE code = 'QA-5401' AND country_id = id_qa LIMIT 1;
     SELECT id INTO qa_idc        FROM acct_accounts WHERE code = 'QA-5501' AND country_id = id_qa LIMIT 1;
     SELECT id INTO qa_net_unrest FROM acct_accounts WHERE code = 'QA-3001' AND country_id = id_qa LIMIT 1;
+
+    IF qa_bank IS NULL OR qa_grant_rev IS NULL OR qa_salary IS NULL THEN
+      RAISE WARNING 'Qatar COA accounts not found. Run coa_rw_qa_us_ke_migration.sql first. Skipping Qatar entries.';
+    ELSE
 
     -- QA-JE-001: USAID Grant Receipt — Doha
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -229,6 +238,7 @@ BEGIN
       (v_entry_id, 2, qa_net_unrest, v_fund_id, 'indirect', 'CR', 13500, 'QAR', 13500, 'QAR', 1);
 
     RAISE NOTICE 'Qatar: 5 journal entries created.';
+    END IF; -- close COA-accounts guard
   ELSE
     RAISE WARNING 'Qatar country not found; skipping Qatar entries.';
   END IF;
@@ -252,6 +262,10 @@ BEGIN
     SELECT id INTO us_rent       FROM acct_accounts WHERE code = 'US-5501' AND country_id = id_us LIMIT 1;
     SELECT id INTO us_nicra      FROM acct_accounts WHERE code = 'US-5601' AND country_id = id_us LIMIT 1;
     SELECT id INTO us_net_donor  FROM acct_accounts WHERE code = 'US-3001' AND country_id = id_us LIMIT 1;
+
+    IF us_bank_op IS NULL OR us_usaid_rev IS NULL OR us_salary_ex IS NULL THEN
+      RAISE WARNING 'USA COA accounts not found. Run coa_rw_qa_us_ke_migration.sql first. Skipping USA entries.';
+    ELSE
 
     -- US-JE-001: USAID Prime Award — Cash Draw-Down
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -310,6 +324,7 @@ BEGIN
       (v_entry_id, 2, us_ap_vendor, v_fund_id, 'program', 'CR', 45000.00, 'USD', 45000.00, 'USD', 1);
 
     RAISE NOTICE 'USA: 6 journal entries created.';
+    END IF; -- close COA-accounts guard
   ELSE
     RAISE WARNING 'USA country not found; skipping USA entries.';
   END IF;
@@ -333,6 +348,12 @@ BEGIN
     SELECT id INTO ke_rent       FROM acct_accounts WHERE code = 'KE-5401' AND country_id = id_ke LIMIT 1;
     SELECT id INTO ke_idc        FROM acct_accounts WHERE code = 'KE-5601' AND country_id = id_ke LIMIT 1;
     SELECT id INTO ke_net_unrest FROM acct_accounts WHERE code = 'KE-3001' AND country_id = id_ke LIMIT 1;
+
+    -- Guard: if key accounts are missing the Kenya COA hasn't been applied yet
+    IF ke_grant_recv IS NULL OR ke_usaid_rev IS NULL OR ke_salary IS NULL THEN
+      RAISE WARNING 'Kenya COA accounts not found (KE-1201, KE-4101, KE-5101). '
+        'Run coa_rw_qa_us_ke_migration.sql first, then re-run this script. Skipping Kenya entries.';
+    ELSE
 
     -- KE-JE-001: USAID Grant Receipt — Nairobi
     INSERT INTO acct_journal_entries (period_id, posting_date, description_en, description_ar, source_type, status, idempotency_key, posted_at, created_by, posted_by)
@@ -392,6 +413,7 @@ BEGIN
       (v_entry_id, 2, ke_cash,       v_fund_id, 'program', 'CR', 95000, 'KES', 95000, 'KES', 1);
 
     RAISE NOTICE 'Kenya: 6 journal entries created.';
+    END IF; -- close COA-accounts guard
   ELSE
     RAISE WARNING 'Kenya country not found; skipping Kenya entries.';
   END IF;

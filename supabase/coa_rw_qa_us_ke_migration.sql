@@ -1,6 +1,20 @@
 -- ============================================================
 -- PACT Command Center — COA Seed for Rwanda, Qatar, USA, Kenya
--- Apply in Supabase SQL editor (safe to run multiple times)
+--
+-- ⚠️  REQUIRED APPLY ORDER — run each file separately and wait
+--     for success before the next:
+--
+--   1. supabase/coa_enum_extensions.sql     ← run FIRST & commit
+--   2. supabase/profile_country_migration.sql
+--   3. supabase/coa_rw_qa_us_ke_migration.sql  ← this file
+--   4. supabase/ug_coa_migration.sql
+--   5. supabase/sample_journal_entries.sql
+--
+-- Why the enum file must be separate:
+--   PostgreSQL prohibits using a newly-added enum value in the
+--   same transaction where ALTER TYPE ... ADD VALUE ran.
+--   Running the two scripts separately gives PG a chance to
+--   commit the new values before the INSERTs execute.
 -- ============================================================
 
 -- ─── 0. Ensure countries exist ───────────────────────────────
@@ -12,25 +26,6 @@ VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- Kenya is already seeded (code = 'KE'), no action needed.
-
--- ─── 1. Extend the acct_account_subtype enum ─────────────────
--- The base enum has 13 values; we add richer COA-specific labels.
--- ADD VALUE IF NOT EXISTS is idempotent — safe to run again.
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'header';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'fixed_asset';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'other_asset';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'investment';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'grant';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'other_income';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'personnel';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'travel';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'program';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'admin';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'supplies';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'indirect';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'unrestricted';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'restricted';
-ALTER TYPE acct_account_subtype ADD VALUE IF NOT EXISTS 'retained_earnings';
 
 -- ============================================================
 -- HELPER: insert parent then children using CTEs
