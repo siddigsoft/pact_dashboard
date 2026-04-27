@@ -45,27 +45,27 @@ BEGIN
 
   -- ── 1. Level-1 Headers ──────────────────────────────────────────
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('UG-1000','Assets','الأصول','asset','header',FALSE,id_ug)
+  VALUES ('UG-1000','Assets','الأصول','asset',NULL,FALSE,id_ug)
   ON CONFLICT (code) DO NOTHING RETURNING id INTO ug_1000;
   IF ug_1000 IS NULL THEN SELECT id INTO ug_1000 FROM acct_accounts WHERE code='UG-1000'; END IF;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('UG-2000','Liabilities','الالتزامات','liability','header',FALSE,id_ug)
+  VALUES ('UG-2000','Liabilities','الالتزامات','liability',NULL,FALSE,id_ug)
   ON CONFLICT (code) DO NOTHING RETURNING id INTO ug_2000;
   IF ug_2000 IS NULL THEN SELECT id INTO ug_2000 FROM acct_accounts WHERE code='UG-2000'; END IF;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('UG-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_ug)
+  VALUES ('UG-3000','Net Assets / Equity','صافي الأصول','equity',NULL,FALSE,id_ug)
   ON CONFLICT (code) DO NOTHING RETURNING id INTO ug_3000;
   IF ug_3000 IS NULL THEN SELECT id INTO ug_3000 FROM acct_accounts WHERE code='UG-3000'; END IF;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('UG-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_ug)
+  VALUES ('UG-4000','Revenue & Grants','الإيرادات والمنح','revenue',NULL,FALSE,id_ug)
   ON CONFLICT (code) DO NOTHING RETURNING id INTO ug_4000;
   IF ug_4000 IS NULL THEN SELECT id INTO ug_4000 FROM acct_accounts WHERE code='UG-4000'; END IF;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('UG-5000','Expenses','المصروفات','expense','header',FALSE,id_ug)
+  VALUES ('UG-5000','Expenses','المصروفات','expense',NULL,FALSE,id_ug)
   ON CONFLICT (code) DO NOTHING RETURNING id INTO ug_5000;
   IF ug_5000 IS NULL THEN SELECT id INTO ug_5000 FROM acct_accounts WHERE code='UG-5000'; END IF;
 
@@ -178,12 +178,12 @@ BEGIN
 
   -- ── 4. Equity / Net Assets ──────────────────────────────────────
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('UG-3100','Contributed Capital','رأس المال المُقدَّم','equity','header',FALSE,ug_3000,id_ug)
+  VALUES ('UG-3100','Contributed Capital','رأس المال المُقدَّم','equity',NULL,FALSE,ug_3000,id_ug)
   ON CONFLICT (code) DO NOTHING RETURNING id INTO ug_3100;
   IF ug_3100 IS NULL THEN SELECT id INTO ug_3100 FROM acct_accounts WHERE code='UG-3100'; END IF;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
-  VALUES ('UG-3200','Retained Results','النتائج المحتجزة','equity','header',FALSE,ug_3000,id_ug)
+  VALUES ('UG-3200','Retained Results','النتائج المحتجزة','equity',NULL,FALSE,ug_3000,id_ug)
   ON CONFLICT (code) DO NOTHING RETURNING id INTO ug_3200;
   IF ug_3200 IS NULL THEN SELECT id INTO ug_3200 FROM acct_accounts WHERE code='UG-3200'; END IF;
 

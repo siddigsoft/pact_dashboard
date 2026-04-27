@@ -80,15 +80,15 @@ BEGIN
 
   -- Level-1 headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-1000','Assets','الأصول','asset','header',FALSE,id_rw) RETURNING id INTO rw_1000;
+  VALUES ('RW-1000','Assets','الأصول','asset',NULL,FALSE,id_rw) RETURNING id INTO rw_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-2000','Liabilities','الالتزامات','liability','header',FALSE,id_rw) RETURNING id INTO rw_2000;
+  VALUES ('RW-2000','Liabilities','الالتزامات','liability',NULL,FALSE,id_rw) RETURNING id INTO rw_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_rw) RETURNING id INTO rw_3000;
+  VALUES ('RW-3000','Net Assets / Equity','صافي الأصول','equity',NULL,FALSE,id_rw) RETURNING id INTO rw_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_rw) RETURNING id INTO rw_4000;
+  VALUES ('RW-4000','Revenue & Grants','الإيرادات والمنح','revenue',NULL,FALSE,id_rw) RETURNING id INTO rw_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('RW-5000','Expenses','المصروفات','expense','header',FALSE,id_rw) RETURNING id INTO rw_5000;
+  VALUES ('RW-5000','Expenses','المصروفات','expense',NULL,FALSE,id_rw) RETURNING id INTO rw_5000;
 
   -- Asset sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
@@ -212,15 +212,15 @@ BEGIN
   -- ================================================================
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-1000','Assets','الأصول','asset','header',FALSE,id_qa) RETURNING id INTO qa_1000;
+  VALUES ('QA-1000','Assets','الأصول','asset',NULL,FALSE,id_qa) RETURNING id INTO qa_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-2000','Liabilities','الالتزامات','liability','header',FALSE,id_qa) RETURNING id INTO qa_2000;
+  VALUES ('QA-2000','Liabilities','الالتزامات','liability',NULL,FALSE,id_qa) RETURNING id INTO qa_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_qa) RETURNING id INTO qa_3000;
+  VALUES ('QA-3000','Net Assets / Equity','صافي الأصول','equity',NULL,FALSE,id_qa) RETURNING id INTO qa_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_qa) RETURNING id INTO qa_4000;
+  VALUES ('QA-4000','Revenue & Grants','الإيرادات والمنح','revenue',NULL,FALSE,id_qa) RETURNING id INTO qa_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('QA-5000','Expenses','المصروفات','expense','header',FALSE,id_qa) RETURNING id INTO qa_5000;
+  VALUES ('QA-5000','Expenses','المصروفات','expense',NULL,FALSE,id_qa) RETURNING id INTO qa_5000;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('QA-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,qa_1000,id_qa) RETURNING id INTO qa_1100;
@@ -317,15 +317,15 @@ BEGIN
   -- ================================================================
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-1000','Assets','الأصول','asset','header',FALSE,id_us) RETURNING id INTO us_1000;
+  VALUES ('US-1000','Assets','الأصول','asset',NULL,FALSE,id_us) RETURNING id INTO us_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-2000','Liabilities','الالتزامات','liability','header',FALSE,id_us) RETURNING id INTO us_2000;
+  VALUES ('US-2000','Liabilities','الالتزامات','liability',NULL,FALSE,id_us) RETURNING id INTO us_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_us) RETURNING id INTO us_3000;
+  VALUES ('US-3000','Net Assets / Equity','صافي الأصول','equity',NULL,FALSE,id_us) RETURNING id INTO us_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_us) RETURNING id INTO us_4000;
+  VALUES ('US-4000','Revenue & Grants','الإيرادات والمنح','revenue',NULL,FALSE,id_us) RETURNING id INTO us_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('US-5000','Expenses','المصروفات','expense','header',FALSE,id_us) RETURNING id INTO us_5000;
+  VALUES ('US-5000','Expenses','المصروفات','expense',NULL,FALSE,id_us) RETURNING id INTO us_5000;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('US-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,us_1000,id_us) RETURNING id INTO us_1100;
@@ -451,15 +451,15 @@ BEGIN
   -- ================================================================
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-1000','Assets','الأصول','asset','header',FALSE,id_ke) RETURNING id INTO ke_1000;
+  VALUES ('KE-1000','Assets','الأصول','asset',NULL,FALSE,id_ke) RETURNING id INTO ke_1000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-2000','Liabilities','الالتزامات','liability','header',FALSE,id_ke) RETURNING id INTO ke_2000;
+  VALUES ('KE-2000','Liabilities','الالتزامات','liability',NULL,FALSE,id_ke) RETURNING id INTO ke_2000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-3000','Net Assets / Equity','صافي الأصول','equity','header',FALSE,id_ke) RETURNING id INTO ke_3000;
+  VALUES ('KE-3000','Net Assets / Equity','صافي الأصول','equity',NULL,FALSE,id_ke) RETURNING id INTO ke_3000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-4000','Revenue & Grants','الإيرادات والمنح','revenue','header',FALSE,id_ke) RETURNING id INTO ke_4000;
+  VALUES ('KE-4000','Revenue & Grants','الإيرادات والمنح','revenue',NULL,FALSE,id_ke) RETURNING id INTO ke_4000;
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,country_id)
-  VALUES ('KE-5000','Expenses','المصروفات','expense','header',FALSE,id_ke) RETURNING id INTO ke_5000;
+  VALUES ('KE-5000','Expenses','المصروفات','expense',NULL,FALSE,id_ke) RETURNING id INTO ke_5000;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('KE-1100','Cash & Bank','النقد والبنك','asset','current_asset',FALSE,ke_1000,id_ke) RETURNING id INTO ke_1100;
