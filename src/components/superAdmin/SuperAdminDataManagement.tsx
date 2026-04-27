@@ -90,6 +90,8 @@ interface ClaimedSiteData {
   enumerator_fee?: number;
   transport_fee?: number;
   main_activity?: string;
+  mmp_id?: string;
+  mmp_name?: string;
 }
 
 interface DispatchedSiteData {
@@ -227,6 +229,7 @@ export function SuperAdminDataManagement() {
   const [localityFilter, setLocalityFilter] = useState('all');
   const [activityFilter, setActivityFilter] = useState('all');
   const [claimedByFilter, setClaimedByFilter] = useState('all');
+  const [claimedMmpFilter, setClaimedMmpFilter] = useState('all');
   const [hubFilter, setHubFilter] = useState('all');
   const [claimedSiteSearch, setClaimedSiteSearch] = useState('');
   const [debouncedClaimedSiteSearch, setDebouncedClaimedSiteSearch] = useState('');
@@ -452,19 +455,33 @@ export function SuperAdminDataManagement() {
   const loadClaimedSites = async () => {
     setLoading(true);
     try {
+      // Fetch all claimed sites (no limit) — user explicitly wants all records visible
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee, main_activity, activity_at_site')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee, main_activity, activity_at_site, mmp_id')
         .not('accepted_by', 'is', null)
-        .order('accepted_at', { ascending: false })
-        .limit(500);
+        .order('accepted_at', { ascending: false });
 
       if (error) throw error;
 
-      const enriched = (data || []).map(site => ({
+      // Build MMP name map from mmp_files
+      const mmpIds = [...new Set((data || []).map((s: any) => s.mmp_id).filter(Boolean))] as string[];
+      let mmpNameMap: Record<string, string> = {};
+      if (mmpIds.length > 0) {
+        const { data: mmpFiles } = await supabase
+          .from('mmp_files')
+          .select('id, name, month, year')
+          .in('id', mmpIds);
+        (mmpFiles || []).forEach((m: any) => {
+          mmpNameMap[m.id] = m.name || `MMP ${m.month}/${m.year}`;
+        });
+      }
+
+      const enriched = (data || []).map((site: any) => ({
         ...site,
         accepted_by_name: userMap.get(site.accepted_by)?.name || 'Unknown',
         main_activity: site.main_activity || site.activity_at_site || null,
+        mmp_name: site.mmp_id ? (mmpNameMap[site.mmp_id] || site.mmp_id) : undefined,
       }));
 
       setClaimedSites(enriched);
@@ -1099,7 +1116,8 @@ export function SuperAdminDataManagement() {
         site.site_code?.toLowerCase().includes(globalSearch) ||
         site.accepted_by_name?.toLowerCase().includes(globalSearch) ||
         site.state?.toLowerCase().includes(globalSearch) ||
-        site.locality?.toLowerCase().includes(globalSearch);
+        site.locality?.toLowerCase().includes(globalSearch) ||
+        site.mmp_name?.toLowerCase().includes(globalSearch);
       
       const matchesLocalSearch = !localSearch ||
         site.site_name?.toLowerCase().includes(localSearch) ||
@@ -1110,10 +1128,11 @@ export function SuperAdminDataManagement() {
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
+      const matchesMmp = claimedMmpFilter === 'all' || site.mmp_id === claimedMmpFilter;
       
-      return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy;
+      return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy && matchesMmp;
     });
-  }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter]);
+  }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter, claimedMmpFilter]);
 
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
@@ -1138,7 +1157,14 @@ export function SuperAdminDataManagement() {
         .filter(Boolean)
     )].sort();
 
-    return { states, localities, activities, claimedByUsers };
+    // Unique MMPs across all claimed sites (not cascaded — always show all available MMPs)
+    const mmpOptions = [...new Map(
+      claimedSites
+        .filter(s => s.mmp_id && s.mmp_name)
+        .map(s => [s.mmp_id!, { id: s.mmp_id!, name: s.mmp_name! }])
+    ).values()].sort((a, b) => a.name.localeCompare(b.name));
+
+    return { states, localities, activities, claimedByUsers, mmpOptions };
   }, [claimedSites, stateFilter, localityFilter, activityFilter]);
 
   const filteredDispatchedSites = useMemo(() => {
@@ -1939,7 +1965,21 @@ export function SuperAdminDataManagement() {
               </div>
 
               {/* Advanced Filters for Claimed Sites */}
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">MMP</Label>
+                  <Select value={claimedMmpFilter} onValueChange={setClaimedMmpFilter}>
+                    <SelectTrigger data-testid="select-claimed-mmp-filter">
+                      <SelectValue placeholder="All MMPs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All MMPs</SelectItem>
+                      {claimedSitesFilterOptions.mmpOptions.map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Enumerator</Label>
                   <Select value={claimedByFilter} onValueChange={setClaimedByFilter}>
@@ -2041,6 +2081,7 @@ export function SuperAdminDataManagement() {
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         <TableHead className="font-semibold">Site</TableHead>
+                        <TableHead className="font-semibold">MMP</TableHead>
                         <TableHead className="font-semibold">Activity</TableHead>
                         <TableHead className="font-semibold">Location</TableHead>
                         <TableHead className="font-semibold">Claimed By</TableHead>
@@ -2051,13 +2092,22 @@ export function SuperAdminDataManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredClaimedSites.slice(0, 50).map((site) => (
+                      {filteredClaimedSites.map((site) => (
                         <TableRow key={site.id} className="hover:bg-muted/30" data-testid={`row-claimed-site-${site.id}`}>
                           <TableCell>
                             <div>
                               <p className="font-medium">{site.site_name}</p>
                               <p className="text-sm text-muted-foreground">{site.site_code}</p>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {site.mmp_name ? (
+                              <Badge variant="secondary" className="whitespace-nowrap text-xs">
+                                {site.mmp_name}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="whitespace-nowrap">
@@ -2109,11 +2159,6 @@ export function SuperAdminDataManagement() {
                       ))}
                     </TableBody>
                   </Table>
-                  {filteredClaimedSites.length > 50 && (
-                    <div className="text-center py-4 text-sm text-muted-foreground border-t">
-                      Showing 50 of {filteredClaimedSites.length} results. Use search to find specific records.
-                    </div>
-                  )}
                 </div>
               )}
             </CardContent>
