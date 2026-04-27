@@ -119,26 +119,30 @@ BEGIN
     ('RW-1101','Petty Cash — Kigali','النقد الصغير كيغالي','asset','current_asset',TRUE,rw_1100,id_rw),
     ('RW-1102','BK Bank — Operations Account','حساب العمليات — بنك BWM','asset','current_asset',TRUE,rw_1100,id_rw),
     ('RW-1103','Equity Bank — Field Account','الحساب الميداني — بنك إيكويتي','asset','current_asset',TRUE,rw_1100,id_rw),
-    ('RW-1104','USD Bank Account','حساب بنكي بالدولار','asset','current_asset',TRUE,rw_1100,id_rw);
+    ('RW-1104','USD Bank Account','حساب بنكي بالدولار','asset','current_asset',TRUE,rw_1100,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- Receivables
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('RW-1201','Grants Receivable','ذمم المنح المدينة','asset','current_asset',TRUE,rw_1200,id_rw),
     ('RW-1202','Staff Advances Receivable','سلف الموظفين المدينة','asset','current_asset',TRUE,rw_1200,id_rw),
-    ('RW-1203','Vendor Advances','سلف الموردين','asset','current_asset',TRUE,rw_1200,id_rw);
+    ('RW-1203','Vendor Advances','سلف الموردين','asset','current_asset',TRUE,rw_1200,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- Prepaid & Advances
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('RW-1301','Prepaid Rent','إيجار مدفوع مقدماً','asset','current_asset',TRUE,rw_1300,id_rw),
     ('RW-1302','Prepaid Insurance','تأمين مدفوع مقدماً','asset','current_asset',TRUE,rw_1300,id_rw),
-    ('RW-1303','Travel Advances','سلف السفر','asset','current_asset',TRUE,rw_1300,id_rw);
+    ('RW-1303','Travel Advances','سلف السفر','asset','current_asset',TRUE,rw_1300,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- Fixed Assets
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('RW-1401','Vehicles','المركبات','asset','fixed_asset',TRUE,rw_1400,id_rw),
     ('RW-1402','Computer Equipment','معدات الحاسوب','asset','fixed_asset',TRUE,rw_1400,id_rw),
     ('RW-1403','Office Furniture & Equipment','أثاث ومعدات المكتب','asset','fixed_asset',TRUE,rw_1400,id_rw),
-    ('RW-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,rw_1400,id_rw);
+    ('RW-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,rw_1400,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- Liability sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
@@ -154,14 +158,16 @@ BEGIN
     ('RW-2201','Accrued Payroll','رواتب مستحقة','liability','current_liability',TRUE,rw_2200,id_rw),
     ('RW-2202','Accrued Taxes — RSSB','ضرائب مستحقة — RSSB','liability','current_liability',TRUE,rw_2200,id_rw),
     ('RW-2203','Withholding Tax Payable','ضريبة الاستقطاع المستحقة','liability','current_liability',TRUE,rw_2200,id_rw),
-    ('RW-2301','Deferred Grant Revenue','إيرادات المنح المؤجلة','liability','current_liability',TRUE,rw_2300,id_rw);
+    ('RW-2301','Deferred Grant Revenue','إيرادات المنح المؤجلة','liability','current_liability',TRUE,rw_2300,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- Equity
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('RW-3001','Unrestricted Net Assets','صافي الأصول غير المقيدة','equity','unrestricted',TRUE,rw_3000,id_rw),
     ('RW-3002','Temporarily Restricted Net Assets','صافي الأصول المقيدة مؤقتاً','equity','restricted',TRUE,rw_3000,id_rw),
     ('RW-3003','Permanently Restricted Net Assets','صافي الأصول المقيدة دائماً','equity','restricted',TRUE,rw_3000,id_rw),
-    ('RW-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,rw_3000,id_rw);
+    ('RW-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,rw_3000,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- Revenue sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
@@ -176,7 +182,8 @@ BEGIN
     ('RW-4104','EU Grant Revenue','إيرادات منحة الاتحاد الأوروبي','revenue','grant',TRUE,rw_4100,id_rw),
     ('RW-4201','Interest Income','إيرادات الفوائد','revenue','other_income',TRUE,rw_4200,id_rw),
     ('RW-4202','Exchange Gain','ربح صرف العملة','revenue','other_income',TRUE,rw_4200,id_rw),
-    ('RW-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,rw_4200,id_rw);
+    ('RW-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,rw_4200,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- Expense sub-headers
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
@@ -217,7 +224,8 @@ BEGIN
     ('RW-5502','Office Furniture & Equipment','أثاث ومعدات مكتبية','expense','supplies',TRUE,rw_5500,id_rw),
     ('RW-5503','Vehicles','مركبات','expense','supplies',TRUE,rw_5500,id_rw),
     ('RW-5601','Indirect Cost Rate Charge','رسوم معدل التكاليف غير المباشرة','expense','indirect',TRUE,rw_5600,id_rw),
-    ('RW-5602','Management Fee','رسوم الإدارة','expense','indirect',TRUE,rw_5600,id_rw);
+    ('RW-5602','Management Fee','رسوم الإدارة','expense','indirect',TRUE,rw_5600,id_rw)
+  ON CONFLICT (code) DO NOTHING;
 
   -- ================================================================
   -- ██████████  QATAR  ██████████
@@ -257,7 +265,8 @@ BEGIN
     ('QA-1401','Vehicles','المركبات','asset','fixed_asset',TRUE,qa_1400,id_qa),
     ('QA-1402','IT Equipment','معدات تقنية المعلومات','asset','fixed_asset',TRUE,qa_1400,id_qa),
     ('QA-1403','Office Furniture','أثاث المكاتب','asset','fixed_asset',TRUE,qa_1400,id_qa),
-    ('QA-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,qa_1400,id_qa);
+    ('QA-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,qa_1400,id_qa)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('QA-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,qa_2000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_2100;
@@ -270,12 +279,14 @@ BEGIN
     ('QA-2201','Accrued Payroll','رواتب مستحقة','liability','current_liability',TRUE,qa_2200,id_qa),
     ('QA-2202','End of Service Benefits Payable','مكافأة نهاية الخدمة المستحقة','liability','current_liability',TRUE,qa_2200,id_qa),
     ('QA-2203','Withholding Tax Payable','ضريبة الاستقطاع المستحقة','liability','current_liability',TRUE,qa_2200,id_qa),
-    ('QA-2204','Social Insurance Payable','مستحقات التأمين الاجتماعي','liability','current_liability',TRUE,qa_2200,id_qa);
+    ('QA-2204','Social Insurance Payable','مستحقات التأمين الاجتماعي','liability','current_liability',TRUE,qa_2200,id_qa)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('QA-3001','Unrestricted Net Assets','صافي الأصول غير المقيدة','equity','unrestricted',TRUE,qa_3000,id_qa),
     ('QA-3002','Restricted Net Assets','صافي الأصول المقيدة','equity','restricted',TRUE,qa_3000,id_qa),
-    ('QA-3003','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,qa_3000,id_qa);
+    ('QA-3003','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,qa_3000,id_qa)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('QA-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,qa_4000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_4100;
@@ -288,7 +299,8 @@ BEGIN
     ('QA-4103','EU Grant Revenue','إيرادات منحة الاتحاد الأوروبي','revenue','grant',TRUE,qa_4100,id_qa),
     ('QA-4201','Interest Income','إيرادات الفوائد','revenue','other_income',TRUE,qa_4200,id_qa),
     ('QA-4202','Exchange Gain','ربح صرف العملة','revenue','other_income',TRUE,qa_4200,id_qa),
-    ('QA-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,qa_4200,id_qa);
+    ('QA-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,qa_4200,id_qa)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('QA-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,qa_5000,id_qa) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO qa_5100;
@@ -322,7 +334,8 @@ BEGIN
     ('QA-5405','Bank Charges','رسوم بنكية','expense','admin',TRUE,qa_5400,id_qa),
     ('QA-5406','Exchange Loss','خسارة صرف العملة','expense','admin',TRUE,qa_5400,id_qa),
     ('QA-5501','Indirect Cost Rate Charge','رسوم معدل التكاليف غير المباشرة','expense','indirect',TRUE,qa_5500,id_qa),
-    ('QA-5502','Management Fee','رسوم الإدارة','expense','indirect',TRUE,qa_5500,id_qa);
+    ('QA-5502','Management Fee','رسوم الإدارة','expense','indirect',TRUE,qa_5500,id_qa)
+  ON CONFLICT (code) DO NOTHING;
 
   -- ================================================================
   -- ██████████  USA  ██████████
@@ -368,7 +381,8 @@ BEGIN
     ('US-1501','Leasehold Improvements','تحسينات العقار المستأجر','asset','fixed_asset',TRUE,us_1500,id_us),
     ('US-1502','Computer & IT Equipment','معدات الحاسوب وتقنية المعلومات','asset','fixed_asset',TRUE,us_1500,id_us),
     ('US-1503','Office Furniture & Equipment','أثاث ومعدات مكتبية','asset','fixed_asset',TRUE,us_1500,id_us),
-    ('US-1504','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,us_1500,id_us);
+    ('US-1504','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,us_1500,id_us)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('US-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,us_2000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_2100;
@@ -388,13 +402,15 @@ BEGIN
     ('US-2206','FICA — Medicare Payable','ضريبة FICA — رعاية طبية مستحقة','liability','current_liability',TRUE,us_2200,id_us),
     ('US-2207','Accrued Vacation','إجازة مستحقة','liability','current_liability',TRUE,us_2200,id_us),
     ('US-2301','Deferred Federal Grant Revenue','إيرادات المنح الفيدرالية المؤجلة','liability','current_liability',TRUE,us_2300,id_us),
-    ('US-2302','Deferred Foundation Revenue','إيرادات مؤسسات مؤجلة','liability','current_liability',TRUE,us_2300,id_us);
+    ('US-2302','Deferred Foundation Revenue','إيرادات مؤسسات مؤجلة','liability','current_liability',TRUE,us_2300,id_us)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('US-3001','Net Assets Without Donor Restrictions','صافي أصول بلا قيود المانحين','equity','unrestricted',TRUE,us_3000,id_us),
     ('US-3002','Net Assets With Donor Restrictions','صافي أصول مع قيود المانحين','equity','restricted',TRUE,us_3000,id_us),
     ('US-3003','Board-Designated Net Assets','صافي الأصول المخصصة من مجلس الإدارة','equity','unrestricted',TRUE,us_3000,id_us),
-    ('US-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,us_3000,id_us);
+    ('US-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,us_3000,id_us)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('US-4100','Federal Grant Revenue','إيرادات المنح الفيدرالية','revenue','grant',FALSE,us_4000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_4100;
@@ -413,7 +429,8 @@ BEGIN
     ('US-4203','Individual Contributions','تبرعات فردية','revenue','grant',TRUE,us_4200,id_us),
     ('US-4301','Investment Income','إيرادات الاستثمار','revenue','other_income',TRUE,us_4300,id_us),
     ('US-4302','Interest Income','إيرادات الفوائد','revenue','other_income',TRUE,us_4300,id_us),
-    ('US-4303','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,us_4300,id_us);
+    ('US-4303','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,us_4300,id_us)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('US-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,us_5000,id_us) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO us_5100;
@@ -456,7 +473,8 @@ BEGIN
     ('US-5507','Bank Charges','رسوم بنكية','expense','admin',TRUE,us_5500,id_us),
     ('US-5508','Printing & Publications','الطباعة والمنشورات','expense','admin',TRUE,us_5500,id_us),
     ('US-5601','NICRA — Indirect Cost Rate','معدل التكاليف غير المباشرة (NICRA)','expense','indirect',TRUE,us_5600,id_us),
-    ('US-5602','Management Fee','رسوم الإدارة','expense','indirect',TRUE,us_5600,id_us);
+    ('US-5602','Management Fee','رسوم الإدارة','expense','indirect',TRUE,us_5600,id_us)
+  ON CONFLICT (code) DO NOTHING;
 
   -- ================================================================
   -- ██████████  KENYA  ██████████
@@ -500,7 +518,8 @@ BEGIN
     ('KE-1401','Vehicles','المركبات','asset','fixed_asset',TRUE,ke_1400,id_ke),
     ('KE-1402','Computer & IT Equipment','معدات الحاسوب وتقنية المعلومات','asset','fixed_asset',TRUE,ke_1400,id_ke),
     ('KE-1403','Office Furniture & Equipment','أثاث ومعدات مكتبية','asset','fixed_asset',TRUE,ke_1400,id_ke),
-    ('KE-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,ke_1400,id_ke);
+    ('KE-1404','Accumulated Depreciation','مجمع الاستهلاك','asset','fixed_asset',TRUE,ke_1400,id_ke)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('KE-2100','Accounts Payable','الذمم الدائنة','liability','current_liability',FALSE,ke_2000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_2100;
@@ -518,13 +537,15 @@ BEGIN
     ('KE-2204','PAYE Tax Payable','ضريبة PAYE المستحقة','liability','current_liability',TRUE,ke_2200,id_ke),
     ('KE-2205','VAT Payable','ضريبة القيمة المضافة المستحقة','liability','current_liability',TRUE,ke_2200,id_ke),
     ('KE-2206','Withholding Tax Payable','ضريبة الاستقطاع المستحقة','liability','current_liability',TRUE,ke_2200,id_ke),
-    ('KE-2301','Deferred Grant Revenue','إيرادات المنح المؤجلة','liability','current_liability',TRUE,ke_2300,id_ke);
+    ('KE-2301','Deferred Grant Revenue','إيرادات المنح المؤجلة','liability','current_liability',TRUE,ke_2300,id_ke)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id) VALUES
     ('KE-3001','Unrestricted Net Assets','صافي الأصول غير المقيدة','equity','unrestricted',TRUE,ke_3000,id_ke),
     ('KE-3002','Temporarily Restricted Net Assets','صافي الأصول المقيدة مؤقتاً','equity','restricted',TRUE,ke_3000,id_ke),
     ('KE-3003','Permanently Restricted Net Assets','صافي الأصول المقيدة دائماً','equity','restricted',TRUE,ke_3000,id_ke),
-    ('KE-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,ke_3000,id_ke);
+    ('KE-3004','Retained Surplus / (Deficit)','الفائض / (العجز) المحتجز','equity','retained_earnings',TRUE,ke_3000,id_ke)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('KE-4100','Grant Revenue','إيرادات المنح','revenue','grant',FALSE,ke_4000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_4100;
@@ -538,7 +559,8 @@ BEGIN
     ('KE-4104','World Bank Grant Revenue','إيرادات منحة البنك الدولي','revenue','grant',TRUE,ke_4100,id_ke),
     ('KE-4201','Interest Income','إيرادات الفوائد','revenue','other_income',TRUE,ke_4200,id_ke),
     ('KE-4202','Exchange Gain','ربح صرف العملة','revenue','other_income',TRUE,ke_4200,id_ke),
-    ('KE-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,ke_4200,id_ke);
+    ('KE-4203','Miscellaneous Income','إيرادات متنوعة','revenue','other_income',TRUE,ke_4200,id_ke)
+  ON CONFLICT (code) DO NOTHING;
 
   INSERT INTO acct_accounts (code,name_en,name_ar,account_type,subtype,is_postable,parent_id,country_id)
   VALUES ('KE-5100','Personnel Costs','تكاليف الموظفين','expense','personnel',FALSE,ke_5000,id_ke) ON CONFLICT (code) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id INTO ke_5100;
@@ -579,7 +601,8 @@ BEGIN
     ('KE-5502','Office Furniture & Equipment','أثاث ومعدات مكتبية','expense','supplies',TRUE,ke_5500,id_ke),
     ('KE-5503','Vehicles','مركبات','expense','supplies',TRUE,ke_5500,id_ke),
     ('KE-5601','Indirect Cost Rate Charge','رسوم معدل التكاليف غير المباشرة','expense','indirect',TRUE,ke_5600,id_ke),
-    ('KE-5602','Management Fee','رسوم الإدارة','expense','indirect',TRUE,ke_5600,id_ke);
+    ('KE-5602','Management Fee','رسوم الإدارة','expense','indirect',TRUE,ke_5600,id_ke)
+  ON CONFLICT (code) DO NOTHING;
 
   RAISE NOTICE 'COA seeding complete: Rwanda, Qatar, USA, Kenya.';
 END $$;
