@@ -95,9 +95,9 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           const [advNotCoveredRes, recoveryLogRes] = await Promise.all([
             supabase
               .from('down_payment_requests')
-              .select('id, site_entry_id')
-              .in('status', ['approved', 'paid'])
-              .eq('mmp_id', mmpId),
+              .select('id, mmp_site_entry_id')
+              .in('status', ['approved', 'partially_paid', 'fully_paid'])
+              .in('mmp_site_entry_id', notCoveredIds),
             supabase
               .from('cost_recovery_log')
               .select('site_entry_id')
@@ -109,7 +109,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           } else {
             const advancedSiteIds = new Set(
               (advNotCoveredRes.data || [])
-                .map((d: { site_entry_id: string | null }) => d.site_entry_id)
+                .map((d: { mmp_site_entry_id: string | null }) => d.mmp_site_entry_id)
                 .filter(Boolean),
             );
             const resolvedSiteIds = new Set(

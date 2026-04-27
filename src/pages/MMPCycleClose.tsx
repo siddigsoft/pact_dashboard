@@ -375,11 +375,12 @@ const MMPCycleClose = () => {
       }
 
       // 2. Get approved/paid advances for those sites
+      const notCoveredSiteIds = (notCoveredEntries as any[]).map((e: any) => e.id);
       const { data: advances } = await supabase
         .from('down_payment_requests')
-        .select('id, site_entry_id, amount, status')
-        .in('status', ['approved', 'paid'])
-        .eq('mmp_id', mmpId);
+        .select('id, mmp_site_entry_id, requested_amount, status')
+        .in('status', ['approved', 'partially_paid', 'fully_paid'])
+        .in('mmp_site_entry_id', notCoveredSiteIds);
 
       // 3. Get recovery log for this MMP
       const { data: recoveryRows } = await supabase
@@ -407,10 +408,10 @@ const MMPCycleClose = () => {
       // Aggregate by site entry
       const advanceMap: Record<string, { total: number; count: number; firstId: string }> = {};
       (advances || []).forEach((a: any) => {
-        const siteId = a.site_entry_id;
+        const siteId = a.mmp_site_entry_id;
         if (!siteId) return;
         if (!advanceMap[siteId]) advanceMap[siteId] = { total: 0, count: 0, firstId: a.id };
-        advanceMap[siteId].total += a.amount || 0;
+        advanceMap[siteId].total += a.requested_amount || 0;
         advanceMap[siteId].count += 1;
       });
 
