@@ -10,6 +10,7 @@ export type PaymentEventType =
   | 'recovery_decision_rolled'          // Not-covered cost rolled to next MMP
   | 'recovery_decision_return_required' // Not-covered cost — enumerator must return
   | 'recovery_decision_writeoff'        // Not-covered cost written off
+  | 'payment_pre_allocated'   // Money pre-allocated in target MMP from a roll-over (target MMP trail)
   | 'repayment_received'      // Enumerator returned money
   | 'repayment_overdue'       // Repayment deadline passed
   | 'settlement_requested'    // Admin requested fee settlement on behalf of enumerator
@@ -119,6 +120,7 @@ export function paymentEventLabel(eventType: PaymentEventType): { en: string; ar
     recovery_decision_rolled:    { en: 'Cost Rolled to Next MMP',        ar: 'تم ترحيل التكلفة للدورة التالية' },
     recovery_decision_return_required: { en: 'Return of Funds Required', ar: 'مطلوب إعادة الأموال' },
     recovery_decision_writeoff:  { en: 'Cost Written Off',               ar: 'تم شطب التكلفة' },
+    payment_pre_allocated:       { en: 'Pre-Allocated from Rolled Advance', ar: 'مبلغ مُرحَّل مخصص مسبقاً' },
     repayment_received:          { en: 'Repayment Received',             ar: 'تم استلام المبلغ المُعاد' },
     repayment_overdue:           { en: 'Repayment Overdue',              ar: 'تأخر السداد' },
     settlement_requested:        { en: 'Settlement Payment Requested',   ar: 'تم طلب سداد المستحق' },

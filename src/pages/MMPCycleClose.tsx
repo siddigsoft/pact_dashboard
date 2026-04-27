@@ -42,6 +42,7 @@ import type { CostRecoverySite } from '@/components/cycle/CostRecoveryDialog';
 import { MoneyTrailPanel } from '@/components/cycle/MoneyTrailPanel';
 import { WFPUploadZone } from '@/components/cycle/WFPUploadZone';
 import { WFPMatchReviewTable } from '@/components/cycle/WFPMatchReviewTable';
+import { RolledAllocationsPanel } from '@/components/cycle/RolledAllocationsPanel';
 import { parseWFPRow, matchAll, summarise } from '@/utils/wfpMatcher';
 import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
 import { logPaymentEvent } from '@/services/paymentEventLogger';
@@ -2860,6 +2861,9 @@ const MMPCycleClose = () => {
                   Refresh
                 </Button>
               </div>
+
+              {/* Pre-allocations rolled INTO this MMP from a prior cycle */}
+              <RolledAllocationsPanel mmpId={checklistMmpId} />
 
               {/* KPI summary cards */}
               {!loadingExceptions && (

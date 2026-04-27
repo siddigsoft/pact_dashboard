@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DollarSign, RotateCcw, AlertTriangle, Trash2, CheckCircle2,
-  Clock, ArrowDown, ArrowUp, Loader2, RefreshCw, Info,
+  Clock, ArrowDown, ArrowUp, Loader2, RefreshCw, Info, ArrowRightLeft,
 } from 'lucide-react';
 import {
   fetchPaymentTrail, fetchMmpPaymentTrail,
@@ -51,7 +51,8 @@ const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgCol
   advance_paid:                 { icon: <ArrowDown className="h-4 w-4" />,    color: 'text-blue-600 dark:text-blue-400',    bgColor: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' },
   advance_reconciled:           { icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-teal-600 dark:text-teal-400',   bgColor: 'bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800' },
   advance_deducted_from_fee:    { icon: <ArrowUp className="h-4 w-4" />,      color: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800' },
-  recovery_decision_rolled:     { icon: <RotateCcw className="h-4 w-4" />,    color: 'text-indigo-600 dark:text-indigo-400', bgColor: 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800' },
+  recovery_decision_rolled:     { icon: <RotateCcw className="h-4 w-4" />,        color: 'text-indigo-600 dark:text-indigo-400', bgColor: 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800' },
+  payment_pre_allocated:        { icon: <ArrowRightLeft className="h-4 w-4" />,  color: 'text-violet-600 dark:text-violet-400', bgColor: 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800' },
   recovery_decision_return_required: { icon: <AlertTriangle className="h-4 w-4" />, color: 'text-amber-600 dark:text-amber-400', bgColor: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800' },
   recovery_decision_writeoff:   { icon: <Trash2 className="h-4 w-4" />,       color: 'text-red-600 dark:text-red-400',     bgColor: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' },
   repayment_received:           { icon: <CheckCircle2 className="h-4 w-4" />, color: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800' },
@@ -169,9 +170,26 @@ export function MoneyTrailPanel({
                         {row.note && (
                           <p className="text-xs text-foreground/70 mt-1 italic">{row.note}</p>
                         )}
-                        {row.metadata && row.metadata.target_mmp_name && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            → Target MMP: <span className="font-medium">{row.metadata.target_mmp_name as string}</span>
+                        {/* recovery_decision_rolled: source trail shows where money went */}
+                        {row.event_type === 'recovery_decision_rolled' && row.metadata?.target_mmp_name && (
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            <RotateCcw className="h-3 w-3 shrink-0" />
+                            Rolled to: <span className="font-medium ml-1">{row.metadata.target_mmp_name as string}</span>
+                          </p>
+                        )}
+                        {/* payment_pre_allocated: target trail shows where money came from */}
+                        {row.event_type === 'payment_pre_allocated' && row.metadata?.source_mmp_name && (
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            <ArrowRightLeft className="h-3 w-3 shrink-0" />
+                            From: <span className="font-medium ml-1">{row.metadata.source_mmp_name as string}</span>
+                            {row.metadata.source_site_name && (
+                              <span className="text-muted-foreground/70 ml-1">· {row.metadata.source_site_name as string}</span>
+                            )}
+                          </p>
+                        )}
+                        {row.metadata?.target_site_auto_inserted && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                            ⚠ Site was not in target MMP — auto-added for this allocation.
                           </p>
                         )}
                         {row.metadata && row.metadata.repayment_deadline && (

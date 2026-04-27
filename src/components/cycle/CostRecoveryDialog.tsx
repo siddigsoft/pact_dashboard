@@ -210,6 +210,110 @@ export function CostRecoveryDialog({
             : { writeoff_reason: writeoffReason },
       });
 
+      // 2B. For Roll: find or auto-create site entry in target MMP, then pre-allocate
+      let targetSiteEntryId: string | null = null;
+      let targetSiteName: string | null = null;
+      let targetSiteAutoInserted = false;
+
+      if (decision === 'rolled') {
+        // Look for matching site in target MMP: same accepted_by enumerator + site_code or site_name
+        const { data: targetSites } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code')
+          .eq('mmp_file_id', targetMmpId)
+          .eq('accepted_by', site.enumerator_id || '')
+          .limit(50);
+
+        if (targetSites && targetSites.length > 0) {
+          // Try exact site_code match first
+          const exactMatch = site.site_code
+            ? targetSites.find((s: any) => s.site_code === site.site_code)
+            : null;
+          // Fall back to case-insensitive name match
+          const nameMatch = targetSites.find(
+            (s: any) => s.site_name?.toLowerCase() === site.site_name.toLowerCase(),
+          );
+          const match = exactMatch || nameMatch || null;
+          if (match) {
+            targetSiteEntryId = match.id;
+            targetSiteName = match.site_name;
+          }
+        }
+
+        // If no matching site found: auto-insert a placeholder site entry
+        if (!targetSiteEntryId) {
+          const { data: inserted, error: insertErr } = await supabase
+            .from('mmp_site_entries')
+            .insert({
+              mmp_file_id: targetMmpId,
+              site_name: site.site_name,
+              site_code: site.site_code || null,
+              state: (site as any).state || null,
+              accepted_by: site.enumerator_id || null,
+              status: 'assigned',
+              not_covered_flag: false,
+            })
+            .select('id, site_name')
+            .single();
+
+          if (!insertErr && inserted) {
+            targetSiteEntryId = inserted.id;
+            targetSiteName = inserted.site_name;
+            targetSiteAutoInserted = true;
+          }
+        }
+
+        // 2C. Insert into rolled_advance_allocations
+        const { data: crlRow } = await supabase
+          .from('cost_recovery_log')
+          .select('id')
+          .eq('site_entry_id', site.id)
+          .maybeSingle();
+
+        await supabase.from('rolled_advance_allocations').insert({
+          source_cost_recovery_id: crlRow?.id || null,
+          source_mmp_id: site.mmp_id,
+          source_mmp_name: site.mmp_name || null,
+          source_site_entry_id: site.id,
+          source_site_name: site.site_name,
+          source_site_code: site.site_code || null,
+          target_mmp_id: targetMmpId,
+          target_mmp_name: targetMmpName,
+          target_site_entry_id: targetSiteEntryId,
+          target_site_name: targetSiteName,
+          target_site_auto_inserted: targetSiteAutoInserted,
+          amount: advanceAmount,
+          amount_currency: currency,
+          enumerator_id: site.enumerator_id || null,
+          enumerator_name: site.enumerator_name || null,
+          allocated_by: currentUser.id,
+          allocated_by_name: currentUser.full_name || currentUser.email || 'Admin',
+          note: rollNote || null,
+          status: 'pending',
+        });
+
+        // 2D. Log pre-allocation event in TARGET MMP's money trail
+        await logPaymentEvent({
+          eventType: 'payment_pre_allocated',
+          amount: advanceAmount,
+          amountCurrency: currency,
+          siteEntryId: targetSiteEntryId,
+          mmpId: targetMmpId,
+          paymentRefId: advanceId || null,
+          performedById: currentUser.id,
+          performedByName: currentUser.full_name || '',
+          performedByRole: (currentUser as any).role || '',
+          enumeratorId: site.enumerator_id || null,
+          note: rollNote || null,
+          metadata: {
+            source_mmp_id: site.mmp_id,
+            source_mmp_name: site.mmp_name || null,
+            source_site_name: site.site_name,
+            target_site_auto_inserted: targetSiteAutoInserted,
+          },
+        });
+      }
+
       // 3. Dispatch notifications
       const adminName = currentUser.full_name || 'Admin';
       const amountStr = `${advanceAmount.toLocaleString()} ${currency}`;
