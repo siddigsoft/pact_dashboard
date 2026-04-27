@@ -414,7 +414,7 @@ const MMP = () => {
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
-  const [verifiedSubTab, setVerifiedSubTab] = useState<'all' | 'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('all');
+  const [verifiedSubTab, setVerifiedSubTab] = useState<'all' | 'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'submitted' | 'wfpConfirmed' | 'notCovered' | 'rejected'>('all');
   const [isBulkApproving, setIsBulkApproving] = useState(false);
   const [pendingBulkApproveCount, setPendingBulkApproveCount] = useState(0);
   const [tableFilteredSiteIds, setTableFilteredSiteIds] = useState<Set<string>>(new Set());
@@ -435,7 +435,7 @@ const MMP = () => {
 
   const isCompletedStatus = (raw: string | null | undefined): boolean => {
     const s = normalizeStatus(raw);
-    return s.includes('completed') || s.includes('finished') || s.includes('done');
+    return s.includes('completed') || s.includes('finished') || s.includes('done') || s === 'submitted' || s === 'wfp_confirmed' || s === 'not_covered';
   };
 
   // Subcategory state for New MMPs (FOM only)
@@ -4269,6 +4269,9 @@ const MMP = () => {
       smartAssigned: [] as SiteVisitRow[],
       ongoing: [] as SiteVisitRow[],
       completed: [] as SiteVisitRow[],
+      submitted: [] as SiteVisitRow[],
+      wfpConfirmed: [] as SiteVisitRow[],
+      notCovered: [] as SiteVisitRow[],
       rejected: [] as SiteVisitRow[],
       approvedCosted: [] as SiteVisitRow[]
     };
@@ -4301,10 +4304,22 @@ const MMP = () => {
       
       // Any site with accepted_by set goes to 'accepted' (post-claim statuses)
       if (acceptedBy) {
+        if (status === 'wfp_confirmed') return 'wfpConfirmed';
+        if (status === 'not_covered') return 'notCovered';
+        if (status === 'submitted') return 'submitted';
         if (status === 'completed') return 'completed';
         if (status === 'rejected' || status === 'declined') return 'rejected';
         if (/inprogress|in_progress|ongoing/.test(status)) return 'ongoing';
         return 'accepted';
+      }
+      if (status === 'wfp_confirmed') {
+        return 'wfpConfirmed';
+      }
+      if (status === 'not_covered') {
+        return 'notCovered';
+      }
+      if (status === 'submitted') {
+        return 'submitted';
       }
       if (status === 'completed') {
         return 'completed';
@@ -4398,6 +4413,9 @@ const MMP = () => {
       precomputedSubcategorySites.accepted.length +
       precomputedSubcategorySites.ongoing.length +
       precomputedSubcategorySites.completed.length +
+      precomputedSubcategorySites.submitted.length +
+      precomputedSubcategorySites.wfpConfirmed.length +
+      precomputedSubcategorySites.notCovered.length +
       precomputedSubcategorySites.rejected.length
     );
   }, [precomputedSubcategorySites]);
@@ -4450,6 +4468,9 @@ const MMP = () => {
       smartAssigned: filterSubcategoryRows(precomputedSubcategorySites.smartAssigned).length,
       ongoing: filterSubcategoryRows(precomputedSubcategorySites.ongoing).length,
       completed: filterSubcategoryRows(precomputedSubcategorySites.completed).length,
+      submitted: filterSubcategoryRows(precomputedSubcategorySites.submitted).length,
+      wfpConfirmed: filterSubcategoryRows(precomputedSubcategorySites.wfpConfirmed).length,
+      notCovered: filterSubcategoryRows(precomputedSubcategorySites.notCovered).length,
       rejected: filterSubcategoryRows(precomputedSubcategorySites.rejected).length,
       approvedCosted: filteredApprovedCosted.length,
     };
@@ -4488,6 +4509,18 @@ const MMP = () => {
     
     if (subKey === 'completed') {
       return precomputedSubcategorySites.completed;
+    }
+
+    if (subKey === 'submitted') {
+      return precomputedSubcategorySites.submitted;
+    }
+
+    if (subKey === 'wfpConfirmed') {
+      return precomputedSubcategorySites.wfpConfirmed;
+    }
+
+    if (subKey === 'notCovered') {
+      return precomputedSubcategorySites.notCovered;
     }
     
     if (subKey === 'rejected') {
@@ -5318,6 +5351,36 @@ const MMP = () => {
                       {t('mmpPage.subcategories.completed')}
                       <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'completed' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{verifiedTabSiteEntryCounts.completed}</Badge>
                     </Button>
+                    <Button
+                      variant={verifiedSubTab === 'submitted' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setVerifiedSubTab('submitted')}
+                      className={`${verifiedSubTab === 'submitted' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white border-0 shadow-md' : 'hover:bg-indigo-50 dark:hover:bg-indigo-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <Send className="h-3.5 w-3.5 mr-1.5" />
+                      Submitted
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'submitted' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'}`}>{verifiedTabSiteEntryCounts.submitted}</Badge>
+                    </Button>
+                    <Button
+                      variant={verifiedSubTab === 'wfpConfirmed' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setVerifiedSubTab('wfpConfirmed')}
+                      className={`${verifiedSubTab === 'wfpConfirmed' ? 'bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white border-0 shadow-md' : 'hover:bg-cyan-50 dark:hover:bg-cyan-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <FileCheck className="h-3.5 w-3.5 mr-1.5" />
+                      WFP Confirmed
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'wfpConfirmed' ? 'bg-white/20 text-white' : 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200'}`}>{verifiedTabSiteEntryCounts.wfpConfirmed}</Badge>
+                    </Button>
+                    <Button
+                      variant={verifiedSubTab === 'notCovered' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setVerifiedSubTab('notCovered')}
+                      className={`${verifiedSubTab === 'notCovered' ? 'bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white border-0 shadow-md' : 'hover:bg-orange-50 dark:hover:bg-orange-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                      Not Covered
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'notCovered' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'}`}>{verifiedTabSiteEntryCounts.notCovered}</Badge>
+                    </Button>
                     <Button 
                       variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} 
                       size="sm" 
@@ -5332,7 +5395,7 @@ const MMP = () => {
                 </div>
               )}
               
-              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && verifiedSubTab !== 'newSites' && (
+              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'submitted' && verifiedSubTab !== 'wfpConfirmed' && verifiedSubTab !== 'notCovered' && verifiedSubTab !== 'rejected' && verifiedSubTab !== 'newSites' && (
                 loading ? (
                   <Card>
                     <CardContent className="py-8">
@@ -5994,7 +6057,64 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'submitted' && (
+                <div className="mt-6">
+                  {filteredVerifiedCategorySiteRows.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No submitted site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Submitted Site Entries</h3>
+                        <Badge variant="secondary">{filteredVerifiedCategorySiteRows.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable siteEntries={filteredVerifiedCategorySiteRows} editable={false} />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'wfpConfirmed' && (
+                <div className="mt-6">
+                  {filteredVerifiedCategorySiteRows.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No WFP-confirmed site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">WFP Confirmed Site Entries</h3>
+                        <Badge variant="secondary">{filteredVerifiedCategorySiteRows.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable siteEntries={filteredVerifiedCategorySiteRows} editable={false} />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab === 'notCovered' && (
+                <div className="mt-6">
+                  {filteredVerifiedCategorySiteRows.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No not-covered site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Not Covered Site Entries</h3>
+                        <Badge variant="secondary">{filteredVerifiedCategorySiteRows.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable siteEntries={filteredVerifiedCategorySiteRows} editable={false} />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator || isDataTeam) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'submitted' && verifiedSubTab !== 'wfpConfirmed' && verifiedSubTab !== 'notCovered' && verifiedSubTab !== 'rejected' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>

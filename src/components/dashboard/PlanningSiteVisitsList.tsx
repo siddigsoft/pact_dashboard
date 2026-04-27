@@ -108,6 +108,9 @@ const PlanningSiteVisitsList: React.FC<PlanningSiteVisitsListProps> = ({ siteVis
             <SelectItem value="assigned">Assigned</SelectItem>
             <SelectItem value="inProgress">In Progress</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="submitted">Submitted</SelectItem>
+            <SelectItem value="wfp_confirmed">WFP Confirmed</SelectItem>
+            <SelectItem value="not_covered">Not Covered</SelectItem>
           </SelectContent>
         </Select>
 

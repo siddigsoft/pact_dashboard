@@ -15,7 +15,7 @@ interface FOMSiteVisitsDashboardProps {
   visits: SiteVisit[];
 }
 
-type StatusFilter = 'all' | 'pending' | 'inProgress' | 'completed' | 'assigned' | 'scheduled' | 'overdue';
+type StatusFilter = 'all' | 'pending' | 'inProgress' | 'completed' | 'submitted' | 'wfp_confirmed' | 'not_covered' | 'assigned' | 'scheduled' | 'overdue';
 
 const FOMSiteVisitsDashboard: FC<FOMSiteVisitsDashboardProps> = ({ visits }) => {
   const [selectedState, setSelectedState] = useState<string | null>(null);
@@ -77,6 +77,12 @@ const FOMSiteVisitsDashboard: FC<FOMSiteVisitsDashboardProps> = ({ visits }) => 
       filtered = filtered.filter(v => v.status?.toLowerCase() === 'inprogress' || v.status?.toLowerCase() === 'in_progress');
     } else if (statusFilter === 'completed') {
       filtered = filtered.filter(v => v.status?.toLowerCase() === 'completed');
+    } else if (statusFilter === 'submitted') {
+      filtered = filtered.filter(v => v.status?.toLowerCase() === 'submitted');
+    } else if (statusFilter === 'wfp_confirmed') {
+      filtered = filtered.filter(v => v.status?.toLowerCase() === 'wfp_confirmed');
+    } else if (statusFilter === 'not_covered') {
+      filtered = filtered.filter(v => v.status?.toLowerCase() === 'not_covered');
     } else if (statusFilter === 'assigned') {
       filtered = filtered.filter(v => v.status?.toLowerCase() === 'assigned');
     } else if (statusFilter === 'scheduled') {
@@ -221,11 +227,14 @@ const FOMSiteVisitsDashboard: FC<FOMSiteVisitsDashboardProps> = ({ visits }) => 
               <>
                 {/* Status Tabs */}
                 <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)} className="mb-6">
-                  <TabsList className="grid w-full grid-cols-6">
+                  <TabsList className="flex flex-wrap gap-1 h-auto p-1">
                     <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
                     <TabsTrigger value="pending" className="text-xs">Pending</TabsTrigger>
                     <TabsTrigger value="inProgress" className="text-xs">In Progress</TabsTrigger>
                     <TabsTrigger value="completed" className="text-xs">Completed</TabsTrigger>
+                    <TabsTrigger value="submitted" className="text-xs">Submitted</TabsTrigger>
+                    <TabsTrigger value="wfp_confirmed" className="text-xs">WFP Confirmed</TabsTrigger>
+                    <TabsTrigger value="not_covered" className="text-xs">Not Covered</TabsTrigger>
                     <TabsTrigger value="scheduled" className="text-xs">Scheduled</TabsTrigger>
                     <TabsTrigger value="overdue" className="text-xs">Overdue</TabsTrigger>
                   </TabsList>

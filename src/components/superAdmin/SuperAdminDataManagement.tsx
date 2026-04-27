@@ -2059,6 +2059,9 @@ export function SuperAdminDataManagement() {
                       <SelectItem value="assigned">Assigned</SelectItem>
                       <SelectItem value="dispatched">Dispatched</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="submitted">Submitted</SelectItem>
+                      <SelectItem value="wfp_confirmed">WFP Confirmed</SelectItem>
+                      <SelectItem value="not_covered">Not Covered</SelectItem>
                       <SelectItem value="verified">Verified</SelectItem>
                     </SelectContent>
                   </Select>

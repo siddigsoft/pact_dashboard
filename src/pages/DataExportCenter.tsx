@@ -458,6 +458,9 @@ const DataExportCenter = () => {
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="submitted">Submitted</SelectItem>
+                  <SelectItem value="wfp_confirmed">WFP Confirmed</SelectItem>
+                  <SelectItem value="not_covered">Not Covered</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="assigned">Assigned</SelectItem>
                   <SelectItem value="dispatched">Dispatched</SelectItem>
