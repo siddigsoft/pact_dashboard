@@ -1031,6 +1031,338 @@ This gives leadership a real-time accountability view without clicking into each
 
 ---
 
+## PART 4C — FULL NOTIFICATION PLAN (In-App + WhatsApp + Email)
+
+*This section defines every notification event triggered by the Cycle Close & Site Visit Status system. All notifications use the existing `dispatchNotification` helper (`src/lib/notify.ts`) which covers all three channels through the `dispatch-notification` and `send-whatsapp` edge functions. Every message is bilingual (English + Arabic).*
+
+---
+
+### How the Notification System Works (Reference)
+
+The platform has three delivery channels:
+- **In-App** — stored in `notifications` table, shown in real-time via Supabase Realtime in the bell icon / Notifications page. Always sent.
+- **Email** — SMTP via IONOS. Sent for financial and approval events unless `sendEmail: false` is set.
+- **WhatsApp** — WasenderAPI (primary) / Meta Cloud API (fallback). Sent only when `sendWhatsApp: true` AND the user has opted in. Bilingual message.
+
+Priority levels affect how the notification appears:
+- `normal` — standard bell notification
+- `high` — orange highlight in notification list
+- `urgent` — blocking popup that requires user dismissal + red highlight
+
+---
+
+### Notification Event Registry — Cycle Close System
+
+The following 16 new event types are added to the system. Each entry shows: the trigger, who is notified, channels, priority, and the exact English and Arabic message templates.
+
+---
+
+#### EVENT 1 — `site_marked_submitted`
+**When:** Enumerator marks a site as Submitted (to WFP) in the app
+**Who is notified:** Enumerator's supervisor
+**Channels:** In-app + WhatsApp
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Site Marked as Submitted | تم تسجيل الموقع كمُقدَّم |
+| Message | [Enumerator Name] has marked [Site Name] as submitted to WFP. MMP: [MMP Name]. | قام [اسم العداد] بتسجيل موقع [اسم الموقع] كمُقدَّم إلى WFP. خطة المراقبة: [اسم الخطة]. |
+
+**Action URL:** `/mmp/cycle-close?mmp=[mmp_id]`
+
+---
+
+#### EVENT 2 — `site_wfp_confirmed`
+**When:** System auto-confirms site from WFP file (strong match) OR admin manually confirms a weak match
+**Who is notified:** Enumerator
+**Channels:** In-app + WhatsApp
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Your Site Was Confirmed by WFP ✓ | تم تأكيد موقعك من قِبَل WFP ✓ |
+| Message | Great news — [Site Name] in the [MMP Name] cycle has been confirmed in WFP's data. No further action needed. | خبر جيد — تم تأكيد موقع [اسم الموقع] في دورة [اسم الخطة] في بيانات WFP. لا يلزم اتخاذ أي إجراء. |
+
+**Action URL:** `/my-sites?site=[site_entry_id]`
+
+---
+
+#### EVENT 3 — `site_wfp_rejected`
+**When:** System marks site as Not Found in WFP file (no match) OR admin manually rejects a weak match
+**Who is notified:** Enumerator + Supervisor
+**Channels:** In-app + WhatsApp + Email
+**Priority:** `high`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Site Not Confirmed by WFP — Action Needed | الموقع غير مؤكد من WFP — يلزم اتخاذ إجراء |
+| Message (enumerator) | Your submission for [Site Name] was not found in WFP's data file. Your supervisor has been notified. You may be asked to provide your ODK reference number. | لم يُعثَر على تقريرك لموقع [اسم الموقع] في ملف بيانات WFP. تم إشعار مشرفك. قد يُطلب منك تقديم رقم مرجعك في ODK. |
+| Message (supervisor) | [Site Name] submitted by [Enumerator Name] was not found in the WFP data file for [MMP Name]. Review required in the Exceptions tab. | لم يُعثَر على موقع [اسم الموقع] الذي قدّمه [اسم العداد] في ملف بيانات WFP لخطة [اسم الخطة]. يرجى المراجعة في تبويب الاستثناءات. |
+
+**Action URL (supervisor):** `/mmp/cycle-close?mmp=[mmp_id]&tab=exceptions`
+
+---
+
+#### EVENT 4 — `site_wfp_rejected_bulk`
+**When:** Multiple sites rejected from a single WFP file upload (replaces individual EVENT 3 per site — bundled message)
+**Who is notified:** Each affected enumerator individually (one bundled message per enumerator) + Supervisors
+**Channels:** In-app + WhatsApp
+**Priority:** `high`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | [N] Sites Not Confirmed by WFP | [N] مواقع غير مؤكدة من WFP |
+| Message | [N] of your submitted sites were not found in the WFP data: [Site 1], [Site 2], [Site 3]. Your supervisor has been notified. | [N] من مواقعك المُقدَّمة لم يُعثَر عليها في بيانات WFP: [اسم الموقع 1]، [اسم الموقع 2]، [اسم الموقع 3]. تم إشعار مشرفك. |
+
+*Note: If only 1 site rejected, use EVENT 3 (individual). If 2+ sites rejected from same enumerator in same upload, use EVENT 4 (bundled).*
+
+---
+
+#### EVENT 5 — `cost_recovery_rolled`
+**When:** Admin decides to roll the approved money to a future MMP
+**Who is notified:** Enumerator + Supervisor
+**Channels:** In-app + WhatsApp
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Your Payment Rolled to Next Cycle | تم ترحيل دفعتك إلى الدورة القادمة |
+| Message | SDG [Amount] approved for [Site Name] has been rolled forward to [Target MMP Name]. The amount will be pre-approved for your next visit. | تم ترحيل [المبلغ] جنيه سوداني المعتمد لموقع [اسم الموقع] إلى خطة [اسم الخطة الهدف]. سيكون المبلغ معتمداً مسبقاً لزيارتك القادمة. |
+
+**Action URL:** `/down-payment?mmp=[target_mmp_id]`
+
+---
+
+#### EVENT 6 — `cost_recovery_return_required`
+**When:** Admin requires the enumerator to return the money
+**Who is notified:** Enumerator + Finance Officer
+**Channels:** In-app + WhatsApp + Email
+**Priority:** `high`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Return of Payment Required | مطلوب إعادة الدفعة |
+| Message (enumerator) | SDG [Amount] received for [Site Name] must be returned by [Deadline Date]. Method: [Return Method]. Contact your supervisor for details. | يجب إعادة [المبلغ] جنيه سوداني المستلم لموقع [اسم الموقع] بحلول [تاريخ الاستحقاق]. الطريقة: [طريقة الإعادة]. تواصل مع مشرفك للتفاصيل. |
+| Message (finance) | A repayment of SDG [Amount] has been requested from [Enumerator Name] for [Site Name] — [MMP Name]. Deadline: [Date]. Method: [Return Method]. | تم طلب استرداد [المبلغ] جنيه سوداني من [اسم العداد] لموقع [اسم الموقع] — [اسم الخطة]. الموعد النهائي: [التاريخ]. الطريقة: [طريقة الإعادة]. |
+
+**Action URL (finance):** `/down-payment?tab=recoveries`
+
+---
+
+#### EVENT 7 — `cost_recovery_writeoff_approved`
+**When:** Write-off digitally signed and approved
+**Who is notified:** Finance Officer + Super Admin
+**Channels:** In-app + Email
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Payment Write-Off Approved | تمت الموافقة على شطب الدفعة |
+| Message | SDG [Amount] for [Site Name] in [MMP Name] has been written off. Approved by: [Approver Name]. Reason: [Reason]. This has been recorded in the financial audit log. | تم شطب [المبلغ] جنيه سوداني لموقع [اسم الموقع] في خطة [اسم الخطة]. اعتمده: [اسم المعتمِد]. السبب: [السبب]. تم تسجيل ذلك في سجل التدقيق المالي. |
+
+---
+
+#### EVENT 8 — `repayment_overdue_day0`
+**When:** Repayment deadline has passed (day 0 — deadline day itself)
+**Who is notified:** Enumerator + Finance Officer
+**Channels:** In-app + WhatsApp + Email
+**Priority:** `high`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Repayment Overdue — Today Was the Deadline | الدفع متأخر — اليوم كان الموعد النهائي |
+| Message (enumerator) | Your repayment of SDG [Amount] for [Site Name] was due today. Please contact your supervisor immediately. | كان يجب إعادة [المبلغ] جنيه سوداني لموقع [اسم الموقع] اليوم. يرجى التواصل مع مشرفك فوراً. |
+
+**Trigger:** Supabase Edge Function cron job — runs daily at 08:00 AM Sudan time, checks `cost_recovery_log` for `repayment_deadline = today` + `status != settled`
+
+---
+
+#### EVENT 9 — `repayment_overdue_day7`
+**When:** 7 days past the repayment deadline
+**Who is notified:** Admin
+**Channels:** In-app + Email
+**Priority:** `urgent`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Repayment 7 Days Overdue — Escalation | الدفع متأخر 7 أيام — تصعيد |
+| Message | [Enumerator Name] has not repaid SDG [Amount] for [Site Name] — [MMP Name]. Deadline was [Date], now 7 days overdue. Escalated from Finance. | لم يُعِد [اسم العداد] [المبلغ] جنيه سوداني لموقع [اسم الموقع] — [اسم الخطة]. كان الموعد النهائي [التاريخ]، متأخر الآن 7 أيام. تصعيد من المالية. |
+
+---
+
+#### EVENT 10 — `repayment_overdue_day14`
+**When:** 14 days past the repayment deadline
+**Who is notified:** Super Admin
+**Channels:** In-app + Email + WhatsApp
+**Priority:** `urgent`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | CRITICAL: Repayment 14 Days Overdue | حرج: الدفع متأخر 14 يوماً |
+| Message | UNRESOLVED: [Enumerator Name] owes SDG [Amount] for [Site Name] — [MMP Name] — now 14 days overdue. Finance and Admin have been notified previously. Immediate action required. | غير محلول: [اسم العداد] مدين بـ [المبلغ] جنيه سوداني لموقع [اسم الموقع] — [اسم الخطة] — متأخر الآن 14 يوماً. تم إشعار المالية والإدارة سابقاً. يلزم اتخاذ إجراء فوري. |
+
+---
+
+#### EVENT 11 — `repayment_received`
+**When:** Finance records that the enumerator has returned money
+**Who is notified:** Enumerator
+**Channels:** In-app + WhatsApp
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Repayment Received — Thank You | تم استلام الدفعة المُعادة — شكراً |
+| Message | We've received your repayment of SDG [Amount] for [Site Name]. Your account is now settled for this matter. | استلمنا مبلغ إعادة [المبلغ] جنيه سوداني لموقع [اسم الموقع]. حسابك الآن مُسوَّى بخصوص هذه المسألة. |
+
+---
+
+#### EVENT 12 — `wfp_file_uploaded`
+**When:** Admin uploads a WFP cleaned data Excel file for a cycle
+**Who is notified:** Admin who uploaded (confirmation) + Super Admin
+**Channels:** In-app only
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | WFP File Uploaded — Processing Complete | تم رفع ملف WFP — اكتملت المعالجة |
+| Message | The WFP file for [MMP Name] has been processed. Results: [X] confirmed, [Y] needs review, [Z] rejected, [W] anomalies. Review the results in the WFP Confirmation tab. | تمت معالجة ملف WFP لخطة [اسم الخطة]. النتائج: [X] مؤكد، [Y] يحتاج مراجعة، [Z] مرفوض، [W] شذوذات. راجع النتائج في تبويب تأكيد WFP. |
+
+---
+
+#### EVENT 13 — `wfp_results_applied`
+**When:** Admin clicks "Apply Results" and WFP match decisions are committed to the database
+**Who is notified:** All supervisors in the MMP's hub
+**Channels:** In-app
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | WFP Confirmation Applied for [MMP Name] | تم تطبيق تأكيد WFP لخطة [اسم الخطة] |
+| Message | WFP verification results have been applied for [MMP Name]. [X] sites confirmed, [Z] sites rejected. Check the Exceptions tab for rejected sites requiring follow-up. | تم تطبيق نتائج التحقق من WFP لخطة [اسم الخطة]. [X] مواقع مؤكدة، [Z] مواقع مرفوضة. تحقق من تبويب الاستثناءات للمواقع المرفوضة التي تحتاج متابعة. |
+
+---
+
+#### EVENT 14 — `cycle_closed`
+**When:** Cycle is officially closed by admin/super admin
+**Who is notified:** All supervisors in the cycle + Finance Officer + Country Director
+**Channels:** In-app + Email
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Cycle Closed — [MMP Name] | تمت إغلاق الدورة — [اسم الخطة] |
+| Message | The [MMP Name] monitoring cycle has been officially closed. Total sites: [X] confirmed, [Y] not covered, [Z] exceptions. Final report is available for download. | تم إغلاق دورة المراقبة [اسم الخطة] رسمياً. إجمالي المواقع: [X] مؤكد، [Y] غير مشمول، [Z] استثناءات. التقرير النهائي متاح للتحميل. |
+
+**Action URL:** `/mmp/cycle-close?mmp=[mmp_id]&tab=reports`
+
+---
+
+#### EVENT 15 — `status_admin_override`
+**When:** Admin or Super Admin manually overrides a site's status (outside the normal flow)
+**Who is notified:** Enumerator + Supervisor
+**Channels:** In-app
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Site Status Updated by Admin | تم تحديث حالة الموقع من قِبَل المدير |
+| Message | The status of [Site Name] has been updated from [Old Status] to [New Status] by [Admin Name]. Reason: [Reason]. | تم تحديث حالة موقع [اسم الموقع] من [الحالة القديمة] إلى [الحالة الجديدة] بواسطة [اسم المدير]. السبب: [السبب]. |
+
+---
+
+#### EVENT 16 — `exception_resolved`
+**When:** Admin resolves a rejected site in the Exceptions tab (accepts evidence, disputes, or accepts rejection)
+**Who is notified:** Enumerator + Supervisor
+**Channels:** In-app + WhatsApp
+**Priority:** `normal`
+
+| Field | English | Arabic |
+|---|---|---|
+| Title | Site Exception Resolved — [Site Name] | تم حل استثناء الموقع — [اسم الموقع] |
+| Message | The exception for [Site Name] has been resolved by [Admin Name]. Resolution: [Evidence Accepted / Rejection Accepted / Disputed]. | تم حل استثناء موقع [اسم الموقع] بواسطة [اسم المدير]. القرار: [الأدلة مقبولة / الرفض مقبول / متنازع عليه]. |
+
+---
+
+### Notification Delivery Matrix
+
+| Event | Enumerator | Supervisor | Finance | Admin | Super Admin | In-App | WhatsApp | Email |
+|---|---|---|---|---|---|---|---|---|
+| `site_marked_submitted` | — | ✓ | — | — | — | ✓ | ✓ | — |
+| `site_wfp_confirmed` | ✓ | — | — | — | — | ✓ | ✓ | — |
+| `site_wfp_rejected` | ✓ | ✓ | — | — | — | ✓ | ✓ | ✓ |
+| `site_wfp_rejected_bulk` | ✓ | ✓ | — | — | — | ✓ | ✓ | — |
+| `cost_recovery_rolled` | ✓ | ✓ | — | — | — | ✓ | ✓ | — |
+| `cost_recovery_return_required` | ✓ | — | ✓ | — | — | ✓ | ✓ | ✓ |
+| `cost_recovery_writeoff_approved` | — | — | ✓ | — | ✓ | ✓ | — | ✓ |
+| `repayment_overdue_day0` | ✓ | — | ✓ | — | — | ✓ | ✓ | ✓ |
+| `repayment_overdue_day7` | — | — | — | ✓ | — | ✓ | — | ✓ |
+| `repayment_overdue_day14` | — | — | — | — | ✓ | ✓ | ✓ | ✓ |
+| `repayment_received` | ✓ | — | — | — | — | ✓ | ✓ | — |
+| `wfp_file_uploaded` | — | — | — | ✓ | ✓ | ✓ | — | — |
+| `wfp_results_applied` | — | ✓ | — | — | — | ✓ | — | — |
+| `cycle_closed` | — | ✓ | ✓ | — | — | ✓ | — | ✓ |
+| `status_admin_override` | ✓ | ✓ | — | — | — | ✓ | — | — |
+| `exception_resolved` | ✓ | ✓ | — | — | — | ✓ | ✓ | — |
+
+---
+
+### Where Notifications Are Triggered in Code
+
+Each event maps to a call to `dispatchNotification()` in `src/lib/notify.ts`. The calls are placed in the service layer, not in the React components directly. New file: `src/services/cycleCloseNotifications.ts`.
+
+```typescript
+// Example — called when WFP match results are applied:
+await dispatchNotification({
+  event: 'wfp_results_applied',
+  recipientIds: supervisorIds,
+  titleEn: `WFP Confirmation Applied for ${mmpName}`,
+  titleAr: `تم تطبيق تأكيد WFP لخطة ${mmpName}`,
+  messageEn: `WFP verification results have been applied for ${mmpName}...`,
+  messageAr: `تم تطبيق نتائج التحقق من WFP لخطة ${mmpName}...`,
+  priority: 'normal',
+  entityType: 'mmpFile',
+  entityId: mmpId,
+  actionUrl: `/mmp/cycle-close?mmp=${mmpId}&tab=exceptions`,
+  sendWhatsApp: false,
+  sendEmail: false,
+});
+```
+
+---
+
+### Cron Jobs for Overdue Escalation
+
+Events 8, 9, and 10 (overdue repayments) are NOT triggered by user actions — they run on a schedule. A new Supabase Edge Function `repayment-overdue-check` is added and registered as a cron job:
+
+```
+-- Runs daily at 08:00 AM UTC (= 10:00 AM Sudan time)
+SELECT cron.schedule(
+  'repayment-overdue-check',
+  '0 8 * * *',
+  $$SELECT net.http_post(url := 'https://[project].supabase.co/functions/v1/repayment-overdue-check') $$
+);
+```
+
+The edge function queries `cost_recovery_log` for all records where:
+- `recovery_type = 'return'`
+- `repayment_status != 'settled'`
+- `repayment_deadline` is in the past
+
+Then for each, calculates days overdue and fires EVENT 8, 9, or 10 accordingly — only firing once per threshold (tracks `day0_notified`, `day7_notified`, `day14_notified` flags in `cost_recovery_log`).
+
+---
+
+### Which Build Phase Adds Each Event
+
+| Phase | Events Added |
+|---|---|
+| Phase A | EVENT 15 (`status_admin_override`) |
+| Phase B | EVENTS 5, 6, 7, 8, 9, 10, 11 (cost recovery + money trail notifications) |
+| Phase C | EVENTS 1, 2, 3, 4, 12, 13, 16 (WFP upload + match results + exceptions) |
+| Phase D | EVENT 14 (`cycle_closed`), plus cron job for overdue check |
+
+---
+
 ## PART 5 — IN-PAGE GUIDES
 
 Each new section/tab will have a "How this works" collapsible guide. Here are the exact texts:
