@@ -237,20 +237,6 @@ const MMPCycleClose = () => {
     setReconciliationAcknowledged(false);
   }, [checklistMmpId]);
 
-  // Phase B: load exceptions data when the exceptions tab is active and a MMP is selected
-  useEffect(() => {
-    if (activeTab === 'exceptions' && checklistMmpId) {
-      loadExceptionsData(checklistMmpId);
-      setShowMoneyTrailMmpId(checklistMmpId);
-    }
-  }, [activeTab, checklistMmpId, loadExceptionsData]);
-
-  // Phase C: load WFP tab data when wfp tab is active and a MMP is selected
-  useEffect(() => {
-    if (activeTab === 'wfp' && checklistMmpId) {
-      loadWFPTab(checklistMmpId);
-    }
-  }, [activeTab, checklistMmpId, loadWFPTab]);
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
     issues: string[];
@@ -543,6 +529,21 @@ const MMPCycleClose = () => {
       setLoadingWFP(false);
     }
   }, [wfpResults.length]);
+
+  // Phase B: load exceptions data when the exceptions tab is active and a MMP is selected
+  useEffect(() => {
+    if (activeTab === 'exceptions' && checklistMmpId) {
+      loadExceptionsData(checklistMmpId);
+      setShowMoneyTrailMmpId(checklistMmpId);
+    }
+  }, [activeTab, checklistMmpId, loadExceptionsData]);
+
+  // Phase C: load WFP tab data when wfp tab is active and a MMP is selected
+  useEffect(() => {
+    if (activeTab === 'wfp' && checklistMmpId) {
+      loadWFPTab(checklistMmpId);
+    }
+  }, [activeTab, checklistMmpId, loadWFPTab]);
 
   // Phase C: parse file → run matching → show review table
   const handleWFPFileParsed = useCallback(async (rawRows: Record<string, unknown>[], filename: string, mmpId: string) => {
