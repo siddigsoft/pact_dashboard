@@ -170,6 +170,54 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const MUTATION_TIMEOUT_MS = 30000;
 
+  /**
+   * Ensures a wallet exists for `userId` before any approval that fires a DB
+   * trigger which requires it.  Tries three routes in order:
+   *   1. Direct upsert  (works when RLS allows it — admin / financialAdmin)
+   *   2. Edge function  (works for ANY authenticated admin-level user; uses service-role)
+   *   3. RPC            (works once 20260427_wallet_fix_complete.sql is applied)
+   * Returns true if the wallet is guaranteed to exist, false if all routes failed
+   * (caller should throw a user-visible error in that case).
+   */
+  const ensureWalletExists = async (userId: string): Promise<boolean> => {
+    const walletPayload = {
+      user_id: userId,
+      currency: 'SDG',
+      balance_cents: 0,
+      total_earned_cents: 0,
+      total_paid_out_cents: 0,
+      pending_payout_cents: 0,
+      balances: { SDG: 0 },
+      total_earned: 0,
+    };
+
+    // Route 1 — direct upsert (allowed for admin / financialAdmin by RLS)
+    const { error: upsertErr } = await supabase
+      .from('wallets')
+      .upsert(walletPayload, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (!upsertErr) return true;
+
+    // Route 2 — edge function (service-role; bypasses RLS for any authenticated admin)
+    try {
+      const { error: fnErr } = await supabase.functions.invoke('ensure-wallet', {
+        body: { target_user_id: userId },
+      });
+      if (!fnErr) return true;
+      console.warn('[ensureWallet] edge function failed:', fnErr);
+    } catch (fnEx) {
+      console.warn('[ensureWallet] edge function threw:', fnEx);
+    }
+
+    // Route 3 — SECURITY DEFINER RPC (available after SQL migration is applied)
+    const { error: rpcErr } = await supabase.rpc('create_wallet_for_user', {
+      target_user_id: userId,
+    });
+    if (!rpcErr) return true;
+
+    console.warn('[ensureWallet] all routes failed. Last RPC error:', rpcErr?.message);
+    return false;
+  };
+
   const createRequest = async (request: CreateDownPaymentRequest): Promise<boolean> => {
     const session = await ensureValidSession();
     if (!session.success) {
@@ -538,28 +586,16 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         adminUpdatePayload.supervisor_notes = data.notes;
       }
 
-      // Pre-create wallet before updating status to 'approved' — a DB trigger fires on
-      // DOWN_PAYMENT_REQUESTS and looks up the requester's wallet. If no wallet exists it
-      // raises "Wallet not found" or hangs until timeout.  Creating it first avoids both.
+      // Pre-create wallet before setting status='approved'.  A DB trigger on this table
+      // looks up the requester's wallet; if none exists it raises an error or hangs.
       if (request.requestedBy) {
-        const { error: wErr } = await supabase
-          .from('wallets')
-          .upsert({
-            user_id: request.requestedBy,
-            currency: 'SDG',
-            balance_cents: 0,
-            total_earned_cents: 0,
-            total_paid_out_cents: 0,
-            pending_payout_cents: 0,
-            balances: { SDG: 0 },
-            total_earned: 0,
-          }, { onConflict: 'user_id', ignoreDuplicates: true });
-        if (wErr) {
-          // RLS blocked direct upsert — try the SECURITY DEFINER RPC
-          if (wErr.code === '42501' || wErr.message?.includes('row-level security')) {
-            await supabase.rpc('create_wallet_for_user', { target_user_id: request.requestedBy });
-          }
-          // Non-fatal — proceed; the DB trigger may still work or the wallet already exists
+        const walletReady = await ensureWalletExists(request.requestedBy);
+        if (!walletReady) {
+          throw new Error(
+            'Cannot approve: unable to create wallet for this user.\n' +
+            'Quickest fix — run supabase/migrations/20260427_wallet_fix_complete.sql ' +
+            'in the Supabase SQL editor, OR deploy the ensure-wallet edge function.'
+          );
         }
       }
 
@@ -1201,44 +1237,25 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       ].filter(Boolean) as string[]),
     ];
     if (allAffectedUserIds.length > 0) {
-      const walletInserts = allAffectedUserIds.map(uid => ({
-        user_id: uid,
-        currency: 'SDG',
-        balance_cents: 0,
-        total_earned_cents: 0,
-        total_paid_out_cents: 0,
-        pending_payout_cents: 0,
-        balances: { SDG: 0 },
-        total_earned: 0,
-      }));
+      // Create wallets for all affected users sequentially (each call tries 3 routes).
+      const walletResults = await Promise.allSettled(
+        allAffectedUserIds.map(uid => ensureWalletExists(uid))
+      );
+      const failedWallets = walletResults
+        .map((r, i) => ({ uid: allAffectedUserIds[i], ok: r.status === 'fulfilled' && r.value }))
+        .filter(x => !x.ok);
 
-      const { error: walletUpsertError } = await supabase
-        .from('wallets')
-        .upsert(walletInserts, { onConflict: 'user_id', ignoreDuplicates: true });
-
-      if (walletUpsertError) {
-        // Bulk upsert blocked by RLS (admin creating wallets for other users).
-        // Fall back to the SECURITY DEFINER RPC for each user individually.
-        console.warn('[BulkApprove] Wallet bulk upsert blocked, trying RPC fallback:', walletUpsertError.message);
-        const rpcResults = await Promise.allSettled(
-          allAffectedUserIds.map(uid =>
-            supabase.rpc('create_wallet_for_user', { target_user_id: uid })
-          )
-        );
-        const rpcFailed = rpcResults.filter(r => r.status === 'rejected' ||
-          (r.status === 'fulfilled' && (r.value as any).error));
-        if (rpcFailed.length > 0) {
-          // RPC not yet deployed → SQL migration hasn't been applied.
-          // Surface a clear message rather than letting the DB trigger crash silently.
-          toastRef.current({
-            title: 'Database Setup Required / مطلوب إعداد قاعدة البيانات',
-            description: 'Apply the wallet fix SQL migration in Supabase SQL editor before approving. ' +
-              'File: supabase/migrations/20260427_wallet_fix_complete.sql',
-            variant: 'destructive',
-          });
-          await refreshRequests();
-          return { success: 0, failed: data.requestIds.length };
-        }
+      if (failedWallets.length > 0) {
+        toastRef.current({
+          title: 'Wallet Setup Required / مطلوب إعداد المحفظة',
+          description:
+            `Could not create wallets for ${failedWallets.length} user(s). ` +
+            'Run supabase/migrations/20260427_wallet_fix_complete.sql in Supabase SQL editor ' +
+            'OR deploy the ensure-wallet edge function.',
+          variant: 'destructive',
+        });
+        await refreshRequests();
+        return { success: 0, failed: data.requestIds.length };
       }
     }
     // ───────────────────────────────────────────────────────────────────────
