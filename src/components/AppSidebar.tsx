@@ -488,6 +488,15 @@
     if (!isHidden('/accounting/trial-balance') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
       acctItems.push({ id: 'accounting-trial-balance', title: 'Trial Balance', url: '/accounting/trial-balance', icon: TrendingUp, priority: 3, isPinned: isPinned('/accounting/trial-balance') });
     }
+    if (!isHidden('/accounting/ledger') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-ledger', title: 'General Ledger', url: '/accounting/ledger', icon: BookOpen, priority: 3.5, isPinned: isPinned('/accounting/ledger') });
+    }
+    if (!isHidden('/accounting/reports') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-reports', title: 'Financial Statements', url: '/accounting/reports', icon: FileText, priority: 3.6, isPinned: isPinned('/accounting/reports') });
+    }
+    if (!isHidden('/accounting/bank-recon') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-bank-recon', title: 'Bank Reconciliation', url: '/accounting/bank-recon', icon: Landmark, priority: 3.7, isPinned: isPinned('/accounting/bank-recon') });
+    }
     if (!isHidden('/finance/audit-trail') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditorRole)) {
       acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
     }

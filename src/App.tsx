@@ -168,6 +168,9 @@ const HierarchyAuditLogPage = lazy(() => import('./pages/HierarchyAuditLog'));
 const AccountingCOA = lazy(() => import('./pages/AccountingCOA'));
 const AccountingJournals = lazy(() => import('./pages/AccountingJournals'));
 const AccountingTrialBalance = lazy(() => import('./pages/AccountingTrialBalance'));
+const AccountingGeneralLedger = lazy(() => import('./pages/AccountingGeneralLedger'));
+const AccountingFinancialStatements = lazy(() => import('./pages/AccountingFinancialStatements'));
+const AccountingBankRecon = lazy(() => import('./pages/AccountingBankRecon'));
 const AccountingFiscalYears = lazy(() => import('./pages/AccountingFiscalYears'));
 const AccountingFunds = lazy(() => import('./pages/AccountingFunds'));
 const AccountingSettings = lazy(() => import('./pages/AccountingSettings'));
@@ -485,6 +488,9 @@ const AppRoutes = () => {
         <Route path="/accounting/coa" element={<PageWrapper><AccountingCOA /></PageWrapper>} />
         <Route path="/accounting/journals" element={<PageWrapper><AccountingJournals /></PageWrapper>} />
         <Route path="/accounting/trial-balance" element={<PageWrapper><AccountingTrialBalance /></PageWrapper>} />
+        <Route path="/accounting/ledger" element={<PageWrapper><AccountingGeneralLedger /></PageWrapper>} />
+        <Route path="/accounting/reports" element={<PageWrapper><AccountingFinancialStatements /></PageWrapper>} />
+        <Route path="/accounting/bank-recon" element={<PageWrapper><AccountingBankRecon /></PageWrapper>} />
         <Route path="/accounting/fiscal-years" element={<PageWrapper><AccountingFiscalYears /></PageWrapper>} />
         <Route path="/accounting/funds" element={<PageWrapper><AccountingFunds /></PageWrapper>} />
         <Route path="/accounting/settings" element={<PageWrapper><AccountingSettings /></PageWrapper>} />
