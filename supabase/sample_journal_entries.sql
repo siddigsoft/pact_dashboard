@@ -95,6 +95,11 @@ BEGIN
   SELECT id INTO id_us FROM countries WHERE code = 'US' LIMIT 1;
   SELECT id INTO id_ke FROM countries WHERE code = 'KE' LIMIT 1;
 
+  -- ── Remove any previous sample entries (idempotent re-run) ──
+  -- Journal lines are deleted automatically via ON DELETE CASCADE.
+  DELETE FROM acct_journal_entries WHERE idempotency_key LIKE 'sample-%';
+  RAISE NOTICE 'Cleaned up any previous sample entries.';
+
   -- ================================================================
   -- ██████████  RWANDA  ██████████
   -- ================================================================
