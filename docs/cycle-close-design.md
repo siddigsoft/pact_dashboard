@@ -1,7 +1,7 @@
 # Cycle Close & Site Visit Status — Full Design & Build Plan
 
-**Status:** Phase A COMPLETE — Ready to apply SQL migration, then proceed to Phase B
-**Last updated:** 2026-04-27 (rev 4 — Phase A code complete; SQL migration file ready)
+**Status:** Phase B COMPLETE — Apply phase_b_migration.sql, then proceed to Phase C
+**Last updated:** 2026-04-27 (rev 5 — Phase B code complete; cost recovery gate + Exceptions tab)
 **Participants:** Product Owner, Engineering
 
 ---

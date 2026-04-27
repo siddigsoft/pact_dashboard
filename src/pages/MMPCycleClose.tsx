@@ -28,7 +28,7 @@ import {
   ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield, ShieldAlert,
   Activity, Target, Layers, SortAsc, SortDesc,
-  BookOpen, RotateCcw, HelpCircle
+  BookOpen, RotateCcw, HelpCircle, Loader2, DollarSign,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -37,6 +37,9 @@ import { CycleCoveragePredictor } from '@/components/cycle/CycleCoveragePredicto
 import { CycleReportsTab } from '@/components/cycle/CycleReportsTab';
 import { CycleComparisonTab } from '@/components/cycle/CycleComparisonTab';
 import { CycleScorecardTab } from '@/components/cycle/CycleScorecardTab';
+import { CostRecoveryDialog } from '@/components/cycle/CostRecoveryDialog';
+import type { CostRecoverySite } from '@/components/cycle/CostRecoveryDialog';
+import { MoneyTrailPanel } from '@/components/cycle/MoneyTrailPanel';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed', labelAr: 'لم يتم التوزيع' },
@@ -121,6 +124,23 @@ interface FollowUpRecord {
   mmpName?: string;
 }
 
+interface NotCoveredAdvanceSite {
+  id: string;
+  site_name: string;
+  site_code: string | null;
+  state: string | null;
+  mmp_id: string;
+  mmp_name: string | null;
+  enumerator_id: string | null;
+  enumerator_name: string | null;
+  supervisor_id: string | null;
+  total_approved_advance: number;
+  advance_count: number;
+  recovery_log_id: string | null;
+  recovery_decision: string | null;
+  repayment_status: string | null;
+}
+
 const fetchAdminFomSuperAdminRecipients = async () => {
   const { data: recipients } = await supabase
     .from('profiles')
@@ -141,6 +161,12 @@ const getSuperAdminEmails = async (): Promise<string[]> => {
 };
 
 const HIGH_PRIORITY_REASONS = ['security_concerns', 'access_denied', 'staff_unavailable'];
+
+const RECOVERY_DECISION_CONFIG: Record<string, { label: string; labelAr: string; color: string }> = {
+  rolled:          { label: 'Rolled to Next MMP',  labelAr: 'مُرحَّل للدورة التالية', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
+  return_required: { label: 'Return Required',     labelAr: 'مطلوب الإعادة',         color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
+  writeoff:        { label: 'Written Off',         labelAr: 'مشطوب',                 color: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' },
+};
 
 const FOLLOW_UP_ACTIONS: Record<string, string> = {
   security_concerns: 'Coordinate with security team and local authorities before next cycle visit',
@@ -202,6 +228,14 @@ const MMPCycleClose = () => {
   useEffect(() => {
     setReconciliationAcknowledged(false);
   }, [checklistMmpId]);
+
+  // Phase B: load exceptions data when the exceptions tab is active and a MMP is selected
+  useEffect(() => {
+    if (activeTab === 'exceptions' && checklistMmpId) {
+      loadExceptionsData(checklistMmpId);
+      setShowMoneyTrailMmpId(checklistMmpId);
+    }
+  }, [activeTab, checklistMmpId, loadExceptionsData]);
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
     issues: string[];
@@ -216,6 +250,16 @@ const MMPCycleClose = () => {
   const [archiveSearch, setArchiveSearch] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
   const [mmpScopeOptions, setMmpScopeOptions] = useState<Record<string, MmpScopeOptions>>({});
+
+  // Phase B — Exceptions tab + Cost Recovery
+  const [notCoveredAdvanceSites, setNotCoveredAdvanceSites] = useState<NotCoveredAdvanceSite[]>([]);
+  const [loadingExceptions, setLoadingExceptions] = useState(false);
+  const [costRecoveryDialogState, setCostRecoveryDialogState] = useState<{
+    site: CostRecoverySite;
+    advanceId: string | null;
+    amount: number;
+  } | null>(null);
+  const [showMoneyTrailMmpId, setShowMoneyTrailMmpId] = useState<string | null>(null);
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
   const isSuperAdmin = hasAnyRole(['super_admin', 'Super Admin']);
@@ -312,6 +356,102 @@ const MMPCycleClose = () => {
       setLoading(false);
     }
   }, [closingMmps, activeMmps, mmpFiles, toast]);
+
+  // Phase B: load not-covered sites that have approved advances + their recovery status
+  const loadExceptionsData = useCallback(async (mmpId: string) => {
+    setLoadingExceptions(true);
+    try {
+      // 1. Get all not-covered entries for this MMP
+      const { data: notCoveredEntries, error: ncErr } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code, state, mmp_file_id, accepted_by, not_covered_reason')
+        .eq('mmp_file_id', mmpId)
+        .or('not_covered_flag.eq.true,status.eq.not_covered');
+
+      if (ncErr) throw ncErr;
+      if (!notCoveredEntries || notCoveredEntries.length === 0) {
+        setNotCoveredAdvanceSites([]);
+        return;
+      }
+
+      // 2. Get approved/paid advances for those sites
+      const { data: advances } = await supabase
+        .from('down_payment_requests')
+        .select('id, site_entry_id, amount, status')
+        .in('status', ['approved', 'paid'])
+        .eq('mmp_id', mmpId);
+
+      // 3. Get recovery log for this MMP
+      const { data: recoveryRows } = await supabase
+        .from('cost_recovery_log')
+        .select('site_entry_id, id, decision, repayment_status')
+        .eq('mmp_id', mmpId);
+
+      // 4. Get enumerator names for affected users
+      const enumeratorIds = [...new Set((notCoveredEntries as any[]).map((e: any) => e.accepted_by).filter(Boolean))];
+      let enumeratorMap: Record<string, { name: string; supervisor_id: string | null }> = {};
+      if (enumeratorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, supervisor_id')
+          .in('id', enumeratorIds);
+        (profiles || []).forEach((p: any) => {
+          enumeratorMap[p.id] = { name: p.full_name || p.id, supervisor_id: p.supervisor_id || null };
+        });
+      }
+
+      // 5. Get MMP name
+      const mmpRow = mmpFiles?.find(m => m.id === mmpId);
+      const mmpName = mmpRow?.name || null;
+
+      // Aggregate by site entry
+      const advanceMap: Record<string, { total: number; count: number; firstId: string }> = {};
+      (advances || []).forEach((a: any) => {
+        const siteId = a.site_entry_id;
+        if (!siteId) return;
+        if (!advanceMap[siteId]) advanceMap[siteId] = { total: 0, count: 0, firstId: a.id };
+        advanceMap[siteId].total += a.amount || 0;
+        advanceMap[siteId].count += 1;
+      });
+
+      const recoveryMap: Record<string, { id: string; decision: string; repayment_status: string }> = {};
+      (recoveryRows || []).forEach((r: any) => {
+        recoveryMap[r.site_entry_id] = { id: r.id, decision: r.decision, repayment_status: r.repayment_status };
+      });
+
+      // Build the Exceptions list — only sites with approved advances
+      const result: NotCoveredAdvanceSite[] = (notCoveredEntries as any[])
+        .filter(e => advanceMap[e.id])
+        .map(e => {
+          const adv = advanceMap[e.id] || { total: 0, count: 0, firstId: '' };
+          const rec = recoveryMap[e.id] || null;
+          const enumInfo = enumeratorMap[e.accepted_by] || null;
+          return {
+            id: e.id,
+            site_name: e.site_name,
+            site_code: e.site_code || null,
+            state: e.state || null,
+            mmp_id: mmpId,
+            mmp_name: mmpName,
+            enumerator_id: e.accepted_by || null,
+            enumerator_name: enumInfo?.name || null,
+            supervisor_id: enumInfo?.supervisor_id || null,
+            total_approved_advance: adv.total,
+            advance_count: adv.count,
+            recovery_log_id: rec?.id || null,
+            recovery_decision: rec?.decision || null,
+            repayment_status: rec?.repayment_status || null,
+          };
+        });
+
+      setNotCoveredAdvanceSites(result);
+    } catch (err) {
+      console.warn('[MMPCycleClose] loadExceptionsData error:', err);
+      setNotCoveredAdvanceSites([]);
+    } finally {
+      setLoadingExceptions(false);
+    }
+  }, [mmpFiles]);
 
   const fetchClosedCycles = useCallback(async () => {
     try {
@@ -1997,6 +2137,16 @@ const MMPCycleClose = () => {
             <span>Scorecard</span>
             <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">بطاقة الاداء</span>
           </TabsTrigger>
+          <TabsTrigger value="exceptions" data-testid="tab-exceptions" className="gap-1.5 px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+            <span>Exceptions</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الاستثناءات</span>
+            {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length > 0 && (
+              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">
+                {notCoveredAdvanceSites.filter(s => !s.recovery_decision).length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="archive" data-testid="tab-archive" className="gap-1.5 px-3 py-2">
             <BookOpen className="h-3.5 w-3.5" />
             <span>Closed Cycles</span>
@@ -2395,6 +2545,204 @@ const MMPCycleClose = () => {
           />
         </TabsContent>
 
+        {/* ── EXCEPTIONS TAB — Section B: Not-Covered Cost Resolutions (Phase B) ── */}
+        <TabsContent value="exceptions" className="space-y-4">
+          {!checklistMmpId ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <AlertTriangle className="h-12 w-12 mx-auto text-amber-400 mb-4" />
+                <h3 className="text-lg font-medium">Select a Cycle First</h3>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Open the Pre-Close Checklist for an MMP from the Active Cycles tab, then come back here.
+                </p>
+                <p dir="rtl" className="text-muted-foreground text-xs mt-1">اختر دورة من تبويب الدورات النشطة أولاً.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {/* Section header */}
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h2 className="text-base font-semibold flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    Section B — Not-Covered Cost Resolutions
+                    <span dir="rtl" className="text-xs text-muted-foreground font-normal">استرداد تكاليف المواقع غير المشمولة</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Not-covered sites that received an advance payment must be resolved before the cycle can close.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadExceptionsData(checklistMmpId)}
+                  disabled={loadingExceptions}
+                  data-testid="button-refresh-exceptions"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1 ${loadingExceptions ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+
+              {/* KPI summary cards */}
+              {!loadingExceptions && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    {
+                      label: 'Sites with Advances',
+                      labelAr: 'مواقع مدفوعة',
+                      value: notCoveredAdvanceSites.length,
+                      color: 'text-foreground',
+                      testId: 'kpi-exceptions-total',
+                    },
+                    {
+                      label: 'Pending Decision',
+                      labelAr: 'بانتظار القرار',
+                      value: notCoveredAdvanceSites.filter(s => !s.recovery_decision).length,
+                      color: 'text-amber-600 dark:text-amber-400',
+                      testId: 'kpi-exceptions-pending',
+                    },
+                    {
+                      label: 'Resolved',
+                      labelAr: 'محسومة',
+                      value: notCoveredAdvanceSites.filter(s => Boolean(s.recovery_decision)).length,
+                      color: 'text-green-600 dark:text-green-400',
+                      testId: 'kpi-exceptions-resolved',
+                    },
+                    {
+                      label: 'Total at Risk (SDG)',
+                      labelAr: 'المجموع المعرض للخطر',
+                      value: notCoveredAdvanceSites
+                        .filter(s => !s.recovery_decision)
+                        .reduce((sum, s) => sum + s.total_approved_advance, 0)
+                        .toLocaleString(),
+                      color: 'text-red-600 dark:text-red-400',
+                      testId: 'kpi-exceptions-amount',
+                    },
+                  ].map(kpi => (
+                    <Card key={kpi.label} className="p-3" data-testid={kpi.testId}>
+                      <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                      <p dir="rtl" className="text-[10px] text-muted-foreground/70">{kpi.labelAr}</p>
+                      <p className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</p>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Site list */}
+              {loadingExceptions ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>Loading exceptions…</span>
+                </div>
+              ) : notCoveredAdvanceSites.length === 0 ? (
+                <Card>
+                  <CardContent className="py-10 text-center">
+                    <CheckCircle2 className="h-10 w-10 mx-auto text-green-500 mb-3" />
+                    <h3 className="text-base font-medium">No Pending Cost Recoveries</h3>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      All not-covered sites either had no approved advances or have already been resolved.
+                    </p>
+                    <p dir="rtl" className="text-muted-foreground text-xs mt-1">لا توجد مواقع غير مشمولة تحتاج إلى قرار استرداد.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {notCoveredAdvanceSites.map(site => {
+                    const isPending = !site.recovery_decision;
+                    const decisionBadge = site.recovery_decision
+                      ? RECOVERY_DECISION_CONFIG[site.recovery_decision] || { label: site.recovery_decision, color: 'bg-muted text-muted-foreground', labelAr: '' }
+                      : null;
+
+                    return (
+                      <Card key={site.id} className={isPending ? 'border-amber-200 dark:border-amber-800' : ''} data-testid={`row-exception-${site.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-sm">{site.site_name}</span>
+                                {site.site_code && <span className="text-xs text-muted-foreground">{site.site_code}</span>}
+                                {site.state && <Badge variant="outline" className="text-xs">{site.state}</Badge>}
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                                {site.enumerator_name && <span>Enumerator: {site.enumerator_name}</span>}
+                                <span className="font-medium text-foreground">
+                                  Advance: {site.total_approved_advance.toLocaleString()} SDG
+                                </span>
+                                {site.advance_count > 1 && <span>({site.advance_count} payments)</span>}
+                              </div>
+                              {site.recovery_decision === 'return_required' && site.repayment_status && (
+                                <div className="mt-1">
+                                  <Badge
+                                    variant="outline"
+                                    className={site.repayment_status === 'settled' ? 'text-green-600 border-green-300' : 'text-amber-600 border-amber-300'}
+                                  >
+                                    Repayment: {site.repayment_status}
+                                  </Badge>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {decisionBadge ? (
+                                <Badge className={decisionBadge.color} data-testid={`badge-decision-${site.id}`}>
+                                  {decisionBadge.label}
+                                  <span dir="rtl" className="ml-1 text-[10px] opacity-70">{decisionBadge.labelAr}</span>
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive" className="text-xs" data-testid={`badge-pending-${site.id}`}>
+                                  Needs Decision
+                                  <span dir="rtl" className="ml-1 text-[10px] opacity-80">يحتاج قرار</span>
+                                </Badge>
+                              )}
+                              {canManageCycle && (
+                                <Button
+                                  size="sm"
+                                  variant={isPending ? 'default' : 'outline'}
+                                  onClick={() => {
+                                    setCostRecoveryDialogState({
+                                      site: {
+                                        id: site.id,
+                                        site_name: site.site_name,
+                                        site_code: site.site_code,
+                                        state: site.state,
+                                        mmp_id: site.mmp_id,
+                                        mmp_name: site.mmp_name,
+                                        enumerator_id: site.enumerator_id,
+                                        enumerator_name: site.enumerator_name,
+                                        supervisor_id: site.supervisor_id,
+                                      },
+                                      advanceId: null,
+                                      amount: site.total_approved_advance,
+                                    });
+                                  }}
+                                  data-testid={`button-resolve-${site.id}`}
+                                >
+                                  {isPending ? 'Resolve' : 'Change Decision'}
+                                  <span dir="rtl" className="mr-1 text-[10px] opacity-70">{isPending ? 'حسم' : 'تغيير القرار'}</span>
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Money Trail for the whole MMP */}
+              {showMoneyTrailMmpId && canManageCycle && (
+                <MoneyTrailPanel
+                  mode="mmp"
+                  mmpId={showMoneyTrailMmpId}
+                  title="MMP Money Trail"
+                  maxRows={10}
+                />
+              )}
+            </div>
+          )}
+        </TabsContent>
+
         <TabsContent value="archive" className="space-y-4">
           {closedCycles.length === 0 ? (
             <Card>
@@ -2534,6 +2882,25 @@ const MMPCycleClose = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Phase B: Cost Recovery Dialog */}
+      {costRecoveryDialogState && (
+        <CostRecoveryDialog
+          open={Boolean(costRecoveryDialogState)}
+          onOpenChange={open => { if (!open) setCostRecoveryDialogState(null); }}
+          site={costRecoveryDialogState.site}
+          advanceId={costRecoveryDialogState.advanceId}
+          advanceAmount={costRecoveryDialogState.amount}
+          currency="SDG"
+          onDecisionSaved={() => {
+            setCostRecoveryDialogState(null);
+            if (checklistMmpId) {
+              loadExceptionsData(checklistMmpId);
+              cycleReadiness.refresh();
+            }
+          }}
+        />
+      )}
 
       {financeOverrideDialog && (
         <AlertDialog open onOpenChange={open => { if (!open) setFinanceOverrideDialog(null); }}>

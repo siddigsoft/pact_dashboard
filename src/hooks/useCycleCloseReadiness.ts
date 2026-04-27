@@ -77,6 +77,55 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           .eq('mmp_id', mmpId),
       ]);
 
+      // ── Gate 5: Cost Recovery — all not-covered sites with approved advances
+      // must have a decision in cost_recovery_log before cycle can close.
+      // Gracefully handles Phase B migration not yet applied (shows notConfigured).
+      let costRecoveryPending = 0;
+      let costRecoveryError = false;
+      try {
+        // Find not-covered site ids for this MMP
+        const notCoveredIds = (siteVisitsRes.data || [])
+          .filter((s: { status: string; not_covered_flag: boolean | null }) =>
+            (s.not_covered_flag === true) || (s.status ?? '').toLowerCase() === 'not_covered',
+          )
+          .map((s: { id: string }) => s.id);
+
+        if (notCoveredIds.length > 0) {
+          // Find which of those have approved/paid advances but no recovery log entry
+          const [advNotCoveredRes, recoveryLogRes] = await Promise.all([
+            supabase
+              .from('down_payment_requests')
+              .select('id, site_entry_id')
+              .in('status', ['approved', 'paid'])
+              .eq('mmp_id', mmpId),
+            supabase
+              .from('cost_recovery_log')
+              .select('site_entry_id')
+              .eq('mmp_id', mmpId),
+          ]);
+
+          if (advNotCoveredRes.error || recoveryLogRes.error) {
+            costRecoveryError = true;
+          } else {
+            const advancedSiteIds = new Set(
+              (advNotCoveredRes.data || [])
+                .map((d: { site_entry_id: string | null }) => d.site_entry_id)
+                .filter(Boolean),
+            );
+            const resolvedSiteIds = new Set(
+              (recoveryLogRes.data || [])
+                .map((r: { site_entry_id: string }) => r.site_entry_id),
+            );
+            // Sites that are not-covered AND have an advance AND have NO recovery decision
+            costRecoveryPending = notCoveredIds.filter(
+              id => advancedSiteIds.has(id) && !resolvedSiteIds.has(id),
+            ).length;
+          }
+        }
+      } catch {
+        costRecoveryError = true;
+      }
+
       // Fail readiness on critical query errors to prevent false-green states
       if (siteVisitsRes.error) throw new Error(siteVisitsRes.error.message);
       if (costSubsRes.error) throw new Error(costSubsRes.error.message);
@@ -178,6 +227,18 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           total: totalWithdrawals,
           link: '/finance',
           notConfigured: withdrawalsError,
+        },
+        {
+          id: 'cost_recovery',
+          label: 'All not-covered cost recoveries addressed',
+          description:
+            'Every not-covered site that received an advance payment must have a recovery decision: Roll to Next MMP, Return Required, or Write-Off.',
+          // Table unavailable (Phase B migration not applied): treat as passed with notConfigured warning
+          passed: costRecoveryError || costRecoveryPending === 0,
+          count: 0,
+          total: costRecoveryPending,
+          link: '/mmp/cycle-close?tab=exceptions',
+          notConfigured: costRecoveryError,
         },
       ];
 
