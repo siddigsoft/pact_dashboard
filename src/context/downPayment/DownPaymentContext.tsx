@@ -168,7 +168,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     enabled: !!currentUser,
   });
 
-  const MUTATION_TIMEOUT_MS = 15000;
+  const MUTATION_TIMEOUT_MS = 30000;
 
   const createRequest = async (request: CreateDownPaymentRequest): Promise<boolean> => {
     const session = await ensureValidSession();
@@ -536,6 +536,31 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         adminUpdatePayload.supervisor_approved_by = data.approvedBy;
         adminUpdatePayload.supervisor_approved_at = now;
         adminUpdatePayload.supervisor_notes = data.notes;
+      }
+
+      // Pre-create wallet before updating status to 'approved' — a DB trigger fires on
+      // DOWN_PAYMENT_REQUESTS and looks up the requester's wallet. If no wallet exists it
+      // raises "Wallet not found" or hangs until timeout.  Creating it first avoids both.
+      if (request.requestedBy) {
+        const { error: wErr } = await supabase
+          .from('wallets')
+          .upsert({
+            user_id: request.requestedBy,
+            currency: 'SDG',
+            balance_cents: 0,
+            total_earned_cents: 0,
+            total_paid_out_cents: 0,
+            pending_payout_cents: 0,
+            balances: { SDG: 0 },
+            total_earned: 0,
+          }, { onConflict: 'user_id', ignoreDuplicates: true });
+        if (wErr) {
+          // RLS blocked direct upsert — try the SECURITY DEFINER RPC
+          if (wErr.code === '42501' || wErr.message?.includes('row-level security')) {
+            await supabase.rpc('create_wallet_for_user', { target_user_id: request.requestedBy });
+          }
+          // Non-fatal — proceed; the DB trigger may still work or the wallet already exists
+        }
       }
 
       const { data: adminUpdated, error } = await supabase
