@@ -1405,34 +1405,94 @@ Both cases are silent financial obligations that should be visible, trackable, a
 
 ### 6.2 — How Fees Work Today (What We Build On)
 
-When a site is assigned, the system already calculates and locks:
-- `mmp_site_entries.enumerator_fee` — base fee × complexity multiplier (calculated from classification level at assignment time)
-- `mmp_site_entries.transport_fee` — transport allowance
-- `mmp_site_entries.cost` — total of both (used when present, else falls back to fee + transport)
+Every site in the system has TWO payment components stored at the time of assignment. Both are already locked in the database:
 
-When a site is completed, a database trigger credits the enumerator's wallet automatically. Down-payment advances are deducted from the wallet at disbursement. The wallet balance = earned fees − disbursed advances.
+| Component | DB Column | What It Is |
+|---|---|---|
+| **Transport Fee** | `mmp_site_entries.transport_fee` | Travel allowance for getting to and from the site |
+| **Enumerator Fee** | `mmp_site_entries.enumerator_fee` | Service fee for conducting the monitoring visit (base fee × classification level × complexity multiplier) |
+| **Total Payout** | `mmp_site_entries.cost` | Transport Fee + Enumerator Fee (this is the authoritative total; if `cost` is set, use it; otherwise sum the two components) |
 
-**So the data is already there.** The fee per site is already stored. We need to surface it as a settlement view and add the "request on behalf" action.
+**Example for a Level B Data Collector:**
+```
+Transport Fee:   SDG 250
+Enumerator Fee:  SDG 350
+─────────────────────────
+Total Payout:    SDG 600   ← this is the full amount owed per site
+```
+
+When a site is completed, a database trigger credits the enumerator's wallet automatically. Down-payment advances are deducted from the wallet at disbursement. The wallet balance = total payout earned − disbursed advances.
+
+**So the data is already there.** Both components are already stored. We need to surface them as a settlement view, show each separately, and add the "request on behalf" action.
+
+---
+
+### 6.2A — The Exact Rule: When Does Payment Trigger?
+
+**The payment trigger is WFP Confirmation — NOT just site completion.**
+
+| Site Status | Transport + Enumerator Fee | Trigger |
+|---|---|---|
+| `assigned` / `dispatched` | Calculated and locked | No payment |
+| `submitted` | Earned (enumerator self-reported) | NOT paid automatically — WFP not yet confirmed |
+| **`wfp_confirmed`** | **Fully earned** | **Settlement becomes due — trigger payment** |
+| `rejected` | Not confirmed | No fee owed — goes to cost recovery if advance was paid |
+| `not_covered` | Not earned | No fee owed — goes to cost recovery if advance was paid |
+
+**This is the key rule:** A site must reach `wfp_confirmed` status (clean data matched and confirmed from the WFP file) before any fee settlement is owed. `submitted` alone is not enough — the enumerator claimed to submit, but WFP confirmation proves it was received.
+
+**Exception — if WFP matching is never done:**
+If a cycle is closed without uploading a WFP file (admin chose to skip Phase 2), then `submitted` sites are treated as confirmed for settlement purposes. Admin sees a warning: "WFP matching was not performed for this cycle. Fees are being calculated from submitted status only." This keeps the system functional even without WFP data.
+
+---
+
+### 6.2B — The Two Components Must Be Shown Separately
+
+In every settlement view, both components are displayed as separate lines — never merged into one "fee" number. This is important because:
+- Advances may have been requested for transport only (not enumerator fee)
+- Finance may approve components independently
+- It provides clear accountability for each type of spend
+
+**Display format in every table row:**
+
+```
+Ahmed Osman (Level B) — February 2026 — Gedaref
+
+  Transport Fee:    SDG 250   Advanced: SDG 250   Balance: SDG 0   ✓ Settled
+  Enumerator Fee:   SDG 350   Advanced: SDG 0     Balance: SDG 350  ⚠ Not Requested
+  ────────────────────────────────────────────────────────────────────────────
+  TOTAL:            SDG 600   Advanced: SDG 250   Balance: SDG 350  [Request SDG 350]
+```
+
+This breakdown is shown in:
+- The Tier 3 expanded row in the settlement view
+- The "Request Payment" confirmation dialog
+- The enumerator's Money Timeline in the mobile app
+- Finance's disbursement queue
 
 ---
 
 ### 6.3 — Fee Settlement States (Per Site Per Enumerator)
 
-After cycle close, every site in a closed cycle falls into one of these settlement states:
+After cycle close, every site in a closed cycle falls into one of these settlement states. The state covers the TOTAL (transport + enumerator fee combined):
 
 | State | Badge | Meaning |
 |---|---|---|
-| `fee_earned_paid` | Green — Settled | Fee was earned. A payment request exists and has been disbursed. |
-| `fee_earned_advance_only` | Blue — Advance Only | Advance was paid but no final settlement yet. May have a balance. |
-| `fee_earned_unpaid` | Amber — Not Requested | Site confirmed/submitted. Fee earned. No payment request exists at all. |
-| `fee_not_earned` | Grey — Not Applicable | Site not covered or rejected. No fee owed. |
-| `fee_partial_balance` | Orange — Balance Due | Advance paid < fee earned. Positive balance owed to enumerator. |
-| `fee_overpaid` | Red — Overpaid | Advance paid > fee earned (rare). Triggers cost recovery. |
+| `fee_earned_paid` | Green — Fully Settled | Site is `wfp_confirmed`. Total payout (transport + fee) has been disbursed. Balance = 0. |
+| `fee_earned_transport_only` | Blue — Transport Only Paid | Site is `wfp_confirmed`. Transport advance was paid. Enumerator fee balance is still outstanding. |
+| `fee_earned_fee_only` | Blue — Fee Only Paid | Site is `wfp_confirmed`. Enumerator fee was requested. Transport was never advanced. |
+| `fee_earned_unpaid` | Amber — Nothing Requested | Site is `wfp_confirmed`. Neither transport nor enumerator fee was ever requested. Full total is owed. |
+| `fee_partial_balance` | Orange — Balance Due | Site is `wfp_confirmed`. Some advance was paid but total advance < total payout. Balance outstanding. |
+| `fee_not_confirmed` | Grey — Submitted Only | Site is `submitted` but WFP match not done. Fee not yet due (see 6.2A exception). |
+| `fee_not_earned` | Grey — Not Applicable | Site is `not_covered` or `rejected`. No fee owed. |
+| `fee_overpaid` | Red — Overpaid | Total advance paid > total payout. Excess triggers automatic cost recovery. |
 
 These states are computed dynamically at query time — not stored as a column. They are derived from:
-- `mmp_site_entries.enumerator_fee` (earned)
-- `down_payment_requests` for that site (advance paid)
-- `wallet_transactions` linked to that site (credits/debits)
+- `mmp_site_entries.transport_fee` + `mmp_site_entries.enumerator_fee` (the two earned components)
+- `mmp_site_entries.cost` (authoritative total — uses this if > 0)
+- `mmp_site_entries.status` (must be `wfp_confirmed` to be payable)
+- `down_payment_requests` for that site (how much was advanced, what type)
+- `wallet_transactions` linked to that site (actual credits/debits)
 
 ---
 
@@ -1452,16 +1512,18 @@ The fee settlement view is structured in three tiers — all three are visible s
 
 **TIER 1 — Summary Cards (top of view)**
 
-Six KPI cards shown instantly after selecting the cycle:
+Eight KPI cards shown instantly after selecting the cycle — four financial, four operational:
 
-| Card | Value |
-|---|---|
-| Total Earned | SDG X — sum of all `enumerator_fee` for confirmed/submitted sites |
-| Total Advanced | SDG Y — sum of all disbursed down payments for this cycle |
-| Outstanding Balance | SDG Z = Earned − Advanced (if positive: owed to enumerators) |
-| Sites Unsettled | N — count of sites with `fee_earned_unpaid` or `fee_partial_balance` |
-| Enumerators Pending | N — count of distinct enumerators with any outstanding balance |
-| Overpaid Amount | SDG X — if any, flagged for cost recovery |
+| Card | Value | Detail |
+|---|---|---|
+| Transport Earned | SDG X | Sum of `transport_fee` for all `wfp_confirmed` sites |
+| Enumerator Fees Earned | SDG Y | Sum of `enumerator_fee` for all `wfp_confirmed` sites |
+| **Total Earned** | **SDG X+Y** | The full amount owed to all enumerators combined |
+| Total Advanced | SDG Z | All disbursed down payments for this cycle |
+| **Outstanding Balance** | **SDG (X+Y)−Z** | What still needs to be paid out — colour-coded red if > 0 |
+| Sites Confirmed (WFP) | N | Count of `wfp_confirmed` sites eligible for settlement |
+| Enumerators Pending | N | Count of distinct enumerators with any outstanding balance |
+| Overpaid Amount | SDG X | If any enumerator received more than earned — flagged for recovery |
 
 ---
 
@@ -1469,25 +1531,32 @@ Six KPI cards shown instantly after selecting the cycle:
 
 A collapsible table grouped by: **Hub → State → Locality → Enumerator → Sites**
 
-Each row shows:
-- Enumerator name + classification level
-- Sites confirmed in this cycle (count)
-- Fee earned (SDG)
-- Advance paid (SDG)
-- **Balance = Earned − Advance** (colour-coded: green = 0 settled, amber = positive owed, red = overpaid)
-- Settlement status badge
-- Action button
+Each enumerator row shows TWO sub-rows (transport + fee) plus a total:
 
-Example row:
 ```
-Ahmed Osman (Level B) | 6 sites | Earned: SDG 1,800 | Advance: SDG 1,200 | Balance: SDG 600 | [Request Payment]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Ahmed Osman  Level B · Gedaref Hub · 6 sites confirmed                      │
+├──────────────┬──────────────┬──────────────┬──────────────┬──────────────────┤
+│ Component    │ Earned       │ Advanced     │ Balance      │                  │
+├──────────────┼──────────────┼──────────────┼──────────────┤                  │
+│ Transport    │ SDG 1,500    │ SDG 1,500    │ SDG 0     ✓  │                  │
+│ Service Fee  │ SDG 2,100    │ SDG 0        │ SDG 2,100 ⚠  │  [Request SDG 2,100] │
+├──────────────┼──────────────┼──────────────┼──────────────┤                  │
+│ TOTAL        │ SDG 3,600    │ SDG 1,500    │ SDG 2,100    │                  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+The settlement status badge on the row reflects the overall state:
+- Transport fully settled + Fee outstanding → **"Service Fee Pending"** (amber)
+- Both outstanding → **"Nothing Requested"** (amber)
+- Both settled → **"Fully Settled"** (green)
+- Overpaid on either component → **"Overpaid"** (red)
 
 Filters available:
 - Hub dropdown
-- State dropdown  
+- State dropdown
 - Locality dropdown
-- Settlement status filter: All / Unsettled / Settled / Advance Only
+- Settlement status: All / Unsettled / Settled / Transport Only / Fee Only
 - Search by enumerator name
 
 ---
@@ -1742,6 +1811,136 @@ Fee Settlement is a standalone, independently deployable phase — Phase E.
 **RLS for new columns:**
 - `on_behalf_of`: enumerator can read their own; admin/finance/super_admin can read all; INSERT by admin/super_admin only
 - `is_admin_request`: readable by all authenticated; INSERT by admin/super_admin only
+
+---
+
+### 6.10B — Additional Items That Belong in the Settlement Plan
+
+*This section captures everything beyond transport + enumerator fee that touches the fee settlement process.*
+
+---
+
+#### A — Operational Cost Submissions (NOT Part of Fee Settlement)
+
+Enumerators may separately submit receipts for operational costs (meals, accommodation, printing, etc.) through the **Operational Cost Submission** system — a different workflow with its own approval chain. These are reimbursements, not fees.
+
+**They are deliberately excluded from the Fee Settlement view** because:
+- They are per-receipt, not per-site
+- They have their own two-tier approval (supervisor + finance)
+- They may be submitted weeks after the cycle closes
+
+**How they are shown:** The settlement view includes a small info line per enumerator: *"Operational cost submissions: [N] submitted, [SDG X] pending approval"* with a link to the cost submission page. This is read-only information — it cannot be actioned from the settlement view.
+
+---
+
+#### B — Classification Level at Time of Assignment (Fee Lock Rule)
+
+**Fees are locked at assignment time, not settlement time.** If an enumerator's classification level changes after they claimed a site (e.g., promoted from Level C to Level B in the middle of the cycle), the fee for already-assigned sites does NOT change. The `enumerator_fee` column was locked when they claimed the site.
+
+**The plan confirms:** Settlement always uses `mmp_site_entries.enumerator_fee` as the source of truth. It never recalculates at settlement time. This is correct and prevents retroactive financial disputes.
+
+---
+
+#### C — Site Deduplication Rule
+
+If a site was assigned to an enumerator, reclaimed, and reassigned to a different enumerator in the same cycle:
+- The ORIGINAL enumerator has `enumerator_fee = 0` (fee was removed on reclaim)
+- The NEW enumerator's fee is calculated at their assignment time
+- The settlement view shows only the current `claimed_by` enumerator
+
+If the same enumerator claimed the same site twice (e.g., it was auto-released and they reclaimed it):
+- Only ONE fee is owed — the `enumerator_fee` column on `mmp_site_entries` is a single value, not cumulative
+- The settlement view does not double-count
+
+---
+
+#### D — Multi-MMP Settlement
+
+An enumerator may be assigned to sites in multiple MMPs that close in the same period (e.g., February Gedaref + February Khartoum). Settlement is always **per MMP** — each cycle's settlement is independent. The Tracker Preparation Plan page-level month/year filter already scopes to one MMP at a time.
+
+**However:** The enumerator's wallet is shared across all MMPs. The wallet balance shows the combined position. The settlement view shows per-MMP breakdown.
+
+---
+
+#### E — Settlement Print / Export as Payment Order
+
+After admin clicks "Clear All Outstanding" or "Request Payment" for a hub/state:
+- Generate a **Payment Order document** (PDF) showing:
+  - Hub name, State, cycle month/year
+  - List of enumerators with: Name | Classification | Sites Confirmed | Transport | Service Fee | Advance Paid | Balance Due
+  - Total row: Transport outstanding | Fee outstanding | Grand total
+  - Authorized by: Admin name + timestamp + digital signature placeholder
+  - Finance acknowledgment field (printed for wet signature if needed)
+- This document becomes the formal finance disbursement authorization
+- Stored in Supabase Storage: `settlement-payment-orders/` bucket
+- Linked in `payment_event_log` metadata for auditability
+
+**Export formats:** PDF (primary) + Excel (for Finance's records)
+
+---
+
+#### F — Finance Disbursement Confirmation Step
+
+When admin initiates a settlement request ("Request on Behalf"), it does NOT automatically credit the enumerator's wallet. There is one more step for Finance:
+
+**Flow:**
+1. Admin requests → creates auto-approved `down_payment_request` (status: `approved`)
+2. Finance sees it in the disbursement queue (same page as all other approved requests)
+3. Finance marks as "Disbursed" → wallet is credited → `payment_event_log` entry: `settlement_disbursed`
+4. Enumerator gets notification: "Your fee settlement of SDG X has been disbursed"
+
+**Why not auto-disburse?** Finance must verify the physical cash transfer or bank instruction. The system cannot auto-credit the wallet without Finance confirming the money actually moved. This is the same accountability standard as all other payments.
+
+**However:** Admin can optionally tick "Auto-Disburse" when initiating the settlement — in which case the wallet is credited immediately and Finance gets a notification to confirm. This is a Super Admin-level option only.
+
+---
+
+#### G — Wallet Type Label for Settlement Transactions
+
+When a settlement payment is disbursed, the wallet transaction record shows:
+- `transaction_type`: `settlement_fee` (new type — distinct from `site_visit_fee` for regular payments)
+- `description`: "Fee Settlement — February 2026 · Gedaref Hub · 6 sites"
+- `metadata`: `{ mmp_id, mmp_name, sites_count, transport_component, fee_component, settlement_type: 'post_cycle_clearance' }`
+
+This keeps settlement payments clearly distinguishable from regular site-visit wallet credits in reports and wallet history.
+
+---
+
+#### H — Localities Breakdown
+
+The plan already has Hub and State breakdowns. Locality is also needed because:
+- Some localities have systematically lower coverage or payment patterns
+- Finance may process payments per locality
+- The MMP structure often maps to localities
+
+**Add to settlement view:** A "By Locality" tab within the Fee Settlement tab, showing:
+- Locality name + State + Hub
+- Enumerators active in that locality this cycle
+- Total earned / advanced / outstanding per locality
+- Settlement % per locality
+
+---
+
+#### I — Automatic Settlement Reminder Before Next Cycle Starts
+
+If the previous cycle's fee settlement is not fully resolved (outstanding > SDG 0) when the next cycle is being prepared, the system shows a warning on:
+- The MMP creation page: "Previous cycle fees are not fully settled — SDG [X] outstanding"
+- The Tracker Preparation Plan header: "Unresolved settlement from [previous month]"
+
+This ensures fee obligations don't silently carry forward into a new cycle's financial records.
+
+---
+
+#### J — Settlement Summary in the Cycle Close History Tab
+
+When the cycle is closed and settlements are processed, the History tab on the Cycle Close page adds a **"Settlement Activity"** section at the bottom showing:
+- Date and time of each settlement request
+- Who initiated it (admin name)
+- Amount requested per enumerator
+- Finance disbursement confirmation date
+- Total settled vs. total outstanding
+
+This gives auditors and super admins a complete picture of the financial closure alongside the WFP confirmation and exception history.
 
 ---
 
