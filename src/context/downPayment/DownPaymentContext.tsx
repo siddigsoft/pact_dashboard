@@ -1120,6 +1120,43 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
     }
 
+    // ── Pre-create wallets for all affected users ──────────────────────────
+    // A DB trigger fires on DOWN_PAYMENT_REQUESTS UPDATE and looks up the
+    // requester's wallet. If no wallet exists yet it raises "Wallet not found
+    // for user <uuid>" and blocks the whole update. We create missing wallets
+    // here (INSERT … ON CONFLICT DO NOTHING) so the trigger always finds one.
+    const allAffectedUserIds = [
+      ...new Set([
+        ...supervisorRows.map(r => {
+          const req = requests.find(x => x.id === r.id);
+          return req?.requestedBy;
+        }),
+        ...adminRows.map(r => {
+          const req = requests.find(x => x.id === r.id);
+          return req?.requestedBy;
+        }),
+      ].filter(Boolean) as string[]),
+    ];
+    if (allAffectedUserIds.length > 0) {
+      const walletInserts = allAffectedUserIds.map(uid => ({
+        user_id: uid,
+        currency: 'SDG',
+        balance_cents: 0,
+        total_earned_cents: 0,
+        total_paid_out_cents: 0,
+        pending_payout_cents: 0,
+        balances: { SDG: 0 },
+        total_earned: 0,
+      }));
+      const { error: walletCreateError } = await supabase
+        .from('wallets')
+        .upsert(walletInserts, { onConflict: 'user_id', ignoreDuplicates: true });
+      if (walletCreateError) {
+        console.warn('[BulkApprove] Wallet pre-creation warning (non-fatal):', walletCreateError.message);
+      }
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     let success = 0;
     let failed = 0;
     const failureReasons: string[] = [];
