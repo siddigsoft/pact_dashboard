@@ -696,6 +696,9 @@
       if (!isHidden('/admin/monitoring')) {
         superAdminItems.push({ id: 'monitoring-dashboard', title: "System Monitoring", url: "/admin/monitoring", icon: Activity, priority: 2, isPinned: isPinned('/admin/monitoring') });
       }
+      if (!isHidden('/admin/cycle-health')) {
+        superAdminItems.push({ id: 'cycle-health', title: "Cycle Health Dashboard", url: "/admin/cycle-health", icon: HeartPulse, priority: 3, isPinned: isPinned('/admin/cycle-health') });
+      }
       if (!isHidden('/approval-dashboard')) {
         superAdminItems.push({ id: 'approval-dashboard', title: "Approval Dashboard", url: "/approval-dashboard", icon: ClipboardCheck, priority: 3, isPinned: isPinned('/approval-dashboard') });
       }

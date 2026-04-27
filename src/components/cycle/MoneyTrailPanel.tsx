@@ -9,12 +9,13 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DollarSign, RotateCcw, AlertTriangle, Trash2, CheckCircle2,
-  Clock, ArrowDown, ArrowUp, Loader2, RefreshCw, Info, ArrowRightLeft, Download,
+  Clock, ArrowDown, ArrowUp, Loader2, RefreshCw, Info, ArrowRightLeft, Download, ExternalLink,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -78,6 +79,7 @@ function getConfig(eventType: string) {
 export function MoneyTrailPanel({
   mode, siteEntryId, mmpId, title, maxRows,
 }: MoneyTrailPanelProps) {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<TrailRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -225,20 +227,42 @@ export function MoneyTrailPanel({
                         )}
                         {/* recovery_decision_rolled: source trail shows where money went */}
                         {row.event_type === 'recovery_decision_rolled' && row.metadata?.target_mmp_name && (
-                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <RotateCcw className="h-3 w-3 shrink-0" />
-                            Rolled to: <span className="font-medium ml-1">{row.metadata.target_mmp_name as string}</span>
-                          </p>
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <RotateCcw className="h-3 w-3 shrink-0" />
+                              Rolled to: <span className="font-medium ml-1">{row.metadata.target_mmp_name as string}</span>
+                            </p>
+                            {row.metadata.target_mmp_id && (
+                              <button
+                                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 ml-1"
+                                onClick={() => navigate(`/mmp/cycle-close?mmpId=${row.metadata!.target_mmp_id}`)}
+                                data-testid={`link-target-cycle-${row.id}`}
+                              >
+                                View cycle <ExternalLink className="h-2.5 w-2.5" />
+                              </button>
+                            )}
+                          </div>
                         )}
                         {/* payment_pre_allocated: target trail shows where money came from */}
                         {row.event_type === 'payment_pre_allocated' && row.metadata?.source_mmp_name && (
-                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <ArrowRightLeft className="h-3 w-3 shrink-0" />
-                            From: <span className="font-medium ml-1">{row.metadata.source_mmp_name as string}</span>
-                            {row.metadata.source_site_name && (
-                              <span className="text-muted-foreground/70 ml-1">· {row.metadata.source_site_name as string}</span>
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <ArrowRightLeft className="h-3 w-3 shrink-0" />
+                              From: <span className="font-medium ml-1">{row.metadata.source_mmp_name as string}</span>
+                              {row.metadata.source_site_name && (
+                                <span className="text-muted-foreground/70 ml-1">· {row.metadata.source_site_name as string}</span>
+                              )}
+                            </p>
+                            {row.metadata.source_mmp_id && (
+                              <button
+                                className="text-xs text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-0.5 ml-1"
+                                onClick={() => navigate(`/mmp/cycle-close?mmpId=${row.metadata!.source_mmp_id}`)}
+                                data-testid={`link-source-cycle-${row.id}`}
+                              >
+                                View source cycle <ExternalLink className="h-2.5 w-2.5" />
+                              </button>
                             )}
-                          </p>
+                          </div>
                         )}
                         {row.metadata?.target_site_auto_inserted && (
                           <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">

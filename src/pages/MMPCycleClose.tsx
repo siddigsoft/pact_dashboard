@@ -670,6 +670,9 @@ const MMPCycleClose = () => {
         }
       }
 
+      // Build enumerator → rejected sites map (for bundled notifications — Enhancement 3)
+      const enumRejectedMap: Record<string, { enumId: string; sites: string[] }> = {};
+
       for (const r of rejected) {
         await supabase.from('mmp_site_entries')
           .update({ status: 'rejected' })
@@ -683,7 +686,7 @@ const MMPCycleClose = () => {
           metadata: { wfp_upload_id: wfpUploadId, match_tier: r.match_tier, match_score: r.match_score, wfp_site_name: r.wfp_site_name },
         });
 
-        // Notify enumerator + supervisor of rejection
+        // Collect enumerator + site name for bundled notification
         const { data: entry } = await supabase
           .from('mmp_site_entries')
           .select('accepted_by, site_name')
@@ -691,14 +694,26 @@ const MMPCycleClose = () => {
           .single();
 
         if (entry?.accepted_by) {
-          await dispatchNotification({
-            recipientId: entry.accepted_by,
-            eventType: 'site_rejected',
-            title: 'Site Visit Not Found in WFP Data',
-            body: `Your visit to ${entry.site_name || r.wfp_site_name} was not found in the WFP confirmation file.`,
-            metadata: { site_entry_id: r.site_entry_id, mmp_id: mmpId },
-          });
+          if (!enumRejectedMap[entry.accepted_by]) {
+            enumRejectedMap[entry.accepted_by] = { enumId: entry.accepted_by, sites: [] };
+          }
+          enumRejectedMap[entry.accepted_by].sites.push(entry.site_name || r.wfp_site_name || r.site_entry_id!);
         }
+      }
+
+      // Enhancement 3: Send ONE bundled notification per enumerator (not one per site)
+      const mmpLabel = activeMmps.find(m => m.id === mmpId)?.name || 'this MMP cycle';
+      for (const { enumId, sites } of Object.values(enumRejectedMap)) {
+        const isBundled = sites.length > 1;
+        await dispatchNotification({
+          recipientId: enumId,
+          eventType: 'site_rejected',
+          title: isBundled ? `${sites.length} Site Visits Not Found in WFP Data` : 'Site Visit Not Found in WFP Data',
+          body: isBundled
+            ? `${sites.length} of your sites were not found in the WFP data for ${mmpLabel}: ${sites.join(', ')}. Contact your supervisor for next steps.`
+            : `Your visit to ${sites[0]} was not found in the WFP confirmation file for ${mmpLabel}. Contact your supervisor.`,
+          metadata: { mmp_id: mmpId, rejected_sites: sites, bundled: isBundled },
+        });
       }
 
       // 3. Mark upload as applied
@@ -3054,15 +3069,60 @@ const MMPCycleClose = () => {
                       {wfpAppliedUpload.filename} · Applied {new Date(wfpAppliedUpload.applied_at).toLocaleString()}
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => {
-                    setWfpAppliedUpload(null);
-                    setWfpResults([]);
-                    setWfpSummary(null);
-                    setWfpUploadId(null);
-                    setWfpFilename(null);
-                  }} data-testid="button-wfp-reupload">
-                    Re-upload
-                  </Button>
+                  <div className="flex gap-2 shrink-0">
+                    {wfpResults.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          const XLSX = await import('xlsx');
+                          const rows = wfpResults.map(r => ({
+                            'WFP Site Name':   r.wfp_site_name || '',
+                            'PACT Site Name':  r.matched_site?.site_name || '',
+                            'WFP State':       r.wfp_state || '',
+                            'WFP Locality':    r.wfp_locality || '',
+                            'WFP Partner':     r.wfp_partner || '',
+                            'WFP Activity':    r.wfp_activity || '',
+                            'Match Tier':      r.match_tier,
+                            'Match Score':     r.match_score != null ? `${Math.round(r.match_score * 100)}%` : '',
+                            'Outcome':         r.outcome,
+                            'Notes':           r.match_notes || '',
+                          }));
+                          const wb = XLSX.utils.book_new();
+                          const ws = XLSX.utils.json_to_sheet(rows);
+                          ws['!cols'] = [{ wch: 28 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 28 }];
+                          XLSX.utils.book_append_sheet(wb, ws, 'WFP Results');
+                          const confirmed = wfpResults.filter(r => r.outcome === 'confirmed').length;
+                          const rejected  = wfpResults.filter(r => r.outcome === 'rejected').length;
+                          const none      = wfpResults.filter(r => r.match_tier === 'none').length;
+                          const summary   = XLSX.utils.aoa_to_sheet([
+                            ['WFP Match Results Summary'],
+                            ['File', wfpAppliedUpload.filename],
+                            ['Applied', new Date(wfpAppliedUpload.applied_at).toLocaleString()],
+                            ['Total Rows', wfpResults.length],
+                            ['Confirmed', confirmed],
+                            ['Rejected', rejected],
+                            ['No Match (WFP rows)', none],
+                          ]);
+                          XLSX.utils.book_append_sheet(wb, summary, 'Summary');
+                          XLSX.writeFile(wb, `wfp-results-${checklistMmpId?.slice(0, 8)}-${new Date().toISOString().split('T')[0]}.xlsx`);
+                        }}
+                        data-testid="button-wfp-export-results"
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1.5" />
+                        Export Report
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setWfpAppliedUpload(null);
+                      setWfpResults([]);
+                      setWfpSummary(null);
+                      setWfpUploadId(null);
+                      setWfpFilename(null);
+                    }} data-testid="button-wfp-reupload">
+                      Re-upload
+                    </Button>
+                  </div>
                 </div>
               )}
 
