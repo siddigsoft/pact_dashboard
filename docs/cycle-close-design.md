@@ -1,7 +1,7 @@
 # Cycle Close & Site Visit Status — Full Design & Build Plan
 
 **Status:** Design Finalized — Ready for Build Approval
-**Last updated:** 2026-04-27
+**Last updated:** 2026-04-27 (rev 2 — full money tracking + timestamps added)
 **Participants:** Product Owner, Engineering
 
 ---
@@ -111,6 +111,209 @@ The WFP cleaned data Excel (`February_2026_cleaned_data_PACT.xlsx`) has no P Cod
 - **Fuzzy:** site name matches but location differs → admin reviews manually
 - **No match:** site not found in WFP file at all → `rejected`
 - **WFP anomaly:** row in WFP file with no matching PACT site → logged, no status change
+
+---
+
+## PART 2B — MONEY TRACKING & TIMESTAMPS (FULL ACCOUNTABILITY LAYER)
+
+### 2B.1 — The Core Principle
+
+Every single SDG that moves in the system must have a complete, unbroken paper trail. Any user — enumerator, supervisor, admin, finance, super admin — should be able to look at a site, a payment, or an MMP and see the full history of that money: where it came from, when it was approved, when it moved, where it went, and what happened to it.
+
+No money can disappear silently. No status can change without a timestamp and a name.
+
+---
+
+### 2B.2 — What Gets Tracked for Every Payment
+
+For every down-payment or transport advance tied to a site, the system records and displays a **Money Trail**. This is a chronological log of every event that touched that payment.
+
+Every entry in the trail records:
+- **What happened** (the event type)
+- **Amount** (SDG X)
+- **Site** (Site Name + Site Code)
+- **MMP** (MMP name, month, year)
+- **Who did it** (full name of the user who triggered the event)
+- **Role of that user** (enumerator, supervisor, admin, finance, etc.)
+- **When exactly** (full timestamp: date + time + timezone)
+- **Note or justification** (if applicable)
+
+---
+
+### 2B.3 — The Full Money Event List (Every Event That Gets Logged)
+
+| Event | When It Happens |
+|---|---|
+| `payment_requested` | Enumerator submits a down-payment or transport advance request |
+| `payment_approved_tier1` | First-tier approver (supervisor/admin) approves |
+| `payment_approved_tier2` | Second-tier approver (finance/admin) approves |
+| `payment_rejected` | Request rejected at any tier — reason recorded |
+| `payment_sent` | Money physically sent / disbursed to the enumerator |
+| `payment_received_confirmed` | Enumerator confirms receipt |
+| `site_claimed` | Enumerator claims the site for this MMP |
+| `site_dispatched` | Supervisor dispatches enumerator to site |
+| `site_submitted` | Enumerator marks site as submitted to WFP |
+| `site_confirmed` | System confirms site from WFP file upload |
+| `site_rejected` | System marks site as not found in WFP file |
+| `site_not_covered` | Site marked as Not Covered with reason |
+| `recovery_decision_rolled` | Money rolled to next MMP — target MMP + site recorded |
+| `recovery_decision_return` | Return required — amount + method + deadline recorded |
+| `recovery_decision_writeoff` | Write-off approved — justification + signature recorded |
+| `recovery_repayment_received` | Partial or full repayment recorded by finance |
+| `recovery_deducted` | Deduction taken from next payment |
+| `wfp_match_confirmed` | Admin manually confirmed a weak/fuzzy WFP match |
+| `wfp_match_rejected` | Admin manually rejected a weak/fuzzy WFP match |
+| `cycle_closed` | Cycle officially closed |
+| `status_override` | Any manual status change by admin/super admin (with reason) |
+
+---
+
+### 2B.4 — Where This Trail Is Visible
+
+#### For the Enumerator (in their app view — My Sites / Field View)
+
+Every site the enumerator has ever been assigned shows a **"Money Timeline"** section on the site detail card. It shows only events relevant to them:
+
+```
+Site: ALMATAR | MMP: February 2026 | State: Gedaref
+
+💰 Money Timeline
+─────────────────────────────────────────────────────────
+✅  SDG 1,200 requested          — You          — 14 Feb 2026, 09:14 AM
+✅  SDG 1,200 approved (Tier 1)  — Ahmed Hassan  — 14 Feb 2026, 02:30 PM
+✅  SDG 1,200 approved (Tier 2)  — Finance Desk  — 15 Feb 2026, 10:05 AM
+💸  SDG 1,200 sent to you        — Finance Desk  — 15 Feb 2026, 11:00 AM
+📋  Site submitted to WFP        — You          — 17 Feb 2026, 04:22 PM
+⚠️  Not found in WFP file        — System       — 25 Feb 2026, 09:00 AM
+    "Your submission was not found in the February WFP data.
+     Your supervisor has been notified."
+```
+
+The enumerator sees exactly what happened to the money for this site in this MMP. Nothing is hidden.
+
+If money was rolled to a next MMP:
+```
+🔄  SDG 1,200 rolled to next MMP — Admin: Sara Ali — 28 Feb 2026, 03:15 PM
+    "Rolled to: March 2026 MMP | Site: ALMATAR"
+    "Reason: Site not covered in February 2026"
+```
+
+If return was required:
+```
+⚠️  SDG 1,200 return required    — Finance: Omar — 28 Feb 2026, 02:00 PM
+    "Method: Deduction from next payment"
+    "Deadline: 30 Mar 2026"
+```
+
+---
+
+#### For the Supervisor / Admin / Finance (full trail, all users)
+
+In the Down-Payment Approval page and the Cycle Close Exceptions tab, every payment row has an expandable **Full Money Trail** panel showing every event above, with full names, timestamps, and notes.
+
+In the admin view, they also see events the enumerator does not see:
+- Internal approval notes
+- Finance authorization details
+- Digital signature IDs for write-offs
+
+---
+
+#### For Super Admin (in Super Admin Data Management)
+
+In the Claimed Sites tab and any financial summary view, a "Payments" column shows the total amount sent to each enumerator for each site/MMP combination, with a drill-down link to the full trail.
+
+---
+
+### 2B.5 — Timestamps on Every Status Change
+
+Every time a site visit status changes, the following is recorded in a `site_visit_status_log` table:
+
+```
+site_visit_id     — which site entry
+old_status        — what the status was before
+new_status        — what it changed to
+changed_by        — user id (with role at time of change)
+changed_at        — full timestamp with timezone
+change_source     — 'user_action' | 'system_wfp_match' | 'admin_override' | 'bulk_action' | 'migration'
+note              — optional text (required for overrides)
+mmp_id            — which MMP this belongs to
+mmp_name          — MMP name at time of change (denormalized for history clarity)
+```
+
+This table is append-only — records are never deleted or updated. Every state the site has ever been in is preserved forever.
+
+**Example for ALMATAR site:**
+```
+assigned    → dispatched   | Ahmed (supervisor)  | 10 Feb 2026 08:00 | user_action
+dispatched  → submitted    | Enumerator          | 17 Feb 2026 16:22 | user_action
+submitted   → rejected     | System              | 25 Feb 2026 09:00 | system_wfp_match
+rejected    → confirmed    | Sara Ali (admin)    | 26 Feb 2026 11:30 | admin_override
+                             "Evidence provided: ODK ref #ABC123"
+```
+
+---
+
+### 2B.6 — Money Trail Database Table: `payment_event_log`
+
+```
+id               (uuid, pk)
+event_type       (text — from the event list in 2B.3)
+amount           (numeric — SDG amount at time of event)
+site_entry_id    (uuid, fk mmp_site_entries)
+site_name        (text — denormalized for history)
+site_code        (text — denormalized for history)
+mmp_id           (uuid, fk mmp_files)
+mmp_name         (text — denormalized for history, e.g. "February 2026 — Gedaref")
+payment_ref_id   (uuid — ID of the down_payment_request or cost_recovery_log row)
+triggered_by     (uuid, fk profiles)
+triggered_by_name (text — denormalized full name)
+triggered_by_role (text — role at time of event)
+triggered_at     (timestamptz — full timestamp with timezone)
+note             (text, nullable)
+metadata         (jsonb — any extra context, e.g. target MMP for roll-over)
+```
+
+This table is the single source of truth for money accountability. It is append-only and never modified after insert.
+
+---
+
+### 2B.7 — Site Visit Status Log Table: `site_visit_status_log`
+
+```
+id               (uuid, pk)
+site_entry_id    (uuid, fk mmp_site_entries)
+mmp_id           (uuid, fk mmp_files)
+mmp_name         (text — denormalized)
+site_name        (text — denormalized)
+old_status       (text)
+new_status       (text)
+changed_by       (uuid, fk profiles)
+changed_by_name  (text — denormalized)
+changed_by_role  (text — role at time of change)
+changed_at       (timestamptz)
+change_source    (text: 'user_action' | 'system_wfp_match' | 'admin_override' | 'bulk_action' | 'migration')
+note             (text, nullable — required for admin_override)
+```
+
+Append-only. Never deleted.
+
+---
+
+### 2B.8 — Notification Triggers for Money Events
+
+When any money event occurs, the relevant users are notified automatically:
+
+| Event | Who Gets Notified | Channel |
+|---|---|---|
+| Payment approved | Enumerator | In-app + WhatsApp (if opted in) |
+| Payment sent | Enumerator | In-app + WhatsApp |
+| Site rejected by WFP | Enumerator + Supervisor | In-app + WhatsApp |
+| Site confirmed by WFP | Enumerator | In-app |
+| Return required | Enumerator + Finance | In-app + Email |
+| Money rolled to next MMP | Enumerator + Supervisor | In-app + WhatsApp |
+| Write-off signed | Finance + Super Admin | In-app + Email |
+| Repayment recorded | Enumerator | In-app |
+| Repayment overdue | Enumerator + Finance + Admin | In-app + Email |
 
 ---
 
@@ -346,134 +549,211 @@ UPDATE mmp_site_entries SET status = 'submitted' WHERE status = 'completed';
 UPDATE site_visits SET status = 'submitted' WHERE status = 'completed';
 ```
 
-**2. New table: `cost_recovery_log`**
+**2. New table: `site_visit_status_log`** *(append-only — never updated or deleted)*
 ```
-id (uuid, pk)
-source_mmp_id (uuid, fk mmp_files)
-source_site_id (uuid, fk mmp_site_entries)
-cost_type (text: 'down_payment' | 'transport_advance' | 'enumerator_fee')
-cost_amount (numeric)
-cost_reference_id (uuid — ID of the original down_payment_request or similar)
-decision (text: 'rolled_over' | 'return_required' | 'written_off' | 'deducted' | 'reused')
-target_mmp_id (uuid, nullable — for rolled_over and reused)
-target_site_id (uuid, nullable)
-repayment_method (text[], nullable — for return_required)
-repayment_status (text: 'pending' | 'in_progress' | 'settled', nullable)
+id               (uuid, pk, default gen_random_uuid())
+site_entry_id    (uuid, fk mmp_site_entries)
+mmp_id           (uuid, fk mmp_files)
+mmp_name         (text — denormalized for permanent record)
+site_name        (text — denormalized)
+site_code        (text — denormalized)
+old_status       (text)
+new_status       (text)
+changed_by       (uuid, fk profiles)
+changed_by_name  (text — denormalized full name)
+changed_by_role  (text — role at time of change)
+changed_at       (timestamptz, default now())
+change_source    (text: 'user_action' | 'system_wfp_match' | 'admin_override' | 'bulk_action' | 'migration')
+note             (text, nullable — required when change_source = 'admin_override')
+```
+
+**3. New table: `payment_event_log`** *(append-only — never updated or deleted)*
+```
+id                (uuid, pk, default gen_random_uuid())
+event_type        (text — see full event list in 2B.3)
+amount            (numeric — SDG amount at time of event)
+site_entry_id     (uuid, fk mmp_site_entries, nullable)
+site_name         (text — denormalized)
+site_code         (text — denormalized)
+mmp_id            (uuid, fk mmp_files, nullable)
+mmp_name          (text — denormalized, e.g. "February 2026 — Gedaref")
+payment_ref_id    (uuid — fk to down_payment_requests or cost_recovery_log)
+triggered_by      (uuid, fk profiles)
+triggered_by_name (text — denormalized full name)
+triggered_by_role (text — role at time of event)
+triggered_at      (timestamptz, default now())
+note              (text, nullable)
+metadata          (jsonb — extra context: target_mmp_id, target_site_id, repayment_method, etc.)
+```
+
+**4. New table: `cost_recovery_log`**
+```
+id                (uuid, pk, default gen_random_uuid())
+source_mmp_id     (uuid, fk mmp_files)
+source_mmp_name   (text — denormalized)
+source_site_id    (uuid, fk mmp_site_entries)
+source_site_name  (text — denormalized)
+cost_type         (text: 'down_payment' | 'transport_advance' | 'enumerator_fee')
+cost_amount       (numeric)
+cost_reference_id (uuid — fk to down_payment_requests)
+decision          (text: 'rolled_over' | 'return_required' | 'written_off' | 'deducted' | 'reused')
+target_mmp_id     (uuid, nullable)
+target_mmp_name   (text, nullable — denormalized)
+target_site_id    (uuid, nullable)
+target_site_name  (text, nullable — denormalized)
+repayment_method  (text[], nullable)
+repayment_status  (text: 'pending' | 'in_progress' | 'settled', nullable)
 repayment_deadline (date, nullable)
-justification (text, nullable — required for written_off)
-signature_id (uuid, nullable — for written_off)
-resolved_by (uuid, fk profiles)
-resolved_at (timestamptz)
-notes (text, nullable)
+justification     (text, nullable — required for written_off, min 50 chars)
+signature_id      (uuid, nullable — for written_off)
+resolved_by       (uuid, fk profiles)
+resolved_by_name  (text — denormalized)
+resolved_at       (timestamptz, default now())
+notes             (text, nullable)
+created_at        (timestamptz, default now())
+updated_at        (timestamptz)
 ```
 
-**3. New table: `wfp_confirmation_uploads`**
+**5. New table: `wfp_confirmation_uploads`**
 ```
-id (uuid, pk)
-mmp_id (uuid, fk mmp_files)
-uploaded_by (uuid, fk profiles)
-uploaded_at (timestamptz)
-filename (text)
-storage_path (text)
-total_rows (int)
-strong_matches (int)
-weak_matches (int)
-no_matches (int)
-anomalies (int)
-status (text: 'pending_review' | 'applied')
-applied_at (timestamptz, nullable)
-applied_by (uuid, nullable)
-notes (text, nullable)
+id              (uuid, pk, default gen_random_uuid())
+mmp_id          (uuid, fk mmp_files)
+mmp_name        (text — denormalized)
+uploaded_by     (uuid, fk profiles)
+uploaded_by_name (text — denormalized)
+uploaded_at     (timestamptz, default now())
+filename        (text)
+storage_path    (text)
+total_rows      (int)
+strong_matches  (int)
+weak_matches    (int)
+no_matches      (int)
+anomalies       (int)
+status          (text: 'pending_review' | 'applied')
+applied_at      (timestamptz, nullable)
+applied_by      (uuid, nullable)
+applied_by_name (text, nullable — denormalized)
+notes           (text, nullable)
 ```
 
-**4. New table: `wfp_match_results`**
+**6. New table: `wfp_match_results`**
 ```
-id (uuid, pk)
-upload_id (uuid, fk wfp_confirmation_uploads)
-site_entry_id (uuid, fk mmp_site_entries)
-match_tier (text: 'strong' | 'weak' | 'fuzzy' | 'none')
-wfp_site_name (text)
-wfp_state (text)
-wfp_locality (text)
-wfp_partner (text)
-wfp_activity (text)
-admin_decision (text: 'confirmed' | 'rejected' | null — null until reviewed)
-admin_note (text, nullable)
-reviewed_by (uuid, nullable)
-reviewed_at (timestamptz, nullable)
+id              (uuid, pk, default gen_random_uuid())
+upload_id       (uuid, fk wfp_confirmation_uploads)
+site_entry_id   (uuid, fk mmp_site_entries)
+site_name       (text — denormalized)
+mmp_id          (uuid, fk mmp_files)
+match_tier      (text: 'strong' | 'weak' | 'fuzzy' | 'none')
+wfp_site_name   (text)
+wfp_state       (text)
+wfp_locality    (text)
+wfp_partner     (text)
+wfp_activity    (text)
+admin_decision  (text: 'confirmed' | 'rejected' | null)
+admin_note      (text, nullable)
+reviewed_by     (uuid, nullable)
+reviewed_by_name (text, nullable — denormalized)
+reviewed_at     (timestamptz, nullable)
+created_at      (timestamptz, default now())
 ```
+
+**Denormalization policy:** Name fields (site_name, mmp_name, triggered_by_name, etc.) are stored directly in every log table. This ensures the history is readable even if the source record is later renamed or deleted. These fields are never updated after insert.
 
 ---
 
 ## PART 4 — BUILD PHASES
 
-### Phase A — Status Rename (1 day)
-**Scope:** Rename `completed` → `submitted` everywhere.
-- SQL migration: update existing records
-- Update status badges, filters, dropdowns on all affected pages
-- Update `useCycleCloseReadiness.ts`: accept `submitted` as resolved
-- Update `MMPCycleClose.tsx`: coverage counts, display labels
-- Update `SuperAdminDataManagement.tsx`: status filter options
+### Phase A — Status Rename + Logging Infrastructure (1–2 days)
+**Scope:** Rename `completed` → `submitted` everywhere AND create the two core tracking tables that all future phases depend on.
 
-**Pages touched:** Cycle Close, Super Admin Data, any status dropdowns
-**Can deploy independently:** Yes
+- SQL migration: `UPDATE mmp_site_entries SET status = 'submitted' WHERE status = 'completed'`
+- Create `site_visit_status_log` table (append-only, RLS: read for own records + admin/finance/super_admin)
+- Create `payment_event_log` table (append-only, empty shell — events start from Phase B)
+- Write shared `logStatusChange(siteId, oldStatus, newStatus, user, source, note?)` service — called by every status mutation going forward
+- Write shared `logPaymentEvent(eventType, amount, siteId, mmpId, paymentRefId, user, note?, metadata?)` service
+- Backfill `site_visit_status_log` for all existing records with `change_source = 'migration'`
+- Update status badges, filters, dropdowns on all affected pages to show `submitted`
+- Update `useCycleCloseReadiness.ts`: accept `submitted` as resolved (alongside `approved`, `cancelled`, `not_covered`)
+- Update `MMPCycleClose.tsx`: coverage counts, display labels
+- Update `SuperAdminDataManagement.tsx`: status filter — add `submitted`, `confirmed`, `rejected`
+
+**Pages touched:** Cycle Close, Super Admin Data Management, any status dropdowns
+**New tables:** `site_visit_status_log`, `payment_event_log`
+**Can deploy independently:** Yes — zero functional change for users, pure infrastructure
 
 ---
 
-### Phase B — Not-Covered Cost Recovery Gate (3–4 days)
-**Scope:** Track and resolve approved costs for not-covered sites.
-- Create `cost_recovery_log` table (SQL migration file)
-- Build Cost Recovery Dialog component
-- Trigger dialog when site marked Not Covered + cost exists
-- Add 5th gate to Pre-Close Checklist
-- Add "Section B" to Exceptions tab
-- Finance sign-off flow for write-offs
+### Phase B — Cost Recovery Gate + Money Trail (3–4 days)
+**Scope:** Track and resolve approved costs for not-covered sites. Every money event writes to `payment_event_log`.
 
-**Pages touched:** Cycle Close (Uncovered tab + new Exceptions tab), Down-Payment Approval
+- Create `cost_recovery_log` table
+- Build Cost Recovery Dialog (Roll / Return / Write-Off) — each decision calls `logPaymentEvent()`
+- Trigger dialog when a site is marked Not Covered AND an approved cost exists for that site+MMP
+- Add 5th Pre-Close Checklist gate: "All not-covered cost recoveries addressed"
+- Add Exceptions tab to Cycle Close — Section B: Not-Covered Resolutions
+- Digital signature flow for write-offs (same as existing cost approvals)
+- Repayment tracking for Return Required (status: pending → in_progress → settled)
+- **Money Timeline panel** — enumerator sees it in their site detail view (filtered to their own events)
+- **Full Money Trail panel** — admin/finance see complete trail with internal approval notes
+- Notification triggers: roll-over → enumerator + supervisor, return required → enumerator + finance
+- Overdue repayment check: if deadline passed and status still `pending` → notify enumerator + finance + admin
+
+**Pages touched:** Cycle Close (Uncovered tab + new Exceptions tab), Down-Payment Approval, Enumerator site view
+**New tables:** `cost_recovery_log`
 **Can deploy independently:** Yes (after Phase A)
 
 ---
 
-### Phase C — WFP Data Confirmation Tab (4–5 days)
-**Scope:** Upload WFP cleaned Excel, match, apply results.
+### Phase C — WFP Confirmation + Status Audit Trail (4–5 days)
+**Scope:** Upload WFP cleaned Excel, match sites, apply confirmed/rejected outcomes. Every outcome writes to `site_visit_status_log` and `payment_event_log`.
+
 - Create `wfp_confirmation_uploads` and `wfp_match_results` tables
 - Build WFP Confirmation tab on Cycle Close page
-- File upload + xlsx.js parsing (reuse existing MMP upload engine)
-- Column mapping with synonym system (same pattern as MMP upload)
-- Three-tier matching logic
-- Weak/fuzzy match manual review UI
-- Bulk "Apply Results" action
-- Add `confirmed` and `rejected` statuses to all status displays
-- Add "Section A — Rejected Sites" to Exceptions tab
-- Add History tab
+- File upload using existing xlsx.js parser (same engine as MMP upload)
+- Column synonym mapping: `SECTION_1/sitename` → site_name, `1.9. State...` → state, `1.10. Locality...` → locality, `1.15 Name...` → partner, `1.16 What kind...` → activity
+- Three-tier matching: Strong (auto) / Weak+Fuzzy (manual) / None (rejected)
+- Manual review UI for weak/fuzzy: reviewer name + timestamp + note → stored in `wfp_match_results`
+- Bulk "Apply Results": each outcome calls `logStatusChange()` with `change_source = 'system_wfp_match'` or `'admin_override'`
+- Each match result also calls `logPaymentEvent('site_confirmed' or 'site_rejected', ...)`
+- Add `confirmed` (green, checkmark) and `rejected` (red, warning) status badges everywhere
+- Exceptions tab Section A: Rejected Sites — resolution options (Evidence / Accept / Dispute)
+- History tab: reads chronologically from `site_visit_status_log` + `payment_event_log` for the selected cycle
+- Enumerator view: shows `rejected` badge + "Not found in WFP data" message when their site is rejected
+- Notification: enumerator + supervisor notified on `rejected`; enumerator notified on `confirmed`
 
-**Pages touched:** Cycle Close (new WFP Confirmation tab, Exceptions tab, History tab), Enumerator view
+**Pages touched:** Cycle Close (WFP Confirmation tab, Exceptions tab, History tab), Enumerator site view, Super Admin Data
+**New tables:** `wfp_confirmation_uploads`, `wfp_match_results`
 **Can deploy independently:** Yes (after Phase A)
 
 ---
 
-### Phase D — Roll-to-Next-MMP Full Flow (3 days)
-**Scope:** Complete the pre-allocated advance flow.
-- Eligibility query: active MMPs matching same state + collector
-- Auto-add site to target MMP if not present (with warning)
-- Mark cost as pre-approved in target MMP down-payment view
-- Notify supervisor and enumerator of the roll-over
-- Show rolled-from badge in target MMP finance view
+### Phase D — Roll-to-Next-MMP Full Flow + Pre-Allocation Tracking (3 days)
+**Scope:** Complete the money roll-over flow so the enumerator sees the money trail spanning both the source MMP and the target MMP.
 
-**Pages touched:** Down-Payment Approval, Cycle Close Exceptions tab
+- Eligibility query: MMPs where state matches + same `accepted_by` user + status `active` or `draft`
+- If site not in target MMP: auto-insert site entry with warning logged to `site_visit_status_log`
+- Mark rolled cost in target MMP down-payment view: badge "Pre-Approved (Rolled from [Source MMP Name])"
+- Log `recovery_decision_rolled` to `payment_event_log` with `metadata: {target_mmp_id, target_mmp_name, target_site_id}`
+- Log `payment_approved_tier2` (pre-approval event) to `payment_event_log` for target MMP — so the trail shows money as already approved without a new request
+- Enumerator Money Timeline in target MMP shows: "SDG X pre-allocated from [Source MMP] — [Date]"
+- Enumerator Money Timeline in source MMP shows: "SDG X rolled to [Target MMP] — [Date] — [Admin Name]"
+- Notify supervisor and enumerator of the roll-over with names and amounts
+- Finance view in target MMP shows total pre-allocated amounts with source links
+
+**Pages touched:** Down-Payment Approval, Cycle Close Exceptions tab, Enumerator site view (source and target MMP)
 **Can deploy independently:** Yes (after Phase B)
 
 ---
 
 ### Suggested Order and Timeline
 ```
-Week 1:   Phase A (status rename)        — 1 day
-Week 1-2: Phase B (cost recovery gate)   — 3-4 days
-Week 2-3: Phase C (WFP confirmation)     — 4-5 days
-Week 3-4: Phase D (roll-to-next-MMP)     — 3 days
+Week 1:     Phase A — Status rename + logging tables        (1–2 days)
+Week 1–2:   Phase B — Cost recovery gate + money trail      (3–4 days)
+Week 2–3:   Phase C — WFP confirmation + status audit       (4–5 days)
+Week 3–4:   Phase D — Roll-to-next-MMP full flow            (3 days)
 ```
 
-Each phase is independently deployable. Phase A should go live first as it has zero risk and unblocks everything else visually.
+Each phase is independently deployable. Phase A goes first — it creates the shared logging infrastructure that all other phases depend on. No phase needs to wait for the one after it to be designed — each has a clear, self-contained scope.
 
 ---
 
