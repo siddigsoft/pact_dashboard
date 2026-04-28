@@ -127,9 +127,7 @@ export default function AdminWhatsAppPage() {
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from PACT Command Center! This is a test message.\n\nأهلاً من مركز قيادة باكت! هذه رسالة اختبار.');
   const [sending, setSending] = useState(false);
-  const [sendProvider, setSendProvider] = useState<'meta_first' | 'meta' | 'wasender'>('meta_first');
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
-  const [metaStatus, setMetaStatus] = useState<{ ok: boolean; verified_name?: string; display_phone_number?: string; status?: string; checking?: boolean }>({ ok: false });
   const [logFilter, setLogFilter] = useState<'all' | 'outbound' | 'inbound' | 'failed' | 'skipped'>('all');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
@@ -254,27 +252,14 @@ export default function AdminWhatsAppPage() {
         error?: string;
       };
 
-      if (result.error || result.configured === false) {
-        setConnectionStatus('error');
-        toast({
-          title: 'WasenderAPI Not Configured',
-          description: 'Set WASENDER_API_KEY in Supabase → Edge Functions → Secrets, then redeploy.',
-          variant: 'destructive',
-        });
-      } else if (result.providers?.wasender || result.providers?.meta) {
+      if (result.providers?.wasender) {
         setConnectionStatus('connected');
-        const parts = [];
-        if (result.providers.wasender) parts.push('WasenderAPI ✓');
-        if (result.providers.meta) parts.push('Meta Cloud API ✓');
-        toast({
-          title: 'Connection OK',
-          description: parts.join(' · ') + ' — messages will go through.',
-        });
+        toast({ title: 'WasenderAPI Connected ✓', description: 'Messages will be delivered via WasenderAPI.' });
       } else {
         setConnectionStatus('error');
         toast({
-          title: 'No provider active',
-          description: 'WASENDER_API_KEY is not set in Supabase Edge Function secrets.',
+          title: 'WasenderAPI Not Configured',
+          description: 'Set WASENDER_API_KEY in Supabase → Edge Functions → Secrets.',
           variant: 'destructive',
         });
       }
@@ -288,7 +273,7 @@ export default function AdminWhatsAppPage() {
     }
   };
 
-  const callSendWhatsApp = async (phones: string[], message: string, providerOverride?: 'meta' | 'wasender' | 'meta_first') => {
+  const callSendWhatsApp = async (phones: string[], message: string) => {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
     if (!accessToken) throw new Error('Not authenticated');
@@ -304,44 +289,15 @@ export default function AdminWhatsAppPage() {
         body: JSON.stringify({
           phone_numbers: phones,
           event_type: 'admin_reply',
-          provider: providerOverride || sendProvider,
           priority: 'urgent',
           data: { message, message_ar: message },
         }),
       }
     );
-    const result = await response.json() as { sent?: number; failed?: number; error?: string; sent_via_meta?: number; sent_via_wasender?: number };
+    const result = await response.json() as { sent?: number; failed?: number; error?: string; sent_via_wasender?: number };
     if (!response.ok || result.error) throw new Error(result.error || 'Send failed');
     if ((result.sent ?? 0) === 0) throw new Error('Message not delivered — check the phone number and API key');
     return result;
-  };
-
-  const checkMetaStatus = async () => {
-    setMetaStatus(s => ({ ...s, checking: true }));
-    try {
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/meta-register-phone`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
-        body: JSON.stringify({ action: 'status' }),
-      });
-      const result = await resp.json();
-      if (resp.ok && result.ok && result.phone) {
-        setMetaStatus({
-          ok: true,
-          checking: false,
-          verified_name: result.phone.verified_name,
-          display_phone_number: result.phone.display_phone_number,
-          status: result.phone.status,
-        });
-        toast({ title: 'Meta connected', description: `${result.phone.verified_name} • ${result.phone.display_phone_number} • ${result.phone.status}` });
-      } else {
-        setMetaStatus({ ok: false, checking: false });
-        toast({ title: 'Meta check failed', description: result.error || 'Unable to reach Meta', variant: 'destructive' });
-      }
-    } catch (err) {
-      setMetaStatus({ ok: false, checking: false });
-      toast({ title: 'Meta check failed', description: err instanceof Error ? err.message : 'Network error', variant: 'destructive' });
-    }
   };
 
   const sendTest = async () => {
@@ -486,57 +442,28 @@ export default function AdminWhatsAppPage() {
       </div>
 
       {/* How it works banner */}
-      <div className="flex items-start gap-3 p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-800 dark:text-green-200">
+      <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-200">
         <Info className="h-4 w-4 mt-0.5 shrink-0" />
         <div>
           <span className="font-semibold">How this works: </span>
-          PACT runs <strong>two WhatsApp channels in parallel</strong>. Meta is tried first; if it fails, Wasender takes over automatically. Both send fully bilingual (EN+AR) messages.
+          All WhatsApp notifications are delivered via <strong>WasenderAPI</strong>. Messages are sent fully bilingual (EN+AR) in a single message.
         </div>
       </div>
 
-      {/* Provider status cards (Meta + Wasender) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3" data-testid="providers-strip">
-        {/* Meta */}
-        <div className="rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 p-4" data-testid="card-provider-meta">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">Primary</span>
-                <span className="font-bold text-blue-900 dark:text-blue-100">Meta WhatsApp Cloud API</span>
-              </div>
-              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1 font-mono">
-                {metaStatus.display_phone_number || '+256 751 900013'}
-              </p>
-              <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
-                {metaStatus.verified_name || 'PACT Consultancy'} • Official templates • EN or AR
-              </p>
-            </div>
-            <Badge variant="secondary" className={cn(
-              'shrink-0',
-              metaStatus.ok && metaStatus.status === 'CONNECTED' && 'bg-green-100 text-green-700 dark:bg-green-900/30',
-              !metaStatus.ok && metaStatus.checking === false && 'bg-amber-100 text-amber-700',
-              metaStatus.checking && 'bg-blue-100 text-blue-700'
-            )}>
-              {metaStatus.checking ? <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Checking</>
-                : metaStatus.ok && metaStatus.status === 'CONNECTED' ? <><CheckCircle2 className="h-3 w-3 mr-1" />Connected</>
-                : <><AlertTriangle className="h-3 w-3 mr-1" />Not checked</>}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Wasender */}
+      {/* Provider status card — WasenderAPI only */}
+      <div data-testid="providers-strip">
         <div className="rounded-xl border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-4" data-testid="card-provider-wasender">
           <div className="flex items-start justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">Backup</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">Active Provider</span>
                 <span className="font-bold text-emerald-900 dark:text-emerald-100">WasenderAPI</span>
               </div>
-              <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1 font-mono">
-                Different number (set in Wasender dashboard)
+              <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
+                Number configured in your WasenderAPI dashboard
               </p>
               <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
-                Free-text bilingual EN+AR • Automatic failover • Works inside conversations
+                Free-text bilingual EN+AR • Works inside conversations • No template approval needed
               </p>
             </div>
             <Badge variant="secondary" className={cn(
@@ -953,49 +880,9 @@ export default function AdminWhatsAppPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200">
-              Choose which WhatsApp channel to send from. <strong>Auto-failover</strong> tries Meta first, then Wasender if Meta fails.
-            </div>
-
-            {/* Provider selector */}
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                <Activity className="h-3.5 w-3.5" /> Send via
-              </Label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="provider-selector">
-                {[
-                  { id: 'meta_first' as const, label: 'Auto-failover', sub: 'Meta → Wasender', color: 'purple' },
-                  { id: 'meta' as const, label: 'Meta only', sub: '+256 751 900013', color: 'blue' },
-                  { id: 'wasender' as const, label: 'Wasender only', sub: 'Backup number', color: 'emerald' },
-                ].map(opt => {
-                  const active = sendProvider === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setSendProvider(opt.id)}
-                      data-testid={`provider-option-${opt.id}`}
-                      className={cn(
-                        'rounded-lg border-2 p-3 text-left transition-all',
-                        active
-                          ? opt.color === 'blue' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                          : opt.color === 'emerald' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
-                          : 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                          : 'border-muted hover:border-muted-foreground/30'
-                      )}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        {active && <CheckCircle2 className={cn(
-                          'h-4 w-4',
-                          opt.color === 'blue' ? 'text-blue-600' : opt.color === 'emerald' ? 'text-emerald-600' : 'text-purple-600'
-                        )} />}
-                        <span className="text-sm font-semibold">{opt.label}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 ml-0.5">{opt.sub}</p>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Sending via <strong>WasenderAPI</strong> — bilingual EN+AR message delivered to recipient.
             </div>
 
             <div className="space-y-1.5">
@@ -1300,64 +1187,6 @@ export default function AdminWhatsAppPage() {
               >
                 {connectionStatus === 'checking' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
                 Check Connection
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Meta Cloud API Connection */}
-          <Card data-testid="card-meta-connection" className="border-blue-200 dark:border-blue-800">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-                    <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      Meta WhatsApp Cloud API
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">Optional (templates)</span>
-                    </CardTitle>
-                    <CardDescription>Pre-approved template messages from {metaStatus.display_phone_number || '+256 751 900013'}</CardDescription>
-                  </div>
-                </div>
-                <Badge variant="secondary" className={cn(
-                  'shrink-0',
-                  metaStatus.ok && metaStatus.status === 'CONNECTED' && 'bg-green-100 text-green-700 dark:bg-green-900/30',
-                  !metaStatus.ok && !metaStatus.checking && 'bg-slate-100 text-slate-600',
-                  metaStatus.checking && 'bg-blue-100 text-blue-700'
-                )}>
-                  {metaStatus.checking ? <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Checking…</>
-                    : metaStatus.ok && metaStatus.status === 'CONNECTED' ? <><CheckCircle2 className="h-3 w-3 mr-1" />Connected</>
-                    : <><Info className="h-3 w-3 mr-1" />Not checked</>}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
-                <p className="font-semibold mb-1">Optional — only needed for Meta template messages</p>
-                <p>If you want to use the official Meta Cloud API alongside WasenderAPI, add these to Supabase Edge Function Secrets:</p>
-                <div className="font-mono text-xs mt-2 space-y-0.5 bg-blue-100 dark:bg-blue-900/50 rounded p-2">
-                  <p>META_WA_ACCESS_TOKEN_NEW</p>
-                  <p>META_WA_PHONE_NUMBER_ID</p>
-                  <p>META_WABA_ID</p>
-                </div>
-              </div>
-              {metaStatus.ok && (
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-lg border p-2"><p className="text-xs text-muted-foreground">Display name</p><p className="font-semibold">{metaStatus.verified_name}</p></div>
-                  <div className="rounded-lg border p-2"><p className="text-xs text-muted-foreground">Phone number</p><p className="font-mono">{metaStatus.display_phone_number}</p></div>
-                  <div className="rounded-lg border p-2 col-span-2"><p className="text-xs text-muted-foreground">Cloud API status</p><p className="font-semibold">{metaStatus.status}</p></div>
-                </div>
-              )}
-              <Button
-                onClick={checkMetaStatus}
-                disabled={metaStatus.checking}
-                variant="outline"
-                className="gap-2"
-                data-testid="button-check-meta"
-              >
-                {metaStatus.checking ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
-                Check Meta Connection
               </Button>
             </CardContent>
           </Card>
