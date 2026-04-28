@@ -3,14 +3,15 @@ import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid, formatDistanceToNow, isBefore } from 'date-fns';
 import {
-  Folder, FolderOpen, FolderPlus, FileText, Upload, Search, MoreVertical,
+  Folder, FolderOpen, FolderPlus, FolderCopy, FileText, Upload, Search, MoreVertical,
   Download, Trash2, Share2, Eye, MessageSquare, Clock, Shield, Lock, LockOpen,
   Users, ChevronRight, ChevronDown, X, Plus, Edit2, AlertTriangle,
   CheckCircle2, Star, StarOff, Grid, List, Filter, Tag, Link,
   Globe, Building2, User, UserCheck, UserX, Calendar, ArrowUpDown,
   File, FileImage, FileVideo, FileArchive, FileSpreadsheet,
-  Activity, History, RefreshCw, Loader2, Send, Check,
+  Activity, History, RefreshCw, Loader2, Send, Check, RotateCcw, Home,
   EyeOff, Key, Copy, ExternalLink, Info, ShieldCheck, QrCode, Printer, Palette, ImageDown, ChevronUp, Ban,
+  SquareCheck, Square,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import PactLogo from '@/assets/logo.png';
@@ -819,12 +820,59 @@ function FileDetailPanel({ file, currentUserId, onClose, onRefresh, canManage, i
         </TabsContent>
 
         {/* Versions tab */}
-        <TabsContent value="versions" className="flex-1 overflow-y-auto p-4 mt-0">
-          <div className="text-center py-8 text-muted-foreground">
-            <History className="h-8 w-8 opacity-30 mx-auto mb-2" />
-            <p className="text-xs">Current version: v{file.version}</p>
-            {versions.length === 0 && <p className="text-[11px] mt-1 opacity-70">No previous versions</p>}
+        <TabsContent value="versions" className="flex-1 overflow-y-auto p-4 mt-0 space-y-3">
+          {/* Current version always shown */}
+          <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-[#1D3461]/30 bg-[#1D3461]/5">
+            <div className="h-8 w-8 rounded-lg bg-[#1D3461] flex items-center justify-center flex-shrink-0">
+              <span className="text-[10px] font-bold text-white">v{file.version}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold">{file.version_label || `Version ${file.version}`}</p>
+                <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Current</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{fmtRelative(file.updated_at)} · {fmtSize(file.file_size)}</p>
+            </div>
           </div>
+
+          {/* Previous versions */}
+          {versions.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Previous Versions</p>
+              {(versions as any[]).map((v, idx) => (
+                <div key={v.id ?? idx} className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/20 transition-colors">
+                  <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-muted-foreground">v{v.version ?? (file.version - idx - 1)}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium">{v.version_label || `Version ${v.version ?? (file.version - idx - 1)}`}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {v.created_at ? fmtRelative(v.created_at) : '—'}
+                      {v.file_size ? ` · ${fmtSize(v.file_size)}` : ''}
+                    </p>
+                  </div>
+                  {v.storage_path && (
+                    <button
+                      onClick={async () => {
+                        const { data: signed } = await supabase.storage.from('workspace-files').createSignedUrl(v.storage_path, 3600, { download: file.name });
+                        if (signed?.signedUrl) { const a = document.createElement('a'); a.href = signed.signedUrl; a.download = file.name; a.click(); }
+                      }}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-[#1D3461] hover:bg-[#1D3461]/5 transition-colors"
+                      title="Download this version"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center py-6 text-muted-foreground gap-2">
+              <History className="h-8 w-8 opacity-20" />
+              <p className="text-xs">No previous versions recorded</p>
+              <p className="text-[11px] opacity-70">Upload a new version to see version history here</p>
+            </div>
+          )}
         </TabsContent>
 
         {/* Activity tab */}
@@ -960,7 +1008,13 @@ export default function WorkspaceHub() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderDesc, setNewFolderDesc] = useState('');
   const [newFolderSec, setNewFolderSec] = useState<SecurityLevel>('internal');
+  // ── Bulk selection state ──────────────────────────────────────────────────
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkMoveFolderId, setBulkMoveFolderId] = useState<string>('__root__');
+  const [bulkMoving, setBulkMoving] = useState(false);
   const [shareFolderTarget, setShareFolderTarget] = useState<WFolder | null>(null);
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
   const [renameTarget, setRenameTarget] = useState<{ type: 'file' | 'folder'; id: string; currentName: string } | null>(null);
@@ -1023,7 +1077,34 @@ export default function WorkspaceHub() {
     staleTime: 60_000,
   });
 
-  const refetch = useCallback(() => { refetchFolders(); refetchFiles(); }, [refetchFolders, refetchFiles]);
+  const { data: archivedFiles = [], refetch: refetchArchived } = useQuery<WFile[]>({
+    queryKey: ['workspace_archived_files', userId],
+    queryFn: async () => {
+      const { data } = await supabase.from('workspace_files').select('*').eq('archived', true).order('updated_at', { ascending: false });
+      if (!data) return [];
+      const ids = [...new Set(data.map(f => f.created_by).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (ids.length > 0) {
+        const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+        (profs ?? []).forEach(p => { nameMap[p.id] = p.full_name ?? 'Unknown'; });
+      }
+      return data.map(f => ({ ...f, _uploaderName: f.created_by ? (nameMap[f.created_by] ?? 'Unknown') : 'Unknown' })) as WFile[];
+    },
+    enabled: selectedFolderId === '__trash__',
+    staleTime: 30_000,
+  });
+
+  const { data: archivedFolders = [], refetch: refetchArchivedFolders } = useQuery<WFolder[]>({
+    queryKey: ['workspace_archived_folders', userId],
+    queryFn: async () => {
+      const { data } = await supabase.from('workspace_folders').select('*').eq('archived', true).order('name');
+      return (data ?? []) as WFolder[];
+    },
+    enabled: selectedFolderId === '__trash__',
+    staleTime: 30_000,
+  });
+
+  const refetch = useCallback(() => { refetchFolders(); refetchFiles(); if (selectedFolderId === '__trash__') { refetchArchived(); refetchArchivedFolders(); } }, [refetchFolders, refetchFiles, refetchArchived, refetchArchivedFolders, selectedFolderId]);
 
   // ── Folder tree helpers ───────────────────────────────────────────────────
 
@@ -1081,12 +1162,88 @@ export default function WorkspaceHub() {
   async function createFolder() {
     if (!newFolderName.trim()) return;
     const { error } = await supabase.from('workspace_folders').insert({
-      name: newFolderName.trim(), security_level: newFolderSec, created_by: userId,
+      name: newFolderName.trim(), description: newFolderDesc.trim() || null,
+      security_level: newFolderSec, created_by: userId,
       parent_folder_id: selectedFolder?.id ?? null,
     });
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    refetchFolders(); setNewFolderOpen(false); setNewFolderName(''); setNewFolderSec('internal');
+    refetchFolders(); setNewFolderOpen(false); setNewFolderName(''); setNewFolderDesc(''); setNewFolderSec('internal');
     toast({ title: 'Folder created' });
+  }
+
+  async function duplicateFolder(folder: WFolder) {
+    const { data: newFolder, error } = await supabase.from('workspace_folders').insert({
+      name: `${folder.name} (Copy)`, description: folder.description,
+      security_level: folder.security_level, created_by: userId,
+      parent_folder_id: folder.parent_folder_id, color: folder.color, icon: folder.icon,
+    }).select().single();
+    if (error || !newFolder) { toast({ title: 'Duplicate failed', description: error?.message, variant: 'destructive' }); return; }
+    // Copy files from the source folder into the new one
+    const sourceFiles = allFiles.filter(f => f.folder_id === folder.id);
+    if (sourceFiles.length > 0) {
+      await supabase.from('workspace_files').insert(
+        sourceFiles.map(f => ({
+          folder_id: newFolder.id, name: f.name, description: f.description,
+          storage_path: f.storage_path, public_url: f.public_url, file_size: f.file_size,
+          mime_type: f.mime_type, extension: f.extension, security_level: f.security_level,
+          tags: f.tags, created_by: userId, version: 1, allow_download: f.allow_download,
+        }))
+      );
+    }
+    refetchFolders(); refetchFiles();
+    toast({ title: 'Folder duplicated', description: `"${folder.name} (Copy)" created with ${sourceFiles.length} file${sourceFiles.length !== 1 ? 's' : ''}` });
+  }
+
+  async function restoreFile(file: WFile) {
+    await supabase.from('workspace_files').update({ archived: false, updated_at: new Date().toISOString() }).eq('id', file.id);
+    await supabase.from('workspace_activity').insert({ file_id: file.id, user_id: userId, action: 'restored', metadata: {} });
+    refetchArchived(); refetchFiles();
+    toast({ title: 'File restored', description: file.name });
+  }
+
+  async function restoreFolder(folder: WFolder) {
+    await supabase.from('workspace_folders').update({ archived: false }).eq('id', folder.id);
+    refetchArchivedFolders(); refetchFolders();
+    toast({ title: 'Folder restored', description: folder.name });
+  }
+
+  async function permanentlyDeleteFile(file: WFile) {
+    await supabase.storage.from('workspace-files').remove([file.storage_path]);
+    await supabase.from('workspace_files').delete().eq('id', file.id);
+    refetchArchived();
+    toast({ title: 'File permanently deleted' });
+  }
+
+  async function bulkDeleteFiles() {
+    const ids = [...selectedFileIds];
+    const toDelete = allFiles.filter(f => ids.includes(f.id));
+    await Promise.all(toDelete.map(f => supabase.from('workspace_files').update({ archived: true }).eq('id', f.id)));
+    setSelectedFileIds(new Set());
+    refetchFiles();
+    toast({ title: `${ids.length} file${ids.length !== 1 ? 's' : ''} moved to trash` });
+  }
+
+  async function bulkMoveFiles() {
+    if (!bulkMoveOpen) return;
+    setBulkMoving(true);
+    const ids = [...selectedFileIds];
+    const targetFolder = bulkMoveFolderId === '__root__' ? null : bulkMoveFolderId;
+    await Promise.all(ids.map(id => supabase.from('workspace_files').update({ folder_id: targetFolder, updated_at: new Date().toISOString() }).eq('id', id)));
+    setSelectedFileIds(new Set());
+    setBulkMoveOpen(false);
+    setBulkMoveFolderId('__root__');
+    setBulkMoving(false);
+    refetchFiles();
+    toast({ title: `${ids.length} file${ids.length !== 1 ? 's' : ''} moved` });
+  }
+
+  function toggleFileSelection(fileId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setSelectedFileIds(prev => {
+      const next = new Set(prev);
+      next.has(fileId) ? next.delete(fileId) : next.add(fileId);
+      return next;
+    });
   }
 
   async function deleteFile(file: WFile) {
@@ -1345,6 +1502,9 @@ export default function WorkspaceHub() {
                 <DropdownMenuItem onClick={() => { setCustomColor(folder.color || '#1D3461'); setCustomIcon(folder.icon || ''); setFolderCustomizeTarget({ id: folder.id, name: folder.name, color: folder.color, icon: folder.icon }); }}>
                   <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => duplicateFolder(folder)}>
+                  <FolderCopy className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
                   <Key className="h-3.5 w-3.5 mr-2" />{folder.password_hash ? 'Change Password' : 'Set Password'}
@@ -1456,7 +1616,9 @@ export default function WorkspaceHub() {
   function FileRow({ file }: { file: WFile }) {
     const Icon = getFileIcon(file.mime_type);
     const isSelected = selectedFile?.id === file.id;
+    const isBulkSelected = selectedFileIds.has(file.id);
     const isLocked = !!file.password_hash && !unlockedIds.has(file.id);
+    const isImage = file.mime_type?.startsWith('image/') && file.public_url;
     return (
       <div onClick={() => openFile(file)}
         draggable
@@ -1464,9 +1626,19 @@ export default function WorkspaceHub() {
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
         className={cn('flex items-center gap-3 px-4 py-3 border-b last:border-b-0 cursor-grab active:cursor-grabbing hover:bg-muted/30 transition-colors group',
           isSelected && 'bg-[#1D3461]/5',
+          isBulkSelected && 'bg-[#1D3461]/8 ring-1 ring-inset ring-[#1D3461]/20',
           dragFileId === file.id && 'opacity-50')}>
-        <div className="relative h-9 w-9 rounded-xl bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
-          <Icon className="h-5 w-5 text-[#1D3461]" />
+        <button onClick={e => toggleFileSelection(file.id, e)} className="flex-shrink-0 text-muted-foreground hover:text-[#1D3461] transition-colors">
+          {isBulkSelected ? <SquareCheck className="h-4 w-4 text-[#1D3461]" /> : <Square className="h-4 w-4 opacity-0 group-hover:opacity-100" />}
+        </button>
+        <div className="relative h-9 w-9 rounded-xl overflow-hidden flex-shrink-0">
+          {isImage ? (
+            <img src={file.public_url!} alt={file.name} className="h-9 w-9 object-cover rounded-xl" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          ) : (
+            <div className="h-9 w-9 rounded-xl bg-[#1D3461]/10 flex items-center justify-center">
+              <Icon className="h-5 w-5 text-[#1D3461]" />
+            </div>
+          )}
           {isLocked && <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-2.5 w-2.5 text-white" /></span>}
         </div>
         <div className="flex-1 min-w-0">
@@ -1543,20 +1715,36 @@ export default function WorkspaceHub() {
   function FileCard({ file }: { file: WFile }) {
     const Icon = getFileIcon(file.mime_type);
     const isSelected = selectedFile?.id === file.id;
+    const isBulkSelected = selectedFileIds.has(file.id);
     const isLocked = !!file.password_hash && !unlockedIds.has(file.id);
+    const isImage = file.mime_type?.startsWith('image/') && file.public_url;
     return (
       <div onClick={() => openFile(file)}
         draggable
         onDragStart={e => { e.dataTransfer.setData('fileId', file.id); e.dataTransfer.effectAllowed = 'move'; setDragFileId(file.id); }}
         onDragEnd={() => { setDragFileId(null); setDragOverFolderId(null); }}
-        className={cn('flex flex-col rounded-2xl border cursor-grab active:cursor-grabbing hover:shadow-md transition-all p-3 group relative',
+        className={cn('flex flex-col rounded-2xl border cursor-grab active:cursor-grabbing hover:shadow-md transition-all group relative overflow-hidden',
           isSelected ? 'border-[#1D3461] ring-2 ring-[#1D3461]/20' : 'hover:border-[#1D3461]/40',
+          isBulkSelected && 'ring-2 ring-[#1D3461] border-[#1D3461]',
           dragFileId === file.id && 'opacity-50')}>
+        {/* Thumbnail area */}
+        {isImage ? (
+          <div className="relative h-28 w-full overflow-hidden bg-muted/20">
+            <img src={file.public_url!} alt={file.name} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }} />
+            {isLocked && <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-3 w-3 text-white" /></span>}
+            <button onClick={e => toggleFileSelection(file.id, e)} className="absolute top-1.5 left-1.5 z-10">
+              {isBulkSelected ? <SquareCheck className="h-4 w-4 text-[#1D3461] bg-white rounded" /> : <Square className="h-4 w-4 text-white opacity-0 group-hover:opacity-80 drop-shadow" />}
+            </button>
+          </div>
+        ) : null}
+        <div className={cn('flex flex-col p-3', isImage ? '' : 'flex-1')}>
         <div className="flex items-start justify-between mb-3">
+          {!isImage && (
           <div className="relative h-12 w-12 rounded-xl bg-[#1D3461]/10 flex items-center justify-center flex-shrink-0">
             <Icon className="h-6 w-6 text-[#1D3461]" />
             {isLocked && <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center"><Lock className="h-3 w-3 text-white" /></span>}
           </div>
+          )}
           <div className="flex items-center gap-1">
             {file.is_pinned && <Star className="h-3.5 w-3.5 text-amber-500" />}
             {file.password_hash && !isLocked && <LockOpen className="h-3.5 w-3.5 text-green-500" />}
@@ -1619,6 +1807,7 @@ export default function WorkspaceHub() {
           )}
         </div>
         <p className="text-[10px] text-muted-foreground mt-1.5">{fmtRelative(file.updated_at)}</p>
+        </div>{/* end inner p-3 wrapper */}
       </div>
     );
   }
@@ -1633,8 +1822,27 @@ export default function WorkspaceHub() {
     return { total: visibleFiles.length, totalSize, byLevel, pinned: visibleFiles.filter(f => f.is_pinned).length, mine: visibleFiles.filter(f => f.created_by === userId).length, root: visibleFiles.filter(f => !f.folder_id).length };
   }, [allFiles, userId, lockedFolderIdSet]);
 
-  const currentFolderName = selectedFolderId === '__pinned__' ? 'Pinned Files' : selectedFolderId === '__recent__' ? 'Recent Files' : selectedFolderId === '__mine__' ? 'My Files' : selectedFolderId === '__task_docs__' ? 'Task Documents' : selectedFolder?.name ?? 'All Files';
+  const VIRTUAL_FOLDER_NAMES: Record<string, string> = {
+    '__pinned__': 'Pinned Files', '__recent__': 'Recent Files', '__mine__': 'My Files',
+    '__task_docs__': 'Task Documents', '__all__': 'All Files', '__trash__': 'Recycle Bin',
+  };
+  const currentFolderName = selectedFolderId && VIRTUAL_FOLDER_NAMES[selectedFolderId]
+    ? VIRTUAL_FOLDER_NAMES[selectedFolderId]
+    : selectedFolder?.name ?? 'All Files';
   const totalTaskAttachments = taskDocsRaw.reduce((sum, t) => sum + t.attachments.length, 0);
+
+  // ── Breadcrumb path ────────────────────────────────────────────────────────
+  function getBreadcrumbPath(folderId: string | null): WFolder[] {
+    if (!folderId || VIRTUAL_FOLDER_NAMES[folderId]) return [];
+    const path: WFolder[] = [];
+    let current = folders.find(f => f.id === folderId);
+    while (current) {
+      path.unshift(current);
+      current = current.parent_folder_id ? folders.find(f => f.id === current!.parent_folder_id) : undefined;
+    }
+    return path;
+  }
+  const breadcrumbs = getBreadcrumbPath(selectedFolderId);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -1677,12 +1885,13 @@ export default function WorkspaceHub() {
           <div className="p-2">
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2 mb-1">Quick Access</p>
             {[
-              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false },
-              { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false },
-              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false },
-              { id: '__task_docs__', label: 'Task Documents', icon: CheckCircle2, count: totalTaskAttachments, droppable: false },
-              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false },
-              { id: null, label: 'Root (no folder)', icon: Folder, count: stats.root, droppable: true },
+              { id: '__recent__', label: 'Recent', icon: Clock, count: Math.min(20, allFiles.length), droppable: false, color: '' },
+              { id: '__pinned__', label: 'Pinned', icon: Star, count: stats.pinned, droppable: false, color: '' },
+              { id: '__mine__', label: 'My Files', icon: User, count: stats.mine, droppable: false, color: '' },
+              { id: '__task_docs__', label: 'Task Documents', icon: CheckCircle2, count: totalTaskAttachments, droppable: false, color: '' },
+              { id: '__all__', label: 'All Files', icon: FolderOpen, count: stats.total, droppable: false, color: '' },
+              { id: null, label: 'Root (no folder)', icon: Folder, count: stats.root, droppable: true, color: '' },
+              { id: '__trash__', label: 'Recycle Bin', icon: Trash2, count: 0, droppable: false, color: 'text-red-500' },
             ].map(item => {
               const isSelected = selectedFolderId === item.id;
               const isRootDragOver = dragOverFolderId === '__root__' && item.droppable;
@@ -1694,7 +1903,7 @@ export default function WorkspaceHub() {
                   className={cn('w-full flex items-center gap-2 py-1.5 px-2 rounded-lg text-xs font-medium transition-all',
                     isSelected ? 'bg-[#1D3461] text-white' : 'hover:bg-muted/60',
                     isRootDragOver && 'ring-2 ring-blue-400 bg-blue-50')}>
-                  <item.icon className="h-3.5 w-3.5 flex-shrink-0" />
+                  <item.icon className={cn('h-3.5 w-3.5 flex-shrink-0', !isSelected && item.color)} />
                   <span className="flex-1 text-left">{item.label}</span>
                   {isRootDragOver && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold">Drop here</span>}
                   <span className={cn('text-[10px] px-1.5 rounded-full', isSelected ? 'bg-white/20' : 'bg-muted')}>{item.count}</span>
@@ -1757,6 +1966,42 @@ export default function WorkspaceHub() {
 
         {/* ══ Main Content ════════════════════════════════════════════════ */}
         <div className={cn('flex-1 flex flex-col min-w-0 overflow-hidden', selectedFile ? 'mr-[380px]' : '')}>
+          {/* Breadcrumb bar */}
+          {breadcrumbs.length > 0 && (
+            <div className="flex items-center gap-1 px-5 py-2 border-b bg-muted/20 text-xs flex-shrink-0 flex-wrap">
+              <button onClick={() => setSelectedFolderId(null)} className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
+                <Home className="h-3 w-3" />Root
+              </button>
+              {breadcrumbs.map((crumb, idx) => (
+                <span key={crumb.id} className="flex items-center gap-1">
+                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                  {idx === breadcrumbs.length - 1 ? (
+                    <span className="font-semibold text-foreground">{crumb.name}</span>
+                  ) : (
+                    <button onClick={() => setSelectedFolderId(crumb.id)} className="text-muted-foreground hover:text-foreground transition-colors">{crumb.name}</button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Bulk action bar */}
+          {selectedFileIds.size > 0 && (
+            <div className="flex items-center gap-2 px-5 py-2 border-b bg-[#1D3461]/5 flex-shrink-0">
+              <span className="text-xs font-semibold text-[#1D3461]">{selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} selected</span>
+              <div className="flex-1" />
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => { setBulkMoveFolderId('__root__'); setBulkMoveOpen(true); }}>
+                <ArrowUpDown className="h-3 w-3" />Move
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50" onClick={bulkDeleteFiles}>
+                <Trash2 className="h-3 w-3" />Delete
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setSelectedFileIds(new Set())}>
+                <X className="h-3 w-3" />Clear
+              </Button>
+            </div>
+          )}
+
           {/* Top bar */}
           <div className="flex items-center gap-3 px-5 py-3 border-b bg-card flex-shrink-0">
             <div>
@@ -1811,7 +2056,88 @@ export default function WorkspaceHub() {
 
           {/* File area */}
           <div className="flex-1 overflow-y-auto">
-            {selectedFolderId === '__task_docs__' ? (
+            {selectedFolderId === '__trash__' ? (
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-200">
+                  <Trash2 className="h-5 w-5 text-red-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-800 dark:text-red-300">Recycle Bin</p>
+                    <p className="text-xs text-red-600 dark:text-red-400">{archivedFiles.length} file{archivedFiles.length !== 1 ? 's' : ''} · {archivedFolders.length} folder{archivedFolders.length !== 1 ? 's' : ''} — restore or permanently delete</p>
+                  </div>
+                </div>
+
+                {/* Archived folders */}
+                {archivedFolders.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Deleted Folders</p>
+                    <div className="space-y-2">
+                      {archivedFolders.map(folder => (
+                        <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:bg-muted/20 transition-colors">
+                          <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                            {folder.icon ? <span className="text-base">{folder.icon}</span> : <Folder className="h-4 w-4 text-muted-foreground" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{folder.name}</p>
+                            <p className="text-[11px] text-muted-foreground">{fmtRelative(folder.created_at)} · {SEC_CFG[folder.security_level].label}</p>
+                          </div>
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => restoreFolder(folder)}>
+                            <RotateCcw className="h-3 w-3" />Restore
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Archived files */}
+                {archivedFiles.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Deleted Files</p>
+                    <div className="space-y-2">
+                      {archivedFiles.map(file => {
+                        const Icon = getFileIcon(file.mime_type);
+                        const isImage = file.mime_type?.startsWith('image/') && file.public_url;
+                        return (
+                          <div key={file.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:bg-muted/20 transition-colors">
+                            <div className="relative h-9 w-9 rounded-xl overflow-hidden flex-shrink-0">
+                              {isImage ? (
+                                <img src={file.public_url!} alt={file.name} className="h-9 w-9 object-cover" />
+                              ) : (
+                                <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center">
+                                  <Icon className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{file.name}</p>
+                              <p className="text-[11px] text-muted-foreground">{fmtSize(file.file_size)} · {fmtRelative(file.updated_at)} · by {file._uploaderName}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => restoreFile(file)}>
+                                <RotateCcw className="h-3 w-3" />Restore
+                              </Button>
+                              {(isSuperAdmin || isAdmin) && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 border-red-200 hover:bg-red-50" onClick={() => permanentlyDeleteFile(file)}>
+                                  <Trash2 className="h-3 w-3" />Delete Forever
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {archivedFiles.length === 0 && archivedFolders.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+                    <Trash2 className="h-12 w-12 opacity-20" />
+                    <p className="text-sm font-medium">Recycle bin is empty</p>
+                    <p className="text-xs">Deleted files and folders will appear here</p>
+                  </div>
+                )}
+              </div>
+            ) : selectedFolderId === '__task_docs__' ? (
               <div className="p-5 space-y-4">
                 <div className="flex items-center gap-3 p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200">
                   <CheckCircle2 className="h-5 w-5 text-blue-600 flex-shrink-0" />
@@ -1972,7 +2298,13 @@ export default function WorkspaceHub() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Folder name…" className="text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && createFolder()} />
+              <div>
+                <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Folder name…" className="text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && createFolder()} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Description (optional)</label>
+                <Input value={newFolderDesc} onChange={e => setNewFolderDesc(e.target.value)} placeholder="What is this folder for?" className="text-xs" />
+              </div>
               <div>
                 <label className="text-xs font-semibold mb-2 block">Security Level</label>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -2179,6 +2511,42 @@ export default function WorkspaceHub() {
                 disabled={moving || (moveTarget?.folder_id === null && moveFolderId === '__root__') || moveTarget?.folder_id === moveFolderId}
               >
                 {moving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}
+                Move Here
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Bulk Move Dialog ──────────────────────────────────────────── */}
+        <Dialog open={bulkMoveOpen} onOpenChange={open => { if (!open) { setBulkMoveOpen(false); setBulkMoveFolderId('__root__'); } }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Move {selectedFileIds.size} File{selectedFileIds.size !== 1 ? 's' : ''}</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground -mt-2">Select the destination folder</p>
+            <div className="max-h-64 overflow-y-auto border rounded-lg divide-y text-sm">
+              <button onClick={() => setBulkMoveFolderId('__root__')}
+                className={cn('w-full flex items-center gap-2 p-2.5 hover:bg-muted/50 transition-colors text-left', bulkMoveFolderId === '__root__' ? 'bg-[#1D3461]/10 font-medium' : '')}>
+                <FolderOpen className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="flex-1">Root (No folder)</span>
+                {bulkMoveFolderId === '__root__' && <Check className="h-3.5 w-3.5 text-[#1D3461]" />}
+              </button>
+              {folders.map(f => {
+                const isChosen = bulkMoveFolderId === f.id;
+                return (
+                  <button key={f.id} onClick={() => setBulkMoveFolderId(f.id)}
+                    className={cn('w-full flex items-center gap-2 p-2.5 hover:bg-muted/50 transition-colors text-left', isChosen ? 'bg-[#1D3461]/10 font-medium' : '')}>
+                    <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="flex-1 truncate">{f.name}</span>
+                    {isChosen && <Check className="h-3.5 w-3.5 text-[#1D3461]" />}
+                  </button>
+                );
+              })}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => { setBulkMoveOpen(false); setBulkMoveFolderId('__root__'); }}>Cancel</Button>
+              <Button size="sm" className="bg-[#1D3461] hover:bg-[#0F2041]" onClick={bulkMoveFiles} disabled={bulkMoving}>
+                {bulkMoving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}
                 Move Here
               </Button>
             </DialogFooter>
