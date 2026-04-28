@@ -562,9 +562,10 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
           <div className="px-5 py-4 flex flex-col gap-4">
 
             {/* Title */}
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
-                Task title <span className="text-red-500 normal-case tracking-normal">*</span>
+            <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
+              <label className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                Task title <span className="text-rose-500 normal-case tracking-normal font-bold">*</span>
+                <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold normal-case tracking-normal">Required</span>
               </label>
               <input
                 autoFocus
@@ -573,13 +574,16 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
                 onChange={e => setTitle(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) submit(); }}
                 data-testid="input-task-title"
-                className="w-full h-10 px-3.5 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all font-medium"
+                className="w-full h-10 px-3.5 rounded-xl border border-rose-200 bg-rose-50/30 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-300/40 focus:border-rose-400 transition-all font-medium"
               />
             </div>
 
             {/* Description (rich HTML — Odoo-style) */}
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">Description</label>
+            <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
+              <label className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                Description <span className="text-rose-500 normal-case tracking-normal font-bold">*</span>
+                <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold normal-case tracking-normal">Required</span>
+              </label>
               <TaskRichEditor
                 value={description}
                 onChange={setDescription}
@@ -589,9 +593,10 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
             </div>
 
             {/* Task Type */}
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
-                Task Type <span className="text-red-500 normal-case tracking-normal">*</span>
+            <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
+              <label className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                Task Type <span className="text-rose-500 normal-case tracking-normal font-bold">*</span>
+                <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold normal-case tracking-normal">Required</span>
               </label>
               <div className="flex gap-2">
                 {TASK_TYPES.map(t => {
@@ -627,9 +632,10 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
 
             {/* Project picker (only when Project Task is selected) */}
             {taskTypeKey === 'project' && (
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
-                  Project <span className="text-red-500 normal-case tracking-normal">*</span>
+              <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
+                <label className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                  Project <span className="text-rose-500 normal-case tracking-normal font-bold">*</span>
+                  <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold normal-case tracking-normal">Required</span>
                 </label>
                 {loadingProjects ? (
                   <div className="h-10 px-3.5 rounded-xl border border-slate-200 flex items-center text-sm text-slate-400">
@@ -796,56 +802,63 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
             </div>
 
             {/* Date range — Start + End (both required), Outlook-style multi-day span */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
-                  Start date <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={startDateQA}
-                  max={dueDate || undefined}
-                  onChange={e => setStartDateQA(e.target.value)}
-                  data-testid="input-start-date"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block">
-                  End date <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={dueDate}
-                  min={startDateQA || undefined}
-                  onChange={e => setDueDate(e.target.value)}
-                  data-testid="input-end-date"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white"
-                />
+            <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
+              <label className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                Dates <span className="text-rose-500 normal-case tracking-normal font-bold">*</span>
+                <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold normal-case tracking-normal">Required</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">Start date</label>
+                  <input
+                    type="date"
+                    required
+                    value={startDateQA}
+                    max={dueDate || undefined}
+                    onChange={e => setStartDateQA(e.target.value)}
+                    data-testid="input-start-date"
+                    className="w-full h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/30 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300/40 focus:border-rose-400 transition-all bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block">End date</label>
+                  <input
+                    type="date"
+                    required
+                    value={dueDate}
+                    min={startDateQA || undefined}
+                    onChange={e => setDueDate(e.target.value)}
+                    data-testid="input-end-date"
+                    className="w-full h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/30 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300/40 focus:border-rose-400 transition-all bg-white"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Time tracking — Estimated total + per-day allocation */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
+              <label className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Hours <span className="text-rose-500 normal-case tracking-normal font-bold">*</span>
+                <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold normal-case tracking-normal">Required</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block flex items-center gap-1">
                   <Clock className="w-3 h-3" /> Estimated total hrs
                 </label>
                 <input type="number" min="0" step="0.25" placeholder="0.0"
                   value={estimatedHoursQA} onChange={e => setEstimatedHoursQA(e.target.value)}
                   data-testid="input-estimated-hours"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+                  className="w-full h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/30 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300/40 focus:border-rose-400 transition-all" />
               </div>
               <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1 block flex items-center gap-1">
                   <Clock className="w-3 h-3" /> Hours / day
                 </label>
                 <input type="number" min="0" step="0.25" placeholder="e.g. 2"
                   value={hoursPerDayQA} onChange={e => setHoursPerDayQA(e.target.value)}
                   data-testid="input-hours-per-day"
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all bg-white" />
+                  className="w-full h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/30 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300/40 focus:border-rose-400 transition-all" />
               </div>
               <p className="col-span-2 text-[10px] text-slate-400 -mt-1">
                 The task will appear on the calendar from <b>start</b> through <b>end</b>, showing <b>hours / day</b> on each day. Actual hours are auto-tracked.
