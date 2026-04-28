@@ -443,6 +443,8 @@ const MMP = () => {
   // Expanded states for returned sites view
   const [expandedReturnedStates, setExpandedReturnedStates] = useState<Set<string>>(new Set());
   const [expandedReturnedLocalities, setExpandedReturnedLocalities] = useState<Set<string>>(new Set());
+  const [returnedGroupBy, setReturnedGroupBy] = useState<'state' | 'mmp'>('state');
+  const [expandedReturnedMmps, setExpandedReturnedMmps] = useState<Set<string>>(new Set());
   // State permit upload dialog for returned sites
   const [returnedStatePermitDialogOpen, setReturnedStatePermitDialogOpen] = useState(false);
   const [selectedReturnedState, setSelectedReturnedState] = useState<{ state: string; sites: any[]; mmpFileId?: string; stateId?: string } | null>(null);
@@ -3080,6 +3082,31 @@ const MMP = () => {
     return Object.values(grouped);
   }, [mmpFiles, applyHubFilter, hubAccessInfo]);
 
+  // Same data grouped by MMP name (month) for the "By Month" view
+  const returnedSitesByMmp = useMemo(() => {
+    const allReturnedSites = mmpFiles.flatMap(mmp => {
+      let siteEntries = mmp.siteEntries || [];
+      if (applyHubFilter && hubAccessInfo.isHubSupervisor && hubAccessInfo.hubStates.length > 0) {
+        siteEntries = filterByHubAccess(siteEntries, hubAccessInfo);
+      }
+      return siteEntries
+        .filter(site => (site.status || '').toLowerCase() === 'returned_to_fom')
+        .map(site => ({ ...site, mmp_file_id: mmp.id, mmpName: mmp.name }));
+    });
+
+    const grouped: Record<string, { mmpName: string; mmpFileId: string; sites: any[]; totalSites: number }> = {};
+    allReturnedSites.forEach(site => {
+      const key = site.mmpName || 'Unknown MMP';
+      if (!grouped[key]) {
+        grouped[key] = { mmpName: key, mmpFileId: site.mmp_file_id, sites: [], totalSites: 0 };
+      }
+      grouped[key].sites.push(site);
+      grouped[key].totalSites++;
+    });
+
+    return Object.values(grouped).sort((a, b) => a.mmpName.localeCompare(b.mmpName));
+  }, [mmpFiles, applyHubFilter, hubAccessInfo]);
+
   // Load down-payment-linked site info once for use across all badge/count computations
   useEffect(() => {
     const loadDpLinkedSites = async () => {
@@ -4926,13 +4953,119 @@ const MMP = () => {
                 {(isFOM || isSupervisor || isAdmin || isICT) && newFomSubTab === 'returned' ? (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Returned Sites by State</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        These sites were returned by coordinators and require action.
-                      </p>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <CardTitle>
+                            {returnedGroupBy === 'state' ? 'Returned Sites by State' : 'Returned Sites by Month'}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            These sites were returned by coordinators and require action.
+                          </p>
+                        </div>
+                        <div className="flex rounded-lg border border-border overflow-hidden text-xs font-medium shrink-0">
+                          <button
+                            onClick={() => setReturnedGroupBy('state')}
+                            className={`px-3 py-1.5 transition-colors ${returnedGroupBy === 'state' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                          >
+                            By State
+                          </button>
+                          <button
+                            onClick={() => setReturnedGroupBy('mmp')}
+                            className={`px-3 py-1.5 transition-colors border-l border-border ${returnedGroupBy === 'mmp' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                          >
+                            By Month
+                          </button>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {returnedSitesByState.length === 0 ? (
+                      {/* ── By Month view ── */}
+                      {returnedGroupBy === 'mmp' && (
+                        returnedSitesByMmp.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">No returned sites found.</div>
+                        ) : (
+                          <div className="space-y-3">
+                            {returnedSitesByMmp.map(mmpGroup => {
+                              const isExpanded = expandedReturnedMmps.has(mmpGroup.mmpName);
+                              // Group sites by state then locality within this MMP
+                              const byState: Record<string, Record<string, any[]>> = {};
+                              mmpGroup.sites.forEach((site: any) => {
+                                const st = site.state || 'Unknown State';
+                                const loc = site.locality || 'Unknown Locality';
+                                if (!byState[st]) byState[st] = {};
+                                if (!byState[st][loc]) byState[st][loc] = [];
+                                byState[st][loc].push(site);
+                              });
+                              return (
+                                <Card key={mmpGroup.mmpName} className="overflow-hidden">
+                                  <CardContent className="pt-4 pb-3">
+                                    {/* MMP header row */}
+                                    <div
+                                      className="flex items-center justify-between cursor-pointer select-none"
+                                      onClick={() => setExpandedReturnedMmps(prev => {
+                                        const s = new Set(prev);
+                                        s.has(mmpGroup.mmpName) ? s.delete(mmpGroup.mmpName) : s.add(mmpGroup.mmpName);
+                                        return s;
+                                      })}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                        <span className="font-semibold text-base">{mmpGroup.mmpName}</span>
+                                        <Badge className="bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700 text-xs">
+                                          {mmpGroup.totalSites} site{mmpGroup.totalSites !== 1 ? 's' : ''} returned
+                                        </Badge>
+                                      </div>
+                                      <span className="text-xs text-muted-foreground">{Object.keys(byState).length} state{Object.keys(byState).length !== 1 ? 's' : ''}</span>
+                                    </div>
+
+                                    {/* Expanded: flat list of every site with state + locality */}
+                                    {isExpanded && (
+                                      <div className="mt-3 border-t pt-3 space-y-1" onClick={e => e.stopPropagation()}>
+                                        {Object.entries(byState).map(([stateName, localities]) =>
+                                          Object.entries(localities).map(([localityName, sites]) =>
+                                            sites.map((site: any) => {
+                                              const siteName = site.site_name || site.siteName || site.site_code || 'Unknown Site';
+                                              const siteCode = site.site_code || site.siteCode || '';
+                                              const returnReason = site.verification_notes || site.additional_data?.rejection_comments || site.additional_data?.return_reason || site.rejection_comments || '';
+                                              const returnedBy = site.verified_by || site.additional_data?.returned_by_name || site.additional_data?.sent_back_by || '';
+                                              return (
+                                                <div
+                                                  key={site.id}
+                                                  className="flex items-start gap-3 px-3 py-2.5 rounded-md hover:bg-muted/50 transition-colors border border-transparent hover:border-border"
+                                                >
+                                                  <AlertTriangle className="h-3.5 w-3.5 text-orange-500 mt-0.5 shrink-0" />
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                      <span className="font-medium text-sm">{siteName}</span>
+                                                      {siteCode && <span className="text-xs text-muted-foreground">({siteCode})</span>}
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                                      {stateName} › {localityName}
+                                                    </div>
+                                                    {returnReason && (
+                                                      <div className="text-xs text-orange-700 dark:text-orange-400 mt-0.5 italic">"{returnReason}"</div>
+                                                    )}
+                                                  </div>
+                                                  {returnedBy && (
+                                                    <span className="text-xs text-muted-foreground shrink-0">by {returnedBy}</span>
+                                                  )}
+                                                </div>
+                                              );
+                                            })
+                                          )
+                                        )}
+                                      </div>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        )
+                      )}
+
+                      {/* ── By State view (original) ── */}
+                      {returnedGroupBy === 'state' && (returnedSitesByState.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
                           No returned sites found.
                         </div>
@@ -5166,7 +5299,7 @@ const MMP = () => {
                             </Card>
                           );
                         })
-                      )}
+                      ))}
                     </CardContent>
                   </Card>
                 ) : loading ? (
