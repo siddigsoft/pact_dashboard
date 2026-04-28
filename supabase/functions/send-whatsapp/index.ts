@@ -474,19 +474,31 @@ serve(async (req) => {
     type AttemptResult = { ok: boolean; providerId: string | null; errorMsg: string | null; bodySent: string; provider: 'wasender' }
 
     const attemptWasender = async (phone: string, lang: string): Promise<AttemptResult> => {
-      const text = buildWasenderText(event_type, templateData, lang)
-      const bodySent = `[WASENDER] ` + text.slice(0, 950)
+      const message = buildWasenderText(event_type, templateData, lang)
+      const bodySent = `[WASENDER] ` + message.slice(0, 950)
+      // WasenderAPI REST API fields: "phone" + "message"
+      const payload = { phone, message }
+      console.log(`[Wasender] → ${phone} payload keys: ${Object.keys(payload).join(', ')}`)
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           const resp = await fetch(WASENDER_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wasenderKey}` },
-            body: JSON.stringify({ to: phone, text }),
+            body: JSON.stringify(payload),
           })
           const respBody = await resp.text()
+          console.log(`[Wasender] HTTP ${resp.status} → ${respBody.slice(0, 400)}`)
           if (resp.ok) {
             let providerId: string | null = null
-            try { const p = JSON.parse(respBody); providerId = p?.id || p?.messageId || null } catch (_) {}
+            try {
+              const p = JSON.parse(respBody)
+              providerId = p?.id || p?.messageId || p?.message_id || p?.data?.id || null
+              // WasenderAPI may return success:false with HTTP 200
+              if (p?.success === false) {
+                const errorMsg = `Wasender reported failure: ${p?.message || respBody.slice(0, 200)}`
+                return { ok: false, providerId: null, errorMsg, bodySent, provider: 'wasender' }
+              }
+            } catch (_) {}
             return { ok: true, providerId, errorMsg: null, bodySent, provider: 'wasender' }
           }
           const errorMsg = `Wasender HTTP ${resp.status}: ${respBody.slice(0, 300)}`
