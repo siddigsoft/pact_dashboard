@@ -479,8 +479,8 @@ serve(async (req) => {
     const attemptWasender = async (phone: string, lang: string): Promise<AttemptResult> => {
       const message = buildWasenderText(event_type, templateData, lang)
       const bodySent = `[WASENDER] ` + message.slice(0, 950)
-      // WasenderAPI REST API fields: "phone" + "message"
-      const payload = { phone, message }
+      // WasenderAPI REST API fields: "to" + "text"
+      const payload = { to: phone, text: message }
       console.log(`[Wasender] → ${phone} payload keys: ${Object.keys(payload).join(', ')}`)
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
