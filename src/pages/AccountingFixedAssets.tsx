@@ -1,0 +1,416 @@
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { Navigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Loader2, Package, Plus, Download, RefreshCw, Pencil, Search, Trash2, TrendingDown, Calendar, AlertTriangle } from 'lucide-react';
+import { format, parseISO, differenceInMonths, addMonths } from 'date-fns';
+import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
+
+interface Asset {
+  id: string; asset_tag: string | null; name_en: string; name_ar: string | null; category: string;
+  country_id: string | null; location: string | null; acquisition_date: string;
+  acquisition_cost: number; currency: string; useful_life_months: number; salvage_value: number;
+  depreciation_method: string; status: string; disposal_date: string | null;
+  disposal_proceeds: number | null; notes: string | null; serial_number: string | null;
+  supplier: string | null; warranty_expiry: string | null; created_at: string;
+}
+interface Country { id: string; code: string; name_en: string; flag_emoji: string | null }
+
+const CATEGORIES = ['equipment', 'furniture', 'vehicle', 'building', 'it_hardware', 'software', 'other'];
+const DEP_METHODS = [{ v: 'straight_line', l: 'Straight Line' }, { v: 'declining_balance', l: 'Declining Balance (20%)' }];
+const STATUS_OPTIONS = ['active', 'disposed', 'written_off', 'under_repair', 'transferred'];
+
+const STATUS_BADGE: Record<string, string> = {
+  active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30',
+  disposed: 'bg-slate-100 text-slate-600',
+  written_off: 'bg-rose-100 text-rose-800',
+  under_repair: 'bg-amber-100 text-amber-800',
+  transferred: 'bg-blue-100 text-blue-800',
+};
+const CAT_ICONS: Record<string, string> = { vehicle: '🚗', building: '🏢', it_hardware: '💻', software: '💿', equipment: '⚙️', furniture: '🪑', other: '📦' };
+
+function calcDepreciation(asset: Asset, asOfDate: Date): { monthlyDep: number; accumulated: number; bookValue: number; depreciationPct: number } {
+  const cost = Number(asset.acquisition_cost);
+  const salvage = Number(asset.salvage_value);
+  const life = asset.useful_life_months;
+  const acquired = new Date(asset.acquisition_date);
+  const monthsElapsed = Math.min(Math.max(0, differenceInMonths(asOfDate, acquired)), life);
+
+  let accumulated = 0;
+  let monthlyDep = 0;
+
+  if (asset.depreciation_method === 'straight_line') {
+    monthlyDep = (cost - salvage) / life;
+    accumulated = monthlyDep * monthsElapsed;
+  } else if (asset.depreciation_method === 'declining_balance') {
+    const rate = 0.20 / 12;
+    let bv = cost;
+    for (let m = 0; m < monthsElapsed; m++) {
+      const dep = bv * rate;
+      accumulated += dep;
+      bv -= dep;
+      if (bv <= salvage) { accumulated = cost - salvage; break; }
+    }
+    monthlyDep = (cost - salvage) / life;
+  }
+
+  accumulated = Math.min(accumulated, cost - salvage);
+  const bookValue = Math.max(cost - accumulated, salvage);
+  const depreciationPct = cost > 0 ? Math.round((accumulated / (cost - salvage)) * 100) : 0;
+  return { monthlyDep, accumulated, bookValue, depreciationPct };
+}
+
+const BLANK: Partial<Asset> = { name_en: '', name_ar: '', category: 'equipment', currency: 'USD', acquisition_date: new Date().toISOString().slice(0, 10), acquisition_cost: 0, useful_life_months: 60, salvage_value: 0, depreciation_method: 'straight_line', status: 'active', location: '', serial_number: '', supplier: '', notes: '' };
+
+export default function AccountingFixedAssets() {
+  const { hasAnyRole, loading: authLoading } = useAuthorization();
+  const allowed = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant', 'auditor']);
+  const canEdit = hasAnyRole(['super_admin', 'admin', 'finance', 'financialAdmin', 'accountant']);
+  const { toast } = useToast();
+
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [dialog, setDialog] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [form, setForm] = useState<Partial<Asset>>(BLANK);
+  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<Asset | null>(null);
+  const today = useMemo(() => new Date(), []);
+
+  const loadAssets = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const [aRes, cRes] = await Promise.all([
+      supabase.from('acct_fixed_assets').select('*').order('acquisition_date', { ascending: false }),
+      supabase.from('countries').select('id, code, name_en, flag_emoji').eq('is_active', true).order('name_en'),
+    ]);
+    if (aRes.error && aRes.error.code !== '42P01') setError(aRes.error.message);
+    setAssets((aRes.data ?? []) as Asset[]);
+    setCountries((cRes.data ?? []) as Country[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { void loadAssets(); }, [loadAssets]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return assets.filter(a => {
+      if (catFilter !== 'all' && a.category !== catFilter) return false;
+      if (statusFilter !== 'all' && a.status !== statusFilter) return false;
+      if (countryFilter !== 'all' && a.country_id !== countryFilter) return false;
+      if (q) return a.name_en.toLowerCase().includes(q) || (a.asset_tag ?? '').toLowerCase().includes(q) || (a.serial_number ?? '').toLowerCase().includes(q);
+      return true;
+    });
+  }, [assets, search, catFilter, statusFilter, countryFilter]);
+
+  const summaryStats = useMemo(() => {
+    const active = assets.filter(a => a.status === 'active');
+    const totalCost = active.reduce((s, a) => s + Number(a.acquisition_cost), 0);
+    const totalAccumDep = active.reduce((s, a) => { const { accumulated } = calcDepreciation(a, today); return s + accumulated; }, 0);
+    const totalBookValue = active.reduce((s, a) => { const { bookValue } = calcDepreciation(a, today); return s + bookValue; }, 0);
+    const nearingEnd = active.filter(a => { const end = addMonths(new Date(a.acquisition_date), a.useful_life_months); return differenceInMonths(end, today) <= 3 && differenceInMonths(end, today) >= 0; }).length;
+    return { count: active.length, totalCost, totalAccumDep, totalBookValue, nearingEnd };
+  }, [assets, today]);
+
+  const catChartData = useMemo(() => {
+    const m: Record<string, number> = {};
+    assets.filter(a => a.status === 'active').forEach(a => {
+      const { bookValue } = calcDepreciation(a, today);
+      m[a.category] = (m[a.category] ?? 0) + bookValue;
+    });
+    return Object.entries(m).map(([cat, v]) => ({ name: cat.replace('_', ' '), value: Math.round(v) })).sort((a, b) => b.value - a.value);
+  }, [assets, today]);
+
+  const openDialog = (a?: Asset) => {
+    setEditingAsset(a ?? null);
+    setForm(a ? { ...a } : { ...BLANK, country_id: '' });
+    setDialog(true);
+  };
+
+  const save = async () => {
+    if (!form.name_en || !form.acquisition_date) return;
+    setSaving(true);
+    const payload: any = { name_en: form.name_en, name_ar: form.name_ar || null, category: form.category ?? 'equipment', country_id: form.country_id || null, location: form.location || null, acquisition_date: form.acquisition_date, acquisition_cost: Number(form.acquisition_cost ?? 0), currency: form.currency || 'USD', useful_life_months: Number(form.useful_life_months ?? 60), salvage_value: Number(form.salvage_value ?? 0), depreciation_method: form.depreciation_method ?? 'straight_line', status: form.status ?? 'active', serial_number: form.serial_number || null, supplier: form.supplier || null, warranty_expiry: form.warranty_expiry || null, notes: form.notes || null };
+    const { error: err } = editingAsset
+      ? await supabase.from('acct_fixed_assets').update(payload).eq('id', editingAsset.id)
+      : await supabase.from('acct_fixed_assets').insert(payload);
+    if (err) { toast({ title: 'Error', description: err.message, variant: 'destructive' }); setSaving(false); return; }
+    toast({ title: editingAsset ? 'Asset updated' : 'Asset added' });
+    setDialog(false);
+    await loadAssets();
+    setSaving(false);
+  };
+
+  const exportCsv = () => {
+    const header = ['Tag', 'Name', 'Category', 'Acquisition Date', 'Cost', 'Currency', 'Book Value', 'Dep %', 'Status', 'Location'];
+    const rows = filtered.map(a => {
+      const { bookValue, depreciationPct } = calcDepreciation(a, today);
+      return [a.asset_tag ?? '', a.name_en, a.category, a.acquisition_date, a.acquisition_cost.toFixed(2), a.currency, bookValue.toFixed(2), `${depreciationPct}%`, a.status, a.location ?? ''];
+    });
+    downloadCsv(`fixed-assets-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
+  };
+
+  if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (!allowed) return <Navigate to="/" replace />;
+
+  const DepBar = ({ asset }: { asset: Asset }) => {
+    const { depreciationPct, bookValue, accumulated, monthlyDep } = calcDepreciation(asset, today);
+    const color = depreciationPct >= 90 ? 'bg-rose-500' : depreciationPct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
+    return (
+      <div>
+        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+          <span>Book Value: {formatNumber(bookValue)} {asset.currency}</span>
+          <span>{depreciationPct}% depreciated</span>
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+          <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${Math.min(depreciationPct, 100)}%` }} />
+        </div>
+        <div className="text-[10px] text-muted-foreground mt-1">Monthly: {formatNumber(monthlyDep)} · Accumulated: {formatNumber(accumulated)}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="fixed-assets-page">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-slate-700 text-white shrink-0">
+            <Package className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Fixed Assets Register</h1>
+            <p className="text-muted-foreground text-sm">سجل الأصول الثابتة — Asset tracking and depreciation</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={loadAssets} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export"><Download className="h-4 w-4 mr-1" />CSV</Button>
+          {canEdit && <Button size="sm" onClick={() => openDialog()} data-testid="button-add"><Plus className="h-4 w-4 mr-1" />Add Asset</Button>}
+        </div>
+      </div>
+
+      <PageInfoBanner
+        title="Fixed Assets Register"
+        description="Track organizational assets with automatic depreciation calculation (straight-line or declining balance). Book value updates in real time. Run supabase/fixed_assets_migration.sql to activate this page."
+        descriptionAr="تتبع أصول المنظمة مع احتساب الاستهلاك تلقائياً (القسط الثابت أو المتناقص). تتحدث القيمة الدفترية في الوقت الفعلي."
+      />
+
+      {error && <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">{error}</div>}
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: 'Active Assets', v: summaryStats.count, suffix: 'assets', color: 'text-slate-700' },
+          { label: 'Total Acquisition Cost', v: summaryStats.totalCost, suffix: '', color: 'text-slate-700' },
+          { label: 'Total Book Value', v: summaryStats.totalBookValue, suffix: '', color: 'text-indigo-700' },
+          { label: 'Nearing End of Life', v: summaryStats.nearingEnd, suffix: '≤3 months', color: summaryStats.nearingEnd > 0 ? 'text-amber-700' : 'text-muted-foreground' },
+        ].map(s => (
+          <Card key={s.label}><CardContent className="p-3">
+            <div className="text-xs text-muted-foreground">{s.label}</div>
+            <div className={cn('font-bold text-lg tabular-nums mt-0.5', s.color)}>
+              {typeof s.v === 'number' && s.label !== 'Active Assets' && s.label !== 'Nearing End of Life' ? formatNumber(s.v) : s.v}
+              {s.suffix && <span className="text-xs font-normal text-muted-foreground ml-1">{s.suffix}</span>}
+            </div>
+          </CardContent></Card>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <Card className="mb-4">
+        <CardContent className="pt-4 pb-3">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="relative flex-1 min-w-40">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input className="pl-8 h-9 text-sm" placeholder="Search name, tag, serial..." value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search" />
+            </div>
+            <Select value={catFilter} onValueChange={setCatFilter}>
+              <SelectTrigger className="w-36 h-9" data-testid="select-category"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {CATEGORIES.map(c => <SelectItem key={c} value={c}>{CAT_ICONS[c]} {c.replace('_', ' ')}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-36 h-9" data-testid="select-status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={countryFilter} onValueChange={setCountryFilter}>
+              <SelectTrigger className="w-40 h-9" data-testid="select-country"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Countries</SelectItem>
+                {countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Asset list */}
+        <div className="lg:col-span-2 space-y-2">
+          {loading ? (
+            <div className="flex items-center justify-center h-40"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-muted-foreground py-10 text-sm">
+              {assets.length === 0 ? 'No assets found. Run fixed_assets_migration.sql first, then add your first asset.' : 'No assets match the current filters.'}
+            </div>
+          ) : filtered.map(asset => {
+            const { bookValue, depreciationPct } = calcDepreciation(asset, today);
+            const endDate = addMonths(new Date(asset.acquisition_date), asset.useful_life_months);
+            const isNearingEnd = differenceInMonths(endDate, today) <= 3 && asset.status === 'active';
+            return (
+              <div key={asset.id} onClick={() => setSelected(asset.id === selected?.id ? null : asset)} className={cn('border rounded-lg p-3 cursor-pointer transition-all hover:shadow-sm', selected?.id === asset.id ? 'border-slate-500 bg-slate-50 dark:bg-slate-900/30' : 'hover:border-slate-300')} data-testid={`asset-card-${asset.id}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold">{CAT_ICONS[asset.category]} {asset.name_en}</span>
+                      {asset.asset_tag && <span className="text-[10px] font-mono text-muted-foreground">{asset.asset_tag}</span>}
+                      {isNearingEnd && <Badge className="text-[10px] bg-amber-100 text-amber-800 border-amber-200"><AlertTriangle className="h-2.5 w-2.5 mr-0.5" />End of life</Badge>}
+                    </div>
+                    {asset.name_ar && <div className="text-[11px] text-muted-foreground" dir="rtl">{asset.name_ar}</div>}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap text-[10px] text-muted-foreground">
+                      <span>{format(parseISO(asset.acquisition_date), 'MMM yyyy')}</span>
+                      <span>{formatNumber(asset.acquisition_cost)} {asset.currency}</span>
+                      {asset.location && <span>📍 {asset.location}</span>}
+                    </div>
+                    <div className="mt-2"><DepBar asset={asset} /></div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <Badge className={cn('text-[10px]', STATUS_BADGE[asset.status] ?? '')}>{asset.status}</Badge>
+                    {canEdit && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={e => { e.stopPropagation(); openDialog(asset); }} data-testid={`button-edit-${asset.id}`}><Pencil className="h-3 w-3" /></Button>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <p className="text-xs text-muted-foreground text-center pt-1">{filtered.length} asset{filtered.length !== 1 ? 's' : ''}</p>
+        </div>
+
+        {/* Right panel: chart or asset detail */}
+        <div className="space-y-4">
+          {selected ? (
+            <Card>
+              <CardHeader className="pb-2 pt-3">
+                <CardTitle className="text-sm">{CAT_ICONS[selected.category]} {selected.name_en}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs space-y-2">
+                {[
+                  { l: 'Tag', v: selected.asset_tag ?? '—' },
+                  { l: 'Serial No.', v: selected.serial_number ?? '—' },
+                  { l: 'Supplier', v: selected.supplier ?? '—' },
+                  { l: 'Acquired', v: format(parseISO(selected.acquisition_date), 'dd MMM yyyy') },
+                  { l: 'Cost', v: `${formatNumber(selected.acquisition_cost)} ${selected.currency}` },
+                  { l: 'Salvage Value', v: `${formatNumber(selected.salvage_value)} ${selected.currency}` },
+                  { l: 'Useful Life', v: `${selected.useful_life_months} months` },
+                  { l: 'Method', v: DEP_METHODS.find(d => d.v === selected.depreciation_method)?.l ?? selected.depreciation_method },
+                  { l: 'Warranty', v: selected.warranty_expiry ? format(parseISO(selected.warranty_expiry), 'dd MMM yyyy') : '—' },
+                  { l: 'Location', v: selected.location ?? '—' },
+                ].map(r => (
+                  <div key={r.l} className="flex justify-between border-b pb-1">
+                    <span className="text-muted-foreground">{r.l}</span>
+                    <span className="font-medium">{r.v}</span>
+                  </div>
+                ))}
+                <div className="pt-1"><DepBar asset={selected} /></div>
+                {selected.notes && <div className="text-muted-foreground italic pt-1">{selected.notes}</div>}
+              </CardContent>
+            </Card>
+          ) : (
+            catChartData.length > 0 && (
+              <Card>
+                <CardHeader className="pb-1 pt-3"><CardTitle className="text-sm">Book Value by Category</CardTitle></CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={catChartData} layout="vertical" margin={{ top: 4, right: 20, left: 50, bottom: 4 }}>
+                      <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => formatNumber(v)} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={50} />
+                      <Tooltip formatter={(v: number) => formatNumber(v)} />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                        {catChartData.map((_, i) => <Cell key={i} fill={['#6366f1', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#22c55e', '#64748b'][i % 7]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )
+          )}
+        </div>
+      </div>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialog} onOpenChange={setDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingAsset ? 'Edit' : 'Add'} Fixed Asset</DialogTitle>
+            <DialogDescription>Register a new fixed asset for depreciation tracking.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Label className="text-xs mb-1">Name (English) *</Label><Input className="h-9" value={form.name_en ?? ''} onChange={e => setForm(p => ({ ...p, name_en: e.target.value }))} data-testid="input-name-en" /></div>
+            <div className="col-span-2"><Label className="text-xs mb-1">Name (Arabic)</Label><Input className="h-9" value={form.name_ar ?? ''} onChange={e => setForm(p => ({ ...p, name_ar: e.target.value }))} dir="rtl" data-testid="input-name-ar" /></div>
+            <div><Label className="text-xs mb-1">Category</Label>
+              <Select value={form.category ?? 'equipment'} onValueChange={v => setForm(p => ({ ...p, category: v }))}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{CAT_ICONS[c]} {c.replace('_', ' ')}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs mb-1">Country</Label>
+              <Select value={form.country_id ?? ''} onValueChange={v => setForm(p => ({ ...p, country_id: v }))}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select country" /></SelectTrigger>
+                <SelectContent>{countries.map(c => <SelectItem key={c.id} value={c.id}>{c.flag_emoji ?? ''} {c.name_en}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs mb-1">Acquisition Date *</Label><Input type="date" className="h-9" value={form.acquisition_date ?? ''} onChange={e => setForm(p => ({ ...p, acquisition_date: e.target.value }))} /></div>
+            <div><Label className="text-xs mb-1">Acquisition Cost *</Label><Input type="number" className="h-9" value={form.acquisition_cost ?? 0} onChange={e => setForm(p => ({ ...p, acquisition_cost: Number(e.target.value) }))} /></div>
+            <div><Label className="text-xs mb-1">Currency</Label><Input className="h-9" value={form.currency ?? 'USD'} onChange={e => setForm(p => ({ ...p, currency: e.target.value.toUpperCase().slice(0, 3) }))} /></div>
+            <div><Label className="text-xs mb-1">Salvage Value</Label><Input type="number" className="h-9" value={form.salvage_value ?? 0} onChange={e => setForm(p => ({ ...p, salvage_value: Number(e.target.value) }))} /></div>
+            <div><Label className="text-xs mb-1">Useful Life (months)</Label><Input type="number" className="h-9" value={form.useful_life_months ?? 60} onChange={e => setForm(p => ({ ...p, useful_life_months: Number(e.target.value) }))} /></div>
+            <div><Label className="text-xs mb-1">Depreciation Method</Label>
+              <Select value={form.depreciation_method ?? 'straight_line'} onValueChange={v => setForm(p => ({ ...p, depreciation_method: v }))}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>{DEP_METHODS.map(d => <SelectItem key={d.v} value={d.v}>{d.l}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs mb-1">Status</Label>
+              <Select value={form.status ?? 'active'} onValueChange={v => setForm(p => ({ ...p, status: v }))}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>{STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs mb-1">Location</Label><Input className="h-9" value={form.location ?? ''} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} /></div>
+            <div><Label className="text-xs mb-1">Serial Number</Label><Input className="h-9" value={form.serial_number ?? ''} onChange={e => setForm(p => ({ ...p, serial_number: e.target.value }))} /></div>
+            <div><Label className="text-xs mb-1">Supplier</Label><Input className="h-9" value={form.supplier ?? ''} onChange={e => setForm(p => ({ ...p, supplier: e.target.value }))} /></div>
+            <div><Label className="text-xs mb-1">Warranty Expiry</Label><Input type="date" className="h-9" value={form.warranty_expiry ?? ''} onChange={e => setForm(p => ({ ...p, warranty_expiry: e.target.value }))} /></div>
+            <div className="col-span-2"><Label className="text-xs mb-1">Notes</Label><Input className="h-9" value={form.notes ?? ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialog(false)}>Cancel</Button>
+            <Button onClick={save} disabled={saving || !form.name_en} data-testid="button-save">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{editingAsset ? 'Update' : 'Add Asset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

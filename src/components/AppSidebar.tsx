@@ -503,6 +503,15 @@
     if (!isHidden('/accounting/vendors') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole)) {
       acctItems.push({ id: 'accounting-vendors', title: 'Vendor Registry', url: '/accounting/vendors', icon: Building2, priority: 3.9, isPinned: isPinned('/accounting/vendors') });
     }
+    if (!isHidden('/accounting/ap-aging') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-ap-aging', title: 'AP Aging', url: '/accounting/ap-aging', icon: Clock, priority: 3.91, isPinned: isPinned('/accounting/ap-aging') });
+    }
+    if (!isHidden('/accounting/cash-flow') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-cash-flow', title: 'Cash Flow', url: '/accounting/cash-flow', icon: Activity, priority: 3.92, isPinned: isPinned('/accounting/cash-flow') });
+    }
+    if (!isHidden('/accounting/fixed-assets') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-fixed-assets', title: 'Fixed Assets', url: '/accounting/fixed-assets', icon: Package, priority: 3.93, isPinned: isPinned('/accounting/fixed-assets') });
+    }
     if (!isHidden('/finance/audit-trail') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditorRole)) {
       acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
     }

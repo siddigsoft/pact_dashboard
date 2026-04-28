@@ -45,6 +45,7 @@ import { BUDGET_STATUS_COLORS, BUDGET_ALERT_SEVERITY_COLORS } from '@/types/budg
 import { exportBudgetToPDF, exportBudgetToExcel, exportBudgetToCSV } from '@/utils/budget-export';
 import type { BudgetExportData } from '@/utils/budget-export';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 
 const formatCurrency = (cents: number) => {
   return new Intl.NumberFormat('en-SD', {
@@ -153,6 +154,29 @@ const BudgetPage = () => {
     const projectIdsWithBudgets = new Set(projectBudgets.map(pb => pb.projectId));
     return projects.filter(p => !projectIdsWithBudgets.has(p.id));
   }, [projects, projectBudgets]);
+
+  const utilizationPieData = useMemo(() => {
+    if (!stats) return [];
+    return [
+      { name: 'Spent', value: Math.round(stats.totalSpent), color: '#ef4444' },
+      { name: 'Remaining', value: Math.max(0, Math.round(stats.totalBudget - stats.totalSpent)), color: '#22c55e' },
+    ].filter(d => d.value > 0);
+  }, [stats]);
+
+  const projectBarData = useMemo(() => {
+    return projectBudgets
+      .filter(pb => pb.totalBudgetCents > 0)
+      .map(pb => {
+        const proj = projects.find(p => p.id === pb.projectId);
+        return {
+          name: (proj?.name ?? 'Unknown').slice(0, 16),
+          Budget: Math.round(pb.totalBudgetCents / 100),
+          Spent: Math.round(pb.spentBudgetCents / 100),
+        };
+      })
+      .sort((a, b) => b.Budget - a.Budget)
+      .slice(0, 8);
+  }, [projectBudgets, projects]);
 
   const selectedOverviewProject = useMemo(() => {
     return projects.find(p => p.id === selectedProjectIdOverview);
@@ -815,28 +839,56 @@ const BudgetPage = () => {
             <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
               <CardHeader>
                 <CardTitle className="text-xl font-bold text-blue-300">Budget Utilization</CardTitle>
+                <p className="text-blue-300/60 text-sm">Spent vs. remaining across all projects</p>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-12">
-                  <PieChart className="w-16 h-16 mx-auto text-blue-400 mb-4" />
-                  <p className="text-blue-300/70">
-                    Chart visualization coming soon
-                  </p>
-                </div>
+                {utilizationPieData.length > 0 ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <RechartsPieChart>
+                        <Pie data={utilizationPieData} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} label={({ name, percent }) => `${name} ${Math.round((percent ?? 0) * 100)}%`} labelLine={false}>
+                          {utilizationPieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v: number) => formatCurrency(v * 100)} />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                    <div className="flex gap-4 text-xs">
+                      {utilizationPieData.map(d => (
+                        <div key={d.name} className="flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                          <span className="text-blue-200">{d.name}: {formatCurrency(d.value * 100)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {stats && <p className="text-xs text-blue-300/60">{stats.utilizationRate.toFixed(1)}% utilization rate</p>}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-blue-300/50 text-sm">No budget data available yet</div>
+                )}
               </CardContent>
             </Card>
 
             <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
               <CardHeader>
-                <CardTitle className="text-xl font-bold text-purple-300">Spending Trends</CardTitle>
+                <CardTitle className="text-xl font-bold text-purple-300">Budget vs. Spend by Project</CardTitle>
+                <p className="text-purple-300/60 text-sm">Top projects by allocated budget</p>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-12">
-                  <BarChart3 className="w-16 h-16 mx-auto text-purple-400 mb-4" />
-                  <p className="text-purple-300/70">
-                    Trend analysis coming soon
-                  </p>
-                </div>
+                {projectBarData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={projectBarData} margin={{ top: 4, right: 10, left: 10, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                      <XAxis dataKey="name" tick={{ fill: '#c4b5fd', fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fill: '#c4b5fd', fontSize: 9 }} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
+                      <Tooltip formatter={(v: number) => formatCurrency(v * 100)} contentStyle={{ background: '#1e1b4b', border: '1px solid #7c3aed', borderRadius: 6, fontSize: 11 }} />
+                      <Legend wrapperStyle={{ color: '#c4b5fd', fontSize: 11 }} />
+                      <Bar dataKey="Budget" fill="#7c3aed" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="Spent" fill="#ec4899" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8 text-purple-300/50 text-sm">No project budget data available yet</div>
+                )}
               </CardContent>
             </Card>
           </div>
