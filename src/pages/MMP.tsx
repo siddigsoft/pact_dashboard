@@ -2988,6 +2988,8 @@ const MMP = () => {
       mmpsToLoad = categorizedMMPs.forwarded || [];
     } else if (activeTab === 'new') {
       mmpsToLoad = categorizedMMPs.new || [];
+    } else if (activeTab === 'tracker') {
+      mmpsToLoad = trackerMMPs;
     }
     
     // Find MMPs that don't have site entries loaded yet
@@ -3001,7 +3003,7 @@ const MMP = () => {
     if (mmpsNeedingEntries.length > 0) {
       loadSiteEntriesForMMPs(mmpsNeedingEntries);
     }
-  }, [activeTab, categorizedMMPs.verified, categorizedMMPs.forwarded, categorizedMMPs.new, mmpFiles, loadSiteEntriesForMMPs]);
+  }, [activeTab, categorizedMMPs.verified, categorizedMMPs.forwarded, categorizedMMPs.new, trackerMMPs, mmpFiles, loadSiteEntriesForMMPs]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
