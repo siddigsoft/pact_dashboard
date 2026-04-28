@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { Calendar } from 'lucide-react';
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 export const DashboardCalendarCard = () => {
   const { siteVisits } = useSiteVisitContext();
@@ -25,7 +25,7 @@ export const DashboardCalendarCard = () => {
           {upcoming.map(v => (
             <li key={v.id} className="flex items-center gap-2 mb-2">
               <span className="font-medium">{v.siteName}</span>
-              <span className="text-xs text-muted-foreground">{format(new Date(v.dueDate), 'MMM d, yyyy')}</span>
+              <span className="text-xs text-muted-foreground">{safeFormat(v.dueDate, 'MMM d, yyyy')}</span>
               <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-800">{v.status}</span>
               <span className="text-xs text-muted-foreground">{v.hub || ''}</span>
             </li>

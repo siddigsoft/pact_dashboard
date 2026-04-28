@@ -19,7 +19,7 @@ import {
   getTimeRemaining, 
   getDeadlineUrgency 
 } from '@/utils/confirmationDeadlines';
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 interface PendingConfirmation {
   id: string;
@@ -276,7 +276,7 @@ export function ConfirmationStatusWidget() {
                         <p className="text-sm font-medium truncate">{item.siteName}</p>
                         <div className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          <span>Deadline: {format(new Date(item.confirmationDeadline), 'MMM d, h:mm a')}</span>
+                          <span>Deadline: {safeFormat(item.confirmationDeadline, 'MMM d, h:mm a')}</span>
                         </div>
                       </div>
                     </div>

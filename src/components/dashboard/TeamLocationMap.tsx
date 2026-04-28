@@ -5,7 +5,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter, Maximize2, Minimize2, X, Users } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Badge } from '@/components/ui/badge';
@@ -272,9 +273,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
           ? `<img src="${user.avatar}" alt="${userName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${markerColor};" onerror="this.style.display='none'" />`
           : `<div style="width: 40px; height: 40px; border-radius: 50%; background: ${markerColor}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px;">${userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}</div>`;
 
-        const exactTimeText = lastSeenTime 
-          ? format(new Date(lastSeenTime), 'MMM d, yyyy h:mm a')
-          : 'Never';
+        const exactTimeText = safeFormat(lastSeenTime, 'MMM d, yyyy h:mm a', 'Never');
         
         const phoneNumber = (user as any).phone || '';
         const userEmail = (user as any).email || '';

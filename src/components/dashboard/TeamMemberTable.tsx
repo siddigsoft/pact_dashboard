@@ -11,7 +11,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Circle, MapPin, Clock, MessageSquare } from 'lucide-react';
 import { User } from '@/types/user';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { TeamMemberActions } from '@/components/team/TeamMemberActions';
 import { useNavigate } from 'react-router-dom';
@@ -89,7 +90,7 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
   const getLastLoginDate = (user: User) => {
     const lastSeenTime = user.location?.lastUpdated || user.lastActive;
     if (!lastSeenTime) return null;
-    return format(new Date(lastSeenTime), 'MMM dd, yyyy HH:mm');
+    return safeFormat(lastSeenTime, 'MMM dd, yyyy HH:mm');
   };
 
   return (

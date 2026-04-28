@@ -36,7 +36,8 @@ import {
 } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 interface TeamMemberDetailModalProps {
   open: boolean;
@@ -371,7 +372,7 @@ export const TeamMemberDetailModal: React.FC<TeamMemberDetailModalProps> = ({
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Calendar className="h-3 w-3" />
-                            <span>{format(new Date(task.completedAt || task.createdAt || task.dueDate), 'MMM dd, yyyy HH:mm')}</span>
+                            <span>{safeFormat(task.completedAt || task.createdAt || task.dueDate, 'MMM dd, yyyy HH:mm')}</span>
                           </div>
                         </div>
                         <Badge variant="outline" className="text-[10px]">

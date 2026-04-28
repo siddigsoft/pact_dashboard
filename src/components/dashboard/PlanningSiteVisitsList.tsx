@@ -5,7 +5,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SiteVisit } from '@/types/siteVisit';
-import { format, isWithinInterval, addDays, isPast } from 'date-fns';
+import { isWithinInterval, addDays, isPast } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -183,7 +184,7 @@ const PlanningSiteVisitsList: React.FC<PlanningSiteVisitsListProps> = ({ siteVis
                         <div className="flex items-center gap-1.5 text-muted-foreground">
                           <Calendar className="h-3.5 w-3.5 shrink-0" />
                           <span className="tabular-nums">
-                            {format(new Date(visit.scheduledDate), 'MMM dd, yyyy')}
+                            {safeFormat(visit.scheduledDate, 'MMM dd, yyyy')}
                           </span>
                         </div>
                       )}

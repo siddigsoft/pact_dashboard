@@ -43,7 +43,7 @@ import {
   GitBranch,
   AlertTriangle
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -759,7 +759,7 @@ export const FOMZone: React.FC = () => {
                                 {mmp.project?.name || mmp.project_name || 'No project'}
                                 {mmp.uploaded_at && (
                                   <span className="ml-2">
-                                    • {format(new Date(mmp.uploaded_at), 'MMM dd, yyyy')}
+                                    • {safeFormat(mmp.uploaded_at, 'MMM dd, yyyy')}
                                   </span>
                                 )}
                               </div>
@@ -943,9 +943,7 @@ export const FOMZone: React.FC = () => {
                           const hasPermitAttached = hasPermit(mmp);
                           const daysSince = getDaysSinceForwarded(mmp);
                           const workflow = mmp.workflow as any;
-                          const forwardedAt = workflow?.forwardedAt 
-                            ? format(new Date(workflow.forwardedAt), 'MMM dd, yyyy')
-                            : '-';
+                          const forwardedAt = safeFormat(workflow?.forwardedAt, 'MMM dd, yyyy', '-');
                           
                           return (
                             <Card key={mmp.id} className="p-4">
@@ -1022,9 +1020,7 @@ export const FOMZone: React.FC = () => {
                               const hasPermitAttached = hasPermit(mmp);
                               const daysSince = getDaysSinceForwarded(mmp);
                               const workflow = mmp.workflow as any;
-                              const forwardedAt = workflow?.forwardedAt 
-                                ? format(new Date(workflow.forwardedAt), 'MMM dd, yyyy')
-                                : '-';
+                              const forwardedAt = safeFormat(workflow?.forwardedAt, 'MMM dd, yyyy', '-');
                               
                               return (
                                 <TableRow key={mmp.id} className="hover:bg-muted/50">
@@ -1156,9 +1152,7 @@ export const FOMZone: React.FC = () => {
                                 <div>
                                   <span className="text-muted-foreground">Uploaded:</span>
                                   <div className="font-medium">
-                                    {mmp.uploaded_at 
-                                      ? format(new Date(mmp.uploaded_at), 'MMM dd, yyyy')
-                                      : '-'}
+                                    {safeFormat(mmp.uploaded_at, 'MMM dd, yyyy', '-')}
                                   </div>
                                 </div>
                               </div>
@@ -1200,9 +1194,7 @@ export const FOMZone: React.FC = () => {
                                 </TableCell>
                                 <TableCell>{mmp.hub || '-'}</TableCell>
                                 <TableCell>
-                                  {mmp.uploaded_at 
-                                    ? format(new Date(mmp.uploaded_at), 'MMM dd, yyyy')
-                                    : '-'}
+                                  {safeFormat(mmp.uploaded_at, 'MMM dd, yyyy', '-')}
                                 </TableCell>
                                 <TableCell>
                                   <Badge variant={mmp.status === 'approved' ? 'default' : 'secondary'}>

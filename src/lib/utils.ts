@@ -2,6 +2,17 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import React from "react"
+import { format, isValid } from "date-fns"
+
+export function safeFormat(
+  value: string | number | Date | null | undefined,
+  formatStr: string,
+  fallback = '—'
+): string {
+  if (value === null || value === undefined || value === '') return fallback;
+  const d = value instanceof Date ? value : new Date(value);
+  return isValid(d) ? format(d, formatStr) : fallback;
+}
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

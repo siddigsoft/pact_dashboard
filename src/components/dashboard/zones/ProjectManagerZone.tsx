@@ -55,7 +55,8 @@ import {
   CheckSquare,
   XCircle
 } from 'lucide-react';
-import { format, differenceInDays, isAfter, isBefore, addDays } from 'date-fns';
+import { differenceInDays, isAfter, isBefore, addDays } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
@@ -628,8 +629,8 @@ export const ProjectManagerZone: React.FC = () => {
                               <Progress value={progress} className="h-1.5" />
                               <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
                                 <span>
-                                  {project.start_date && format(new Date(project.start_date), 'MMM d, yyyy')}
-                                  {project.end_date && ` - ${format(new Date(project.end_date), 'MMM d, yyyy')}`}
+                                  {project.start_date && safeFormat(project.start_date, 'MMM d, yyyy')}
+                                  {project.end_date && ` - ${safeFormat(project.end_date, 'MMM d, yyyy')}`}
                                 </span>
                                 <ExternalLink className="h-3 w-3" />
                               </div>
@@ -787,7 +788,7 @@ export const ProjectManagerZone: React.FC = () => {
                               </div>
                             </TableCell>
                             <TableCell>{approval.requestedBy || 'N/A'}</TableCell>
-                            <TableCell>{format(new Date(approval.requestedAt), 'MMM d, yyyy')}</TableCell>
+                            <TableCell>{safeFormat(approval.requestedAt, 'MMM d, yyyy')}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <Button 
@@ -961,7 +962,7 @@ export const ProjectManagerZone: React.FC = () => {
                               <TableCell>
                                 <Badge variant="outline" className="capitalize">{deadline.type}</Badge>
                               </TableCell>
-                              <TableCell>{format(new Date(deadline.dueDate), 'MMM d, yyyy')}</TableCell>
+                              <TableCell>{safeFormat(deadline.dueDate, 'MMM d, yyyy')}</TableCell>
                               <TableCell>
                                 <span className={daysUntil < 0 ? 'text-red-500 font-medium' : daysUntil <= 7 ? 'text-orange-500' : ''}>
                                   {daysUntil < 0 ? `${Math.abs(daysUntil)}d overdue` : `${daysUntil}d`}
@@ -1132,7 +1133,7 @@ export const ProjectManagerZone: React.FC = () => {
                   </p>
                 )}
                 <p className="text-sm">
-                  <span className="text-muted-foreground">Date:</span> {format(new Date(selectedApproval.requestedAt), 'MMM d, yyyy HH:mm')}
+                  <span className="text-muted-foreground">Date:</span> {safeFormat(selectedApproval.requestedAt, 'MMM d, yyyy HH:mm')}
                 </p>
               </div>
             </div>

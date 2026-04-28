@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { Clock, CheckCircle, UserCheck, DollarSign, Loader2 } from "lucide-react";
 import { isTerminalCompletionRawStatus } from '@/utils/siteCompletionStatus';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
@@ -169,7 +169,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                           )}
                         </TableCell>
                         <TableCell>{visit.locality}, {visit.state}</TableCell>
-                        <TableCell>{format(new Date(visit.dueDate), 'MMM d, yyyy')}</TableCell>
+                        <TableCell>{safeFormat(visit.dueDate, 'MMM d, yyyy')}</TableCell>
                         <TableCell>
                           <Badge variant="secondary">
                             {visit.status === 'pending' ? 'Pending' : 'Permit Verified'}
@@ -254,7 +254,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                           )}
                         </TableCell>
                         <TableCell>{visit.locality}, {visit.state}</TableCell>
-                        <TableCell>{format(new Date(visit.dueDate), 'MMM d, yyyy')}</TableCell>
+                        <TableCell>{safeFormat(visit.dueDate, 'MMM d, yyyy')}</TableCell>
                         <TableCell>
                           <Badge variant={visit.status === 'inProgress' ? 'default' : 'outline'}>
                             {visit.status === 'inProgress' ? 'In Progress' : 'Assigned'}
@@ -341,7 +341,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                           )}
                         </TableCell>
                         <TableCell>{visit.locality}, {visit.state}</TableCell>
-                        <TableCell>{visit.completedAt ? format(new Date(visit.completedAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                        <TableCell>{visit.completedAt ? safeFormat(visit.completedAt, 'MMM d, yyyy') : 'N/A'}</TableCell>
                         <TableCell>
                           {visit.rating ? `${visit.rating}/5` : 'Not rated'}
                         </TableCell>

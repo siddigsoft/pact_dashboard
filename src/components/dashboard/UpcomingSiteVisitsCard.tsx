@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, MapPin, Navigation2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { SiteVisit } from '@/types';
 
 interface UpcomingSiteVisitsCardProps {
@@ -68,7 +68,7 @@ const UpcomingSiteVisitsCard = ({ siteVisits }: UpcomingSiteVisitsCardProps) => 
                         {visit.priority} priority
                       </Badge>
                       <Badge variant="outline" className="bg-purple-50">
-                        {format(new Date(visit.dueDate), 'MMM dd')}
+                        {safeFormat(visit.dueDate, 'MMM dd')}
                       </Badge>
                     </div>
                   </div>

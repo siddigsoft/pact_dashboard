@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SiteVisit } from '@/types/siteVisit';
 import { User } from '@/types/user';
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import 'leaflet/dist/leaflet.css';
 
@@ -413,7 +413,7 @@ const PlanningSiteVisitsMap: FC<PlanningSiteVisitsMapProps> = ({ siteVisits, tea
                             Scheduled:
                           </span>
                           <span className="font-medium">
-                            {format(new Date(visit.scheduledDate), 'MMM dd, yyyy')}
+                            {safeFormat(visit.scheduledDate, 'MMM dd, yyyy')}
                           </span>
                         </div>
                       )}

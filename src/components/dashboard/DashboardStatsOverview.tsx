@@ -7,7 +7,8 @@ import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useNavigate } from 'react-router-dom';
-import { format, startOfMonth, subMonths, isAfter } from 'date-fns';
+import { startOfMonth, subMonths, isAfter } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon, ClipboardDocumentCheckIcon, CalendarDaysIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -455,7 +456,7 @@ export const DashboardStatsOverview = () => {
                 {upcoming.map(u => (
                   <li key={u.id} className="flex justify-between items-center py-1">
                     <div className="truncate">{u.siteName || u.siteCode || 'Unnamed site'}</div>
-                    <div className="text-xs text-muted-foreground">{u.dueDate ? format(new Date(u.dueDate), 'MMM d') : '-'}</div>
+                    <div className="text-xs text-muted-foreground">{safeFormat(u.dueDate, 'MMM d', '-')}</div>
                   </li>
                 ))}
               </ul>
