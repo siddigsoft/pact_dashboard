@@ -304,9 +304,17 @@ export default function AdminWhatsAppPage() {
         }),
       }
     );
-    const result = await response.json() as { sent?: number; failed?: number; error?: string; sent_via_wasender?: number };
+    const result = await response.json() as { sent?: number; failed?: number; error?: string; sent_via_wasender?: number; skipped?: boolean; reason?: string; failure_details?: Array<{ phone: string; error: string }> };
     if (!response.ok || result.error) throw new Error(result.error || 'Send failed');
-    if ((result.sent ?? 0) === 0) throw new Error('Message not delivered — check the phone number and API key');
+    if ((result.sent ?? 0) === 0) {
+      // Show the specific WasenderAPI error if available
+      const detail = result.failure_details?.[0]?.error;
+      const reason = result.reason;
+      if (detail) throw new Error(`Delivery failed: ${detail}`);
+      if (reason === 'quiet_hours') throw new Error('Quiet hours active (10 PM – 7 AM Khartoum). Use urgent priority to override.');
+      if (reason === 'No valid phones') throw new Error('Phone number format not recognised. Try international format: +249XXXXXXXXX');
+      throw new Error('Message not delivered — check the phone number and API key');
+    }
     return result;
   };
 

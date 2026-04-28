@@ -553,7 +553,7 @@ serve(async (req) => {
           console.error(`[WhatsApp] log insert failed:`, logErr instanceof Error ? logErr.message : logErr)
         }
 
-        return { phone, success, provider, skipped: false as const }
+        return { phone, success, provider, errorMsg, skipped: false as const }
       }),
     )
 
@@ -561,6 +561,11 @@ serve(async (req) => {
     const rateLimitedSkipped = results.filter(r => r.skipped).length
     skippedCount += rateLimitedSkipped
     const failed = results.filter(r => !r.success && !r.skipped).length
+
+    // Collect per-phone error details to return to caller
+    const failureDetails = (results as Array<{ phone: string; success: boolean; skipped?: boolean; errorMsg?: string | null }>)
+      .filter(r => !r.success && !r.skipped)
+      .map(r => ({ phone: r.phone, error: (r as any).errorMsg ?? 'unknown' }))
 
     try {
       await supabase.from('audit_logs').insert({
@@ -578,6 +583,7 @@ serve(async (req) => {
         sent, failed, total: normalized.length, skipped: skippedCount,
         provider: 'wasender',
         sent_via_wasender: sent,
+        ...(failureDetails.length > 0 ? { failure_details: failureDetails } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
