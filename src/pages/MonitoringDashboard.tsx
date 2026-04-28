@@ -516,6 +516,8 @@ function MonitoringContent({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     { key: 'accepted',          label: 'Accepted',           color: 'bg-violet-50 text-violet-700 border-violet-200',   dot: 'bg-violet-500'  },
     { key: 'inprogress',        label: 'In Progress',        color: 'bg-purple-50 text-purple-700 border-purple-200',   dot: 'bg-purple-500'  },
     { key: 'completed',         label: 'Completed',          color: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: 'bg-emerald-500' },
+    { key: 'submitted',         label: 'Submitted',          color: 'bg-cyan-50 text-cyan-700 border-cyan-200',         dot: 'bg-cyan-500'    },
+    { key: 'wfpconfirmed',      label: 'WFP Confirmed',      color: 'bg-teal-50 text-teal-700 border-teal-200',         dot: 'bg-teal-500'    },
     { key: 'returned',          label: 'Returned',           color: 'bg-amber-50 text-amber-700 border-amber-200',      dot: 'bg-amber-500'   },
     { key: 'rejected',          label: 'Rejected',           color: 'bg-rose-50 text-rose-700 border-rose-200',         dot: 'bg-rose-500'    },
     { key: 'cancelled',         label: 'Cancelled',          color: 'bg-red-50 text-red-700 border-red-200',            dot: 'bg-red-400'     },
