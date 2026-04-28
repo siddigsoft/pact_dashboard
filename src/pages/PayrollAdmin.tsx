@@ -213,7 +213,9 @@ const AVATAR_COLORS = [
 function avatarColor(str: string) { return AVATAR_COLORS[str.charCodeAt(0) % AVATAR_COLORS.length]; }
 
 // ── PDF ──────────────────────────────────────────────────────────────────────
-function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem) {
+interface YTDTotals { gross: number; deductions: number; net: number; months: number }
+
+function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem, ytd?: YTDTotals) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const W = 210;
 
@@ -238,23 +240,28 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem) {
   doc.text(`Pay Period: ${run.period_label}`, W - 14, 25, { align: 'right' });
   doc.text(`Issue Date: ${format(new Date(), 'dd MMMM yyyy')}`, W - 14, 31.5, { align: 'right' });
 
-  // Employee info panel
+  // Employee info panel — 4 rows: Name, ID + Role, Dept + Email, Employment type + contract
   doc.setFillColor(248, 250, 255);
-  doc.rect(14, 50, W - 28, 34, 'F');
+  doc.rect(14, 50, W - 28, 42, 'F');
   doc.setDrawColor(220, 228, 245);
-  doc.rect(14, 50, W - 28, 34, 'S');
+  doc.rect(14, 50, W - 28, 42, 'S');
 
   doc.setTextColor(15, 32, 65);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
   doc.text(emp.full_name ?? '—', 20, 61);
+
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(80, 100, 140);
   doc.text(`Employee ID: ${item.user_id.slice(0, 8).toUpperCase()}`, 20, 69);
   doc.text(`Role: ${emp.role ?? '—'}`, 20, 76);
+  const empTypeLabel = emp.employment_type ? emp.employment_type.replace(/_/g, ' ') : '—';
+  const contractLabel = emp.contract_type ? emp.contract_type.replace(/_/g, ' ') : '—';
+  doc.text(`Employment: ${empTypeLabel}`, 20, 83);
 
   doc.setTextColor(80, 100, 140);
   doc.text(`Department: ${item.department_name ?? '—'}`, W / 2, 61);
   doc.text(`Email: ${emp.email ?? '—'}`, W / 2, 69);
   doc.text(`Currency: ${item.currency}`, W / 2, 76);
+  doc.text(`Contract: ${contractLabel}`, W / 2, 83);
 
   // Earnings
   const earningsRows: any[] = [
@@ -272,7 +279,7 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem) {
   ];
 
   autoTable(doc, {
-    startY: 92,
+    startY: 100,
     head: [['EARNINGS', 'BASIS', 'AMOUNT']],
     body: earningsRows,
     theme: 'striped',
@@ -321,8 +328,37 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem) {
   doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
   doc.text(`${item.currency} ${item.net_salary.toLocaleString()}`, W - 22, afterD + 13, { align: 'right' });
 
+  let afterNetPay = afterD + 32;
+
+  // YTD summary (only shown if ytd data is provided)
+  if (ytd && ytd.months > 0) {
+    const ytdY = afterNetPay;
+    doc.setFillColor(240, 245, 255);
+    doc.rect(14, ytdY, W - 28, 24, 'F');
+    doc.setDrawColor(200, 215, 245);
+    doc.rect(14, ytdY, W - 28, 24, 'S');
+
+    doc.setTextColor(60, 80, 130);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+    doc.text(`YEAR-TO-DATE SUMMARY (${ytd.months} pay period${ytd.months !== 1 ? 's' : ''})`, 20, ytdY + 8);
+
+    // Three columns: YTD Gross | YTD Deductions | YTD Net
+    const colW = (W - 28) / 3;
+    const labels = ['YTD Gross Earnings', 'YTD Total Deductions', 'YTD Net Pay'];
+    const values = [ytd.gross, ytd.deductions, ytd.net];
+    const valueColors: [number, number, number][] = [[15, 32, 65], [160, 30, 30], [21, 100, 50]];
+    labels.forEach((lbl, i) => {
+      const x = 20 + i * colW;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(100, 120, 160);
+      doc.text(lbl, x, ytdY + 14);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...valueColors[i]);
+      doc.text(`${item.currency} ${values[i].toLocaleString()}`, x, ytdY + 21);
+    });
+    afterNetPay = ytdY + 32;
+  }
+
   // Signatures
-  const sigY = afterD + 40;
+  const sigY = afterNetPay + 8;
   doc.setDrawColor(200, 210, 225); doc.setLineWidth(0.4);
   doc.line(22, sigY, 90, sigY); doc.line(W - 90, sigY, W - 22, sigY);
   doc.setTextColor(120, 140, 170); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
@@ -3738,10 +3774,39 @@ function PayslipsTab({ runs, loading, employees }: {
     setLoadingItems(false);
   };
 
-  const downloadPDF = (item: RunItem) => {
+  const downloadPDF = async (item: RunItem) => {
     if (!selectedRun) return;
-    const emp = empMap[item.user_id] ?? { id: item.user_id, full_name: item.user_name, role: null, department_name: item.department_name, department_id: null, email: null, salary_config: null };
-    generatePayslipPDF(emp, selectedRun, item);
+    const emp: EmployeeRow = empMap[item.user_id] ?? { id: item.user_id, full_name: item.user_name, role: null, department_name: item.department_name, department_id: null, email: null, employment_type: null, contract_start_date: null, contract_end_date: null, contract_type: null, is_employee: null, salary_config: null, retainer: null };
+    // Fetch YTD data: all locked/approved payroll items for this employee in the same calendar year
+    let ytd: YTDTotals | undefined;
+    try {
+      const runYear = selectedRun.period_start ? new Date(selectedRun.period_start).getFullYear() : new Date().getFullYear();
+      const yearStart = `${runYear}-01-01`;
+      const yearEnd = `${runYear}-12-31`;
+      const { data: ytdRuns } = await supabase
+        .from('payroll_runs')
+        .select('id')
+        .in('status', ['locked', 'approved'])
+        .gte('period_start', yearStart)
+        .lte('period_start', yearEnd);
+      if (ytdRuns && ytdRuns.length > 0) {
+        const runIds = ytdRuns.map((r: any) => r.id);
+        const { data: ytdItems } = await supabase
+          .from('payroll_run_items')
+          .select('gross_salary, deductions_total, net_salary')
+          .eq('user_id', item.user_id)
+          .in('run_id', runIds);
+        if (ytdItems && ytdItems.length > 0) {
+          ytd = {
+            gross: ytdItems.reduce((s: number, r: any) => s + (Number(r.gross_salary) || 0), 0),
+            deductions: ytdItems.reduce((s: number, r: any) => s + (Number(r.deductions_total) || 0), 0),
+            net: ytdItems.reduce((s: number, r: any) => s + (Number(r.net_salary) || 0), 0),
+            months: ytdItems.length,
+          };
+        }
+      }
+    } catch (_) { /* ytd stays undefined — pdf still generates */ }
+    generatePayslipPDF(emp, selectedRun, item, ytd);
   };
 
   const downloadAll = () => {

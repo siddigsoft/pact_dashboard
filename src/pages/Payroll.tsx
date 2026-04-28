@@ -922,80 +922,169 @@ function MyPayslipsTab({ userId }: { userId: string }) {
   });
 
   const downloadPDF = (item: PayslipRunItem, run: PayslipRun) => {
-    const doc = new jsPDF();
-    const gross = item.gross_salary;
-    const base  = item.base_salary;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210;
     const currency = item.currency;
+    const locked = run.status === 'locked';
 
-    // Header
+    // ── Navy header
     doc.setFillColor(15, 32, 65);
-    doc.rect(0, 0, 210, 30, 'F');
+    doc.rect(0, 0, W, 42, 'F');
+    doc.setFillColor(29, 52, 97);
+    doc.rect(0, 30, W, 12, 'F');
+
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PACT — PAYSLIP', 14, 18);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(run.period_label, 196, 18, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22);
+    doc.text('PACT', 14, 18);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.setTextColor(180, 210, 255);
+    doc.text('People and Community Together', 14, 25);
 
-    // Employee details
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text(item.user_name, 14, 42);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(`Department: ${item.department_name}`, 14, 50);
-    doc.text(`Period: ${run.period_label}`, 14, 57);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+    doc.text('SALARY PAYSLIP', W - 14, 18, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+    doc.setTextColor(180, 210, 255);
+    doc.text(`Pay Period: ${run.period_label}`, W - 14, 25, { align: 'right' });
+    doc.text(`Issue Date: ${format(new Date(), 'dd MMMM yyyy')}`, W - 14, 31.5, { align: 'right' });
 
-    // Earnings table
-    const earningsRows: (string | number)[][] = [
-      ['Base Salary', `${currency} ${base.toLocaleString()}`],
-      ...item.allowances_snapshot.map(a => {
-        const amt = a.type === 'fixed' ? a.amount : Math.round(base * a.amount / 100);
-        return [a.name, `+ ${currency} ${amt.toLocaleString()}`];
-      }),
-      ...item.adjustments.filter(a => a.type === 'bonus').map(a => [`${a.name} (Bonus)`, `+ ${currency} ${a.amount.toLocaleString()}`]),
+    // ── Employee info panel
+    doc.setFillColor(248, 250, 255);
+    doc.rect(14, 50, W - 28, 34, 'F');
+    doc.setDrawColor(220, 228, 245);
+    doc.rect(14, 50, W - 28, 34, 'S');
+
+    doc.setTextColor(15, 32, 65);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    doc.text(item.user_name, 20, 61);
+
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(80, 100, 140);
+    doc.text(`Employee ID: ${item.user_id.slice(0, 8).toUpperCase()}`, 20, 69);
+    doc.text(`Department: ${item.department_name ?? '—'}`, 20, 76);
+
+    doc.text(`Period: ${run.period_label}`, W / 2, 61);
+    doc.text(`Currency: ${currency}`, W / 2, 69);
+    doc.text(`Status: ${locked ? 'Official / Locked' : 'DRAFT — Pending'}`, W / 2, 76);
+
+    // ── Earnings table
+    const earningsRows: any[] = [
+      [{ content: 'Base Salary', styles: { fontStyle: 'bold' } }, '', `${currency} ${item.base_salary.toLocaleString()}`],
+      ...item.allowances_snapshot.map((a: any) => [
+        `  ${a.name}`,
+        a.type === 'percent' ? `${a.amount}% of base` : 'Fixed',
+        `${currency} ${(a.type === 'percent' ? item.base_salary * a.amount / 100 : a.amount).toLocaleString()}`
+      ]),
+      ...item.adjustments.filter((a: any) => a.type === 'bonus').map((a: any) => [
+        `  ${a.name} (Bonus)`, 'Adjustment', `${currency} ${a.amount.toLocaleString()}`
+      ]),
+      [
+        { content: 'GROSS SALARY', styles: { fontStyle: 'bold', fillColor: [235, 244, 255], textColor: [15, 32, 65] } },
+        { content: '', styles: { fillColor: [235, 244, 255] } },
+        { content: `${currency} ${item.gross_salary.toLocaleString()}`, styles: { fontStyle: 'bold', fillColor: [235, 244, 255], textColor: [15, 32, 65] } },
+      ],
     ];
     autoTable(doc, {
-      head: [['Earnings', 'Amount']], body: earningsRows,
-      startY: 66, theme: 'striped',
-      headStyles: { fillColor: [21, 128, 61] },
-      columnStyles: { 1: { halign: 'right' } },
+      startY: 92,
+      head: [['EARNINGS', 'BASIS', 'AMOUNT']],
+      body: earningsRows,
+      theme: 'striped',
+      headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, cellPadding: 4 },
+      bodyStyles: { fontSize: 8.5, cellPadding: 3 },
+      columnStyles: { 0: { cellWidth: 90 }, 1: { cellWidth: 52 }, 2: { cellWidth: 44, halign: 'right' } },
+      alternateRowStyles: { fillColor: [250, 252, 255] },
+      margin: { left: 14, right: 14 },
     });
 
-    const afterEarnings = (doc as any).lastAutoTable.finalY + 6;
-    const deductionRows: (string | number)[][] = [
-      ...item.deductions_snapshot.map(d => {
-        const amt = d.type === 'fixed' ? d.amount : Math.round(gross * d.amount / 100);
-        return [d.name, `- ${currency} ${amt.toLocaleString()}`];
-      }),
-      ...item.adjustments.filter(a => a.type === 'deduction').map(a => [`${a.name} (Deduction)`, `- ${currency} ${a.amount.toLocaleString()}`]),
+    const afterE = (doc as any).lastAutoTable.finalY + 6;
+
+    // ── Deductions table
+    const dedRows: any[] = [
+      ...item.deductions_snapshot.map((d: any) => [
+        `  ${d.name}`,
+        d.type === 'percent' ? `${d.amount}% of gross` : 'Fixed',
+        `${currency} ${(d.type === 'percent' ? item.gross_salary * d.amount / 100 : d.amount).toLocaleString()}`
+      ]),
+      ...item.adjustments.filter((a: any) => a.type === 'deduction').map((a: any) => [
+        `  ${a.name} (Deduction)`, 'Adjustment', `${currency} ${a.amount.toLocaleString()}`
+      ]),
+      [
+        { content: 'TOTAL DEDUCTIONS', styles: { fontStyle: 'bold', fillColor: [255, 245, 245], textColor: [160, 30, 30] } },
+        { content: '', styles: { fillColor: [255, 245, 245] } },
+        { content: `${currency} ${item.deductions_total.toLocaleString()}`, styles: { fontStyle: 'bold', fillColor: [255, 245, 245], textColor: [160, 30, 30] } },
+      ],
     ];
-    if (deductionRows.length) {
+    if (dedRows.length > 1) {
       autoTable(doc, {
-        head: [['Deductions', 'Amount']], body: deductionRows,
-        startY: afterEarnings, theme: 'striped',
-        headStyles: { fillColor: [185, 28, 28] },
-        columnStyles: { 1: { halign: 'right' } },
+        startY: afterE,
+        head: [['DEDUCTIONS', 'BASIS', 'AMOUNT']],
+        body: dedRows,
+        theme: 'striped',
+        headStyles: { fillColor: [140, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, cellPadding: 4 },
+        bodyStyles: { fontSize: 8.5, cellPadding: 3 },
+        columnStyles: { 0: { cellWidth: 90 }, 1: { cellWidth: 52 }, 2: { cellWidth: 44, halign: 'right', textColor: [160, 30, 30] } },
+        alternateRowStyles: { fillColor: [255, 250, 250] },
+        margin: { left: 14, right: 14 },
       });
     }
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFillColor(15, 32, 65);
-    doc.roundedRect(14, finalY, 182, 16, 3, 3, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('NET SALARY', 20, finalY + 10);
-    doc.text(`${currency} ${item.net_salary.toLocaleString()}`, 196, finalY + 10, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
+    const afterD = (doc as any).lastAutoTable.finalY + 10;
 
-    const locked = runsMap[item.run_id]?.status === 'locked';
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(120, 120, 120);
-    doc.text(locked ? 'This payslip is official and locked.' : 'DRAFT — Not yet finalized', 14, finalY + 24);
+    // ── Net pay box
+    doc.setFillColor(15, 32, 65);
+    doc.roundedRect(14, afterD, W - 28, 22, 4, 4, 'F');
+    doc.setTextColor(180, 210, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text('NET PAY FOR THE PERIOD', 22, afterD + 10);
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text(`${currency} ${item.net_salary.toLocaleString()}`, W - 22, afterD + 13, { align: 'right' });
+
+    let afterNetPay = afterD + 32;
+
+    // ── YTD section — compute from myItems already in memory
+    const runYear = run.period_start ? new Date(run.period_start).getFullYear() : new Date().getFullYear();
+    const ytdItems = myItems.filter(mi => {
+      const miRun = runsMap[mi.run_id];
+      if (!miRun || !['locked', 'approved'].includes(miRun.status)) return false;
+      const miYear = miRun.period_start ? new Date(miRun.period_start).getFullYear() : null;
+      return miYear === runYear;
+    });
+    if (ytdItems.length > 0) {
+      const ytdGross = ytdItems.reduce((s, r) => s + (Number(r.gross_salary) || 0), 0);
+      const ytdDed   = ytdItems.reduce((s, r) => s + (Number(r.deductions_total) || 0), 0);
+      const ytdNet   = ytdItems.reduce((s, r) => s + (Number(r.net_salary) || 0), 0);
+      const ytdY = afterNetPay;
+      doc.setFillColor(240, 245, 255);
+      doc.rect(14, ytdY, W - 28, 24, 'F');
+      doc.setDrawColor(200, 215, 245);
+      doc.rect(14, ytdY, W - 28, 24, 'S');
+      doc.setTextColor(60, 80, 130);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+      doc.text(`YEAR-TO-DATE SUMMARY (${ytdItems.length} pay period${ytdItems.length !== 1 ? 's' : ''})`, 20, ytdY + 8);
+      const colW = (W - 28) / 3;
+      [
+        { lbl: 'YTD Gross Earnings', v: ytdGross, color: [15, 32, 65] as [number, number, number] },
+        { lbl: 'YTD Total Deductions', v: ytdDed,  color: [160, 30, 30] as [number, number, number] },
+        { lbl: 'YTD Net Pay', v: ytdNet,            color: [21, 100, 50] as [number, number, number] },
+      ].forEach((s, i) => {
+        const x = 20 + i * colW;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(100, 120, 160);
+        doc.text(s.lbl, x, ytdY + 14);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...s.color);
+        doc.text(`${currency} ${s.v.toLocaleString()}`, x, ytdY + 21);
+      });
+      afterNetPay = ytdY + 32;
+    }
+
+    // ── Signatures
+    const sigY = afterNetPay + 8;
+    doc.setDrawColor(200, 210, 225); doc.setLineWidth(0.4);
+    doc.line(22, sigY, 90, sigY); doc.line(W - 90, sigY, W - 22, sigY);
+    doc.setTextColor(120, 140, 170); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text('Employee Signature', 22, sigY + 5);
+    doc.text('Authorised by', W - 90, sigY + 5);
+
+    // ── Footer
+    doc.setFontSize(7); doc.setTextColor(180, 190, 210);
+    doc.text(locked ? 'This is an official, locked payslip · PACT Sudan Field Operations · Confidential' : 'DRAFT — Not yet finalised · PACT Sudan Field Operations · Confidential', W / 2, 287, { align: 'center' });
 
     doc.save(`payslip-${run.period_label.replace(/\s/g, '-')}-${item.user_name.replace(/\s/g, '-')}.pdf`);
     toast({ title: `Payslip downloaded for ${run.period_label}` });

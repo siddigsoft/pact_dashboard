@@ -174,6 +174,8 @@ const AccountingBankRecon = lazy(() => import('./pages/AccountingBankRecon'));
 const AccountingFiscalYears = lazy(() => import('./pages/AccountingFiscalYears'));
 const AccountingFunds = lazy(() => import('./pages/AccountingFunds'));
 const AccountingSettings = lazy(() => import('./pages/AccountingSettings'));
+const AccountingBudgetVsActual = lazy(() => import('./pages/AccountingBudgetVsActual'));
+const AccountingVendors = lazy(() => import('./pages/AccountingVendors'));
 const FinanceAuditTrail = lazy(() => import('./pages/FinanceAuditTrail'));
 // HR audit gaps H2-H5: self-service pages
 const MyAdvances = lazy(() => import('./pages/MyAdvances'));
@@ -494,6 +496,8 @@ const AppRoutes = () => {
         <Route path="/accounting/fiscal-years" element={<PageWrapper><AccountingFiscalYears /></PageWrapper>} />
         <Route path="/accounting/funds" element={<PageWrapper><AccountingFunds /></PageWrapper>} />
         <Route path="/accounting/settings" element={<PageWrapper><AccountingSettings /></PageWrapper>} />
+        <Route path="/accounting/budget-variance" element={<PageWrapper><AccountingBudgetVsActual /></PageWrapper>} />
+        <Route path="/accounting/vendors" element={<PageWrapper><AccountingVendors /></PageWrapper>} />
         <Route path="/finance/audit-trail" element={<PageWrapper><FinanceAuditTrail /></PageWrapper>} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />

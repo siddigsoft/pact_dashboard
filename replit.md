@@ -50,6 +50,9 @@ The frontend is built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI,
 *   **Integrations Settings Page (`/integrations`):** Dedicated settings page for connecting Google Calendar and configuring email notification preferences.
 *   **Team Task Monitor (`/team-tasks`):** Executive-only dashboard for monitoring team members' task load and activity.
 *   **WhatsApp Integration (WasenderAPI):** Full integration with connection check, per-user opt-in, delivery logging, inbound webhook, and an admin panel.
+*   **Budget vs. Actual (`/accounting/budget-variance`):** Inline budget editing per account against trial-balance actuals. Green/amber/red usage bands, summary KPI cards, country/period/fund/type filters, CSV + PDF export. Requires `supabase/budget_lines_migration.sql` (`acct_budget_lines` table).
+*   **Vendor Registry (`/accounting/vendors`):** Central register of suppliers, consultants, service providers, and NGO partners. Split-panel list + detail with Ledger tab showing all tagged journal entries (DR/CR totals, net balance). Full CRUD, active/inactive toggle, linked GL account. Requires `supabase/vendors_migration.sql` (`acct_vendors` table + `vendor_id` FK on `acct_journal_lines`).
+*   **Enhanced Payslip PDFs:** Admin payslip (`generatePayslipPDF` in `PayrollAdmin.tsx`) now includes Employment Type, Contract Type, and a Year-to-Date summary band (YTD Gross / Deductions / Net) fetched from locked/approved runs in the same calendar year. Employee self-service payslip (`Payroll.tsx`) fully redesigned to match admin quality with the same YTD section computed from in-memory data.
 
 ### System Design Choices
 The project utilizes a unified Supabase client and integrates the complete Sudan administrative structure. It supports multiple concurrent sessions for the same user across different devices and browsers. All accounting/HR SQL is applied manually by the user; the agent writes SQL files and runbooks.

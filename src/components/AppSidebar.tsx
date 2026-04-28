@@ -497,6 +497,12 @@
     if (!isHidden('/accounting/bank-recon') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
       acctItems.push({ id: 'accounting-bank-recon', title: 'Bank Reconciliation', url: '/accounting/bank-recon', icon: Landmark, priority: 3.7, isPinned: isPinned('/accounting/bank-recon') });
     }
+    if (!isHidden('/accounting/budget-variance') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-budget-variance', title: 'Budget vs. Actual', url: '/accounting/budget-variance', icon: BarChart3, priority: 3.8, isPinned: isPinned('/accounting/budget-variance') });
+    }
+    if (!isHidden('/accounting/vendors') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole)) {
+      acctItems.push({ id: 'accounting-vendors', title: 'Vendor Registry', url: '/accounting/vendors', icon: Building2, priority: 3.9, isPinned: isPinned('/accounting/vendors') });
+    }
     if (!isHidden('/finance/audit-trail') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditorRole)) {
       acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
     }
