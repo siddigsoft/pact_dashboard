@@ -1,7 +1,13 @@
-part of 'site_verification_screen.dart';
+part of '../../screens/site_verification_screen.dart';
 
 extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
-  Widget _buildSiteCard(Map<String, dynamic> site, String category) {
+  Widget _buildSiteCard(
+    Map<String, dynamic> site,
+    String category, {
+    bool isSelectable = false,
+    bool isSelected = false,
+    VoidCallback? onToggle,
+  }) {
     final siteName = site['site_name']?.toString() ?? 'Unknown Site';
     final siteCode = site['site_code']?.toString() ?? '';
     final locality = site['locality']?.toString() ?? '';
@@ -65,6 +71,15 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
                 // Header row
                 Row(
                   children: [
+                    if (isSelectable && onToggle != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Checkbox(
+                          value: isSelected,
+                          onChanged: (_) => onToggle(),
+                          activeColor: AppColors.primaryBlue,
+                        ),
+                      ),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -104,6 +119,7 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
                           if (projectName.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             Container(
+                              width: double.infinity,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 6,
@@ -113,7 +129,6 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
-                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const Icon(
                                     Icons.folder,
@@ -121,14 +136,17 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
                                     color: AppColors.textDark,
                                   ),
                                   const SizedBox(width: 6),
-                                  Text(
-                                    projectName,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: const Color(0xFF374151),
+                                  Expanded(
+                                    child: Text(
+                                      projectName,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: const Color(0xFF374151),
+                                      ),
+                                      maxLines: 2,
+                                      softWrap: true,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
@@ -137,7 +155,13 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
                         ],
                       ),
                     ),
-                    _buildStatusChip(status),
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _buildStatusChip(status),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -211,7 +235,8 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
                             fontSize: 12,
                             color: const Color(0xFF6B7280),
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
+                          softWrap: true,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -403,6 +428,7 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
 
   Widget _buildStatusChip(String status) {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 120),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: _getStatusColor(status).withValues(alpha: 0.1),
@@ -413,7 +439,6 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
         ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 6,
@@ -424,12 +449,17 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            _formatStatus(status),
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: _getStatusColor(status),
+          Expanded(
+            child: Text(
+              _formatStatus(status),
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _getStatusColor(status),
+              ),
+              maxLines: 2,
+              softWrap: true,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -541,11 +571,10 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 14, color: color),
               const SizedBox(width: 4),
-              Flexible(
+              Expanded(
                 child: Text(
                   label,
                   style: GoogleFonts.poppins(
@@ -553,7 +582,8 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
                     fontWeight: FontWeight.w500,
                     color: const Color(0xFF6B7280),
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
+                  softWrap: true,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -561,7 +591,6 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
           ),
           const SizedBox(height: 4),
           Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 4,
@@ -583,6 +612,4 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
       ),
     );
   }
-
-
 }

@@ -1,11 +1,16 @@
 // lib/widgets/agora_incoming_call_dialog.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 import '../services/agora_call_service.dart';
+import '../models/agora_incoming_call.dart';
 import '../screens/agora_call_screen.dart';
+import '../services/bilingual_notification_service.dart';
+import '../services/debug_log_service.dart';
 import '../theme/app_colors.dart';
+import '../models/call_state.dart';
 
 /// Incoming Agora call dialog - Accept/Reject with navigation to AgoraCallScreen
 class AgoraIncomingCallDialog extends StatefulWidget {
@@ -31,13 +36,59 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   final AgoraCallService _agoraService = AgoraCallService();
+  StreamSubscription<CallState>? _callStateSub;
 
   @override
   void initState() {
     super.initState();
     _initAnimation();
-    _playRingingSound();
-    _startVibration();
+    _subscribeToCallState();
+
+    if (widget.incomingCall.autoAccept) {
+      // User pressed Accept on notification — skip ringing, auto-accept after frame
+      debugLog('CALL_UI', 'Auto-accepting call ${widget.incomingCall.callId}');
+      WidgetsBinding.instance.addPostFrameCallback((_) => _doAccept());
+    } else {
+      _playRingingSound();
+      _startVibration();
+    }
+  }
+
+  /// Accept the call programmatically (shared by auto-accept and button press)
+  Future<void> _doAccept() async {
+    _stopEffects();
+    widget.onAccept?.call();
+    BilingualNotificationService.cancelCallNotification(
+      widget.incomingCall.callId,
+    );
+    final navigator = Navigator.of(context);
+
+    final result = await _agoraService.acceptCall(widget.incomingCall);
+
+    if (!mounted) return;
+    navigator.pop();
+
+    if (result.success && result.channelName != null && mounted) {
+      navigator.push(
+        MaterialPageRoute(
+          builder: (context) => AgoraCallScreen(
+            channelName: result.channelName!,
+            remoteUserId: widget.incomingCall.callerId,
+            remoteUserName: widget.incomingCall.callerName,
+            remoteUserAvatar: widget.incomingCall.callerAvatar,
+            isAudioOnly: widget.incomingCall.isAudioOnly,
+            isOutgoing: false,
+          ),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.error ?? 'Failed to join call'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _initAnimation() {
@@ -57,14 +108,17 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
       await _audioPlayer.play(
         AssetSource('sounds/Phone Dial Tone - Sound Effect (HD).mp3'),
       );
+      debugLog('CALL_UI', 'Incoming call dialog: ringing started');
     } catch (e) {
       debugPrint('[AgoraIncomingCall] Error playing ring: $e');
+      debugLog('CALL_UI', 'Incoming call dialog: ring error: $e');
     }
   }
 
   Future<void> _startVibration() async {
     if (await Vibration.hasVibrator() ?? false) {
       Vibration.vibrate(pattern: [0, 500, 200, 500], repeat: 0);
+      debugLog('CALL_UI', 'Incoming call dialog: vibration started');
     }
   }
 
@@ -77,10 +131,30 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
     }
   }
 
+  void _subscribeToCallState() {
+    _callStateSub = _agoraService.callStateStream.listen((state) {
+      if (!mounted) return;
+
+      // When the caller hangs up (or the call otherwise ends) before we answer,
+      // automatically stop ringing and close this dialog.
+      if (!state.isInCall &&
+          (state.status == CallStatus.ended ||
+              state.status == CallStatus.rejected ||
+              state.status == CallStatus.busy ||
+              state.status == CallStatus.failed)) {
+        _stopEffects();
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      }
+    });
+  }
+
   @override
   void dispose() {
     _stopEffects();
     _pulseController.dispose();
+    _callStateSub?.cancel();
     super.dispose();
   }
 
@@ -218,6 +292,10 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
                   onPressed: () async {
                     _stopEffects();
                     widget.onReject?.call();
+                    // Cancel the notification (if shown by FCM handler)
+                    BilingualNotificationService.cancelCallNotification(
+                      widget.incomingCall.callId,
+                    );
                     await _agoraService.rejectCall(widget.incomingCall);
                     if (mounted) Navigator.of(context).pop();
                   },
@@ -229,43 +307,7 @@ class _AgoraIncomingCallDialogState extends State<AgoraIncomingCallDialog>
                       : Icons.videocam,
                   color: Colors.green,
                   onPressed: () async {
-                    _stopEffects();
-                    widget.onAccept?.call();
-                    final navigator = Navigator.of(context);
-
-                    final result = await _agoraService.acceptCall(
-                      widget.incomingCall,
-                    );
-
-                    if (!mounted) return;
-                    navigator.pop();
-
-                    if (result.success &&
-                        result.channelName != null &&
-                        mounted) {
-                      if (mounted) {
-                        navigator.push(
-                          MaterialPageRoute(
-                            builder: (context) => AgoraCallScreen(
-                              channelName: result.channelName!,
-                              remoteUserId: widget.incomingCall.callerId,
-                              remoteUserName: widget.incomingCall.callerName,
-                              remoteUserAvatar:
-                                  widget.incomingCall.callerAvatar,
-                              isAudioOnly: widget.incomingCall.isAudioOnly,
-                              isOutgoing: false,
-                            ),
-                          ),
-                        );
-                      }
-                    } else if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(result.error ?? 'Failed to join call'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
+                    await _doAccept();
                   },
                   label: 'Accept',
                 ),

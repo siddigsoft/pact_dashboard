@@ -34,8 +34,10 @@ class EncryptionService {
 
       LoggerService.log('Encryption service initialized');
     } catch (e) {
-      LoggerService.log('Error initializing encryption service: $e',
-          level: LogLevel.error);
+      LoggerService.log(
+        'Error initializing encryption service: $e',
+        level: LogLevel.error,
+      );
       rethrow;
     }
   }

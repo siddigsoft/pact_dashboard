@@ -13,13 +13,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:html' as html show window;
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
+import '../widgets/filter_status_bar.dart';
 import '../theme/app_colors.dart';
 import '../widgets/main_layout.dart';
 import '../services/wallet_service.dart';
 import '../services/offline/offline_db.dart';
+import '../services/notification_trigger_service.dart';
 
 class WalletScreen extends StatefulWidget {
   final bool isArabic;
@@ -69,11 +70,12 @@ class _WalletScreenState extends State<WalletScreen> {
         };
         if (!outstanding.contains(status)) return sum;
         final approved =
-            (a['approved_amount'] as num?)?.toDouble() ??
-            (a['disbursed_amount'] as num?)?.toDouble() ??
-            (a['requested_amount'] as num?)?.toDouble() ??
+            ((a['approved_amount'] as num?)?.toDouble() ?? 0.0) ??
+            ((a['disbursed_amount'] as num?)?.toDouble() ?? 0.0) ??
+            ((a['requested_amount'] as num?)?.toDouble() ?? 0.0) ??
             0.0;
-        final paid = (a['total_paid_amount'] as num?)?.toDouble() ?? 0.0;
+        final paid =
+            ((a['total_paid_amount'] as num?)?.toDouble() ?? 0.0) ?? 0.0;
         return sum + (approved - paid).clamp(0.0, double.infinity);
       });
     }
@@ -198,14 +200,12 @@ class _WalletScreenState extends State<WalletScreen> {
         _setupRealtimeSubscription();
         setState(() => _isLoading = false);
 
-        // Show blocking dialogs if pending receipts or advances exist
-        if (mounted && _pendingReceiptConfirmations.isNotEmpty) {
-          await _showNextPendingReceiptDialog();
-        }
+        // Show blocking receipt modal if pending receipts exist
         _checkPendingAdvanceConfirmations();
-        if (mounted && _pendingAdvanceConfirmations.isNotEmpty) {
-          await Future.delayed(const Duration(milliseconds: 400));
-          _showNextPendingAdvanceDialog();
+        if (mounted && _pendingReceiptConfirmations.isNotEmpty) {
+          await _showHighPriorityBlockingReceiptModal();
+        } else if (mounted && (_pendingAdvanceConfirmations.isNotEmpty)) {
+          await _showViewModeChoiceDialog();
         }
       } catch (e) {
         // Network error - fall back to cache
@@ -392,7 +392,7 @@ class _WalletScreenState extends State<WalletScreen> {
           .order('created_at', ascending: false)
           .limit(500);
 
-      _transactions = (data ?? []).map((t) => t).toList();
+      _transactions = (data as List).cast<Map<String, dynamic>>();
 
       // Accurately compute Total Earned: sum of ALL earning transactions
       // (site visit fees + fund receipts) — not limited to the 500-row slice.
@@ -488,7 +488,7 @@ class _WalletScreenState extends State<WalletScreen> {
           .order('created_at', ascending: false)
           .limit(50);
 
-      _withdrawalRequests = (data ?? []).map((w) => w).toList();
+      _withdrawalRequests = (data as List).cast<Map<String, dynamic>>();
 
       _pendingWithdrawals = _withdrawalRequests
           .where((w) => w['status'] == 'pending')
@@ -514,7 +514,7 @@ class _WalletScreenState extends State<WalletScreen> {
           .eq('user_id', _userId!)
           .order('created_at', ascending: false);
 
-      _paymentMethods = (data ?? []).map((p) => p).toList();
+      _paymentMethods = (data as List).cast<Map<String, dynamic>>();
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('Error loading payment methods: $e');
@@ -533,7 +533,7 @@ class _WalletScreenState extends State<WalletScreen> {
           .order('created_at', ascending: false)
           .limit(100);
 
-      _advances = List<Map<String, dynamic>>.from(data ?? []);
+      _advances = List<Map<String, dynamic>>.from(data as List);
       debugPrint(
         '[Wallet] Loaded ${_advances.length} advances for user $_userId',
       );
@@ -563,7 +563,7 @@ class _WalletScreenState extends State<WalletScreen> {
           .eq('submitted_by', _userId!)
           .order('created_at', ascending: false)
           .limit(100);
-      _costPayments = List<Map<String, dynamic>>.from(data ?? []);
+      _costPayments = List<Map<String, dynamic>>.from(data as List);
       debugPrint(
         '[Wallet] Loaded ${_costPayments.length} cost submissions for user $_userId',
       );
@@ -575,11 +575,40 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   void _checkPendingReceiptConfirmations() {
+    debugPrint(
+      '[Wallet] Checking pending receipts from ${_costPayments.length} cost payments',
+    );
+
+    // Only request receipt confirmation for payments that were actually disbursed
+    // by finance and have an attached payment proof (not submitter attachments).
     _pendingReceiptConfirmations = _costPayments.where((cost) {
-      final status = (cost['status'] as String? ?? '').toLowerCase();
       final receiptConfirmed = cost['fund_receipt_confirmed'] == true;
-      // Show pending confirmations for paid/reconciled costs not yet confirmed
-      return (status == 'paid' || status == 'reconciled') && !receiptConfirmed;
+      final id = cost['id'] as String?;
+      final status = (cost['status'] as String ?? '').toLowerCase();
+      final paymentProofUrl = (cost['payment_proof_url'] as String?)?.trim();
+      final category = cost['expense_category'] as String? ?? 'unknown';
+      final isPaid = status == 'paid' || status == 'partially_paid' || status == 'fully_paid';
+      final hasPaymentProof = paymentProofUrl != null && paymentProofUrl.isNotEmpty;
+
+      debugPrint(
+        '[Wallet] Checking cost: id=$id, status=$status, confirmed=$receiptConfirmed, category=$category',
+      );
+
+      // Skip ONLY if already confirmed
+      if (receiptConfirmed) {
+        debugPrint('[Wallet]   → Skipping: Already confirmed');
+        return false;
+      }
+
+      if (!isPaid || !hasPaymentProof) {
+        debugPrint(
+          '[Wallet]   → Skipping: isPaid=$isPaid, hasPaymentProof=$hasPaymentProof',
+        );
+        return false;
+      }
+
+      debugPrint('[Wallet]   → INCLUDING for confirmation (paid + receipt proof)');
+      return true;
     }).toList();
 
     debugPrint(
@@ -587,7 +616,7 @@ class _WalletScreenState extends State<WalletScreen> {
     );
     for (final cost in _pendingReceiptConfirmations) {
       debugPrint(
-        '[Wallet] Pending: ${cost['id']} - ${cost['expense_category']}',
+        '[Wallet] Pending: ${cost['id']} - ${cost['expense_category']} (status: ${cost['status']})',
       );
     }
   }
@@ -596,18 +625,3548 @@ class _WalletScreenState extends State<WalletScreen> {
     _pendingAdvanceConfirmations = _advances.where((advance) {
       final status = (advance['status'] as String? ?? '').toLowerCase();
       final meta = (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
-      final receiptConfirmed = meta['receipt_confirmation']?['confirmed'] == true;
+      final declineMeta =
+          (meta['receipt_decline'] as Map?)?.cast<String, dynamic>() ?? {};
+      final waitingFinanceResend =
+          declineMeta['declined'] == true &&
+          (declineMeta['resendRequested'] == true ||
+              declineMeta['resendStatus'] == 'pending_finance');
+      final receiptConfirmed =
+          meta['receipt_confirmation']?['confirmed'] == true;
       final isDisbursed =
-          status == 'partially_paid' || status == 'fully_paid' || status == 'paid';
-      return isDisbursed && !receiptConfirmed;
+          status == 'partially_paid' ||
+          status == 'fully_paid' ||
+          status == 'paid';
+      return isDisbursed && !receiptConfirmed && !waitingFinanceResend;
     }).toList();
     debugPrint(
       '[Wallet] Found ${_pendingAdvanceConfirmations.length} pending advance confirmations',
     );
   }
 
-  Future<void> _showNextPendingReceiptDialog() async {
+  // Get the total count of pending confirmations (advances + costs combined)
+  int getTotalPendingConfirmationCount() {
+    return _pendingAdvanceConfirmations.length +
+        _pendingReceiptConfirmations.length;
+  }
+
+  Future<void> _notifyNotReceivedToFinanceAndApprovers({
+    required String title,
+    required String titleAr,
+    required String message,
+    required String messageAr,
+    required String notificationType,
+    required String relatedId,
+    required String relatedType,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    const recipientTypes = ['admin', 'supervisor', 'coordinator', 'finance'];
+
+    final payloads = recipientTypes
+        .map(
+          (recipientType) => {
+            'recipient_type': recipientType,
+            'sender_id': _userId,
+            'title': title,
+            'title_ar': titleAr,
+            'message': message,
+            'message_ar': messageAr,
+            'notification_type': notificationType,
+            'related_id': relatedId,
+            'related_type': relatedType,
+            'created_at': now,
+          },
+        )
+        .toList(growable: false);
+
+    try {
+      await Supabase.instance.client
+          .from('notification_broadcast')
+          .insert(payloads);
+    } catch (e) {
+      debugPrint('[Wallet] Notification broadcast error: $e');
+    }
+  }
+
+  Future<void> _showViewModeChoiceDialog() async {
+    debugPrint(
+      '[Wallet] _showViewModeChoiceDialog: receipts=${_pendingReceiptConfirmations.length}, advances=${_pendingAdvanceConfirmations.length}',
+    );
+    if (_pendingReceiptConfirmations.isEmpty &&
+        _pendingAdvanceConfirmations.isEmpty) {
+      debugPrint('[Wallet] No pending confirmations to show!');
+      return;
+    }
+
+    final costTotal = _pendingReceiptConfirmations.fold(
+      0.0,
+      (sum, c) => sum + (((c['amount_cents'] as num?)?.toInt() ?? 0) / 100.0),
+    );
+    final advanceTotal = _pendingAdvanceConfirmations.fold(0.0, (sum, a) {
+      final disbursed = (a['disbursed_amount'] as num?)?.toDouble() ?? 0.0;
+      final approved = (a['approved_amount'] as num?)?.toDouble() ?? 0.0;
+      final requested = (a['requested_amount'] as num?)?.toDouble() ?? 0.0;
+      if (disbursed > 0) return sum + disbursed;
+      if (approved > 0) return sum + approved;
+      return sum + requested;
+    });
+    final totalItems =
+        _pendingReceiptConfirmations.length +
+        _pendingAdvanceConfirmations.length;
+    final totalAmount = costTotal + advanceTotal;
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Blue header
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.primaryBlue, Color(0xFF2E5C8A)],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.checklist_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        crossAxisAlignment: widget.isArabic
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.isArabic
+                                ? 'التأكيدات المعلقة'
+                                : 'Pending Confirmations',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            widget.isArabic
+                                ? 'اختر طريقة العرض'
+                                : 'Choose view mode',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Container(
+                color: const Color(0xFFF0F7FF),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 20,
+                ),
+                child: Column(
+                  textDirection: widget.isArabic
+                      ? ui.TextDirection.rtl
+                      : ui.TextDirection.ltr,
+                  crossAxisAlignment: widget.isArabic
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.isArabic ? 'ملخص' : 'Summary',
+                      textDirection: widget.isArabic
+                          ? ui.TextDirection.rtl
+                          : ui.TextDirection.ltr,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...[
+                      {
+                        'label': widget.isArabic
+                            ? 'إجمالي العناصر:'
+                            : 'Total Items:',
+                        'value': '$totalItems',
+                        'color': Colors.black,
+                      },
+                      {
+                        'label': widget.isArabic
+                            ? 'إجمالي التكاليف:'
+                            : 'Total Costs:',
+                        'value': '${costTotal.toStringAsFixed(2)} SDG',
+                        'color': Colors.red.shade700,
+                      },
+                      {
+                        'label': widget.isArabic
+                            ? 'إجمالي السلف:'
+                            : 'Total Advances:',
+                        'value': '${advanceTotal.toStringAsFixed(2)} SDG',
+                        'color': Colors.orange.shade700,
+                      },
+                    ].map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          textDirection: widget.isArabic
+                              ? ui.TextDirection.rtl
+                              : ui.TextDirection.ltr,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              item['label']! as String,
+                              textDirection: widget.isArabic
+                                  ? ui.TextDirection.rtl
+                                  : ui.TextDirection.ltr,
+                              style: GoogleFonts.poppins(fontSize: 13),
+                            ),
+                            Text(
+                              item['value']! as String,
+                              textDirection: widget.isArabic
+                                  ? ui.TextDirection.rtl
+                                  : ui.TextDirection.ltr,
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                color: item['color']! as Color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2E5C8A).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF2E5C8A).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            widget.isArabic
+                                ? 'الإجمالي الكلي:'
+                                : 'Grand Total:',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            _formatCurrency(totalAmount),
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: const Color(0xFF2E5C8A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Buttons
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: Column(
+                  textDirection: widget.isArabic
+                      ? ui.TextDirection.rtl
+                      : ui.TextDirection.ltr,
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Advances/Transportation Button - Shows approved advances
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showAdvancesConfirmationsDialog();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        widget.isArabic
+                            ? 'السلف المعتمدة (${_pendingAdvanceConfirmations.length})'
+                            : 'Approved Advances (${_pendingAdvanceConfirmations.length})',
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Costs Only Button - Shows other cost categories
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showCostSubmissionsDialog();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        widget.isArabic
+                            ? 'طلبات الصرف (${_pendingReceiptConfirmations.length})'
+                            : 'Cost Submissions (${_pendingReceiptConfirmations.length})',
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // View All At Once Button
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showBulkPendingConfirmationsModal();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        widget.isArabic
+                            ? 'عرض الكل معاً ($totalItems)'
+                            : 'View All At Once ($totalItems)',
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        // Reload cost payments and recheck pending confirmations
+                        await _loadCostPayments();
+                        _checkPendingReceiptConfirmations();
+                        _checkPendingAdvanceConfirmations();
+
+                        await Future.delayed(const Duration(milliseconds: 500));
+                        if (_pendingReceiptConfirmations.isNotEmpty) {
+                          await _showNextPendingReceiptDialog();
+                        } else if (_pendingAdvanceConfirmations.isNotEmpty) {
+                          await _showNextPendingAdvanceDialog();
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                widget.isArabic
+                                    ? 'لا توجد تأكيدات معلقة'
+                                    : 'No pending confirmations',
+                              ),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        widget.isArabic
+                            ? 'عرض واحد تلو الآخر ($totalItems)'
+                            : 'One By One ($totalItems)',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showBulkPendingConfirmationsModal() async {
+    final totalItems =
+        _pendingReceiptConfirmations.length +
+        _pendingAdvanceConfirmations.length;
+
+    // Extract cost amounts - using amount_cents field (in cents, divide by 100)
+    final costTotal = _pendingReceiptConfirmations.fold(0.0, (sum, c) {
+      final amountCents = (c['amount_cents'] as num?)?.toInt() ?? 0;
+      return sum + (amountCents / 100.0);
+    });
+
+    // Extract advance amounts - use priority: disbursed > approved > requested
+    final advanceTotal = _pendingAdvanceConfirmations.fold(0.0, (sum, a) {
+      final disbursed = ((a['disbursed_amount'] as num?)?.toInt() ?? 0) / 100.0;
+      final approved = ((a['approved_amount'] as num?)?.toInt() ?? 0) / 100.0;
+      final requested = ((a['requested_amount'] as num?)?.toInt() ?? 0) / 100.0;
+
+      // Use first non-zero amount in priority order
+      final amount = disbursed > 0
+          ? disbursed
+          : approved > 0
+          ? approved
+          : requested;
+      return sum + amount;
+    });
+
+    final totalAmount = costTotal + advanceTotal;
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.primaryBlue, Color(0xFF2E5C8A)],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.list_alt_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        crossAxisAlignment: widget.isArabic
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.isArabic
+                                ? 'جميع التأكيدات المعلقة'
+                                : 'All Pending Items',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            widget.isArabic
+                                ? 'ملخص شامل لجميع الطلبات'
+                                : 'Complete overview of all requests',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Container(
+                color: const Color(0xFFF0F7FF),
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.65,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Summary box
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(
+                                0xFF2E5C8A,
+                              ).withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.isArabic
+                                    ? 'ملخص إجمالي'
+                                    : 'Total Summary',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                textDirection: widget.isArabic
+                                    ? ui.TextDirection.rtl
+                                    : ui.TextDirection.ltr,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    widget.isArabic
+                                        ? 'إجمالي العناصر:'
+                                        : 'Total Items:',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    '$totalItems',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (costTotal > 0)
+                                Row(
+                                  textDirection: widget.isArabic
+                                      ? ui.TextDirection.rtl
+                                      : ui.TextDirection.ltr,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      widget.isArabic
+                                          ? 'إجمالي التكاليف:'
+                                          : 'Total Costs:',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    Text(
+                                      '${costTotal.toStringAsFixed(2)} SDG',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.red.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              if (advanceTotal > 0)
+                                Row(
+                                  textDirection: widget.isArabic
+                                      ? ui.TextDirection.rtl
+                                      : ui.TextDirection.ltr,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      widget.isArabic
+                                          ? 'إجمالي السلف:'
+                                          : 'Total Advances:',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    Text(
+                                      '${advanceTotal.toStringAsFixed(2)} SDG',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.orange.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              const Divider(),
+                              Row(
+                                textDirection: widget.isArabic
+                                    ? ui.TextDirection.rtl
+                                    : ui.TextDirection.ltr,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    widget.isArabic
+                                        ? 'الإجمالي الكلي:'
+                                        : 'Grand Total:',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatCurrency(totalAmount),
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: const Color(0xFF2E5C8A),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        //======== COST SUBMISSIONS ========
+                        if (_pendingReceiptConfirmations.isNotEmpty) ...[
+                          Text(
+                            widget.isArabic
+                                ? 'طلبات الصرف (التكاليف)'
+                                : 'Cost Submissions',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ..._pendingReceiptConfirmations.map((c) {
+                            final amount =
+                                ((c['amount_cents'] as num?)?.toInt() ?? 0) /
+                                100.0;
+                            final category =
+                                (c['expense_category'] as String? ?? 'Cost')
+                                    .replaceAll('_', ' ')
+                                    .toUpperCase();
+                            final site = c['site_name'] as String? ?? 'Site';
+                            final proofUrl =
+                                c['payment_proof_url'] as String? ?? '';
+                            final isImage =
+                                proofUrl.isNotEmpty &&
+                                RegExp(
+                                  r'\.(jpg|jpeg|png|gif|webp)$',
+                                  caseSensitive: false,
+                                ).hasMatch(proofUrl);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.red.shade300,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    textDirection: widget.isArabic
+                                        ? ui.TextDirection.rtl
+                                        : ui.TextDirection.ltr,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              category,
+                                              style: GoogleFonts.poppins(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 11,
+                                                color: Colors.red.shade800,
+                                              ),
+                                            ),
+                                            Text(
+                                              site,
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.shade200,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${amount.toStringAsFixed(2)} SDG',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.red.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (isImage)
+                                    // Receipt uploaded - show styled receipt preview
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Colors.green.shade300,
+                                          width: 2,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          // Receipt label
+                                          Text(
+                                            widget.isArabic
+                                                ? 'إيصال الدفع / Payment Receipt'
+                                                : 'Payment Receipt / إيصال الدفع',
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: Colors.green.shade600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          // Receipt image preview
+                                          Container(
+                                            width: double.infinity,
+                                            height: 120,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: Colors.grey.shade200,
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: Image.network(
+                                                proofUrl,
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) => Container(
+                                                      color:
+                                                          Colors.grey.shade200,
+                                                      child: Center(
+                                                        child: Icon(
+                                                          Icons.image,
+                                                          color: Colors
+                                                              .grey
+                                                              .shade600,
+                                                          size: 40,
+                                                        ),
+                                                      ),
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          // Open full document button
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: ElevatedButton.icon(
+                                              onPressed: () {
+                                                // Open receipt in browser or full screen
+                                                if (proofUrl.isNotEmpty) {
+                                                  try {
+                                                    launchUrl(
+                                                      Uri.parse(proofUrl),
+                                                      mode: LaunchMode
+                                                          .externalApplication,
+                                                    );
+                                                  } catch (e) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          widget.isArabic
+                                                              ? 'لا يمكن فتح الملف'
+                                                              : 'Cannot open file',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                }
+                                              },
+                                              icon: const Icon(
+                                                Icons.download,
+                                                size: 16,
+                                              ),
+                                              label: Text(
+                                                widget.isArabic
+                                                    ? 'فتح الوثيقة الكاملة'
+                                                    : 'Open Full Document',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    Colors.green.shade600,
+                                                foregroundColor: Colors.white,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 10,
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  else
+                                    // Receipt not uploaded - show styled message
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Colors.red.shade300,
+                                          width: 2,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          // Receipt label
+                                          Text(
+                                            widget.isArabic
+                                                ? 'إيصال الدفع / Payment Receipt'
+                                                : 'Payment Receipt / إيصال الدفع',
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: Colors.red.shade600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          // No receipt message box
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            padding: const EdgeInsets.all(12),
+                                            child: Row(
+                                              children: [
+                                                // Placeholder icon
+                                                Container(
+                                                  width: 48,
+                                                  height: 48,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.red.shade200,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          6,
+                                                        ),
+                                                  ),
+                                                  child: Center(
+                                                    child: Icon(
+                                                      Icons
+                                                          .description_outlined,
+                                                      color:
+                                                          Colors.red.shade600,
+                                                      size: 24,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                // Message
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        widget.isArabic
+                                                            ? 'وثيقة / Document'
+                                                            : 'Document / وثيقة',
+                                                        style:
+                                                            GoogleFonts.poppins(
+                                                              fontSize: 12,
+                                                              color:
+                                                                  Colors.grey,
+                                                            ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        widget.isArabic
+                                                            ? 'لم يتم تحميل إيصال'
+                                                            : 'No receipt uploaded',
+                                                        style:
+                                                            GoogleFonts.poppins(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                              fontSize: 13,
+                                                              color: Colors
+                                                                  .red
+                                                                  .shade600,
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                        //======== ADVANCES ========
+                        if (_pendingAdvanceConfirmations.isNotEmpty) ...[
+                          if (_pendingReceiptConfirmations.isNotEmpty)
+                            const SizedBox(height: 12),
+                          Text(
+                            widget.isArabic
+                                ? 'السلف المعتمدة'
+                                : 'Approved Advances',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ..._pendingAdvanceConfirmations.map((a) {
+                            // Advance amounts are stored directly in SDG, NOT in cents.
+                            final disbursed =
+                                (a['disbursed_amount'] as num?)?.toDouble() ??
+                                0.0;
+                            final approved =
+                                (a['approved_amount'] as num?)?.toDouble() ??
+                                0.0;
+                            final requested =
+                                (a['requested_amount'] as num?)?.toDouble() ??
+                                0.0;
+                            final amount = (disbursed > 0
+                                ? disbursed
+                                : (approved > 0 ? approved : requested));
+                            final site = a['site_name'] as String? ?? 'Site';
+                            final status = (a['status'] as String? ?? '')
+                                .toLowerCase();
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.orange.shade300,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    textDirection: widget.isArabic
+                                        ? ui.TextDirection.rtl
+                                        : ui.TextDirection.ltr,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              site,
+                                              style: GoogleFonts.poppins(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 11,
+                                                color: Colors.orange.shade800,
+                                              ),
+                                            ),
+                                            Text(
+                                              widget.isArabic
+                                                  ? 'طلب سلفة'
+                                                  : 'Advance Request',
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.shade200,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          _formatCurrency(amount),
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.orange.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade100,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: Colors.orange.shade300,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle_outline,
+                                          size: 16,
+                                          color: Colors.orange.shade600,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          widget.isArabic
+                                              ? 'معتمد بواسطة المراجع المالي'
+                                              : 'Approved by Finance',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            color: Colors.orange.shade600,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Buttons
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade300,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          widget.isArabic ? 'إغلاق' : 'Close',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _confirmAllPendingReceipts();
+                        },
+                        icon: const Icon(Icons.check_circle, size: 16),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        label: Text(
+                          widget.isArabic ? 'تأكيد الكل' : 'Confirm All',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCostSubmissionsDialog() async {
+    if (_pendingReceiptConfirmations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isArabic
+                ? 'لا توجد طلبات صرف معلقة'
+                : 'No pending cost submissions',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final totalCost = _pendingReceiptConfirmations.fold(
+      0.0,
+      (sum, c) => sum + (((c['amount_cents'] as num?)?.toInt() ?? 0) / 100.0),
+    );
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header with red color for Costs
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFFD32F2F), Color(0xFFE53935)],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.receipt_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        crossAxisAlignment: widget.isArabic
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.isArabic
+                                ? 'طلبات الصرف'
+                                : 'Cost Submissions',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            widget.isArabic
+                                ? 'طلبات تكاليف المشروع'
+                                : 'Project cost requests',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content - Scrollable list of costs with details
+              Container(
+                color: const Color(0xFFFFF0F0),
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Summary
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(
+                                0xFFD32F2F,
+                              ).withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.isArabic
+                                    ? 'ملخص التكاليف'
+                                    : 'Costs Summary',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                textDirection: widget.isArabic
+                                    ? ui.TextDirection.rtl
+                                    : ui.TextDirection.ltr,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    widget.isArabic
+                                        ? 'عدد الطلبات:'
+                                        : 'Number of Requests:',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    '${_pendingReceiptConfirmations.length}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                textDirection: widget.isArabic
+                                    ? ui.TextDirection.rtl
+                                    : ui.TextDirection.ltr,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    widget.isArabic
+                                        ? 'الإجمالي:'
+                                        : 'Total Amount:',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    '${totalCost.toStringAsFixed(2)} SDG',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFFD32F2F),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // Costs List with full details
+                        ..._pendingReceiptConfirmations.map((cost) {
+                          final amount =
+                              ((cost['amount_cents'] as num?)?.toInt() ?? 0) /
+                              100.0;
+                          final category =
+                              (cost['expense_category'] as String? ?? 'Cost')
+                                  .replaceAll('_', ' ')
+                                  .toUpperCase();
+                          final site = cost['site_name'] as String? ?? 'Site';
+                          final description =
+                              cost['description'] as String? ??
+                              'Cost submission';
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.red.shade300,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Header: Category + Amount
+                                Row(
+                                  textDirection: widget.isArabic
+                                      ? ui.TextDirection.rtl
+                                      : ui.TextDirection.ltr,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            category,
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12,
+                                              color: Colors.red.shade800,
+                                            ),
+                                          ),
+                                          Text(
+                                            site,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade200,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${amount.toStringAsFixed(2)} SDG',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.red.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                // Description
+                                Text(
+                                  description,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 10),
+                                // Receipt Image or No Receipt indicator
+                                Builder(
+                                  builder: (context) {
+                                    var proofUrl =
+                                        cost['payment_proof_url'] as String? ??
+                                        '';
+
+                                    // Fallback to supporting_documents if payment_proof_url is empty
+                                    if (proofUrl.isEmpty &&
+                                        cost['supporting_documents'] != null) {
+                                      final docs =
+                                          cost['supporting_documents'] as List?;
+                                      if (docs != null && docs.isNotEmpty) {
+                                        proofUrl =
+                                            (docs.first as String?) ?? '';
+                                      }
+                                    }
+
+                                    final isImage =
+                                        proofUrl.isNotEmpty &&
+                                        RegExp(
+                                          r'\.(jpg|jpeg|png|gif|webp)$',
+                                          caseSensitive: false,
+                                        ).hasMatch(proofUrl);
+
+                                    if (isImage) {
+                                      return Container(
+                                        width: double.infinity,
+                                        height: 90,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.red.shade200,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                          child: Image.network(
+                                            proofUrl,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (
+                                                  context,
+                                                  error,
+                                                  stackTrace,
+                                                ) => Container(
+                                                  color: Colors.grey.shade200,
+                                                  child: Center(
+                                                    child: Icon(
+                                                      Icons.broken_image,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                      size: 30,
+                                                    ),
+                                                  ),
+                                                ),
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      return Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.shade100,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.red.shade300,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.attachment,
+                                              size: 14,
+                                              color: Colors.red.shade600,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              widget.isArabic
+                                                  ? 'لم يتم تحميل إيصال'
+                                                  : 'No receipt uploaded',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 10,
+                                                color: Colors.red.shade600,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Action Buttons
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade300,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          widget.isArabic ? 'إغلاق' : 'Close',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _confirmAllPendingReceipts();
+                        },
+                        icon: const Icon(Icons.check_circle, size: 16),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        label: Text(
+                          widget.isArabic ? 'تأكيد الكل' : 'Confirm All',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAdvancesConfirmationsDialog() async {
+    if (_pendingAdvanceConfirmations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isArabic ? 'لا توجد سلفيات معلقة' : 'No pending advances',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final totalAdvance = _pendingAdvanceConfirmations.fold(0.0, (sum, a) {
+      final disbursed = (a['disbursed_amount'] as num?)?.toDouble() ?? 0.0;
+      final approved = (a['approved_amount'] as num?)?.toDouble() ?? 0.0;
+      final requested = (a['requested_amount'] as num?)?.toDouble() ?? 0.0;
+      if (disbursed > 0) return sum + disbursed;
+      if (approved > 0) return sum + approved;
+      return sum + requested;
+    });
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header with teal color for Advances
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF008B8B), Color(0xFF20B2AA)],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.savings_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        textDirection: widget.isArabic
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        crossAxisAlignment: widget.isArabic
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.isArabic
+                                ? 'السلف المعتمدة'
+                                : 'Approved Advances',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            widget.isArabic
+                                ? 'طلبات السلفة المعتمدة'
+                                : 'Authorized advance requests',
+                            textDirection: widget.isArabic
+                                ? ui.TextDirection.rtl
+                                : ui.TextDirection.ltr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content - Scrollable list of advances with details
+              Container(
+                color: const Color(0xFFF0F7FF),
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Summary
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(
+                                0xFF008B8B,
+                              ).withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.isArabic
+                                    ? 'ملخص السلف'
+                                    : 'Advances Summary',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                textDirection: widget.isArabic
+                                    ? ui.TextDirection.rtl
+                                    : ui.TextDirection.ltr,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    widget.isArabic
+                                        ? 'عدد السلف:'
+                                        : 'Number of Advances:',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    '${_pendingAdvanceConfirmations.length}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                textDirection: widget.isArabic
+                                    ? ui.TextDirection.rtl
+                                    : ui.TextDirection.ltr,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    widget.isArabic
+                                        ? 'الإجمالي:'
+                                        : 'Total Amount:',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    '${totalAdvance.toStringAsFixed(2)} SDG',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF008B8B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // Advances List with full details
+                        ..._pendingAdvanceConfirmations.map((advance) {
+                          final disbursed =
+                              (advance['disbursed_amount'] as num?)
+                                  ?.toDouble() ??
+                              0.0;
+                          final approved =
+                              (advance['approved_amount'] as num?)
+                                  ?.toDouble() ??
+                              0.0;
+                          final requested =
+                              (advance['requested_amount'] as num?)
+                                  ?.toDouble() ??
+                              0.0;
+                          final amount = (disbursed > 0
+                              ? disbursed
+                              : (approved > 0 ? approved : requested));
+                          final status =
+                              (advance['status'] as String? ?? 'pending')
+                                  .toUpperCase();
+                          final site =
+                              advance['site_name'] as String? ?? 'Site';
+                          final description =
+                              advance['description'] as String? ??
+                              'Advance Request';
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.teal.shade300,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Header: Site + Status
+                                Row(
+                                  textDirection: widget.isArabic
+                                      ? ui.TextDirection.rtl
+                                      : ui.TextDirection.ltr,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            site,
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 14,
+                                              color: Colors.teal.shade800,
+                                            ),
+                                          ),
+                                          Text(
+                                            widget.isArabic
+                                                ? 'طلب سلفة'
+                                                : 'Advance Request',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.shade200,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        status,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.teal.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                // Description
+                                Text(
+                                  description,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 10),
+                                // Amount Box
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    textDirection: widget.isArabic
+                                        ? ui.TextDirection.rtl
+                                        : ui.TextDirection.ltr,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        widget.isArabic
+                                            ? 'المبلغ المعتمد:'
+                                            : 'Approved Amount:',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatCurrency(amount),
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                          color: Colors.teal.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Action Buttons
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade300,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          widget.isArabic ? 'إغلاق' : 'Close',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _confirmAllPendingAdvances();
+                        },
+                        icon: const Icon(Icons.check_circle, size: 16),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        label: Text(
+                          widget.isArabic ? 'تأكيد الكل' : 'Confirm All',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showFilteredConfirmationsOneByOne(String filterType) async {
+    debugPrint('[Wallet] Filtering confirmations by type: $filterType');
+
+    // Filter costs based on type
+    List<Map<String, dynamic>> filteredCosts = [];
+
+    for (var cost in _pendingReceiptConfirmations) {
+      final category = ((cost['expense_category'] as String?) ?? '')
+          .toLowerCase();
+
+      if (filterType == 'transportation') {
+        // Show transportation/advance related costs
+        if (category.contains('transportation') ||
+            category.contains('vehicle') ||
+            category.contains('advance') ||
+            category.contains('travel') ||
+            category.contains('mileage')) {
+          filteredCosts.add(cost);
+        }
+      } else if (filterType == 'cost') {
+        // Show other cost categories (accommodation, meals, other, permits, etc)
+        if (!category.contains('transportation') &&
+            !category.contains('vehicle') &&
+            !category.contains('advance') &&
+            !category.contains('travel') &&
+            !category.contains('mileage')) {
+          filteredCosts.add(cost);
+        }
+      } else {
+        // All costs
+        filteredCosts = List<Map<String, dynamic>>.from(
+          _pendingReceiptConfirmations,
+        );
+        break;
+      }
+    }
+
+    if (filteredCosts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isArabic
+                ? 'لا توجد تأكيدات من هذا النوع'
+                : 'No confirmations of this type',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // Temporarily replace pending confirmations with filtered ones
+    final savedConfirmations = List<Map<String, dynamic>>.from(
+      _pendingReceiptConfirmations,
+    );
+    _pendingReceiptConfirmations = filteredCosts;
+
+    // Show first confirmation one by one
+    await _showNextPendingReceiptDialog();
+
+    // After all confirmations are done, restore original list
+    if (_pendingReceiptConfirmations.isEmpty) {
+      _pendingReceiptConfirmations = savedConfirmations;
+    }
+  }
+
+  Future<void> _confirmAllPendingReceipts() async {
+    if (_pendingReceiptConfirmations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isArabic
+                ? 'لا توجد تأكيدات معلقة'
+                : 'No pending confirmations',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Show confirmation dialog
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              widget.isArabic ? 'تأكيد الكل' : 'Confirm All Receipts',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+            ),
+            content: Text(
+              widget.isArabic
+                  ? 'هل تريد تأكيد استلام جميع المدفوعات (${_pendingReceiptConfirmations.length} عنصر)؟'
+                  : 'Confirm receipt of all ${_pendingReceiptConfirmations.length} payments?',
+              style: GoogleFonts.poppins(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(
+                  widget.isArabic ? 'إلغاء' : 'Cancel',
+                  style: GoogleFonts.poppins(),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                ),
+                child: Text(
+                  widget.isArabic ? 'تأكيد الكل' : 'Confirm All',
+                  style: GoogleFonts.poppins(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    setState(() => _declineLoading = true);
+
+    try {
+      final now = DateTime.now().toIso8601String();
+      int successCount = 0;
+
+      // Confirm each pending receipt
+      for (final cost in _pendingReceiptConfirmations) {
+        final costId = cost['id'] as String?;
+        if (costId == null) continue;
+
+        try {
+          await Supabase.instance.client
+              .from('operational_cost_submissions')
+              .update({
+                'fund_receipt_confirmed': true,
+                'fund_receipt_confirmed_at': now,
+                'fund_receipt_confirmed_by': _userId,
+                'updated_at': now,
+              })
+              .eq('id', costId);
+
+          successCount++;
+        } catch (e) {
+          debugPrint('[Wallet] Error confirming receipt $costId: $e');
+        }
+      }
+
+      await _loadCostPayments();
+      _checkPendingReceiptConfirmations();
+
+      if (mounted) {
+        setState(() {}); // Update UI with new pending confirmations count
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'تم تأكيد $successCount من ${_pendingReceiptConfirmations.length} عنصر'
+                  : 'Confirmed $successCount of ${_pendingReceiptConfirmations.length} items',
+            ),
+            backgroundColor: Colors.green.shade600,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Wallet] Error in batch receipt confirmation: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic ? 'حدث خطأ' : 'An error occurred'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _declineLoading = false);
+      }
+    }
+  }
+
+  Future<void> _confirmAllPendingAdvances() async {
+    if (_pendingAdvanceConfirmations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isArabic ? 'لا توجد سلفيات معلقة' : 'No pending advances',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Show confirmation dialog
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              widget.isArabic ? 'تأكيد جميع السلف' : 'Confirm All Advances',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+            ),
+            content: Text(
+              widget.isArabic
+                  ? 'هل تريد تأكيد استلام جميع السلف المعتمدة (${_pendingAdvanceConfirmations.length} عنصر)؟'
+                  : 'Confirm receipt of all ${_pendingAdvanceConfirmations.length} advances?',
+              style: GoogleFonts.poppins(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(
+                  widget.isArabic ? 'إلغاء' : 'Cancel',
+                  style: GoogleFonts.poppins(),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade600,
+                ),
+                child: Text(
+                  widget.isArabic ? 'تأكيد الكل' : 'Confirm All',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    setState(() => _declineLoading = true);
+
+    try {
+      final now = DateTime.now().toIso8601String();
+      int successCount = 0;
+
+      // Confirm each pending advance
+      for (final advance in _pendingAdvanceConfirmations) {
+        final advanceId = advance['id'] as String?;
+        if (advanceId == null) continue;
+
+        try {
+          await Supabase.instance.client
+              .from('advance_requests')
+              .update({
+                'fund_received_confirmed': true,
+                'fund_received_confirmed_at': now,
+                'fund_received_confirmed_by': _userId,
+                'updated_at': now,
+              })
+              .eq('id', advanceId);
+
+          successCount++;
+        } catch (e) {
+          debugPrint('[Wallet] Error confirming advance $advanceId: $e');
+        }
+      }
+
+      // Reload the advances data from database and recheck confirmations
+      await _loadAdvances();
+      _checkPendingAdvanceConfirmations();
+
+      if (mounted) {
+        setState(() {}); // Update UI with new pending confirmations count
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'تم تأكيد $successCount من ${_pendingAdvanceConfirmations.length} سلفة'
+                  : 'Confirmed $successCount of ${_pendingAdvanceConfirmations.length} advances',
+            ),
+            backgroundColor: Colors.teal.shade600,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Wallet] Error in batch advance confirmation: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic ? 'حدث خطأ' : 'An error occurred'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _declineLoading = false);
+      }
+    }
+  }
+
+  /// High-priority blocking modal that appears automatically
+  Future<void> _showHighPriorityBlockingReceiptModal() async {
     if (_pendingReceiptConfirmations.isEmpty) return;
+
+    final cost = _pendingReceiptConfirmations.first;
+    final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
+    final amountSdg = amountCents / 100.0;
+    final category = cost['expense_category'] as String? ?? 'Cost';
+    var proofUrl = cost['payment_proof_url'] as String?;
+    String? proofFilename;
+    String? proofDocType;
+
+    if (proofUrl != null && proofUrl.isNotEmpty) {
+      proofFilename = proofUrl.split('/').last.split('?').first;
+    }
+
+    // Debug: Log what we received
+    debugPrint('[Receipt Modal] Cost ID: ${cost['id']}');
+    debugPrint('[Receipt Modal] Keys in cost data: ${cost.keys.toList()}');
+    debugPrint('[Receipt Modal] proofUrl: $proofUrl');
+
+    // Fallback: Check for other possible field names
+    if ((proofUrl == null || proofUrl.isEmpty) &&
+        cost.containsKey('receipt_url')) {
+      proofUrl = cost['receipt_url'] as String?;
+      debugPrint('[Receipt Modal] Found receipt_url instead: $proofUrl');
+    }
+
+    // IMPORTANT: do NOT fallback to supporting_documents for wallet receipt
+    // confirmation. supporting_documents are submitter attachments, not
+    // disbursement proof uploaded by finance.
+
+    // Blob URLs are session-scoped (web) and often unusable later.
+    // Treat blob/missing URLs as needing a persistent URL refresh from DB.
+    final needsPersistentProofUrl = proofUrl == null ||
+        proofUrl.isEmpty ||
+        proofUrl.startsWith('blob:');
+
+    // Try refreshing from the latest submission row and cost_attachments.
+    if (needsPersistentProofUrl && cost['id'] != null) {
+      try {
+        final latestSubmission = await Supabase.instance.client
+            .from('operational_cost_submissions')
+            .select('payment_proof_url')
+            .eq('id', cost['id'])
+            .maybeSingle();
+
+        final latestProofUrl = latestSubmission?['payment_proof_url'] as String?;
+        if (latestProofUrl != null &&
+            latestProofUrl.isNotEmpty &&
+            !latestProofUrl.startsWith('blob:')) {
+          proofUrl = latestProofUrl;
+          proofFilename = proofUrl.split('/').last.split('?').first;
+          debugPrint(
+            '[Receipt Modal] Refreshed payment_proof_url from DB: $proofUrl',
+          );
+        }
+
+        final attachments = await Supabase.instance.client
+            .from('cost_attachments')
+            .select('url')
+            .eq('cost_id', cost['id'])
+            .limit(1)
+            .maybeSingle();
+        final attachmentUrl = attachments?['url'] as String?;
+        if (attachmentUrl != null &&
+            attachmentUrl.isNotEmpty &&
+            !attachmentUrl.startsWith('blob:')) {
+          proofUrl = attachmentUrl;
+          proofFilename = proofUrl.split('/').last.split('?').first;
+          debugPrint('[Receipt Modal] Found in cost_attachments: $proofUrl');
+        }
+      } catch (e) {
+        debugPrint('[Receipt Modal] No cost_attachments table or error: $e');
+      }
+    }
+
+    final imageExtRegex = RegExp(
+      r'\.(jpg|jpeg|png|gif|webp)(\?.*)?$',
+      caseSensitive: false,
+    );
+    final isImage = (proofDocType != null &&
+            proofDocType!.toLowerCase() == 'photo') ||
+        (proofFilename != null && imageExtRegex.hasMatch(proofFilename!)) ||
+        (proofUrl != null && imageExtRegex.hasMatch(proofUrl));
+    debugPrint(
+      '[Receipt Modal] isImage=$isImage, proofDocType=$proofDocType, proofFilename=$proofFilename',
+    );
+
+    // Use a safe URL for previewing images:
+    // - if it's a storage-relative path, convert to a public https URL
+    // - if it's a blob: url (web upload), keep it as-is
+    String? displayProofUrl = proofUrl;
+    if (displayProofUrl != null &&
+        displayProofUrl.isNotEmpty &&
+        !displayProofUrl.startsWith('http') &&
+        !displayProofUrl.startsWith('blob:')) {
+      displayProofUrl = 'https://storage.googleapis.com/$displayProofUrl';
+    }
+
+    // Load signature and bank account details if available
+    // Load signature and bank account details if available
+    String? savedSignatureBase64;
+    Map<String, dynamic>? bankAccount;
+    String? accountNumber;
+    String? accountHolderName;
+    String? bankName;
+    String? bankBranch;
+    String? userName;
+    String? userRole;
+    String? staffName;
+
+    try {
+      // Try to get user info from auth
+      final authUser = Supabase.instance.client.auth.currentUser;
+      userName =
+          authUser?.userMetadata?['name'] ??
+          authUser?.userMetadata?['full_name'] ??
+          authUser?.email?.split('@').first ??
+          'User';
+
+      // Fetch bank account and role info
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('bank_account, role')
+          .eq('id', _userId ?? '')
+          .maybeSingle();
+
+      debugPrint('[PROFILE] ProfileData: $profileData');
+
+      if (profileData != null) {
+        // Get role from the role field
+        userRole = profileData['role'] ?? 'Field Staff';
+
+        debugPrint('[PROFILE] User role: $userRole');
+      }
+
+      if (profileData != null) {
+        var bankData = profileData['bank_account'];
+
+        debugPrint('[BANK] Raw bankData: $bankData');
+        debugPrint('[BANK] bankData type: ${bankData.runtimeType}');
+
+        // Parse JSON string if necessary
+        if (bankData is String) {
+          debugPrint('[BANK] Parsing JSON string...');
+          try {
+            bankAccount = jsonDecode(bankData) as Map<String, dynamic>?;
+            debugPrint('[BANK] Parsed to: $bankAccount');
+          } catch (e) {
+            debugPrint('[BANK] Failed to parse JSON: $e');
+          }
+        } else {
+          bankAccount = bankData as Map<String, dynamic>?;
+        }
+
+        debugPrint('[BANK] Final bankAccount: $bankAccount');
+
+        if (bankAccount != null) {
+          accountNumber =
+              bankAccount['account_number'] ??
+              bankAccount['accountNumber'] ??
+              bankAccount['AccountNumber'] ??
+              bankAccount['number'] ??
+              'N/A';
+          accountHolderName =
+              bankAccount['account_name'] ??
+              bankAccount['accountHolderName'] ??
+              bankAccount['account_holder_name'] ??
+              bankAccount['holder_name'] ??
+              bankAccount['name'] ??
+              'N/A';
+          bankName =
+              bankAccount['bank_name'] ??
+              bankAccount['bankName'] ??
+              bankAccount['name'] ??
+              bankAccount['bank'] ??
+              'N/A';
+          bankBranch =
+              bankAccount['branch_code'] ??
+              bankAccount['bankBranch'] ??
+              bankAccount['bank_branch'] ??
+              bankAccount['branch'] ??
+              bankAccount['location'] ??
+              'N/A';
+
+          debugPrint(
+            '[BANK] Account: $accountNumber, Holder: $accountHolderName, Bank: $bankName, Branch: $bankBranch',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[BANK] Error loading bank details: $e');
+    }
+
+    // Set default values for user details
+    staffName ??= userName ?? 'N/A';
+    userRole ??= 'Field Staff';
+
+    final signatureStrokes = <List<Offset>>[];
+    bool useSaved = savedSignatureBase64 != null;
+
+    if (!mounted) return;
+
+    // Show blocking modal
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.87),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final hasSig = signatureStrokes.isNotEmpty;
+
+          return Dialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.95,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.9,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Red urgent header
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade700,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.priority_high,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '⚠️ Receipt Upload - Action Required',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${_pendingReceiptConfirmations.indexOf(cost) + 1} of ${_pendingReceiptConfirmations.length}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Content area - scrollable
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            proofUrl != null && proofUrl.isNotEmpty
+                                ? 'Your cost submission has been approved and the receipt has been uploaded to the system.'
+                                : 'Your cost submission has been approved. Please review and acknowledge receipt.',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          // === RECEIPT IMAGE - SHOW FIRST & PROMINENTLY ===
+                          if (proofUrl != null && proofUrl.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.teal.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.teal.shade300,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Payment Receipt / إيصال الدفع',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.teal.shade900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (isImage)
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Container(
+                                        color: Colors.white,
+                                        width: double.infinity,
+                                        child:
+                                            (displayProofUrl?.startsWith(
+                                                    'blob:') ??
+                                                false)
+                                                ? Image.network(
+                                                    displayProofUrl!,
+                                                    height: 420,
+                                                    fit: BoxFit.contain,
+                                                    errorBuilder:
+                                                        (_, __, ___) =>
+                                                            Container(
+                                                      height: 420,
+                                                      color: Colors
+                                                          .grey.shade100,
+                                                      child: const Center(
+                                                        child: Icon(
+                                                          Icons.broken_image,
+                                                          color: Colors.grey,
+                                                          size: 48,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  )
+                                                : CachedNetworkImage(
+                                                    imageUrl:
+                                                        displayProofUrl ??
+                                                            proofUrl!,
+                                                    height: 420,
+                                                    fit: BoxFit.contain,
+                                                    placeholder: (_, __) =>
+                                                        Container(
+                                                      height: 420,
+                                                      color: Colors
+                                                          .grey.shade100,
+                                                      child: const Center(
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    errorWidget: (_, __, ___) =>
+                                                        Container(
+                                                      height: 420,
+                                                      color: Colors
+                                                          .grey.shade100,
+                                                      child: const Center(
+                                                        child: Icon(
+                                                          Icons.broken_image,
+                                                          color: Colors.grey,
+                                                          size: 48,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                      ),
+                                    )
+                                  else if (proofUrl.isNotEmpty)
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.picture_as_pdf,
+                                                color: Colors.red.shade600,
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  'Document / وثيقة',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: Colors.grey.shade200,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              proofUrl.split('/').last.split('?').first,
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: ElevatedButton.icon(
+                                              onPressed: () async {
+                                                try {
+                                                  var urlToOpen =
+                                                      proofUrl ?? '';
+                                                  // Ensure URL is complete for Supabase storage
+                                                  if (urlToOpen.isNotEmpty &&
+                                                      !urlToOpen.startsWith(
+                                                        'http',
+                                                      )) {
+                                                    urlToOpen =
+                                                        'https://storage.googleapis.com/$urlToOpen';
+                                                  }
+                                                  final uri = Uri.tryParse(
+                                                    urlToOpen,
+                                                  );
+                                                  if (uri != null &&
+                                                      await canLaunchUrl(uri)) {
+                                                    await launchUrl(
+                                                      uri,
+                                                      mode: LaunchMode
+                                                          .externalApplication,
+                                                    );
+                                                  } else if (uri != null) {
+                                                    // Fallback: try opening even if canLaunchUrl fails
+                                                    try {
+                                                      await launchUrl(
+                                                        uri,
+                                                        mode: LaunchMode
+                                                            .externalApplication,
+                                                      );
+                                                    } catch (e) {
+                                                      debugPrint(
+                                                        '[Document Open] Failed to open: $e',
+                                                      );
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              widget.isArabic
+                                                                  ? 'فشل فتح المستند'
+                                                                  : 'Failed to open document',
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                    }
+                                                  }
+                                                } catch (e) {
+                                                  debugPrint(
+                                                    '[Document Open] Error: $e',
+                                                  );
+                                                }
+                                              },
+                                              icon: const Icon(
+                                                Icons.open_in_new,
+                                                size: 16,
+                                              ),
+                                              label: Text(
+                                                'Open Full Document',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    Colors.teal.shade600,
+                                                foregroundColor: Colors.white,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 10,
+                                                    ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            // Receipt Confirmation Status
+                            if (cost['fund_receipt_confirmed'] == true)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.green.shade300,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green.shade700,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Receipt confirmed ✓',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.green.shade700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            cost['fund_receipt_confirmed_at'] !=
+                                                    null
+                                                ? DateFormat(
+                                                    'dd MMM yyyy, HH:mm',
+                                                  ).format(
+                                                    DateTime.parse(
+                                                      cost['fund_receipt_confirmed_at'],
+                                                    ),
+                                                  )
+                                                : 'Confirmed',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 10,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 20),
+                          ] else ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.orange.shade300,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.hourglass_empty,
+                                        color: Colors.orange.shade600,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Receipt Pending',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            color: Colors.orange.shade900,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'The finance team is preparing your receipt. It will appear here shortly. You can still acknowledge once you receive it.',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade800,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade100,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.info_outline,
+                                          size: 18,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Amount: ${amountSdg.toStringAsFixed(2)} SDG',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.orange.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                          // Submission details card
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Submission & Approval Details:',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: Colors.blue.shade900,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _buildDetailRow(
+                                  'Category',
+                                  category,
+                                  Colors.blue.shade700,
+                                  Colors.blue.shade900,
+                                ),
+                                const SizedBox(height: 10),
+                                _buildDetailRow(
+                                  'Amount',
+                                  '${amountSdg.toStringAsFixed(2)} SDG',
+                                  Colors.blue.shade700,
+                                  Colors.teal.shade700,
+                                  bold: true,
+                                ),
+                                const SizedBox(height: 10),
+                                if (cost['submitted_by'] != null)
+                                  _buildDetailRow(
+                                    'Submitted By',
+                                    cost['submitted_by_name'] as String? ??
+                                        'Field Staff',
+                                    Colors.blue.shade700,
+                                    Colors.blue.shade900,
+                                  ),
+                                if (cost['submitted_by'] != null)
+                                  const SizedBox(height: 10),
+                                if (cost['submitted_at'] != null)
+                                  _buildDetailRow(
+                                    'Submitted On',
+                                    _formatDate(cost['submitted_at']),
+                                    Colors.blue.shade700,
+                                    Colors.blue.shade900,
+                                  ),
+                                if (cost['submitted_at'] != null)
+                                  const SizedBox(height: 10),
+                                if (cost['approved_by'] != null)
+                                  _buildDetailRow(
+                                    'Approved By',
+                                    cost['approved_by_name'] as String? ??
+                                        'Finance Team',
+                                    Colors.blue.shade700,
+                                    Colors.green.shade700,
+                                    bold: true,
+                                  ),
+                                if (cost['approved_by'] != null)
+                                  const SizedBox(height: 10),
+                                if (cost['approved_at'] != null)
+                                  _buildDetailRow(
+                                    'Approved On',
+                                    _formatDate(cost['approved_at']),
+                                    Colors.blue.shade700,
+                                    Colors.green.shade700,
+                                  ),
+                                if (cost['site_name'] != null) ...[
+                                  const SizedBox(height: 10),
+                                  _buildDetailRow(
+                                    'Site',
+                                    cost['site_name'] as String? ?? 'N/A',
+                                    Colors.blue.shade700,
+                                    Colors.blue.shade900,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Account Details Section
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.purple.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Your Account Details:',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: Colors.purple.shade900,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _buildDetailRow(
+                                  'Staff Name',
+                                  staffName ?? 'N/A',
+                                  Colors.purple.shade700,
+                                  Colors.purple.shade900,
+                                ),
+                                const SizedBox(height: 10),
+                                _buildDetailRow(
+                                  'User ID',
+                                  _userId?.substring(0, 8).toUpperCase() ??
+                                      'N/A',
+                                  Colors.purple.shade700,
+                                  Colors.purple.shade900,
+                                ),
+                                const SizedBox(height: 10),
+                                _buildDetailRow(
+                                  'Role',
+                                  userRole ?? 'N/A',
+                                  Colors.purple.shade700,
+                                  Colors.purple.shade900,
+                                ),
+                                const SizedBox(height: 10),
+                                _buildDetailRow(
+                                  'Wallet Balance',
+                                  '${_currentBalance.toStringAsFixed(2)} SDG',
+                                  Colors.purple.shade700,
+                                  Colors.teal.shade700,
+                                  bold: true,
+                                ),
+                                // Bank Account Details Section
+                                if (bankAccount != null) ...[
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Bank Account Information:',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  _buildDetailRow(
+                                    'Account Holder',
+                                    accountHolderName ?? 'N/A',
+                                    Colors.orange.shade700,
+                                    Colors.orange.shade900,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildDetailRow(
+                                    'Bank Name',
+                                    bankName ?? 'N/A',
+                                    Colors.orange.shade700,
+                                    Colors.orange.shade900,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildDetailRow(
+                                    'Account Number',
+                                    accountNumber ?? 'N/A',
+                                    Colors.orange.shade700,
+                                    Colors.orange.shade900,
+                                    bold: true,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildDetailRow(
+                                    'Branch',
+                                    bankBranch ?? 'N/A',
+                                    Colors.orange.shade700,
+                                    Colors.orange.shade900,
+                                  ),
+                                ] else ...[
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.orange.shade300,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '⚠️ Bank account information not configured. Please add your bank account details in Profile Settings.',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.orange.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Signature section
+                          Text(
+                            'Your Signature / توقيعك',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const SizedBox(height: 12),
+                          // Signature canvas or display
+                          if (useSaved && savedSignatureBase64 != null)
+                            Container(
+                              height: 180,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.teal.shade300,
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.memory(
+                                  base64Decode(savedSignatureBase64),
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            )
+                          else
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Container(
+                                  height: 180,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.teal.shade400,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: GestureDetector(
+                                      onPanStart: (d) {
+                                        setDialogState(
+                                          () => signatureStrokes.add([
+                                            d.localPosition,
+                                          ]),
+                                        );
+                                      },
+                                      onPanUpdate: (d) {
+                                        setDialogState(
+                                          () => signatureStrokes.last.add(
+                                            d.localPosition,
+                                          ),
+                                        );
+                                      },
+                                      child: CustomPaint(
+                                        painter: _SignaturePainter(
+                                          signatureStrokes,
+                                        ),
+                                        child: Container(),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                if (signatureStrokes.isNotEmpty)
+                                  TextButton.icon(
+                                    onPressed: () => setDialogState(
+                                      () => signatureStrokes.clear(),
+                                    ),
+                                    icon: const Icon(Icons.refresh, size: 14),
+                                    label: Text(
+                                      'Clear',
+                                      style: GoogleFonts.poppins(fontSize: 11),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.teal,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Action buttons
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(color: Colors.grey.shade200),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _declineReceiptConfirmation(cost);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange.shade600,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: Text(
+                              'Not Yet Received',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: hasSig
+                                ? () {
+                                    Navigator.pop(ctx);
+                                    _confirmReceiptWithSignature(
+                                      cost,
+                                      useSaved
+                                          ? savedSignatureBase64
+                                          : signatureStrokes,
+                                    );
+                                  }
+                                : null,
+                            icon: const Icon(Icons.check_circle, size: 16),
+                            label: Text(
+                              'Acknowledge Receipt',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(
+    String label,
+    String value,
+    Color labelColor,
+    Color valueColor, {
+    bool bold = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(fontSize: 12, color: labelColor),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showNextPendingReceiptDialog() async {
+    debugPrint(
+      '[Wallet] _showNextPendingReceiptDialog: ${_pendingReceiptConfirmations.length} pending receipts',
+    );
+    if (_pendingReceiptConfirmations.isEmpty) {
+      debugPrint('[Wallet] No pending receipt confirmations found!');
+      return;
+    }
 
     final cost = _pendingReceiptConfirmations.first;
     _currentPendingReceipt = cost;
@@ -615,6 +4174,13 @@ class _WalletScreenState extends State<WalletScreen> {
     final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
     final amountSdg = amountCents / 100.0;
     final category = cost['expense_category'] as String? ?? 'Cost';
+    final siteName = cost['site_name'] as String? ?? 'N/A';
+    final description = cost['description'] as String? ?? '';
+    var proofUrl = cost['payment_proof_url'] as String?;
+
+    // IMPORTANT: no supporting_documents fallback here.
+    // For this modal, use payment_proof_url only (finance disbursement proof).
+
     final categoryLabel =
         {
           'permits': 'Permits & Licenses',
@@ -631,6 +4197,900 @@ class _WalletScreenState extends State<WalletScreen> {
         }[category] ??
         category;
 
+    // Load signature if available
+    String? savedSignatureBase64;
+    try {
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('signature_base64')
+          .eq('id', _userId ?? '')
+          .maybeSingle();
+      savedSignatureBase64 = profileData?['signature_base64'] as String?;
+    } catch (_) {}
+
+    final signatureStrokes = <List<Offset>>[];
+    bool useSaved = savedSignatureBase64 != null;
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final isImage =
+              proofUrl != null &&
+              RegExp(
+                r'\.(jpg|jpeg|png|gif|webp)$',
+                caseSensitive: false,
+              ).hasMatch(proofUrl);
+          final hasSig = useSaved
+              ? savedSignatureBase64 != null
+              : signatureStrokes.isNotEmpty;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            insetPadding: const EdgeInsets.all(16),
+            titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.receipt_long,
+                    color: Colors.orange.shade700,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Confirm Receipt / تأكيد الاستلام',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        '${_pendingReceiptConfirmations.indexOf(cost) + 1} of ${_pendingReceiptConfirmations.length}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 10),
+
+                    // Cost Details Section
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Cost Details / تفاصيل الصرف',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: Colors.blue.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Category:',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                              Text(
+                                categoryLabel,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Amount:',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                              Text(
+                                '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amountSdg)} SDG',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.teal.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Site:',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                              Text(
+                                siteName,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (description.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Activity/Description:',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  description,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.blue.shade900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (cost['submitted_at'] != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Submitted On:',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    DateFormat('dd MMM yyyy, hh:mm a').format(
+                                      DateTime.parse(
+                                        cost['submitted_at'] as String,
+                                      ),
+                                    ),
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 10,
+                                      color: Colors.blue.shade900,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    textAlign: TextAlign.end,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Payment Receipt Section - Full Display
+                    if (proofUrl != null && proofUrl.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green.shade300),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header with title
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.receipt,
+                                  color: Colors.green.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Payment Receipt / إيصال الدفع',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.green.shade900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Receipt Image
+                            if (isImage)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  color: Colors.white,
+                                  child: CachedNetworkImage(
+                                    imageUrl: proofUrl,
+                                    height: 200,
+                                    width: double.infinity,
+                                    fit: BoxFit.contain,
+                                    placeholder: (_, _) => Container(
+                                      height: 200,
+                                      color: Colors.grey.shade100,
+                                      child: const Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    errorWidget: (_, _, _) => Container(
+                                      height: 200,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              // Document receipt preview (not an image)
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // File info row
+                                    Row(
+                                      children: [
+                                        // Document icon box
+                                        Container(
+                                          width: 48,
+                                          height: 48,
+                                          decoration: BoxDecoration(
+                                            color: Colors.teal.shade200,
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Icon(
+                                              Icons.description_outlined,
+                                              color: Colors.teal.shade700,
+                                              size: 24,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        // File details
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Document / وثيقة',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Payment Receipt',
+                                                style: GoogleFonts.poppins(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13,
+                                                  color: Colors.grey.shade800,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    // Open Document Button
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: () async {
+                                          final uri = Uri.tryParse(
+                                            proofUrl ?? '',
+                                          );
+                                          if (uri != null &&
+                                              await canLaunchUrl(uri)) {
+                                            await launchUrl(
+                                              uri,
+                                              mode: LaunchMode
+                                                  .externalApplication,
+                                            );
+                                          }
+                                        },
+                                        icon: const Icon(
+                                          Icons.download,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          'Open Full Document',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.teal.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 12),
+                            // Receipt Status
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green.shade700,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Receipt confirmed ✓',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.green.shade700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          cost['fund_receipt_confirmed_at'] !=
+                                                  null
+                                              ? DateFormat(
+                                                  'dd MMM yyyy, HH:mm',
+                                                ).format(
+                                                  DateTime.parse(
+                                                    cost['fund_receipt_confirmed_at'],
+                                                  ),
+                                                )
+                                              : 'Confirmed',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      // No receipt uploaded - styled message
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Colors.red.shade300,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Receipt label
+                            Text(
+                              'Payment Receipt / إيصال الدفع',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Colors.red.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // No receipt message box
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  // Placeholder icon
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade200,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.description_outlined,
+                                        color: Colors.red.shade600,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Message
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Document / وثيقة',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'No receipt uploaded',
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 13,
+                                            color: Colors.red.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Signature Section
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Your Signature / توقيعك',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (savedSignatureBase64 != null)
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () =>
+                                    setDialogState(() => useSaved = true),
+                                child: Text(
+                                  'Use Saved',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: useSaved
+                                        ? Colors.teal
+                                        : Colors.grey.shade500,
+                                    fontWeight: useSaved
+                                        ? FontWeight.w700
+                                        : FontWeight.w400,
+                                    decoration: useSaved
+                                        ? TextDecoration.underline
+                                        : TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              GestureDetector(
+                                onTap: () => setDialogState(() {
+                                  useSaved = false;
+                                  signatureStrokes.clear();
+                                }),
+                                child: Text(
+                                  'Draw New',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: !useSaved
+                                        ? Colors.teal
+                                        : Colors.grey.shade500,
+                                    fontWeight: !useSaved
+                                        ? FontWeight.w700
+                                        : FontWeight.w400,
+                                    decoration: !useSaved
+                                        ? TextDecoration.underline
+                                        : TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (useSaved && savedSignatureBase64 != null)
+                      Container(
+                        height: 100,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.teal.shade300),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            base64Decode(savedSignatureBase64),
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Container(
+                            height: 100,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.teal.shade300,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: GestureDetector(
+                                onPanStart: (d) {
+                                  setDialogState(
+                                    () =>
+                                        signatureStrokes.add([d.localPosition]),
+                                  );
+                                },
+                                onPanUpdate: (d) {
+                                  setDialogState(
+                                    () => signatureStrokes.last.add(
+                                      d.localPosition,
+                                    ),
+                                  );
+                                },
+                                child: CustomPaint(
+                                  painter: _SignaturePainter(signatureStrokes),
+                                  child: Container(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          TextButton.icon(
+                            onPressed: () =>
+                                setDialogState(() => signatureStrokes.clear()),
+                            icon: const Icon(Icons.refresh, size: 13),
+                            label: Text(
+                              'Clear',
+                              style: GoogleFonts.poppins(fontSize: 11),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.grey.shade600,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 10),
+                  ],
+                ),
+              ),
+            ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            actions: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await Future.delayed(const Duration(milliseconds: 100));
+                      await _declineReceiptConfirmation(cost);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange.shade600,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Not Yet Received',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: hasSig
+                        ? () async {
+                            Navigator.pop(ctx);
+                            await Future.delayed(
+                              const Duration(milliseconds: 100),
+                            );
+                            await _confirmReceiptWithSignature(
+                              cost,
+                              useSaved
+                                  ? savedSignatureBase64
+                                  : signatureStrokes,
+                            );
+                          }
+                        : null,
+                    icon: const Icon(Icons.verified, size: 16),
+                    label: Text(
+                      'Confirm Receipt',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade600,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade300,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _declineReceiptConfirmation(Map<String, dynamic> cost) async {
+    final costId = cost['id'] as String?;
+    final amountSdg = ((cost['amount_cents'] as num?)?.toInt() ?? 0) / 100.0;
+    final category = cost['expense_category'] as String? ?? 'Cost';
+
+    if (costId == null) return;
+
+    setState(() => _declineLoading = true);
+
+    try {
+      final now = DateTime.now().toIso8601String();
+
+      // Mark receipt as not confirmed and record when user declined it
+      // This prevents showing the modal again until supervisor/finance resends it
+      await Supabase.instance.client
+          .from('operational_cost_submissions')
+          .update({
+            'fund_receipt_confirmed': false,
+            'fund_receipt_confirmed_at': null,
+            'receipt_declined_at':
+                now, // Track when user marked as "Not Yet Received"
+            'updated_at': now,
+          })
+          .eq('id', costId);
+
+      debugPrint('[Wallet] Marked receipt as not received for: $costId');
+
+      // Send notifications to supervisor, admin, and finance with error handling
+      try {
+        // Notify admin
+        await Supabase.instance.client.from('notification_broadcast').insert({
+          'recipient_type': 'admin',
+          'sender_id': _userId,
+          'title': '$category Payment Not Yet Received',
+          'title_ar': 'لم يتم استلام دفعة $category بعد',
+          'message':
+              'User has indicated they have not received this payment yet. Please resend.',
+          'message_ar':
+              'أفاد المستخدم بأنه لم يستلم هذه الدفعة بعد. يرجى إعادة الإرسال.',
+          'notification_type': 'cost_payment_not_received',
+          'related_id': costId,
+          'related_type': 'cost_submission',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        // Also notify supervisor
+        await Supabase.instance.client.from('notification_broadcast').insert({
+          'recipient_type': 'supervisor',
+          'sender_id': _userId,
+          'title': '$category Payment Not Yet Received',
+          'title_ar': 'لم يتم استلام دفعة $category بعد',
+          'message':
+              'Your staff member has indicated they have not received this payment yet.',
+          'message_ar': 'أفاد عضو فريقك بأنه لم يستلم هذه الدفعة بعد.',
+          'notification_type': 'cost_payment_not_received',
+          'related_id': costId,
+          'related_type': 'cost_submission',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint('[Wallet] Notification error: $e');
+      }
+
+      // Reload cost payments after a brief delay
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _loadCostPayments();
+      _checkPendingReceiptConfirmations();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'تم تسجيل عدم الاستلام ✓ تم إخطار المالية والمشرف'
+                  : 'Marked as Not Yet Received ✓ Supervisor & Finance notified',
+            ),
+            backgroundColor: Colors.orange.shade600,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Show next pending receipt if any exists (but not the same one again)
+        if (_pendingReceiptConfirmations.isNotEmpty) {
+          await Future.delayed(const Duration(milliseconds: 600));
+          if (mounted && _pendingReceiptConfirmations.isNotEmpty) {
+            await _showHighPriorityBlockingReceiptModal();
+          }
+        }
+      }
+    } catch (e, st) {
+      debugPrint('[Wallet] Error declining receipt confirmation: $e');
+      debugPrint('[Wallet] Stack trace: $st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'خطأ: ${e.toString()}'
+                  : 'Error: ${e.toString()}',
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _declineLoading = false);
+      }
+    }
+  }
+
+  Future<void> _showNextPendingAdvanceDialog() async {
+    if (_pendingAdvanceConfirmations.isEmpty) return;
+    final advance = _pendingAdvanceConfirmations.first;
+    final currentIndex = _pendingAdvanceConfirmations.indexOf(advance) + 1;
+    final totalCount = _pendingAdvanceConfirmations.length;
+
+    final requestedAmount =
+        (advance['requested_amount'] as num?)?.toDouble() ?? 0.0;
+    final approvedAmount =
+        (advance['approved_amount'] as num?)?.toDouble() ?? requestedAmount;
+    final disbursedAmount = approvedAmount;
+    final siteName = advance['site_name'] as String? ?? 'Site Visit';
+    var proofUrl = advance['payment_proof_url'] as String?;
+
+    // Fallback to supporting_documents if payment_proof_url is empty
+    if ((proofUrl == null || proofUrl.isEmpty) &&
+        advance['supporting_documents'] != null) {
+      final docs = advance['supporting_documents'] as List?;
+      if (docs != null && docs.isNotEmpty) {
+        proofUrl = (docs.first as String?);
+        debugPrint(
+          '[Advance Modal] Using receipt from supporting_documents: $proofUrl',
+        );
+      }
+    }
+
+    final proofNotes = advance['payment_proof_notes'] as String?;
+    final isImage =
+        proofUrl != null &&
+        RegExp(
+          r'\.(jpg|jpeg|png|gif|webp)$',
+          caseSensitive: false,
+        ).hasMatch(proofUrl);
+
     if (!mounted) return;
 
     await showDialog<void>(
@@ -641,41 +5101,64 @@ class _WalletScreenState extends State<WalletScreen> {
         insetPadding: const EdgeInsets.all(16),
         titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
         contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.receipt_long,
-                color: Colors.orange.shade700,
-                size: 24,
-              ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.directions_car,
+                    color: Colors.amber.shade700,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Transport Advance Confirmation',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      Text(
+                        'تأكيد استلام سلفة النقل',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Payment Receipt Confirmation',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                  Text(
-                    'تأكيد استلام دفعة الصرف',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 12),
+            // Grouping indicator
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '$currentIndex of $totalCount',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.amber.shade800,
+                ),
               ),
             ),
           ],
@@ -686,14 +5169,14 @@ class _WalletScreenState extends State<WalletScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'You have a pending cost payment receipt that requires confirmation.',
+                'You have a pending transport advance receipt that requires confirmation.',
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   color: Colors.grey.shade700,
                 ),
               ),
               Text(
-                'لديك دفعة تكاليف معلقة تتطلب تأكيد الاستلام.',
+                'لديك سلفة نقل معلقة تتطلب تأكيد الاستلام.',
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   color: Colors.grey.shade600,
@@ -702,35 +5185,280 @@ class _WalletScreenState extends State<WalletScreen> {
               ),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.teal.shade200),
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade200),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      categoryLabel,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.place,
+                          color: Colors.amber.shade700,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            siteName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 10),
                     Text(
-                      '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amountSdg)} SDG',
+                      '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(disbursedAmount)} SDG',
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        color: Colors.teal.shade700,
+                        fontSize: 22,
+                        color: Colors.amber.shade800,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              // ── Payment Proof Image - PROMINENTLY DISPLAYED ─────────────
+              if (proofUrl != null && proofUrl.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Payment Receipt / إيصال الدفع',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (isImage)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      color: Colors.white,
+                      width: double.infinity,
+                      child: CachedNetworkImage(
+                        imageUrl: proofUrl,
+                        height: 200,
+                        fit: BoxFit.contain,
+                        placeholder: (_, __) => Container(
+                          height: 200,
+                          color: Colors.grey.shade100,
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          height: 200,
+                          color: Colors.grey.shade100,
+                          child: const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                              size: 48,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  // Document receipt preview (not an image)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // File info row
+                        Row(
+                          children: [
+                            // Document icon box
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade200,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.description_outlined,
+                                  color: Colors.amber.shade700,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // File details
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Document / وثيقة',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Payment Receipt',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Open Document Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final uri = Uri.tryParse(proofUrl ?? '');
+                              if (uri != null && await canLaunchUrl(uri)) {
+                                await launchUrl(
+                                  uri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.download, size: 16),
+                            label: Text(
+                              'Open Full Document',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amber.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (proofNotes != null && proofNotes.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Text(
+                      'Finance Notes: "$proofNotes"',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ] else ...[
+                const SizedBox(height: 16),
+                // No receipt uploaded - styled message
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.red.shade300, width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Receipt label
+                      Text(
+                        'Payment Receipt / إيصال الدفع',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.red.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // No receipt message box
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            // Placeholder icon
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade200,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.description_outlined,
+                                  color: Colors.red.shade600,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Message
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Document / وثيقة',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'No receipt uploaded',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                      color: Colors.red.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -748,7 +5476,7 @@ class _WalletScreenState extends State<WalletScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Please confirm receipt of this payment or indicate that you have not yet received it.',
+                        'Please confirm receipt or mark as not yet received.',
                         style: GoogleFonts.poppins(
                           fontSize: 12,
                           color: Colors.blue.shade900,
@@ -766,9 +5494,8 @@ class _WalletScreenState extends State<WalletScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              // Schedule state changes after frame completes
               await Future.delayed(const Duration(milliseconds: 100));
-              await _declineReceiptConfirmation(cost);
+              await _declineAdvanceConfirmation(advance);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange.shade600,
@@ -778,350 +5505,9 @@ class _WalletScreenState extends State<WalletScreen> {
               ),
             ),
             child: Text(
-              'Not Yet Received',
+              'Not Yet Received / لم يتم الاستلام بعد',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
             ),
-          ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              // Schedule state changes after frame completes
-              await Future.delayed(const Duration(milliseconds: 100));
-              await _confirmCostPaymentReceipt(cost);
-            },
-            icon: const Icon(Icons.verified, size: 16),
-            label: Text(
-              'Confirm Receipt',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _declineReceiptConfirmation(Map<String, dynamic> cost) async {
-    final costId = cost['id'] as String?;
-    if (costId == null) return;
-
-    setState(() => _declineLoading = true);
-
-    try {
-      final now = DateTime.now().toIso8601String();
-      final existingMeta = Map<String, dynamic>.from(
-        (cost['metadata'] as Map?)?.cast<String, dynamic>() ?? {},
-      );
-
-      // Add decline metadata
-      existingMeta['receipt_decline'] = {
-        'declined': true,
-        'declinedAt': now,
-        'declinedBy': _userId,
-        '_message': 'Fund not yet received; awaiting reconfirmation',
-      };
-
-      // Update cost submission to reset back to 'pending_receipt' for re-review
-      await Supabase.instance.client
-          .from('operational_cost_submissions')
-          .update({
-            'fund_receipt_confirmed': false,
-            'fund_receipt_confirmed_at': null,
-            'metadata': existingMeta,
-            'updated_at': now,
-          })
-          .eq('id', costId);
-
-      // Send notification to approver
-      try {
-        await Supabase.instance.client.from('notification_broadcast').insert({
-          'recipient_type': 'admin',
-          'sender_id': _userId,
-          'title':
-              '${cost['expense_category'] ?? 'Cost'} Payment Not Yet Received',
-          'title_ar':
-              'لم يتم استلام دفعة ${cost['expense_category'] ?? 'التكاليف'}',
-          'message':
-              'Field user has indicated they have not yet received the cost payment of ${NumberFormat.currency(symbol: '', decimalDigits: 2).format((cost['amount_cents'] as num? ?? 0) / 100.0)} SDG. Please review and process again.',
-          'message_ar':
-              'أشار المستخدم الميداني إلى عدم استلامه دفعة التكاليف. يرجى المراجعة والمعالجة مجددا.',
-          'notification_type': 'cost_payment_not_received',
-          'related_id': costId,
-          'related_type': 'cost_submission',
-          'created_at': now,
-        });
-      } catch (notifError) {
-        debugPrint('[Wallet] Notification send error: $notifError');
-      }
-
-      // Reload cost payments after a brief delay to stabilize UI state
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _loadCostPayments();
-      _checkPendingReceiptConfirmations();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.isArabic
-                  ? 'تم إرسال إشعار إلى المحقق بأنك لم تستلم الدفعة بعد'
-                  : 'Approval sent back to reviewer - awaiting reconfirmation',
-            ),
-            backgroundColor: Colors.orange.shade600,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-
-        // Show next pending receipt if any
-        if (_pendingReceiptConfirmations.isNotEmpty) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              _showNextPendingReceiptDialog();
-            }
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('[Wallet] Error declining receipt confirmation: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.isArabic ? 'فشل الرفض' : 'Failed to decline receipt',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _declineLoading = false);
-      }
-    }
-  }
-
-  Future<void> _showNextPendingAdvanceDialog() async {
-    if (_pendingAdvanceConfirmations.isEmpty) return;
-    final advance = _pendingAdvanceConfirmations.first;
-
-    final requestedAmount = (advance['requested_amount'] as num?)?.toDouble() ?? 0.0;
-    final approvedAmount = (advance['approved_amount'] as num?)?.toDouble() ?? requestedAmount;
-    final disbursedAmount = approvedAmount;
-    final siteName = advance['site_name'] as String? ?? 'Site Visit';
-    final proofUrl = advance['payment_proof_url'] as String?;
-    final proofNotes = advance['payment_proof_notes'] as String?;
-    final isImage = proofUrl != null &&
-        RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false).hasMatch(proofUrl);
-
-    if (!mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        insetPadding: const EdgeInsets.all(16),
-        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.directions_car, color: Colors.amber.shade700, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Transport Advance Confirmation',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
-                  ),
-                  Text(
-                    'تأكيد استلام سلفة النقل',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'You have a pending transport advance receipt that requires confirmation.',
-                style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade700),
-              ),
-              Text(
-                'لديك سلفة نقل معلقة تتطلب تأكيد الاستلام.',
-                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
-                textDirection: ui.TextDirection.rtl,
-              ),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Icon(Icons.place, color: Colors.amber.shade700, size: 14),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          siteName,
-                          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(disbursedAmount)} SDG',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        color: Colors.amber.shade800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // ── Payment Proof Image ─────────────────────────────────────
-              if (proofUrl != null && proofUrl.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        Icon(Icons.receipt_long, color: Colors.amber.shade700, size: 14),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Payment Receipt / إيصال الدفع',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                            color: Colors.amber.shade800,
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 8),
-                      if (isImage)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            proofUrl,
-                            height: 160,
-                            width: double.infinity,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => Container(
-                              height: 80,
-                              alignment: Alignment.center,
-                              child: Text(
-                                'Could not load image',
-                                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        InkWell(
-                          onTap: () async {
-                            final uri = Uri.tryParse(proofUrl);
-                            if (uri != null) await launchUrl(uri);
-                          },
-                          child: Row(children: [
-                            Icon(Icons.open_in_new, color: Colors.amber.shade700, size: 14),
-                            const SizedBox(width: 6),
-                            Text(
-                              'View Receipt / عرض الإيصال',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: Colors.amber.shade700,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ]),
-                        ),
-                      if (proofNotes != null && proofNotes.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          '"$proofNotes"',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: Colors.grey.shade600,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Row(children: [
-                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Please confirm receipt of this advance or indicate that you have not yet received it.',
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.blue.shade900),
-                    ),
-                  ),
-                ]),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await Future.delayed(const Duration(milliseconds: 100));
-              await _declineAdvanceConfirmation(advance);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('Not Yet Received', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
           ),
           ElevatedButton.icon(
             onPressed: () async {
@@ -1130,11 +5516,16 @@ class _WalletScreenState extends State<WalletScreen> {
               await _confirmAdvanceReceipt(advance);
             },
             icon: const Icon(Icons.verified, size: 16),
-            label: Text('Confirm Receipt', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            label: Text(
+              'Confirm Receipt / تأكيد الاستلام',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.amber.shade700,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
         ],
@@ -1154,6 +5545,9 @@ class _WalletScreenState extends State<WalletScreen> {
         'declined': true,
         'declinedAt': now,
         'declinedBy': _userId,
+        'resendRequested': true,
+        'resendStatus': 'pending_finance',
+        'resendRequestedAt': now,
         '_message': 'Advance not yet received; awaiting reconfirmation',
       };
       await Supabase.instance.client
@@ -1161,43 +5555,48 @@ class _WalletScreenState extends State<WalletScreen> {
           .update({'metadata': existingMeta, 'updated_at': now})
           .eq('id', advanceId);
       try {
-        await Supabase.instance.client.from('notification_broadcast').insert({
-          'recipient_type': 'admin',
-          'sender_id': _userId,
-          'title': 'Transport Advance Not Yet Received',
-          'title_ar': 'لم يتم استلام سلفة النقل',
-          'message': 'Field user has indicated they have not yet received the transport advance for site ${advance['site_name'] ?? ''}. Please review and process again.',
-          'message_ar': 'أشار المستخدم الميداني إلى عدم استلامه سلفة النقل. يرجى المراجعة والمعالجة مجدداً.',
-          'notification_type': 'advance_not_received',
-          'related_id': advanceId,
-          'related_type': 'down_payment_request',
-          'created_at': now,
-        });
+        await _notifyNotReceivedToFinanceAndApprovers(
+          title: 'Transport Advance Not Yet Received',
+          titleAr: 'لم يتم استلام سلفة النقل',
+          message:
+              'Field user marked transport advance as Not Yet Received for site ${advance['site_name'] ?? ''}. Finance should resend; admin/supervisor/coordinators are notified.',
+          messageAr:
+              'اختار المستخدم الميداني "لم يتم الاستلام بعد" لسلفة النقل. على المالية إعادة الإرسال وقد تم إشعار الإدارة/المشرفين/المنسقين.',
+          notificationType: 'advance_not_received',
+          relatedId: advanceId,
+          relatedType: 'down_payment_request',
+        );
       } catch (_) {}
       await Future.delayed(const Duration(milliseconds: 300));
       await _loadAdvances();
       _checkPendingAdvanceConfirmations();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(widget.isArabic
-              ? 'تم إرسال إشعار بأنك لم تستلم السلفة بعد'
-              : 'Reviewer notified — awaiting reconfirmation'),
-          backgroundColor: Colors.orange.shade600,
-          duration: const Duration(seconds: 3),
-        ));
-        if (_pendingAdvanceConfirmations.isNotEmpty) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) _showNextPendingAdvanceDialog();
-          });
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'تم تسجيل عدم الاستلام وإشعار الإدارة/المشرفين/المنسقين/المالية. يمكنك متابعة العمل الآن.'
+                  : 'Marked as Not Yet Received. Admin/supervisor/coordinator/finance were notified. You can continue using the app.',
+            ),
+            backgroundColor: Colors.orange.shade600,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        // Don't force another blocking popup immediately after decline.
       }
     } catch (e) {
       debugPrint('[Wallet] Error declining advance confirmation: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(widget.isArabic ? 'فشل الرفض' : 'Failed to decline advance receipt'),
-          backgroundColor: Colors.red,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'فشل الرفض'
+                  : 'Failed to decline advance receipt',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -1302,13 +5701,145 @@ class _WalletScreenState extends State<WalletScreen> {
                   children: [
                     const SizedBox(height: 10),
 
+                    // Cost Submission Details Section
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Cost Submission Details / تفاصيل طلب التكاليف',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: Colors.blue.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Category:',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                              Text(
+                                categoryLabel,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Amount:',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                              Text(
+                                '${amountSdg.toStringAsFixed(2)} SDG',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.teal.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Status:',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      (cost['status'] as String?)
+                                              ?.toLowerCase() ==
+                                          'paid'
+                                      ? Colors.green.shade100
+                                      : Colors.orange.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  (cost['status'] as String?)?.toUpperCase() ??
+                                      'UNKNOWN',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color:
+                                        (cost['status'] as String?)
+                                                ?.toLowerCase() ==
+                                            'paid'
+                                        ? Colors.green.shade900
+                                        : Colors.orange.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (cost['submitted_at'] != null) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Submitted:',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                                Text(
+                                  DateTime.parse(
+                                    cost['submitted_at'] as String,
+                                  ).toString().split('.').first,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
                     // Payment receipt preview
                     if (proofUrl != null && proofUrl.isNotEmpty) ...[
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Payment Receipt / \u0625\u064a\u0635\u0627\u0644 \u0627\u0644\u062f\u0641\u0639:',
+                            'Payment Receipt / إيصال الدفع:',
                             style: GoogleFonts.poppins(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -1426,7 +5957,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       else
                         InkWell(
                           onTap: () async {
-                            final uri = Uri.tryParse(proofUrl);
+                            final uri = Uri.tryParse(proofUrl ?? '');
                             if (uri != null && await canLaunchUrl(uri)) {
                               await launchUrl(
                                 uri,
@@ -1506,13 +6037,137 @@ class _WalletScreenState extends State<WalletScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // Pending Items List
+                    if (_pendingReceiptConfirmations.length > 1) ...[
+                      Text(
+                        'Pending Confirmations: ${_pendingReceiptConfirmations.length} items / التأكيدات المعلقة',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _pendingReceiptConfirmations
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                                final idx = entry.key + 1;
+                                final item = entry.value;
+                                final itemAmount =
+                                    ((item['amount_cents'] as num?)?.toInt() ??
+                                        0) /
+                                    100.0;
+                                final itemCategory =
+                                    item['expense_category'] as String? ??
+                                    'Cost';
+                                final isCurrent = item['id'] == costId;
+
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: isCurrent
+                                              ? Colors.teal
+                                              : Colors.grey.shade300,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          '$idx',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: isCurrent
+                                                ? Colors.white
+                                                : Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              itemCategory,
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 11,
+                                                fontWeight: isCurrent
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w600,
+                                                color: isCurrent
+                                                    ? Colors.teal.shade900
+                                                    : Colors.grey.shade700,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${itemAmount.toStringAsFixed(2)} SDG',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 10,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isCurrent)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.teal.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Current',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.teal.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              })
+                              .toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     // Confirmation statement
                     Text(
                       'I confirm that I have received this cost payment in full.',
                       style: GoogleFonts.poppins(fontSize: 13),
                     ),
                     Text(
-                      '\u0623\u0624\u0643\u062f \u0623\u0646\u0646\u064a \u0627\u0633\u062a\u0644\u0645\u062a \u0643\u0627\u0645\u0644 \u0645\u0628\u0644\u063a \u062f\u0641\u0639\u0629 \u0627\u0644\u062a\u0643\u0627\u0644\u064a\u0641 \u0647\u0630\u0647.',
+                      'أؤكد أنني استلمت كامل مبلغ دفعة التكاليف هذه.',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: Colors.grey.shade600,
@@ -1768,7 +6423,6 @@ class _WalletScreenState extends State<WalletScreen> {
     // Step 4: Save to database
     try {
       final now = DateTime.now().toIso8601String();
-      final notes = notesController.text.trim();
 
       debugPrint('[Wallet] Starting cost confirmation for costId: $costId');
       debugPrint('[Wallet] User ID: $_userId');
@@ -1851,8 +6505,8 @@ class _WalletScreenState extends State<WalletScreen> {
           SnackBar(
             content: Text(
               widget.isArabic
-                  ? '\u062a\u0645 \u062a\u0623\u0643\u064a\u062f \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u062f\u0641\u0639\u0629 \u0628\u0646\u062c\u0627\u062d \u2713'
-                  : 'Cost payment receipt confirmed \u2713',
+                  ? 'تم تأكيد استلام الدفعة بنجاح ✓'
+                  : 'Cost payment receipt confirmed ✓',
             ),
             backgroundColor: Colors.teal.shade600,
             duration: const Duration(seconds: 3),
@@ -1861,11 +6515,11 @@ class _WalletScreenState extends State<WalletScreen> {
 
         // Show next pending receipt if any exists
         if (_pendingReceiptConfirmations.isNotEmpty) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              _showNextPendingReceiptDialog();
-            }
-          });
+          // Small delay to let UI settle before showing next dialog
+          await Future.delayed(const Duration(milliseconds: 800));
+          if (mounted && _pendingReceiptConfirmations.isNotEmpty) {
+            await _showNextPendingReceiptDialog();
+          }
         }
       }
     } catch (e, st) {
@@ -1899,6 +6553,143 @@ class _WalletScreenState extends State<WalletScreen> {
             duration: const Duration(seconds: 4),
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _confirmReceiptWithSignature(
+    Map<String, dynamic> cost,
+    dynamic signatureData,
+  ) async {
+    final costId = cost['id'] as String?;
+    if (costId == null) return;
+
+    final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
+    final amountSdg = amountCents / 100.0;
+    final category = cost['expense_category'] as String? ?? 'Cost Submission';
+
+    setState(() => _declineLoading = true);
+
+    try {
+      final now = DateTime.now().toIso8601String();
+
+      // Encode signature (either base64 string or list of offsets)
+      String? signatureBase64;
+      if (signatureData is String) {
+        // Already base64 encoded (saved signature)
+        signatureBase64 = signatureData;
+      } else if (signatureData is List<List<Offset>>) {
+        // Draw new signature
+        try {
+          final recorder = ui.PictureRecorder();
+          final uiCanvas = ui.Canvas(
+            recorder,
+            ui.Rect.fromLTWH(0, 0, 320, 100),
+          );
+          uiCanvas.drawRect(
+            ui.Rect.fromLTWH(0, 0, 320, 100),
+            ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+          );
+          final sigPaint = ui.Paint()
+            ..color = const ui.Color(0xFF000000)
+            ..strokeWidth = 2.5
+            ..strokeCap = ui.StrokeCap.round
+            ..strokeJoin = ui.StrokeJoin.round
+            ..style = ui.PaintingStyle.stroke;
+          for (final stroke in signatureData) {
+            if (stroke.length < 2) continue;
+            final path = ui.Path()..moveTo(stroke[0].dx, stroke[0].dy);
+            for (int i = 1; i < stroke.length; i++) {
+              path.lineTo(stroke[i].dx, stroke[i].dy);
+            }
+            uiCanvas.drawPath(path, sigPaint);
+          }
+          final picture = recorder.endRecording();
+          final img = await picture.toImage(320, 100);
+          final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+          if (byteData != null) {
+            signatureBase64 = base64Encode(byteData.buffer.asUint8List());
+          }
+        } catch (e) {
+          debugPrint('[Wallet] Signature encode error: $e');
+        }
+      }
+
+      debugPrint('[Wallet] Confirming receipt for cost: $costId');
+      debugPrint('[Wallet] Amount: ${amountSdg.toStringAsFixed(2)} SDG');
+      debugPrint(
+        '[Wallet] Signature: ${signatureBase64?.substring(0, 50) ?? "null"}...',
+      );
+
+      // Update cost submission in database
+      await Supabase.instance.client
+          .from('operational_cost_submissions')
+          .update({
+            'fund_receipt_confirmed': true,
+            'fund_receipt_confirmed_at': now,
+          })
+          .eq('id', costId);
+
+      // Send notification to approver
+      try {
+        await Supabase.instance.client.from('notification_broadcast').insert({
+          'recipient_type': 'admin',
+          'sender_id': _userId,
+          'title': '$category Payment Receipt Confirmed',
+          'title_ar': 'تم تأكيد استلام دفعة $category',
+          'message':
+              'Field user has confirmed receipt of payment: ${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amountSdg)} SDG',
+          'message_ar':
+              'أكد المستخدم الميداني استلام الدفعة: ${amountSdg.toStringAsFixed(2)} SDG',
+          'notification_type': 'cost_payment_confirmed',
+          'related_id': costId,
+          'related_type': 'cost_submission',
+          'created_at': now,
+        });
+      } catch (notifError) {
+        debugPrint('[Wallet] Notification error: $notifError');
+      }
+
+      // Reload and continue to next pending receipt
+      await _loadCostPayments();
+      _checkPendingReceiptConfirmations();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic
+                  ? 'تم تأكيد الاستلام بنجاح ✓'
+                  : 'Receipt confirmed successfully ✓',
+            ),
+            backgroundColor: Colors.teal.shade600,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Show next pending receipt if any exists
+        if (_pendingReceiptConfirmations.isNotEmpty) {
+          await Future.delayed(const Duration(milliseconds: 600));
+          if (mounted && _pendingReceiptConfirmations.isNotEmpty) {
+            await _showHighPriorityBlockingReceiptModal();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[Wallet] Error confirming receipt: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isArabic ? 'فشل التأكيد' : 'Confirmation failed',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _declineLoading = false);
       }
     }
   }
@@ -1978,6 +6769,19 @@ class _WalletScreenState extends State<WalletScreen> {
         debugPrint('[Withdrawal] Notification broadcast error: $e');
       }
 
+      // Notify the user of their own action (e.g. "You have requested a withdrawal of X SDG")
+      if (_userId != null) {
+        try {
+          await NotificationTriggerService().withdrawalRequestedBySelf(
+            _userId!,
+            amount,
+            'SDG',
+          );
+        } catch (e) {
+          debugPrint('[Withdrawal] Self-notification error: $e');
+        }
+      }
+
       setState(() {
         _showWithdrawalDialog = false;
         _withdrawalAmountController.clear();
@@ -2046,8 +6850,32 @@ class _WalletScreenState extends State<WalletScreen> {
     return '${NumberFormat.currency(symbol: '', decimalDigits: 2).format(amount)} SDG';
   }
 
+  String _formatDate(dynamic dateValue) {
+    if (dateValue == null) return 'N/A';
+    try {
+      DateTime parsedDate;
+      if (dateValue is String) {
+        parsedDate = DateTime.parse(dateValue);
+      } else if (dateValue is DateTime) {
+        parsedDate = dateValue;
+      } else {
+        return 'N/A';
+      }
+      return DateFormat('MMM dd, yyyy • hh:mm a').format(parsedDate);
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
   List<Map<String, dynamic>> _getFilteredTransactions() {
-    if (_transactionFilter == 'all') return _transactions;
+    if (_transactionFilter == 'all') {
+      return _transactions
+          .where(
+            (t) =>
+                t['type'] != 'down_payment' && t['type'] != 'advance_deduction',
+          )
+          .toList();
+    }
     return _transactions.where((t) {
       if (_transactionFilter == 'earning') {
         return t['type'] == 'earning' ||
@@ -2164,331 +6992,478 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return MainLayout(
-      currentIndex: 2, // Wallet is index 2
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: AppColors.backgroundGray,
-        drawer: CustomDrawerMenu(
-          currentUser: Supabase.instance.client.auth.currentUser,
-          onClose: () => _scaffoldKey.currentState?.closeDrawer(),
-        ),
-        body: Stack(
-          children: [
-            SafeArea(
-              child: Column(
-                children: [
-                  ReusableAppBar(
-                    title: widget.isArabic ? 'المحفظة' : 'Wallet',
-                    scaffoldKey: _scaffoldKey,
-                  ),
-                  Expanded(
-                    child: _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : RefreshIndicator(
-                            onRefresh: _initializeWallet,
-                            child: SingleChildScrollView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Balance Card
-                                  Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Color(0xFF3B82F6),
-                                          Color(0xFF1D4ED8),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.blue.withValues(
-                                            alpha: 0.3,
-                                          ),
-                                          blurRadius: 20,
-                                          offset: const Offset(0, 10),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  'Current Balance',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white
-                                                        .withValues(alpha: 0.9),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  'الرصيد الحالي',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 12,
-                                                    color: Colors.white
-                                                        .withValues(alpha: 0.8),
-                                                  ),
-                                                  textDirection:
-                                                      ui.TextDirection.rtl,
-                                                ),
-                                              ],
-                                            ),
-                                            Icon(
-                                              Icons.account_balance_wallet,
-                                              color: Colors.white.withValues(
-                                                alpha: 0.9,
-                                              ),
-                                              size: 24,
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          _formatCurrency(_netBalance),
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 32,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        if (_netBalance > 0) ...[
-                                          const SizedBox(height: 16),
-                                          SizedBox(
-                                            width: double.infinity,
-                                            child: OutlinedButton.icon(
-                                              onPressed: () => setState(
-                                                () => _showWithdrawalDialog =
-                                                    true,
-                                              ),
-                                              icon: const Icon(
-                                                Icons.arrow_downward_rounded,
-                                                color: Colors.white,
-                                                size: 18,
-                                              ),
-                                              label: Text(
-                                                widget.isArabic
-                                                    ? 'طلب سحب'
-                                                    : 'Request Withdrawal',
-                                                style: GoogleFonts.poppins(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                              style: OutlinedButton.styleFrom(
-                                                side: const BorderSide(
-                                                  color: Colors.white70,
-                                                  width: 1.5,
-                                                ),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 12,
-                                                    ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 16),
-
-                                  // Stats Grid
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildStatCard(
-                                          'Total Earned',
-                                          'إجمالي الايرادات',
-                                          _formatCurrency(_totalEarned),
-                                          Icons.trending_up,
-                                          Colors.green,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: _buildStatCard(
-                                          'This Month',
-                                          'هذا الشهر',
-                                          _formatCurrency(_thisMonthEarnings),
-                                          Icons.calendar_today,
-                                          Colors.purple,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 8),
-
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildStatCard(
-                                          'Pending',
-                                          'قيد الانتظار',
-                                          _formatCurrency(_pendingWithdrawals),
-                                          Icons.pending,
-                                          Colors.orange,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: _buildStatCard(
-                                          'Withdrawn',
-                                          'السحوبات',
-                                          _formatCurrency(_totalWithdrawn),
-                                          Icons.check_circle,
-                                          Colors.cyan,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  if (_totalAdvanceDeductions > 0) ...[
-                                    const SizedBox(height: 12),
-                                    _buildAdvanceDeductionBanner(),
-                                  ],
-
-                                  const SizedBox(height: 24),
-
-                                  // Tabs
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.05,
-                                          ),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        // Tab Buttons
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          color: Colors.grey.shade50,
-                                          child: SingleChildScrollView(
-                                            scrollDirection: Axis.horizontal,
-                                            child: Row(
-                                              children: [
-                                                _buildTabButton(
-                                                  'overview',
-                                                  'Overview',
-                                                  'نظرة عامة',
-                                                  Icons.dashboard_outlined,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildTabButton(
-                                                  'transactions',
-                                                  'History',
-                                                  'المعاملات',
-                                                  Icons.receipt_long_outlined,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildTabButton(
-                                                  'withdrawals',
-                                                  'Withdraw',
-                                                  'السحوبات',
-                                                  Icons
-                                                      .arrow_circle_down_outlined,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildTabButton(
-                                                  'advances',
-                                                  'Advances',
-                                                  'الترحيل و المواصلات',
-                                                  Icons.directions_car_outlined,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildTabButtonWithBadge(
-                                                  'cost_payments',
-                                                  'Costs',
-                                                  'التكاليف',
-                                                  Icons.receipt_outlined,
-                                                  badge: _costPayments
-                                                      .where(
-                                                        (c) =>
-                                                            c['status'] ==
-                                                                'paid' &&
-                                                            c['fund_receipt_confirmed'] !=
-                                                                true,
-                                                      )
-                                                      .length,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildTabButton(
-                                                  'statement',
-                                                  'Statement',
-                                                  'كشف الحساب',
-                                                  Icons.summarize_outlined,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        // Tab Content
-                                        Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: _buildTabContent(),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 24),
-                                ],
-                              ),
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            if (_showWithdrawalDialog) ...[
-              // Dimmed background barrier — blocks all taps on content behind
-              ModalBarrier(
-                color: Colors.black.withValues(alpha: 0.55),
-                dismissible: true,
-                onDismiss: () => setState(() {
-                  _showWithdrawalDialog = false;
-                  _withdrawalAmountController.clear();
-                  _withdrawalReasonController.clear();
-                  _selectedPaymentMethod = '';
-                }),
-              ),
-              _buildWithdrawalDialog(),
-            ],
+  Widget _buildBalanceCard() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primaryBlue,
+            AppColors.primaryBlue.withValues(alpha: 0.8),
           ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryBlue.withValues(alpha: 0.3),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {}, // For subtle ripple effect
+          splashColor: Colors.white.withValues(alpha: 0.1),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Available Balance',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.9),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          'الرصيد المتاح',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.75),
+                          ),
+                          textDirection: ui.TextDirection.rtl,
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.account_balance_wallet_rounded,
+                        color: Colors.white.withValues(alpha: 0.95),
+                        size: 24,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _formatCurrency(_netBalance),
+                  style: GoogleFonts.poppins(
+                    fontSize: 36,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'SDG',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+                if (_netBalance > 0) ...[
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ElevatedButton.icon(
+                        onPressed: () =>
+                            setState(() => _showWithdrawalDialog = true),
+                        icon: const Icon(
+                          Icons.arrow_downward_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          widget.isArabic ? 'طلب سحب' : 'Request Withdrawal',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppColors.primaryBlue,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: AppColors.backgroundGray,
+      drawer: CustomDrawerMenu(
+        currentUser: Supabase.instance.client.auth.currentUser,
+        onClose: () => _scaffoldKey.currentState?.closeDrawer(),
+      ),
+      floatingActionButton:
+          (_pendingReceiptConfirmations.isNotEmpty ||
+              _pendingAdvanceConfirmations.isNotEmpty)
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                // Reload data before showing dialog
+                await _loadCostPayments();
+                await _loadAdvances();
+                _checkPendingReceiptConfirmations();
+                _checkPendingAdvanceConfirmations();
+                if (mounted) {
+                  setState(() {});
+                }
+                await _showViewModeChoiceDialog();
+              },
+              backgroundColor: Colors.orange.shade600,
+              icon: const Icon(Icons.done_all, color: Colors.white),
+              label: Text(
+                _pendingReceiptConfirmations.length +
+                            _pendingAdvanceConfirmations.length ==
+                        1
+                    ? 'Confirm'
+                    : 'Confirm (${_pendingReceiptConfirmations.length + _pendingAdvanceConfirmations.length})',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          : null,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                ReusableAppBar(
+                  title: widget.isArabic ? 'المحفظة' : 'Wallet',
+                  scaffoldKey: _scaffoldKey,
+                ),
+                Expanded(
+                  child: _isLoading
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ScaleTransition(
+                                scale: Tween(begin: 0.5, end: 1.0).animate(
+                                  CurvedAnimation(
+                                    parent: AlwaysStoppedAnimation(0.5),
+                                    curve: Curves.elasticOut,
+                                  ),
+                                ),
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation(
+                                    AppColors.primaryBlue,
+                                  ),
+                                  strokeWidth: 3,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Loading wallet...',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: AppColors.primaryBlue,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _initializeWallet,
+                          color: AppColors.primaryBlue,
+                          backgroundColor: Colors.white,
+                          child: SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Balance Card with Blue Theme
+                                _buildBalanceCard(),
+
+                                const SizedBox(height: 20),
+
+                                // Stats Grid
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildStatCard(
+                                        'Total Earned',
+                                        'إجمالي الايرادات',
+                                        _formatCurrency(_totalEarned),
+                                        Icons.trending_up,
+                                        Colors.green,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _buildStatCard(
+                                        'This Month',
+                                        'هذا الشهر',
+                                        _formatCurrency(_thisMonthEarnings),
+                                        Icons.calendar_today,
+                                        Colors.purple,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildStatCard(
+                                        'Pending',
+                                        'قيد الانتظار',
+                                        _formatCurrency(_pendingWithdrawals),
+                                        Icons.pending,
+                                        Colors.orange,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _buildStatCard(
+                                        'Withdrawn',
+                                        'السحوبات',
+                                        _formatCurrency(_totalWithdrawn),
+                                        Icons.check_circle,
+                                        AppColors.primaryBlue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                if (_totalAdvanceDeductions > 0) ...[
+                                  const SizedBox(height: 16),
+                                  _buildAdvanceDeductionBanner(),
+                                ],
+
+                                const SizedBox(height: 24),
+
+                                // Tabs
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      // Tab Buttons
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryBlue
+                                              .withValues(alpha: 0.05),
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            topRight: Radius.circular(16),
+                                          ),
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: AppColors.primaryBlue
+                                                  .withValues(alpha: 0.1),
+                                            ),
+                                          ),
+                                        ),
+                                        child: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: Row(
+                                            children: [
+                                              _buildTabButton(
+                                                'overview',
+                                                'Overview',
+                                                'نظرة عامة',
+                                                Icons.dashboard_outlined,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              _buildTabButton(
+                                                'transactions',
+                                                'History',
+                                                'المعاملات',
+                                                Icons.receipt_long_outlined,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              _buildTabButton(
+                                                'withdrawals',
+                                                'Withdraw',
+                                                'السحوبات',
+                                                Icons
+                                                    .arrow_circle_down_outlined,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              _buildTabButtonWithBadge(
+                                                'advances',
+                                                'Advances',
+                                                'الترحيل و المواصلات',
+                                                Icons.directions_car_outlined,
+                                                badge:
+                                                    _pendingAdvanceConfirmations
+                                                        .length,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              _buildTabButtonWithBadge(
+                                                'cost_payments',
+                                                'Costs',
+                                                'التكاليف',
+                                                Icons.receipt_outlined,
+                                                badge: _costPayments
+                                                    .where(
+                                                      (c) =>
+                                                          c['status'] ==
+                                                              'paid' &&
+                                                          c['fund_receipt_confirmed'] !=
+                                                              true,
+                                                    )
+                                                    .length,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              _buildTabButton(
+                                                'statement',
+                                                'Statement',
+                                                'كشف الحساب',
+                                                Icons.summarize_outlined,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              if (_pendingReceiptConfirmations
+                                                      .isNotEmpty ||
+                                                  _pendingAdvanceConfirmations
+                                                      .isNotEmpty)
+                                                Material(
+                                                  color: Colors.transparent,
+                                                  child: InkWell(
+                                                    onTap: () async {
+                                                      debugPrint(
+                                                        '[Wallet] Confirm tab tapped - loading data',
+                                                      );
+                                                      try {
+                                                        // Reload data before showing dialog
+                                                        await _loadCostPayments();
+                                                        await _loadAdvances();
+                                                        _checkPendingReceiptConfirmations();
+                                                        _checkPendingAdvanceConfirmations();
+                                                        if (mounted) {
+                                                          setState(() {});
+                                                        }
+                                                        debugPrint(
+                                                          '[Wallet] Showing confirmation dialog - confirmations: ${_pendingReceiptConfirmations.length + _pendingAdvanceConfirmations.length}',
+                                                        );
+                                                        await _showViewModeChoiceDialog();
+                                                      } catch (e) {
+                                                        debugPrint(
+                                                          '[Wallet] Error in Confirm tab: $e',
+                                                        );
+                                                        if (mounted) {
+                                                          ScaffoldMessenger.of(
+                                                            context,
+                                                          ).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text(
+                                                                widget.isArabic
+                                                                    ? 'حدث خطأ: $e'
+                                                                    : 'Error: $e',
+                                                              ),
+                                                              backgroundColor:
+                                                                  Colors.red,
+                                                            ),
+                                                          );
+                                                        }
+                                                      }
+                                                    },
+                                                    child: _buildTabButtonWithBadge(
+                                                      'confirmations',
+                                                      'Confirm',
+                                                      'تأكيد',
+                                                      Icons.done_all_outlined,
+                                                      badge:
+                                                          _pendingReceiptConfirmations
+                                                              .length +
+                                                          _pendingAdvanceConfirmations
+                                                              .length,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      // Tab Content
+                                      Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: _buildTabContent(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+          if (_showWithdrawalDialog) ...[
+            // Dimmed background barrier — blocks all taps on content behind
+            ModalBarrier(
+              color: Colors.black.withValues(alpha: 0.55),
+              dismissible: true,
+              onDismiss: () => setState(() {
+                _showWithdrawalDialog = false;
+                _withdrawalAmountController.clear();
+                _withdrawalReasonController.clear();
+                _selectedPaymentMethod = '';
+              }),
+            ),
+            _buildWithdrawalDialog(),
+          ],
+        ],
       ),
     );
   }
@@ -3196,60 +8171,74 @@ class _WalletScreenState extends State<WalletScreen> {
     final isActive = _activeTab == tab;
     return GestureDetector(
       onTap: () => setState(() => _activeTab = tab),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.primaryBlue : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: isActive
-              ? [
-                  BoxShadow(
-                    color: AppColors.primaryBlue.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-          border: isActive
-              ? null
-              : Border.all(color: Colors.grey.shade200, width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isActive ? Colors.white : Colors.grey.shade500,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              labelEn,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : Colors.grey.shade700,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+          decoration: BoxDecoration(
+            color: isActive ? AppColors.primaryBlue : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: AppColors.primaryBlue.withValues(alpha: 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : [],
+            border: !isActive
+                ? Border.all(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.15),
+                    width: 0.5,
+                  )
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 300),
+                style: TextStyle(
+                  color: isActive
+                      ? Colors.white
+                      : AppColors.textLight.withValues(alpha: 0.7),
+                  fontSize: 20,
+                ),
+                child: Icon(icon, size: 18),
               ),
-            ),
-            Text(
-              labelAr,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: isActive ? Colors.white : Colors.grey.shade600,
+              const SizedBox(height: 4),
+              Text(
+                labelEn,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                  color: isActive ? Colors.white : AppColors.textLight,
+                  height: 1.2,
+                ),
               ),
-            ),
-          ],
+              Text(
+                labelAr,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.9)
+                      : AppColors.textLight,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -3268,22 +8257,36 @@ class _WalletScreenState extends State<WalletScreen> {
         _buildTabButton(tab, labelEn, labelAr, icon),
         if (badge > 0)
           Positioned(
-            top: -4,
-            right: -4,
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: const BoxDecoration(
-                color: Colors.teal,
+            top: -6,
+            right: -6,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primaryBlue,
+                    AppColors.primaryBlue.withValues(alpha: 0.8),
+                  ],
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.4),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Center(
                 child: Text(
-                  badge > 9 ? '9+' : badge.toString(),
+                  badge > 99 ? '99+' : badge.toString(),
                   style: GoogleFonts.poppins(
-                    fontSize: 10,
+                    fontSize: 9,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
+                    height: 1.0,
                   ),
                 ),
               ),
@@ -3307,6 +8310,8 @@ class _WalletScreenState extends State<WalletScreen> {
         return _buildCostPaymentsTab();
       case 'statement':
         return _buildStatementTab();
+      case 'confirmations':
+        return _buildConfirmationsTab();
       default:
         return const SizedBox();
     }
@@ -3340,13 +8345,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _buildOverviewTab() {
     // Group recent transactions by reference_id (site visit), or show individually
-    final siteTypes = {
-      'site_visit_fee',
-      'visit_completion',
-      'advance_deduction',
-      'down_payment',
-      'earning',
-    };
+    final siteTypes = {'site_visit_fee', 'visit_completion', 'earning'};
     final recent = _transactions
         .where((t) => siteTypes.contains(t['type']))
         .take(30)
@@ -3377,6 +8376,493 @@ class _WalletScreenState extends State<WalletScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // === PENDING RECEIPT CONFIRMATIONS SECTION ===
+        if (_pendingReceiptConfirmations.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.red.shade300, width: 2),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.priority_high,
+                        color: Colors.red.shade700,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '⚠️ Pending Receipt Confirmations',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                          Text(
+                            '${_pendingReceiptConfirmations.length} cost submission(s) awaiting your confirmation',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.red.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Display each pending receipt
+                ..._pendingReceiptConfirmations.asMap().entries.map((entry) {
+                  final index = entry.key + 1;
+                  final cost = entry.value;
+                  final amountCents =
+                      (cost['amount_cents'] as num?)?.toInt() ?? 0;
+                  final amountSdg = amountCents / 100.0;
+                  final category =
+                      cost['expense_category'] as String? ?? 'Cost';
+                  final proofUrl = cost['payment_proof_url'] as String?;
+                  final isImage =
+                      proofUrl != null &&
+                      RegExp(
+                        r'\.(jpg|jpeg|png|gif|webp)$',
+                        caseSensitive: false,
+                      ).hasMatch(proofUrl);
+
+                  return Column(
+                    children: [
+                      if (index > 1) const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        category,
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${amountSdg.toStringAsFixed(2)} SDG',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.teal.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '$index of ${_pendingReceiptConfirmations.length}',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.red.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (proofUrl != null && proofUrl.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              if (isImage)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    color: Colors.white,
+                                    width: double.infinity,
+                                    child: CachedNetworkImage(
+                                      imageUrl: proofUrl,
+                                      height: 120,
+                                      fit: BoxFit.contain,
+                                      placeholder: (_, __) => Container(
+                                        height: 120,
+                                        color: Colors.grey.shade100,
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (_, __, ___) => Container(
+                                        height: 120,
+                                        color: Colors.grey.shade100,
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.broken_image,
+                                            color: Colors.grey,
+                                            size: 40,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                InkWell(
+                                  onTap: () async {
+                                    final uri = Uri.tryParse(proofUrl ?? '');
+                                    if (uri != null &&
+                                        await canLaunchUrl(uri)) {
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 10,
+                                      horizontal: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.insert_drive_file,
+                                          color: Colors.grey.shade600,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'View Receipt',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 11,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.open_in_new,
+                                          color: Colors.grey.shade600,
+                                          size: 14,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await _showHighPriorityBlockingReceiptModal();
+                    },
+                    icon: const Icon(Icons.check_circle, size: 16),
+                    label: Text(
+                      'Confirm Receipts Now',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+        // === PENDING ADVANCE CONFIRMATIONS SECTION ===
+        if (_pendingAdvanceConfirmations.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.amber.shade300, width: 2),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.directions_car,
+                        color: Colors.amber.shade700,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Pending Transport Advances',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Colors.amber.shade800,
+                            ),
+                          ),
+                          Text(
+                            '${_pendingAdvanceConfirmations.length} advance(s) awaiting your confirmation',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.amber.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Display each pending advance
+                ..._pendingAdvanceConfirmations.asMap().entries.map((entry) {
+                  final index = entry.key + 1;
+                  final advance = entry.value;
+                  final amountCents =
+                      (advance['disbursed_amount'] as num?)?.toInt() ?? 0;
+                  final amountSdg = amountCents / 100.0;
+                  final siteName = advance['site_name'] as String? ?? 'Site';
+                  final proofUrl = advance['payment_proof_url'] as String?;
+                  final isImage =
+                      proofUrl != null &&
+                      RegExp(
+                        r'\.(jpg|jpeg|png|gif|webp)$',
+                        caseSensitive: false,
+                      ).hasMatch(proofUrl);
+
+                  return Column(
+                    children: [
+                      if (index > 1) const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.amber.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        siteName,
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${amountSdg.toStringAsFixed(2)} SDG',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.amber.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '$index of ${_pendingAdvanceConfirmations.length}',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.amber.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (proofUrl != null && proofUrl.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              if (isImage)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    color: Colors.white,
+                                    width: double.infinity,
+                                    child: CachedNetworkImage(
+                                      imageUrl: proofUrl,
+                                      height: 120,
+                                      fit: BoxFit.contain,
+                                      placeholder: (_, __) => Container(
+                                        height: 120,
+                                        color: Colors.grey.shade100,
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (_, __, ___) => Container(
+                                        height: 120,
+                                        color: Colors.grey.shade100,
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.broken_image,
+                                            color: Colors.grey,
+                                            size: 40,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                InkWell(
+                                  onTap: () async {
+                                    final uri = Uri.tryParse(proofUrl ?? '');
+                                    if (uri != null &&
+                                        await canLaunchUrl(uri)) {
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 10,
+                                      horizontal: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.insert_drive_file,
+                                          color: Colors.grey.shade600,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'View Receipt',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 11,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.open_in_new,
+                                          color: Colors.grey.shade600,
+                                          size: 14,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await _showNextPendingAdvanceDialog();
+                    },
+                    icon: const Icon(Icons.check_circle, size: 16),
+                    label: Text(
+                      'Confirm Advances Now',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
         Text(
           widget.isArabic ? 'معاملات حسب الموقع' : 'Recent by Site',
           style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
@@ -3681,7 +9167,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
     final totalDeducted = advanceDeductions.fold(
       0.0,
-      (sum, t) => sum + (t['amount'] as num).toDouble().abs(),
+      (sum, t) => sum + ((t['amount'] as num?)?.toDouble() ?? 0.0).abs(),
     );
 
     return Column(
@@ -3736,11 +9222,86 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _buildTransactionsTab() {
     final filtered = _getFilteredTransactions();
+    final allTransactions = _getFilteredTransactions();
+    final totalTx = _transactions.length;
+
+    String getFilterLabel() {
+      switch (_transactionFilter) {
+        case 'earning':
+          return widget.isArabic ? 'الأرباح' : 'Earnings';
+        case 'withdrawal':
+          return widget.isArabic ? 'السحوبات' : 'Withdrawals';
+        case 'bonus':
+          return widget.isArabic ? 'المكافآت' : 'Bonuses';
+        case 'penalty':
+          return widget.isArabic ? 'الغرامات' : 'Penalties';
+        default:
+          return widget.isArabic ? 'جميع' : 'All';
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Filter
+        // Show enhanced filter status bar when filtering
+        if (_transactionFilter != 'all')
+          FilterStatusBar(
+            filterLabel: widget.isArabic ? 'نوع المعاملة' : 'Transaction Type',
+            currentFilter: getFilterLabel(),
+            totalCount: totalTx,
+            filteredCount: filtered.length,
+            subtitle: widget.isArabic
+                ? 'شغل جميع المعاملات'
+                : 'View all transactions',
+            icon: Icons.receipt_long,
+            primaryColor: Colors.teal.shade600,
+            showPercentage: true,
+            showResetButton: true,
+            onTap: () {
+              // Show filter selector
+              showModalBottomSheet(
+                context: context,
+                builder: (ctx) => Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.isArabic ? 'نوع المعاملة' : 'Transaction Type',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ...[
+                        ('all', widget.isArabic ? 'جميع' : 'All'),
+                        ('earning', widget.isArabic ? 'الأرباح' : 'Earnings'),
+                        (
+                          'withdrawal',
+                          widget.isArabic ? 'السحوبات' : 'Withdrawals',
+                        ),
+                        ('bonus', widget.isArabic ? 'المكافآت' : 'Bonuses'),
+                        ('penalty', widget.isArabic ? 'الغرامات' : 'Penalties'),
+                      ].map(
+                        (item) => ListTile(
+                          title: Text(item.$2),
+                          selected: _transactionFilter == item.$1,
+                          onTap: () {
+                            setState(() => _transactionFilter = item.$1);
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            onReset: () => setState(() => _transactionFilter = 'all'),
+          ),
+
+        // Filter dropdown
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -3796,11 +9357,82 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _buildWithdrawalsTab() {
     final filtered = _getFilteredWithdrawals();
+    final totalWd = _withdrawalRequests.length;
+
+    String getFilterLabel() {
+      switch (_withdrawalFilter) {
+        case 'pending':
+          return widget.isArabic ? 'قيد الانتظار' : 'Pending';
+        case 'approved':
+          return widget.isArabic ? 'معتمدة' : 'Approved';
+        case 'rejected':
+          return widget.isArabic ? 'مرفوضة' : 'Rejected';
+        default:
+          return widget.isArabic ? 'الكل' : 'All';
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Filter
+        // Show enhanced filter status bar when filtering
+        if (_withdrawalFilter != 'all')
+          FilterStatusBar(
+            filterLabel: widget.isArabic ? 'حالة السحب' : 'Withdrawal Status',
+            currentFilter: getFilterLabel(),
+            totalCount: totalWd,
+            filteredCount: filtered.length,
+            subtitle: widget.isArabic
+                ? 'عرض جميع طلبات السحب'
+                : 'View all withdrawal requests',
+            icon: Icons.arrow_circle_down,
+            primaryColor: Colors.teal.shade600,
+            showPercentage: true,
+            showResetButton: true,
+            onTap: () {
+              // Show filter selector
+              showModalBottomSheet(
+                context: context,
+                builder: (ctx) => Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.isArabic ? 'حالة السحب' : 'Withdrawal Status',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ...[
+                        ('all', widget.isArabic ? 'الكل' : 'All'),
+                        (
+                          'pending',
+                          widget.isArabic ? 'قيد الانتظار' : 'Pending',
+                        ),
+                        ('approved', widget.isArabic ? 'معتمدة' : 'Approved'),
+                        ('rejected', widget.isArabic ? 'مرفوضة' : 'Rejected'),
+                      ].map(
+                        (item) => ListTile(
+                          title: Text(item.$2),
+                          selected: _withdrawalFilter == item.$1,
+                          onTap: () {
+                            setState(() => _withdrawalFilter = item.$1);
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            onReset: () => setState(() => _withdrawalFilter = 'all'),
+          ),
+
+        // Filter dropdown
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -3884,7 +9516,8 @@ class _WalletScreenState extends State<WalletScreen> {
       final s = (a['status'] as String? ?? '').toLowerCase();
       final meta = (a['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
       final confirmed = meta['receipt_confirmation']?['confirmed'] == true;
-      return (s == 'partially_paid' || s == 'fully_paid' || s == 'paid') && !confirmed;
+      return (s == 'partially_paid' || s == 'fully_paid' || s == 'paid') &&
+          !confirmed;
     }).length;
 
     return Column(
@@ -3897,20 +9530,23 @@ class _WalletScreenState extends State<WalletScreen> {
           style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        if (pendingAdv > 0)
+        if (getTotalPendingConfirmationCount() > 0)
           GestureDetector(
             onTap: () {
               final first = _pendingAdvanceConfirmations.isNotEmpty
                   ? _pendingAdvanceConfirmations.first
-                  : _advances.firstWhere(
-                      (a) {
-                        final s = (a['status'] as String? ?? '').toLowerCase();
-                        final meta = (a['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
-                        final confirmed = meta['receipt_confirmation']?['confirmed'] == true;
-                        return (s == 'partially_paid' || s == 'fully_paid' || s == 'paid') && !confirmed;
-                      },
-                      orElse: () => {},
-                    );
+                  : _advances.firstWhere((a) {
+                      final s = (a['status'] as String? ?? '').toLowerCase();
+                      final meta =
+                          (a['metadata'] as Map?)?.cast<String, dynamic>() ??
+                          {};
+                      final confirmed =
+                          meta['receipt_confirmation']?['confirmed'] == true;
+                      return (s == 'partially_paid' ||
+                              s == 'fully_paid' ||
+                              s == 'paid') &&
+                          !confirmed;
+                    }, orElse: () => {});
               if (first.isNotEmpty) _confirmAdvanceReceipt(first);
             },
             child: Container(
@@ -3922,23 +9558,33 @@ class _WalletScreenState extends State<WalletScreen> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.amber.shade300),
               ),
-              child: Row(children: [
-                Icon(Icons.info_outline, color: Colors.amber.shade800, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.isArabic
-                        ? '$pendingAdv سلفة تنتظر تأكيد الاستلام — اضغط للتأكيد'
-                        : '$pendingAdv advance${pendingAdv != 1 ? 's' : ''} awaiting your receipt confirmation — tap to confirm',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.amber.shade900,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.amber.shade800,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.isArabic
+                          ? '${getTotalPendingConfirmationCount()} من المستندات تنتظر التأكيد (${_pendingAdvanceConfirmations.length} سلفة و ${_pendingReceiptConfirmations.length} تكاليف)'
+                          : '${getTotalPendingConfirmationCount()} items await confirmation (${_pendingAdvanceConfirmations.length} advances, ${_pendingReceiptConfirmations.length} costs)',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber.shade900,
+                      ),
                     ),
                   ),
-                ),
-                Icon(Icons.chevron_right, color: Colors.amber.shade700, size: 18),
-              ]),
+                  Icon(
+                    Icons.chevron_right,
+                    color: Colors.amber.shade700,
+                    size: 18,
+                  ),
+                ],
+              ),
             ),
           ),
         const SizedBox(height: 4),
@@ -3949,7 +9595,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _buildCostPaymentsTab() {
     if (_costPaymentsLoading) {
-      return const ShimmerBody(layout: ShimmerLayout.retainer, listItems: 5);
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_costPayments.isEmpty) {
@@ -4079,11 +9725,12 @@ class _WalletScreenState extends State<WalletScreen> {
     final status = (cost['status'] as String? ?? 'pending').toLowerCase();
     final receiptConfirmed = cost['fund_receipt_confirmed'] == true;
     final confirmedAt = cost['fund_receipt_confirmed_at'] as String?;
+    final declinedAt = cost['receipt_declined_at'] as String?;
+    final isDeclined = declinedAt != null;
     final paidAt = cost['paid_at'] as String?;
     final createdAt = cost['created_at'] as String?;
     final description = cost['description'] as String?;
     final vendor = cost['vendor'] as String?;
-    final referenceNumber = cost['reference_number'] as String?;
     final expenseDate = cost['expense_date'] as String?;
     final rejectionReason = cost['rejection_reason'] as String?;
     final tier1Status = (cost['tier1_status'] as String? ?? '').toLowerCase();
@@ -4372,13 +10019,11 @@ class _WalletScreenState extends State<WalletScreen> {
                         final uri = Uri.tryParse(cost['payment_proof_url']);
                         if (uri != null) {
                           try {
-                            // For web, try to show in new tab or download
-                            if (kIsWeb) {
-                              html.window.open(
-                                cost['payment_proof_url'],
-                                '_blank',
-                              );
-                            }
+                            // Open URL on both web and mobile
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
                           } catch (_) {}
                         }
                       },
@@ -4394,6 +10039,70 @@ class _WalletScreenState extends State<WalletScreen> {
             ],
 
             const SizedBox(height: 10),
+
+            // Not Yet Received Indicator for Cost Payments
+            if (isDeclined) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Colors.red.shade700,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            widget.isArabic
+                                ? 'تم تسجيل "لم يتم الاستلام"'
+                                : 'Marked as Not Yet Received',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.isArabic
+                            ? 'التاريخ: ${DateFormat('dd MMM yyyy - HH:mm').format(DateTime.parse(declinedAt))}'
+                            : 'Date: ${DateFormat('dd MMM yyyy - HH:mm').format(DateTime.parse(declinedAt))}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.red.shade600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.isArabic
+                          ? 'تم إخطار المشرفين والإدارة والمالية. ستتمكن من تأكيد الاستلام عند وصول الدفعة المعاد إرسالها.'
+                          : 'Supervisors, administration, and finance have been notified. You can confirm receipt once the resent payment arrives.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: Colors.red.shade600,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
 
             // Receipt status
             if (receiptConfirmed) ...[
@@ -4579,31 +10288,6 @@ class _WalletScreenState extends State<WalletScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _costDetailChip(IconData icon, String label, String value) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 12, color: Colors.grey.shade500),
-        const SizedBox(width: 4),
-        Text(
-          '$label: ',
-          style: GoogleFonts.poppins(
-            fontSize: 10.5,
-            color: Colors.grey.shade500,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.poppins(
-            fontSize: 10.5,
-            color: Colors.grey.shade700,
-          ),
-        ),
-      ],
     );
   }
 
@@ -5218,9 +10902,9 @@ class _WalletScreenState extends State<WalletScreen> {
           'title': 'Advance Receipt Confirmed',
           'title_ar': 'تم تأكيد استلام الدفعة المقدمة',
           'message':
-              'Field user has confirmed receipt of advance payment of ${_formatCurrency((advance['amount'] as num?)?.toDouble() ?? 0)}',
+              'Field user has confirmed receipt of advance payment of ${_formatCurrency((advance['disbursed_amount'] as num?)?.toDouble() ?? 0.0)}',
           'message_ar':
-              'أكد المستخدم الميداني استلام الدفعة المقدمة بقيمة ${_formatCurrency((advance['amount'] as num?)?.toDouble() ?? 0)}',
+              'أكد المستخدم الميداني استلام الدفعة المقدمة بقيمة ${_formatCurrency((advance['disbursed_amount'] as num?)?.toDouble() ?? 0.0)}',
           'notification_type': 'advance_receipt_confirmed',
           'related_id': advanceId,
           'related_type': 'advance',
@@ -5322,7 +11006,7 @@ class _WalletScreenState extends State<WalletScreen> {
     for (final tx in _transactions) {
       final type = (tx['type'] as String? ?? '').toLowerCase();
       final status = (tx['status'] as String? ?? '').toLowerCase();
-      final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
+      final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
 
       // Include earning, site_visit_fee, and other earning transaction types
       if ((type == 'earning' ||
@@ -5337,22 +11021,22 @@ class _WalletScreenState extends State<WalletScreen> {
         // Extract description and metadata for detail
         final description = tx['description'] as String? ?? '';
         final metadata = tx['metadata'];
-        String label_en = 'Site Visit Fee';
-        String label_ar = 'رسوم الزيارة الميدانية';
+        String labelEn = 'Site Visit Fee';
+        String labelAr = 'رسوم الزيارة الميدانية';
 
         if (type == 'earning') {
-          label_en = 'Site Visit Earnings';
-          label_ar = 'أرباح زيارة الموقع';
+          labelEn = 'Site Visit Earnings';
+          labelAr = 'أرباح زيارة الموقع';
         } else if (type == 'fund_receipt' ||
             type == 'fund_receipt_confirmation') {
-          label_en = 'Fund Receipt';
-          label_ar = 'استلام الصندوق';
+          labelEn = 'Fund Receipt';
+          labelAr = 'استلام الصندوق';
         }
 
         entries.add({
           'entry_type': 'site_fee',
-          'label_en': label_en,
-          'label_ar': label_ar,
+          'label_en': labelEn,
+          'label_ar': labelAr,
           'description': description,
           'date': tx['created_at'] as String? ?? '',
           'amount_sdg': amount,
@@ -5810,6 +11494,529 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
+  Widget _buildConfirmationsTab() {
+    final ar = widget.isArabic;
+    final totalCount =
+        _pendingReceiptConfirmations.length +
+        _pendingAdvanceConfirmations.length;
+
+    if (totalCount == 0) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.done_all_outlined, size: 56, color: Colors.green),
+              const SizedBox(height: 16),
+              Text(
+                ar ? 'جميع التأكيدات اكتملت' : 'All confirmations completed!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                ar ? 'لا توجد عناصر معلقة' : 'No pending items',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: AppColors.textLight,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary Box
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primaryBlue,
+                  AppColors.primaryBlue.withValues(alpha: 0.8),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ar
+                      ? 'ملخص التأكيدات المعلقة'
+                      : 'Pending Confirmations Summary',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ar ? 'السلف المعلقة:' : 'Pending Advances:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        Text(
+                          _pendingAdvanceConfirmations.length.toString(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          ar
+                              ? 'طلبات الصرف المعلقة:'
+                              : 'Pending Cost Submissions:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        Text(
+                          _pendingReceiptConfirmations.length.toString(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Advances Confirmations Section
+          if (_pendingAdvanceConfirmations.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                ar
+                    ? 'السلف المعتمدة (${_pendingAdvanceConfirmations.length})'
+                    : 'Approved Advances (${_pendingAdvanceConfirmations.length})',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.teal.shade700,
+                ),
+              ),
+            ),
+            ..._pendingAdvanceConfirmations.map((advance) {
+              final status = (advance['status'] as String? ?? '').toLowerCase();
+              final meta =
+                  (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
+
+              // Try multiple field names for amount
+              double amount = 0.0;
+              final disbursed =
+                  (advance['disbursed_amount'] as num?)?.toDouble() ?? 0.0;
+              final approved =
+                  (advance['approved_amount'] as num?)?.toDouble() ?? 0.0;
+              final requested =
+                  (advance['requested_amount'] as num?)?.toDouble() ?? 0.0;
+
+              if (disbursed > 0) {
+                amount = disbursed;
+              } else if (approved > 0) {
+                amount = approved;
+              } else if (requested > 0) {
+                amount = requested;
+              }
+
+              final advanceType =
+                  (advance['advance_type'] as String? ?? 'Transportation')
+                      .replaceAll('_', ' ');
+              final createdAt = advance['created_at'] as String?;
+
+              String formattedDate = '';
+              if (createdAt != null && createdAt.isNotEmpty) {
+                try {
+                  final dt = DateTime.parse(createdAt).toLocal();
+                  formattedDate =
+                      '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+                } catch (_) {}
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  border: Border.all(color: Colors.teal.shade200),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header row with ID and Amount
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                ar
+                                    ? 'سلفة #${(advance["id"] as String?)?.substring(0, 8) ?? "N/A"}'
+                                    : 'Advance #${(advance["id"] as String?)?.substring(0, 8) ?? "N/A"}',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          amount > 0
+                              ? _formatCurrency(amount)
+                              : ar
+                              ? 'غير محدد'
+                              : 'N/A',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Colors.teal.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Type and Date row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            ar ? 'النوع: $advanceType' : 'Type: $advanceType',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.grey.shade700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (formattedDate.isNotEmpty)
+                          Text(
+                            formattedDate,
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Status and breakdown
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                ar ? 'الحالة:' : 'Status:',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  ar
+                                      ? status.replaceAll('_', ' ')
+                                      : status
+                                            .replaceAll('_', ' ')
+                                            .split(' ')
+                                            .map(
+                                              (w) =>
+                                                  w[0].toUpperCase() +
+                                                  w.substring(1),
+                                            )
+                                            .join(' '),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.teal.shade700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              ar ? 'التفاصيل:' : 'Breakdown:',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              ar
+                                  ? 'مطلوب: ${_formatCurrency(requested)}'
+                                  : 'Requested: ${_formatCurrency(requested)}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 9,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            if (approved > 0)
+                              Text(
+                                ar
+                                    ? 'موافق: ${_formatCurrency(approved)}'
+                                    : 'Approved: ${_formatCurrency(approved)}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+
+          // Cost Submissions Section
+          if (_pendingReceiptConfirmations.isNotEmpty) ...[
+            if (_pendingAdvanceConfirmations.isNotEmpty)
+              const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                ar
+                    ? 'طلبات الصرف (${_pendingReceiptConfirmations.length})'
+                    : 'Cost Submissions (${_pendingReceiptConfirmations.length})',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ),
+            ..._pendingReceiptConfirmations.map((cost) {
+              final amountCents = (cost['amount_cents'] as num?)?.toInt() ?? 0;
+              final amountSdg = amountCents / 100.0;
+              final category = cost['expense_category'] as String? ?? 'Cost';
+              final status = (cost['status'] as String? ?? '').toLowerCase();
+              final createdAt = cost['created_at'] as String?;
+              final costId = (cost['id'] as String? ?? '').substring(0, 8);
+
+              String formattedDate = '';
+              if (createdAt != null && createdAt.isNotEmpty) {
+                try {
+                  final dt = DateTime.parse(createdAt).toLocal();
+                  formattedDate =
+                      '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+                } catch (_) {}
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  border: Border.all(color: Colors.red.shade200),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with ID and Amount
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                category,
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          _formatCurrency(amountSdg),
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Colors.red.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // ID and Date
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          ar ? 'رقم: #$costId' : 'ID: #$costId',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        if (formattedDate.isNotEmpty)
+                          Text(
+                            formattedDate,
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Status
+                    Row(
+                      children: [
+                        Text(
+                          ar ? 'الحالة: ' : 'Status: ',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            ar
+                                ? status.replaceAll('_', ' ')
+                                : status
+                                      .replaceAll('_', ' ')
+                                      .split(' ')
+                                      .map(
+                                        (w) =>
+                                            w[0].toUpperCase() + w.substring(1),
+                                      )
+                                      .join(' '),
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+
+          // Action Buttons
+          const SizedBox(height: 20),
+          if (_pendingAdvanceConfirmations.isNotEmpty)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await _confirmAllPendingAdvances();
+                },
+                icon: const Icon(Icons.check_circle),
+                label: Text(
+                  ar ? 'تأكيد جميع السلف' : 'Confirm All Advances',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          if (_pendingReceiptConfirmations.isNotEmpty) ...[
+            if (_pendingAdvanceConfirmations.isNotEmpty)
+              const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await _confirmAllPendingReceipts();
+                },
+                icon: const Icon(Icons.check_circle),
+                label: Text(
+                  ar
+                      ? 'تأكيد جميع طلبات الصرف'
+                      : 'Confirm All Cost Submissions',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildPaymentReceiptCard({
     required String proofUrl,
     String? proofNotes,
@@ -5945,6 +12152,11 @@ class _WalletScreenState extends State<WalletScreen> {
     final meta = (advance['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
     final receiptConfirmed = meta['receipt_confirmation']?['confirmed'] == true;
     final advanceReconciled = meta['advance_reconciled_at'] != null;
+    final receiptDecline =
+        (meta['receipt_decline'] as Map?)?.cast<String, dynamic>() ?? {};
+    final isDeclined = receiptDecline['declined'] == true;
+    final declinedAt = receiptDecline['declinedAt'] as String?;
+    final resendStatus = receiptDecline['resendStatus'] as String? ?? 'pending';
 
     // Statuses that mean the advance has been disbursed
     final isDisbursed =
@@ -6140,6 +12352,97 @@ class _WalletScreenState extends State<WalletScreen> {
                     ),
                   ),
                 ],
+              ),
+            ],
+            // Not Yet Received Indicator
+            if (isDeclined) ...[
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Colors.red.shade700,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            widget.isArabic
+                                ? 'تم تسجيل "لم يتم الاستلام"'
+                                : 'Marked as Not Yet Received',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (declinedAt != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.isArabic
+                            ? 'التاريخ: ${DateFormat('dd MMM yyyy - HH:mm').format(DateTime.parse(declinedAt))}'
+                            : 'Date: ${DateFormat('dd MMM yyyy - HH:mm').format(DateTime.parse(declinedAt))}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.red.shade600,
+                        ),
+                      ),
+                    ],
+                    if (resendStatus.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            resendStatus == 'sent'
+                                ? Icons.check_circle
+                                : Icons.hourglass_bottom,
+                            color: resendStatus == 'sent'
+                                ? Colors.green.shade600
+                                : Colors.orange.shade600,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              widget.isArabic
+                                  ? 'حالة إعادة الإرسال: ${resendStatus.replaceAll('_', ' ')}'
+                                  : 'Resend Status: ${resendStatus.replaceAll('_', ' ').split(' ').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ')}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.isArabic
+                          ? 'تم إخطار المالية والإدارة. ستتمكن من تأكيد الاستلام عند وصول المبلغ المعاد إرساله.'
+                          : 'Finance and administration have been notified. You can acknowledge receipt once the resent amount arrives.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: Colors.red.shade600,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             // Confirm receipt banner + button
@@ -6371,7 +12674,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _buildTransactionItem(Map<String, dynamic> transaction) {
     final type = transaction['type'] as String? ?? '';
-    final amount = (transaction['amount'] as num?)?.toDouble().abs() ?? 0.0;
+    final amount = ((transaction['amount'] as num?)?.toDouble() ?? 0.0).abs();
     final description = transaction['description'] as String? ?? '';
     final createdAt = transaction['created_at'] != null
         ? DateTime.parse(transaction['created_at'] as String)
@@ -6929,8 +13232,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                     t['reference_id'] == referenceId &&
                                     (t['type'] == 'site_visit_fee' ||
                                         t['type'] == 'visit_completion' ||
-                                        t['type'] == 'down_payment' ||
-                                        t['type'] == 'advance_deduction'),
+                                        t['type'] == 'earning'),
                               )
                               .toList();
                           if (related.isEmpty) return const SizedBox.shrink();
@@ -7169,7 +13471,7 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Widget _buildWithdrawalItem(Map<String, dynamic> withdrawal) {
-    final amount = (withdrawal['amount'] as num).toDouble();
+    final amount = (withdrawal['amount'] as num?)?.toDouble() ?? 0.0;
     final status = withdrawal['status'] as String;
     final reason = withdrawal['request_reason'] as String? ?? '';
     final createdAt = DateTime.parse(withdrawal['created_at'] as String);

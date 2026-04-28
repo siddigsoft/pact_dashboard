@@ -41,8 +41,9 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
     try {
       final rawFiles = await _mmpService.getMMPFilesCached();
       final mapped = rawFiles
-          .map<MMPFile>((file) =>
-              MMPFile.fromJson(Map<String, dynamic>.from(file as Map)))
+          .map<MMPFile>(
+            (file) => MMPFile.fromJson(Map<String, dynamic>.from(file as Map)),
+          )
           .toList();
 
       if (!mounted) return;
@@ -98,10 +99,7 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
   void _showFriendlyError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -112,9 +110,7 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
+      builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
@@ -148,9 +144,7 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
         return Container(
           decoration: BoxDecoration(
             color: Theme.of(context).canvasColor,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(20),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
             children: [
@@ -175,40 +169,39 @@ class _MMPFilesSheetState extends State<MMPFilesSheet> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _files.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'No MMP files found. Pull to refresh once connected.',
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : ListView.builder(
-                            controller: scrollController,
-                            itemCount: _files.length,
-                            itemBuilder: (context, index) {
-                              final file = _files[index];
-                              final created = file.createdAt
-                                  .toLocal()
-                                  .toString()
-                                  .split('.')[0];
-                              final isCached = _cachedFileIds.contains(file.id);
+                    ? const Center(
+                        child: Text(
+                          'No MMP files found. Pull to refresh once connected.',
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        itemCount: _files.length,
+                        itemBuilder: (context, index) {
+                          final file = _files[index];
+                          final created = file.createdAt
+                              .toLocal()
+                              .toString()
+                              .split('.')[0];
+                          final isCached = _cachedFileIds.contains(file.id);
 
-                              return ListTile(
-                                title: Text(file.name ?? 'Unnamed File'),
-                                subtitle: Text(
-                                  'Status: ${file.status ?? 'Unknown'}\nCreated: $created${isCached ? '\n✓ Ready to view' : '\n⏳ Preparing file...'}\nTap to open in Excel viewer',
-                                ),
-                                leading: Icon(
-                                  isCached
-                                      ? Icons.check_circle
-                                      : Icons.hourglass_empty,
-                                  color:
-                                      isCached ? Colors.green : Colors.orange,
-                                ),
-                                onTap: () => _openInAppViewer(file),
-                                trailing: const Icon(Icons.open_in_new),
-                              );
-                            },
-                          ),
+                          return ListTile(
+                            title: Text(file.name ?? 'Unnamed File'),
+                            subtitle: Text(
+                              'Status: ${file.status ?? 'Unknown'}\nCreated: $created${isCached ? '\n✓ Ready to view' : '\n⏳ Preparing file...'}\nTap to open in Excel viewer',
+                            ),
+                            leading: Icon(
+                              isCached
+                                  ? Icons.check_circle
+                                  : Icons.hourglass_empty,
+                              color: isCached ? Colors.green : Colors.orange,
+                            ),
+                            onTap: () => _openInAppViewer(file),
+                            trailing: const Icon(Icons.open_in_new),
+                          );
+                        },
+                      ),
               ),
             ],
           ),

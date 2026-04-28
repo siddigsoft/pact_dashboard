@@ -52,7 +52,8 @@ class AuthService {
         // Create new user profile if doesn't exist
         await supabase.from('Users').insert({
           'UID': user.id,
-          'Display name': user.userMetadata?['full_name'] ??
+          'Display name':
+              user.userMetadata?['full_name'] ??
               user.email?.split('@')[0] ??
               'User',
           'Email': user.email,
@@ -67,8 +68,8 @@ class AuthService {
         // Update last sign in time
         await supabase
             .from('Users')
-            .update({'Last sign in at': DateTime.now().toIso8601String()}).eq(
-                'UID', user.id);
+            .update({'Last sign in at': DateTime.now().toIso8601String()})
+            .eq('UID', user.id);
       }
 
       // Ensure user has worker role
@@ -142,7 +143,8 @@ class AuthService {
       final normalizedRole = role?.trim().toLowerCase() ?? 'dataCollector';
 
       debugPrint(
-          '[AuthService] SignUp with metadata: role=$normalizedRole, hubId=$hubId, stateId=$stateId, localityId=$localityId');
+        '[AuthService] SignUp with metadata: role=$normalizedRole, hubId=$hubId, stateId=$stateId, localityId=$localityId',
+      );
 
       final response = await supabase.auth.signUp(
         email: email,
@@ -170,7 +172,8 @@ class AuthService {
       );
 
       debugPrint(
-          '[AuthService] SignUp successful. User ID: ${response.user?.id}');
+        '[AuthService] SignUp successful. User ID: ${response.user?.id}',
+      );
       debugPrint('[AuthService] User metadata: ${response.user?.userMetadata}');
 
       return response;
@@ -217,7 +220,8 @@ class AuthService {
     try {
       await supabase
           .from('profiles')
-          .update({'status': 'approved'}).eq('id', userId);
+          .update({'status': 'approved'})
+          .eq('id', userId);
     } catch (e) {
       throw const AuthException('Failed to approve user');
     }

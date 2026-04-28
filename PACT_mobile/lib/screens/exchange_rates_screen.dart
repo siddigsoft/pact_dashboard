@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/shimmer_loading.dart';
+import '../widgets/reusable_app_bar.dart';
 
 class ExchangeRatesScreen extends StatefulWidget {
   const ExchangeRatesScreen({super.key});
@@ -25,7 +26,10 @@ class _ExchangeRatesScreenState extends State<ExchangeRatesScreen> {
   Future<void> _loadRates() async {
     setState(() => _isLoading = true);
     try {
-      final data = await _supabase.from('exchange_rates').select('*').order('effective_date', ascending: false);
+      final data = await _supabase
+          .from('exchange_rates')
+          .select('*')
+          .order('effective_date', ascending: false);
       final box = await Hive.openBox('offline_cache');
       await box.put('exchange_rates', data);
       if (!mounted) return;
@@ -42,7 +46,8 @@ class _ExchangeRatesScreenState extends State<ExchangeRatesScreen> {
         if (cached != null) {
           setState(() {
             _rates = List<Map<String, dynamic>>.from(
-                (cached as List).map((e) => Map<String, dynamic>.from(e)));
+              (cached as List).map((e) => Map<String, dynamic>.from(e)),
+            );
             _isLoading = false;
             _isOffline = true;
           });
@@ -57,27 +62,50 @@ class _ExchangeRatesScreenState extends State<ExchangeRatesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.primaryDark,
-        title: const Text('Exchange Rates', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _loadRates)],
-      ),
-      body: _isLoading
-          ? const ShimmerBody(listItems: 5)
-          : Column(
-              children: [
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReusableAppBar(
+              title: 'Exchange Rates',
+              showBackButton: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadRates,
+                ),
+              ],
+            ),
+            if (_isLoading)
+              const Expanded(child: ShimmerBody(listItems: 5))
+            else ...[
                 if (_isOffline) const OfflineBanner(),
                 Expanded(
                   child: _rates.isEmpty
                       ? Center(
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            const Icon(Icons.currency_exchange, size: 64, color: Colors.grey),
-                            const SizedBox(height: 12),
-                            const Text('No exchange rates configured.', style: TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 8),
-                            const Text('Exchange rates are managed by the Finance Admin on the web platform.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13)),
-                          ]),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.currency_exchange,
+                                size: 64,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'No exchange rates configured.',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Exchange rates are managed by the Finance Admin on the web platform.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
                         )
                       : RefreshIndicator(
                           onRefresh: _loadRates,
@@ -88,32 +116,88 @@ class _ExchangeRatesScreenState extends State<ExchangeRatesScreen> {
                               final r = _rates[i];
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 10),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                                 child: Padding(
                                   padding: const EdgeInsets.all(16),
-                                  child: Row(children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(color: AppColors.primaryDark.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                                      child: const Icon(Icons.currency_exchange, color: AppColors.primaryDark, size: 24),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      Text('${r['from_currency'] ?? 'USD'} → ${r['to_currency'] ?? 'SDG'}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                      const SizedBox(height: 2),
-                                      Text('Rate: ${r['rate']?.toString() ?? 'N/A'}', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
-                                      if (r['effective_date'] != null)
-                                        Text('Effective: ${r['effective_date'].toString().split('T')[0]}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                                    ])),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: (r['is_active'] == true) ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryDark
+                                              .withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.currency_exchange,
+                                          color: AppColors.primaryDark,
+                                          size: 24,
+                                        ),
                                       ),
-                                      child: Text(r['is_active'] == true ? 'Active' : 'Inactive', style: TextStyle(color: r['is_active'] == true ? Colors.green : Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
-                                    ),
-                                  ]),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${r['from_currency'] ?? 'USD'} → ${r['to_currency'] ?? 'SDG'}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Rate: ${r['rate']?.toString() ?? 'N/A'}',
+                                              style: TextStyle(
+                                                color: Colors.grey.shade600,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            if (r['effective_date'] != null)
+                                              Text(
+                                                'Effective: ${r['effective_date'].toString().split('T')[0]}',
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade500,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: (r['is_active'] == true)
+                                              ? Colors.green.withOpacity(0.1)
+                                              : Colors.grey.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          r['is_active'] == true
+                                              ? 'Active'
+                                              : 'Inactive',
+                                          style: TextStyle(
+                                            color: r['is_active'] == true
+                                                ? Colors.green
+                                                : Colors.grey,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               );
                             },
@@ -121,7 +205,9 @@ class _ExchangeRatesScreenState extends State<ExchangeRatesScreen> {
                         ),
                 ),
               ],
-            ),
+          ],
+        ),
+      ),
     );
   }
 }

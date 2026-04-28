@@ -109,11 +109,12 @@ class MMPFileService {
   void _initializeRealtimeSubscription() {
     _subscription = _supabase
         .from('mmp_files')
-        .stream(primaryKey: ['id']).listen((List<Map<String, dynamic>> data) {
-      if (data.isNotEmpty) {
-        _newFilesController.add(data);
-      }
-    });
+        .stream(primaryKey: ['id'])
+        .listen((List<Map<String, dynamic>> data) {
+          if (data.isNotEmpty) {
+            _newFilesController.add(data);
+          }
+        });
   }
 
   Future<List<Map<String, dynamic>>> getMMPFiles() async {
@@ -142,8 +143,11 @@ class MMPFileService {
 
   Future<Map<String, dynamic>> getMMPFileDetails(String fileId) async {
     try {
-      final response =
-          await _supabase.from('mmp_files').select().eq('id', fileId).single();
+      final response = await _supabase
+          .from('mmp_files')
+          .select()
+          .eq('id', fileId)
+          .single();
 
       return Map<String, dynamic>.from(response);
     } catch (e) {
@@ -253,8 +257,9 @@ class MMPFileService {
         await box.put('file_$fileId', {
           'data': file,
           'cached_at': DateTime.now().toIso8601String(),
-          'expires_at':
-              DateTime.now().add(const Duration(hours: 24)).toIso8601String(),
+          'expires_at': DateTime.now()
+              .add(const Duration(hours: 24))
+              .toIso8601String(),
         });
       }
 
@@ -328,8 +333,9 @@ class MMPFileService {
       await box.put('file_$fileId', {
         'data': fileData,
         'cached_at': DateTime.now().toIso8601String(),
-        'expires_at':
-            DateTime.now().add(const Duration(hours: 24)).toIso8601String(),
+        'expires_at': DateTime.now()
+            .add(const Duration(hours: 24))
+            .toIso8601String(),
       });
     } catch (e) {
       LoggerService.log(
@@ -501,8 +507,9 @@ class MMPFileService {
         'Downloading from storage bucket: $_storageBucket, path: $storagePath',
       );
 
-      final bytes =
-          await _supabase.storage.from(_storageBucket).download(storagePath);
+      final bytes = await _supabase.storage
+          .from(_storageBucket)
+          .download(storagePath);
 
       LoggerService.log('Downloaded ${bytes.length} bytes for $fileName');
 

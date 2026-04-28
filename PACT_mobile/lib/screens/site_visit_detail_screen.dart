@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
 import '../l10n/app_localizations.dart';
+import '../widgets/reusable_app_bar.dart';
 
 class SiteVisitDetailScreen extends StatefulWidget {
   final String siteVisitId;
@@ -163,45 +164,32 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
       textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
         backgroundColor: AppColors.backgroundGray,
-        appBar: AppBar(
-          backgroundColor: AppColors.primaryBlue,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text(
-            l10n?.visitDetails ??
-                (isArabic ? 'تفاصيل الزيارة الميدانية' : 'Site Visit Details'),
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              onPressed: _loadSiteVisitDetails,
-            ),
-            TextButton.icon(
-              onPressed: _toggleLanguage,
-              icon: const Icon(Icons.language, color: Colors.white, size: 20),
-              label: Text(
-                isArabic ? 'EN' : 'عربي',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              ReusableAppBar(
+                title: l10n?.visitDetails ??
+                    (isArabic ? 'تفاصيل الزيارة الميدانية' : 'Site Visit Details'),
+                showBackButton: true,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _loadSiteVisitDetails,
+                  ),
+                  TextButton.icon(
+                    onPressed: _toggleLanguage,
+                    icon: const Icon(Icons.language, size: 20),
+                    label: Text(
+                      isArabic ? 'EN' : 'عربي',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SafeArea(
-                top: false,
-                child: _siteVisit == null
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _siteVisit == null
                     ? Center(
                         child: Text(
                           l10n?.noData ??
@@ -231,6 +219,8 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                               _buildAssignmentCard(isArabic),
                               const SizedBox(height: 16),
                               _buildDatesCard(isArabic),
+                              const SizedBox(height: 16),
+                              _buildFeeBreakdownCard(isArabic),
                               if (_costSubmissions.isNotEmpty) ...[
                                 const SizedBox(height: 16),
                                 _buildCostsCard(isArabic),
@@ -245,6 +235,9 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                         ),
                       ),
               ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -358,7 +351,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
             ),
             _buildInfoRow(
               isArabic ? 'النشاط' : 'Activity',
-              _siteVisit?['activityType'] ?? '-',
+              _getActivityText(),
               Icons.work,
             ),
             if (_siteVisit?['projectName'] != null)
@@ -595,6 +588,116 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
                 _formatDateTime(_siteVisit?['startedAt']),
                 Icons.play_circle_outline,
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getActivityText() {
+    final visitData = _siteVisit?['visit_data'] as Map<String, dynamic>? ?? {};
+    final additionalData =
+        _siteVisit?['additional_data'] as Map<String, dynamic>? ?? {};
+
+    final selectedActivities =
+        visitData['selected_activities'] ??
+        additionalData['selected_activities'];
+    if (selectedActivities is List && selectedActivities.isNotEmpty) {
+      return selectedActivities.join(', ');
+    }
+    return _siteVisit?['activityType'] ?? _siteVisit?['activity_type'] ?? '-';
+  }
+
+  Widget _buildFeeBreakdownCard(bool isArabic) {
+    // Read fees from top level first
+    final enumeratorFee =
+        (_siteVisit?['enumerator_fee'] as num?)?.toDouble() ??
+        (_siteVisit?['enumeratorFee'] as num?)?.toDouble() ??
+        0.0;
+
+    // Attempt to read breakdown from JSON
+    final visitData = _siteVisit?['visit_data'] as Map<String, dynamic>? ?? {};
+    final additionalData =
+        _siteVisit?['additional_data'] as Map<String, dynamic>? ?? {};
+
+    final baseFee =
+        (visitData['base_enumerator_fee'] as num?)?.toDouble() ??
+        (additionalData['base_enumerator_fee'] as num?)?.toDouble() ??
+        enumeratorFee;
+    final multiplier =
+        (visitData['fee_multiplier'] as num?)?.toInt() ??
+        (additionalData['fee_multiplier'] as num?)?.toInt() ??
+        1;
+    final transportFee =
+        (_siteVisit?['transport_fee'] as num?)?.toDouble() ??
+        (_siteVisit?['transportFee'] as num?)?.toDouble() ??
+        0.0;
+    final totalCost =
+        (_siteVisit?['total_cost'] as num?)?.toDouble() ??
+        (_siteVisit?['totalCost'] as num?)?.toDouble() ??
+        (enumeratorFee + transportFee);
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.payments, color: AppColors.primaryGreen),
+                const SizedBox(width: 8),
+                Text(
+                  isArabic ? 'تفاصيل الأجر' : 'Visit Fee Breakdown',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            _buildInfoRow(
+              isArabic ? 'الأجر الأساسي للباحث' : 'Base Enumerator Fee',
+              '${baseFee.toStringAsFixed(2)} SDG',
+              Icons.person,
+            ),
+            if (multiplier > 1)
+              _buildInfoRow(
+                isArabic
+                    ? 'مضاعف النشاط (أنشطة متعددة)'
+                    : 'Activity Multiplier (Multiple Activities)',
+                'x$multiplier',
+                Icons.layers,
+              ),
+            _buildInfoRow(
+              isArabic ? 'إجمالي أجر الباحث' : 'Total Enumerator Fee',
+              '${enumeratorFee.toStringAsFixed(2)} SDG',
+              Icons.attach_money,
+            ),
+            _buildInfoRow(
+              isArabic ? 'بدل المواصلات' : 'Transport Budget',
+              '${transportFee.toStringAsFixed(2)} SDG',
+              Icons.directions_car,
+            ),
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  isArabic ? 'إجمالي الدفع المستحق' : 'Total Payout',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${totalCost.toStringAsFixed(2)} SDG',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryGreen,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

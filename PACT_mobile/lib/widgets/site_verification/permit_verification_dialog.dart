@@ -1,4 +1,4 @@
-part of 'site_verification_screen.dart';
+part of '../../screens/site_verification_screen.dart';
 
 // Permit Verification Dialog - Matches PermitVerificationQuestions.tsx flow
 class _PermitVerificationDialog extends StatefulWidget {
@@ -2463,4 +2463,3 @@ class _PermitVerificationDialogState extends State<_PermitVerificationDialog> {
     );
   }
 }
-

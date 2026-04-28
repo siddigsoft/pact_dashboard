@@ -104,7 +104,7 @@ class _FloatingCallOverlayState extends State<FloatingCallOverlay>
             remoteUserName: remoteUserName,
             remoteUserAvatar: widget.remoteUserAvatar,
             isAudioOnly: _callState?.isAudioOnly ?? true,
-            isOutgoing: true,
+            isOutgoing: _agoraService.isOutgoingCall,
           ),
         ),
       );

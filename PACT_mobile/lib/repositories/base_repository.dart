@@ -48,11 +48,10 @@ abstract class BaseRepository<T> {
       // Update local database
       await database.transaction((txn) async {
         for (final change in remoteChanges) {
-          await txn.insert(
-            tableName,
-            {...change, 'synced': 1},
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await txn.insert(tableName, {
+            ...change,
+            'synced': 1,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } catch (e) {
@@ -97,10 +96,6 @@ abstract class BaseRepository<T> {
   }
 
   Future<int> delete(String id) async {
-    return await database.delete(
-      tableName,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await database.delete(tableName, where: 'id = ?', whereArgs: [id]);
   }
 }

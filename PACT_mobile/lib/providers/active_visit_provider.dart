@@ -101,8 +101,8 @@ class ActiveVisitState {
 /// Provider for active visit state
 final activeVisitProvider =
     StateNotifierProvider<ActiveVisitNotifier, ActiveVisitState>((ref) {
-  return ActiveVisitNotifier(ref);
-});
+      return ActiveVisitNotifier(ref);
+    });
 
 class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
   final Ref _ref;
@@ -151,7 +151,8 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
   /// Capture GPS once on start with ≤10m accuracy requirement
   Future<Position?> _captureStartGPS() async {
     debugPrint(
-        '📍 Starting GPS capture for visit (accuracy ≤${maxAccuracyMeters}m required)...');
+      '📍 Starting GPS capture for visit (accuracy ≤${maxAccuracyMeters}m required)...',
+    );
 
     state = state.copyWith(isCapturingGPS: true, gpsError: null);
 
@@ -205,13 +206,15 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
           ).timeout(const Duration(seconds: 5));
 
           debugPrint(
-              '📍 Got position: ${position.latitude}, ${position.longitude} (accuracy: ${position.accuracy}m)');
+            '📍 Got position: ${position.latitude}, ${position.longitude} (accuracy: ${position.accuracy}m)',
+          );
 
           // Check if accuracy is within our requirement
           if (position.accuracy <= maxAccuracyMeters) {
             bestPosition = position;
             debugPrint(
-                '✅ GPS captured with accuracy ${position.accuracy}m (≤${maxAccuracyMeters}m)');
+              '✅ GPS captured with accuracy ${position.accuracy}m (≤${maxAccuracyMeters}m)',
+            );
             break;
           } else {
             // Keep the best position so far
@@ -220,7 +223,8 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
               bestPosition = position;
             }
             debugPrint(
-                '⚠️ Accuracy ${position.accuracy}m > ${maxAccuracyMeters}m required, trying again...');
+              '⚠️ Accuracy ${position.accuracy}m > ${maxAccuracyMeters}m required, trying again...',
+            );
           }
         } catch (e) {
           debugPrint('⚠️ GPS attempt $attempts failed: $e');
@@ -243,7 +247,8 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
         );
 
         debugPrint(
-            '🔒 GPS LOCKED: ${bestPosition.latitude}, ${bestPosition.longitude} (${bestPosition.accuracy}m)');
+          '🔒 GPS LOCKED: ${bestPosition.latitude}, ${bestPosition.longitude} (${bestPosition.accuracy}m)',
+        );
         return bestPosition;
       } else {
         state = state.copyWith(
@@ -286,17 +291,11 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
   }
 
   /// Complete the current visit
-  Future<void> completeVisit({
-    String? notes,
-    List<String>? photos,
-  }) async {
+  Future<void> completeVisit({String? notes, List<String>? photos}) async {
     if (!state.hasActiveVisit) return;
 
     // Update final state
-    state = state.copyWith(
-      notes: notes,
-      photos: photos ?? state.photos,
-    );
+    state = state.copyWith(notes: notes, photos: photos ?? state.photos);
 
     // Stop the visit
     await stopVisit();
@@ -317,9 +316,7 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
   void addPhoto(String photoPath) {
     if (!state.hasActiveVisit) return;
 
-    state = state.copyWith(
-      photos: [...state.photos, photoPath],
-    );
+    state = state.copyWith(photos: [...state.photos, photoPath]);
   }
 
   /// Update notes
@@ -351,14 +348,15 @@ class ActiveVisitNotifier extends StateNotifier<ActiveVisitState> {
       }
 
       // Start location stream for tracking (but NOT for changing locked GPS)
-      _locationSubscription = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 10, // Update every 10 meters
-        ),
-      ).listen((Position position) {
-        updateLocation(position);
-      });
+      _locationSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 10, // Update every 10 meters
+            ),
+          ).listen((Position position) {
+            updateLocation(position);
+          });
 
       state = state.copyWith(isTrackingLocation: true);
       debugPrint('Started location tracking for active visit');

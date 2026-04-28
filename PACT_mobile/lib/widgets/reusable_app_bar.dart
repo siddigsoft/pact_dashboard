@@ -54,9 +54,13 @@ import '../screens/settings_screen.dart';
 ///   showBackButton: true,
 /// )
 /// ```
-class ReusableAppBar extends StatelessWidget {
-  /// The page title to display
-  final String title;
+class ReusableAppBar extends StatelessWidget implements PreferredSizeWidget {
+  /// The page title to display.
+  ///
+  /// Supports both:
+  /// - `title: 'My Page'` (preferred)
+  /// - `title: Text('My Page')` (AppBar-compatible migration path)
+  final Object title;
 
   /// Optional scaffold key to control drawer opening/closing
   /// If provided, a drawer icon will be shown on the left
@@ -122,6 +126,9 @@ class ReusableAppBar extends StatelessWidget {
   });
 
   @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 16);
+
+  @override
   Widget build(BuildContext context) {
     // Determine what leading icon/button to show
     IconData? leadingIcon;
@@ -181,7 +188,7 @@ class ReusableAppBar extends StatelessWidget {
     }
 
     return ModernAppHeader(
-      title: title,
+      title: _resolveTitleText(),
       leadingIcon: leadingIcon,
       onLeadingIconPressed: leadingCallback,
       actions: allActions.isEmpty ? null : allActions,
@@ -190,6 +197,24 @@ class ReusableAppBar extends StatelessWidget {
       textColor: textColor,
       showBackButton: showBackButton && leadingIcon == null,
     );
+  }
+
+  String _resolveTitleText() {
+    if (title is String) {
+      return title as String;
+    }
+    if (title is Text) {
+      final textWidget = title as Text;
+      if (textWidget.data != null) {
+        return textWidget.data!;
+      }
+      final span = textWidget.textSpan;
+      if (span is TextSpan) {
+        return span.toPlainText();
+      }
+      return '';
+    }
+    return title.toString();
   }
 
   /// Build notification icon with badge
@@ -265,7 +290,8 @@ class ReusableAppBar extends StatelessWidget {
       builder: (context, snapshot) {
         final profile = snapshot.data;
         final profileAvatarUrl = profile?['avatar_url'] as String?;
-        final profileName = profile?['full_name'] as String? ??
+        final profileName =
+            profile?['full_name'] as String? ??
             profile?['username'] as String? ??
             userName ??
             currentUser.email?.split('@').first ??
@@ -298,8 +324,9 @@ class ReusableAppBar extends StatelessWidget {
     String? userName,
   ) {
     final String finalUserName = userName ?? 'User';
-    final String userInitial =
-        finalUserName.isNotEmpty ? finalUserName[0].toUpperCase() : 'U';
+    final String userInitial = finalUserName.isNotEmpty
+        ? finalUserName[0].toUpperCase()
+        : 'U';
 
     return GestureDetector(
       onTap: () {

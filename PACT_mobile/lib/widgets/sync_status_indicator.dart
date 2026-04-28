@@ -63,8 +63,9 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
   }
 
   void _listenToConnectivity() {
-    _connectivitySubscription =
-        Connectivity().onConnectivityChanged.listen((result) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      result,
+    ) {
       final wasOffline = !_isOnline;
       setState(() {
         _isOnline = !result.contains(ConnectivityResult.none);
@@ -123,13 +124,17 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
       }
       debugPrint('[SyncStatusIndicator] Starting sync...');
       final result = await syncManager.forceSync();
-      debugPrint('[SyncStatusIndicator] Sync completed: ${result.success}, synced: ${result.synced}, failed: ${result.failed}');
+      debugPrint(
+        '[SyncStatusIndicator] Sync completed: ${result.success}, synced: ${result.synced}, failed: ${result.failed}',
+      );
 
       if (mounted) {
         if (result.success && result.synced > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Synced ${result.synced} pending item${result.synced > 1 ? 's' : ''}'),
+              content: Text(
+                'Synced ${result.synced} pending item${result.synced > 1 ? 's' : ''}',
+              ),
               backgroundColor: AppColors.primaryGreen,
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 2),
@@ -138,7 +143,9 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
         } else if (result.failed > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Sync completed with ${result.failed} error${result.failed > 1 ? 's' : ''}'),
+              content: Text(
+                'Sync completed with ${result.failed} error${result.failed > 1 ? 's' : ''}',
+              ),
               backgroundColor: Colors.orange,
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 3),
@@ -198,8 +205,11 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
                 child: const Icon(Icons.sync, color: Colors.white, size: 16),
               )
             else
-              const Icon(Icons.cloud_upload_outlined,
-                  color: Colors.white, size: 16),
+              const Icon(
+                Icons.cloud_upload_outlined,
+                color: Colors.white,
+                size: 16,
+              ),
             const SizedBox(width: 4),
             Text(
               _isSyncing ? 'Syncing...' : '$_pendingCount pending',
@@ -276,8 +286,10 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
               ),
               if (_pendingCount > 0)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -306,11 +318,13 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
               ),
             ),
             const SizedBox(height: 8),
-            ..._pendingByType.entries.map((entry) => _buildPendingItem(
-                  _getTypeLabel(entry.key),
-                  entry.value,
-                  _getTypeIcon(entry.key),
-                )),
+            ..._pendingByType.entries.map(
+              (entry) => _buildPendingItem(
+                _getTypeLabel(entry.key),
+                entry.value,
+                _getTypeIcon(entry.key),
+              ),
+            ),
           ],
           if (_pendingCount > 0 && _isOnline) ...[
             const SizedBox(height: 16),
@@ -355,10 +369,7 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
           Expanded(
             child: Text(
               label,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: Colors.grey[700],
-              ),
+              style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[700]),
             ),
           ),
           Container(

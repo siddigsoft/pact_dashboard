@@ -2,8 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../models/project_model.dart';
-import '../repositories/project_repository.dart';
 
 class UserProfile {
   final String id;
@@ -24,9 +22,13 @@ class UserProfile {
 
   bool get isAdmin => role == 'super_admin' || role == 'admin';
   bool get isFom => role == 'fom';
-  bool get isCoordinator => role == 'coordinator' || role == 'field_coordinator' || role == 'state_coordinator';
+  bool get isCoordinator =>
+      role == 'coordinator' ||
+      role == 'field_coordinator' ||
+      role == 'state_coordinator';
   bool get isSupervisor => role == 'supervisor';
-  bool get isDataCollector => role == 'data_collector' || role == 'dataCollector';
+  bool get isDataCollector =>
+      role == 'data_collector' || role == 'dataCollector';
 
   bool get canSeeAdminFeatures => isAdmin || isFom;
   bool get canSeeReports => isAdmin || isFom || isCoordinator || isSupervisor;
@@ -66,7 +68,8 @@ class UserProfileNotifier extends AsyncNotifier<UserProfile?> {
       return profile;
     } catch (e) {
       final box = await Hive.openBox('user_profile_cache');
-      final cachedRole = (box.get('user_role') as String?)?.toLowerCase() ?? 'data_collector';
+      final cachedRole =
+          (box.get('user_role') as String?)?.toLowerCase() ?? 'data_collector';
       final cachedName = box.get('full_name') as String?;
       return UserProfile(
         id: authUser.id,
@@ -83,15 +86,18 @@ class UserProfileNotifier extends AsyncNotifier<UserProfile?> {
   }
 }
 
-final userProfileProvider = AsyncNotifierProvider<UserProfileNotifier, UserProfile?>(
-  UserProfileNotifier.new,
-);
+final userProfileProvider =
+    AsyncNotifierProvider<UserProfileNotifier, UserProfile?>(
+      UserProfileNotifier.new,
+    );
 
 final userRoleProvider = Provider<String>((ref) {
-  return ref.watch(userProfileProvider).maybeWhen(
-    data: (profile) => profile?.role ?? 'data_collector',
-    orElse: () => 'data_collector',
-  );
+  return ref
+      .watch(userProfileProvider)
+      .maybeWhen(
+        data: (profile) => profile?.role ?? 'data_collector',
+        orElse: () => 'data_collector',
+      );
 });
 
 final isAdminProvider = Provider<bool>((ref) {
@@ -109,44 +115,10 @@ final connectivityProvider = StreamProvider<List<ConnectivityResult>>((ref) {
 });
 
 final isOnlineProvider = Provider<bool>((ref) {
-  return ref.watch(connectivityProvider).maybeWhen(
-    data: (results) => !results.contains(ConnectivityResult.none),
-    orElse: () => true,
-  );
+  return ref
+      .watch(connectivityProvider)
+      .maybeWhen(
+        data: (results) => !results.contains(ConnectivityResult.none),
+        orElse: () => true,
+      );
 });
-
-// ============================================================
-// Project Providers
-// ============================================================
-
-final projectRepositoryProvider = Provider<ProjectRepository>((ref) {
-  return ProjectRepository(Supabase.instance.client);
-});
-
-/// Paginated project list for the current user.
-/// Params: (page, isAdmin)
-final projectsProvider = FutureProvider.family<List<ProjectModel>, (int, bool)>(
-  (ref, params) async {
-    final (page, isAdmin) = params;
-    final supabase = Supabase.instance.client;
-    final userId = supabase.auth.currentUser?.id ?? '';
-    // fullName is needed to match team.projectManager and team.members on server
-    final userProfile = ref.watch(userProfileProvider).valueOrNull;
-    final fullName = userProfile?.fullName ?? '';
-    final repo = ref.watch(projectRepositoryProvider);
-    return repo.fetchProjects(
-      userId: userId,
-      fullName: fullName,
-      isAdmin: isAdmin,
-      page: page,
-    );
-  },
-);
-
-/// Single project detail with flow log.
-final projectDetailProvider = FutureProvider.family<ProjectModel?, String>(
-  (ref, projectId) async {
-    final repo = ref.watch(projectRepositoryProvider);
-    return repo.fetchProjectDetail(projectId);
-  },
-);

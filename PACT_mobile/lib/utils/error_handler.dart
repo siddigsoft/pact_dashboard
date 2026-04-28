@@ -6,13 +6,15 @@ import '../widgets/app_widgets.dart';
 /// Centralized error handling utilities for consistent user-friendly error messages
 class ErrorHandler {
   /// Show a user-friendly error message based on the exception type
-  static void showError(BuildContext context, dynamic error, {
+  static void showError(
+    BuildContext context,
+    dynamic error, {
     String? customTitle,
     String? customMessage,
     VoidCallback? onRetry,
   }) {
     final errorInfo = _parseError(error);
-    
+
     AppErrorDialog.show(
       context,
       title: customTitle ?? errorInfo.title,
@@ -24,29 +26,17 @@ class ErrorHandler {
 
   /// Show a success snackbar
   static void showSuccess(BuildContext context, String message) {
-    AppSnackBar.show(
-      context,
-      message: message,
-      type: SnackBarType.success,
-    );
+    AppSnackBar.show(context, message: message, type: SnackBarType.success);
   }
 
   /// Show an info snackbar
   static void showInfo(BuildContext context, String message) {
-    AppSnackBar.show(
-      context,
-      message: message,
-      type: SnackBarType.info,
-    );
+    AppSnackBar.show(context, message: message, type: SnackBarType.info);
   }
 
   /// Show a warning snackbar
   static void showWarning(BuildContext context, String message) {
-    AppSnackBar.show(
-      context,
-      message: message,
-      type: SnackBarType.warning,
-    );
+    AppSnackBar.show(context, message: message, type: SnackBarType.warning);
   }
 
   /// Parse error and return user-friendly message
@@ -59,7 +49,8 @@ class ErrorHandler {
         errorString.contains('connection')) {
       return ErrorInfo(
         title: 'Connection Error',
-        message: 'Unable to connect to the server. Please check your internet connection and try again.',
+        message:
+            'Unable to connect to the server. Please check your internet connection and try again.',
       );
     }
 
@@ -74,8 +65,7 @@ class ErrorHandler {
     }
 
     // Validation errors
-    if (errorString.contains('invalid') ||
-        errorString.contains('validation')) {
+    if (errorString.contains('invalid') || errorString.contains('validation')) {
       return ErrorInfo(
         title: 'Invalid Data',
         message: 'Please check your input and try again.',
@@ -93,8 +83,7 @@ class ErrorHandler {
     }
 
     // Permission errors
-    if (errorString.contains('permission') ||
-        errorString.contains('denied')) {
+    if (errorString.contains('permission') || errorString.contains('denied')) {
       return ErrorInfo(
         title: 'Permission Denied',
         message: 'You don\'t have permission to perform this action.',
@@ -102,8 +91,7 @@ class ErrorHandler {
     }
 
     // Timeout errors
-    if (errorString.contains('timeout') ||
-        errorString.contains('timed out')) {
+    if (errorString.contains('timeout') || errorString.contains('timed out')) {
       return ErrorInfo(
         title: 'Request Timeout',
         message: 'The request took too long. Please try again.',
@@ -132,7 +120,8 @@ class ErrorHandler {
     // Generic error
     return ErrorInfo(
       title: 'Something Went Wrong',
-      message: 'An unexpected error occurred. Please try again or contact support if the problem persists.',
+      message:
+          'An unexpected error occurred. Please try again or contact support if the problem persists.',
     );
   }
 }

@@ -32,7 +32,9 @@ class GeographicalTaskService {
       );
 
       // Get all available site visits from service (respect user profile filtering)
-      final allAvailableVisits = await _service.getAvailableSiteVisits(userProfile);
+      final allAvailableVisits = await _service.getAvailableSiteVisits(
+        userProfile,
+      );
 
       // Filter visits with valid coordinates
       final validVisits = allAvailableVisits.where((visit) {
@@ -122,25 +124,25 @@ class GeographicalTaskService {
           'nearby_${userLat.round()}_${userLng.round()}_${maxTasks}_${maxRadiusKm.round()}';
 
       final tasksData = tasks
-          .map((task) => {
-                'visit': task.visit.toJson(),
-                'distance':
-                    task.distance, // Store in km for backward compatibility
-                'distanceText': task.distanceText,
-                'distanceMeters': task.distanceMeters, // Store actual meters
-              })
+          .map(
+            (task) => {
+              'visit': task.visit.toJson(),
+              'distance':
+                  task.distance, // Store in km for backward compatibility
+              'distanceText': task.distanceText,
+              'distanceMeters': task.distanceMeters, // Store actual meters
+            },
+          )
           .toList();
 
       await box.put(cacheKey, {
         'tasks': tasksData,
         'user_location': {'lat': userLat, 'lng': userLng},
-        'parameters': {
-          'maxTasks': maxTasks,
-          'maxRadiusKm': maxRadiusKm,
-        },
+        'parameters': {'maxTasks': maxTasks, 'maxRadiusKm': maxRadiusKm},
         'cached_at': DateTime.now().toIso8601String(),
-        'expires_at':
-            DateTime.now().add(const Duration(hours: 1)).toIso8601String(),
+        'expires_at': DateTime.now()
+            .add(const Duration(hours: 1))
+            .toIso8601String(),
       });
     } catch (e) {
       print('Error caching nearby tasks: $e');
@@ -174,7 +176,8 @@ class GeographicalTaskService {
         final visit = SiteVisit.fromJson(taskData['visit']);
         return SiteVisitWithDistance(
           visit: visit,
-          distanceMeters: (taskData['distance'] as num).toDouble() *
+          distanceMeters:
+              (taskData['distance'] as num).toDouble() *
               1000, // Convert km back to meters
         );
       }).toList();
@@ -203,8 +206,12 @@ class GeographicalTaskService {
       await cacheUserLocation(userLat, userLng);
 
       // Check for cached results first
-      final cachedTasks =
-          await getCachedNearbyTasks(userLat, userLng, maxTasks, maxRadiusKm);
+      final cachedTasks = await getCachedNearbyTasks(
+        userLat,
+        userLng,
+        maxTasks,
+        maxRadiusKm,
+      );
       if (cachedTasks != null && cachedTasks.isNotEmpty) {
         print('Using cached nearby tasks: ${cachedTasks.length} tasks');
         return cachedTasks;
@@ -219,7 +226,12 @@ class GeographicalTaskService {
 
       // Cache the results
       await cacheNearbyTasks(
-          freshTasks, userLat, userLng, maxTasks, maxRadiusKm);
+        freshTasks,
+        userLat,
+        userLng,
+        maxTasks,
+        maxRadiusKm,
+      );
 
       return freshTasks;
     } catch (e) {
@@ -231,11 +243,16 @@ class GeographicalTaskService {
         final userLat = cachedLocation['latitude'];
         final userLng = cachedLocation['longitude'];
 
-        final cachedTasks =
-            await getCachedNearbyTasks(userLat, userLng, maxTasks, maxRadiusKm);
+        final cachedTasks = await getCachedNearbyTasks(
+          userLat,
+          userLng,
+          maxTasks,
+          maxRadiusKm,
+        );
         if (cachedTasks != null) {
           print(
-              'Using cached tasks with cached location: ${cachedTasks.length} tasks');
+            'Using cached tasks with cached location: ${cachedTasks.length} tasks',
+          );
           return cachedTasks;
         }
       }
@@ -258,8 +275,12 @@ class GeographicalTaskService {
         final userLng = cachedLocation['longitude'];
 
         // Try cached tasks
-        final cachedTasks =
-            await getCachedNearbyTasks(userLat, userLng, maxTasks, maxRadiusKm);
+        final cachedTasks = await getCachedNearbyTasks(
+          userLat,
+          userLng,
+          maxTasks,
+          maxRadiusKm,
+        );
         if (cachedTasks != null && cachedTasks.isNotEmpty) {
           return cachedTasks;
         }
@@ -278,7 +299,12 @@ class GeographicalTaskService {
 
           // Cache the calculated results
           await cacheNearbyTasks(
-              nearbyTasks, userLat, userLng, maxTasks, maxRadiusKm);
+            nearbyTasks,
+            userLat,
+            userLng,
+            maxTasks,
+            maxRadiusKm,
+          );
 
           return nearbyTasks;
         }
@@ -300,8 +326,9 @@ class GeographicalTaskService {
       await box.put('assigned_$userId', {
         'tasks': tasksData,
         'cached_at': DateTime.now().toIso8601String(),
-        'expires_at':
-            DateTime.now().add(const Duration(hours: 2)).toIso8601String(),
+        'expires_at': DateTime.now()
+            .add(const Duration(hours: 2))
+            .toIso8601String(),
       });
     } catch (e) {
       print('Error caching assigned tasks: $e');

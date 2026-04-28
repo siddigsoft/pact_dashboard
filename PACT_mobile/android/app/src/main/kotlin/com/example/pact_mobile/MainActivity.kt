@@ -60,8 +60,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
 					}
 				}
 
-				KeyEvent.ACTION_UP,
-				KeyEvent.ACTION_CANCEL -> {
+				KeyEvent.ACTION_UP -> {
 					mainHandler.removeCallbacks(volumeHoldRunnable)
 					volumeUpPressStartMs = null
 					holdTriggeredForCurrentPress = false

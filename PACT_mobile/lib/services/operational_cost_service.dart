@@ -51,11 +51,11 @@ class OperationalCostService {
           .from('operational_cost_submissions')
           .select('''
             *,
-            profiles:user_id(name, role),
+            profiles:submitted_by(name, role),
             projects:project_id(name),
             hubs:hub_id(name)
           ''')
-          .eq('user_id', userId)
+          .eq('submitted_by', userId)
           .order('created_at', ascending: false);
 
       return (response as List)
@@ -76,7 +76,7 @@ class OperationalCostService {
     try {
       var query = _supabase.from('operational_cost_submissions').select('''
             *,
-            profiles:user_id(name, role),
+            profiles:submitted_by(name, role),
             projects:project_id(name),
             hubs:hub_id(name)
           ''');
@@ -113,7 +113,7 @@ class OperationalCostService {
           .from('operational_cost_submissions')
           .select('''
             *,
-            profiles:user_id(name, role),
+            profiles:submitted_by(name, role),
             projects:project_id(name),
             hubs:hub_id(name)
           ''')
@@ -139,11 +139,11 @@ class OperationalCostService {
           .from('operational_cost_submissions')
           .select('''
             *,
-            profiles:user_id(name, role),
+            profiles:submitted_by(name, role),
             projects:project_id(name),
             hubs:hub_id(name)
           ''')
-          .eq('user_id', userId)
+          .eq('submitted_by', userId)
           .eq('funding_type', 'advance')
           .eq('status', 'paid')
           .eq('is_reconciled', false)
@@ -180,8 +180,8 @@ class OperationalCostService {
       final response = await _supabase
           .from('operational_cost_submissions')
           .insert({
-            'user_id': userId,
-            'expense_category': expenseCategory.value,
+            'submitted_by': userId,
+            'expense_category': expenseCategory.dbValue,
             'funding_type': fundingType.value,
             'amount_cents': (amount * 100).round(),
             'currency': currency,
@@ -228,7 +228,7 @@ class OperationalCostService {
       };
 
       if (expenseCategory != null) {
-        updates['expense_category'] = expenseCategory.value;
+        updates['expense_category'] = expenseCategory.dbValue;
       }
       if (fundingType != null) updates['funding_type'] = fundingType.value;
       if (amount != null) updates['amount_cents'] = (amount * 100).round();

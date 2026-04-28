@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/shimmer_loading.dart';
+import '../widgets/reusable_app_bar.dart';
 
 class HubManagementScreen extends StatefulWidget {
   const HubManagementScreen({super.key});
@@ -28,7 +29,10 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
     try {
       List<Map<String, dynamic>> data;
       try {
-        final raw = await _supabase.from('hubs').select('*, hub_states(count)').order('name');
+        final raw = await _supabase
+            .from('hubs')
+            .select('*, hub_states(count)')
+            .order('name');
         data = List<Map<String, dynamic>>.from(raw);
       } catch (_) {
         final raw = await _supabase.from('hubs').select('*').order('name');
@@ -37,7 +41,11 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
       final box = await Hive.openBox('offline_cache');
       await box.put('hubs', data);
       if (!mounted) return;
-      setState(() { _hubs = data; _isLoading = false; _isOffline = false; });
+      setState(() {
+        _hubs = data;
+        _isLoading = false;
+        _isOffline = false;
+      });
     } catch (e) {
       if (!mounted) return;
       try {
@@ -46,7 +54,8 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
         if (cached != null) {
           setState(() {
             _hubs = List<Map<String, dynamic>>.from(
-                (cached as List).map((e) => Map<String, dynamic>.from(e)));
+              (cached as List).map((e) => Map<String, dynamic>.from(e)),
+            );
             _isLoading = false;
             _isOffline = true;
           });
@@ -57,21 +66,33 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
     }
   }
 
-  List<Map<String, dynamic>> get _filtered => _hubs.where((h) =>
-      _searchQuery.isEmpty || (h['name'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+  List<Map<String, dynamic>> get _filtered => _hubs
+      .where(
+        (h) =>
+            _searchQuery.isEmpty ||
+            (h['name'] ?? '').toLowerCase().contains(
+              _searchQuery.toLowerCase(),
+            ),
+      )
+      .toList();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.primaryDark,
-        title: const Text('Hub Management', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _loadHubs)],
-      ),
-      body: Column(
-        children: [
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReusableAppBar(
+              title: 'Hub Management',
+              showBackButton: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadHubs,
+                ),
+              ],
+            ),
           if (_isOffline) const OfflineBanner(),
           Container(
             padding: const EdgeInsets.all(12),
@@ -80,7 +101,9 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
               decoration: InputDecoration(
                 hintText: 'Search hubs...',
                 prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 8),
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
@@ -90,54 +113,112 @@ class _HubManagementScreenState extends State<HubManagementScreen> {
             child: _isLoading
                 ? const ShimmerBody(layout: ShimmerLayout.hub, listItems: 6)
                 : _filtered.isEmpty
-                    ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         const Icon(Icons.hub, size: 60, color: Colors.grey),
                         const SizedBox(height: 12),
-                        const Text('No hubs found.', style: TextStyle(color: Colors.grey)),
-                      ]))
-                    : RefreshIndicator(
-                        onRefresh: _loadHubs,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _filtered.length,
-                          itemBuilder: (_, i) {
-                            final h = _filtered[i];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              child: ExpansionTile(
-                                leading: CircleAvatar(backgroundColor: AppColors.primaryDark.withOpacity(0.1), child: const Icon(Icons.hub, color: AppColors.primaryDark)),
-                                title: Text(h['name'] ?? 'Unnamed Hub', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text(h['region'] ?? h['state'] ?? '', style: TextStyle(color: Colors.grey.shade600)),
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      if (h['manager_name'] != null) _row('Manager', h['manager_name']),
-                                      if (h['phone'] != null) _row('Phone', h['phone']),
-                                      if (h['email'] != null) _row('Email', h['email']),
-                                      if (h['address'] != null) _row('Address', h['address']),
-                                      if (h['states_count'] != null) _row('States', h['states_count'].toString()),
-                                      if (h['localities_count'] != null) _row('Localities', h['localities_count'].toString()),
-                                    ]),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
+                        const Text(
+                          'No hubs found.',
+                          style: TextStyle(color: Colors.grey),
                         ),
-                      ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadHubs,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _filtered.length,
+                      itemBuilder: (_, i) {
+                        final h = _filtered[i];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: ExpansionTile(
+                            leading: CircleAvatar(
+                              backgroundColor: AppColors.primaryDark
+                                  .withOpacity(0.1),
+                              child: const Icon(
+                                Icons.hub,
+                                color: AppColors.primaryDark,
+                              ),
+                            ),
+                            title: Text(
+                              h['name'] ?? 'Unnamed Hub',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              h['region'] ?? h['state'] ?? '',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  16,
+                                  14,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (h['manager_name'] != null)
+                                      _row('Manager', h['manager_name']),
+                                    if (h['phone'] != null)
+                                      _row('Phone', h['phone']),
+                                    if (h['email'] != null)
+                                      _row('Email', h['email']),
+                                    if (h['address'] != null)
+                                      _row('Address', h['address']),
+                                    if (h['states_count'] != null)
+                                      _row(
+                                        'States',
+                                        h['states_count'].toString(),
+                                      ),
+                                    if (h['localities_count'] != null)
+                                      _row(
+                                        'Localities',
+                                        h['localities_count'].toString(),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _row(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
-    child: Row(children: [
-      SizedBox(width: 90, child: Text('$label:', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey, fontSize: 13))),
-      Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
-    ]),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            '$label:',
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
+      ],
+    ),
   );
 }

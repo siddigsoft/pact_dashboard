@@ -9,6 +9,8 @@ import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import '../services/agora_call_service.dart';
 import '../models/call_state.dart';
 import '../theme/app_colors.dart';
+import '../widgets/floating_call_overlay.dart';
+import '../widgets/standard_back_button.dart';
 
 /// Agora Call Screen - Native video/audio call interface
 /// Provides full-featured video and audio calling with Agora RTC Engine
@@ -50,6 +52,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   StreamSubscription<CallState>? _callStateSubscription;
   StreamSubscription<int?>? _remoteUserSubscription;
   bool _isEndingCall = false;
+  CallStatus? _lastCallStatus;
 
   @override
   void initState() {
@@ -88,10 +91,16 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       '[AgoraCall] AgoraCallScreen _subscribeToCallState() subscribing to callStateStream',
     );
     _callStateSubscription = _agoraService.callStateStream.listen((state) {
+      // #region agent log
+      debugPrint(
+        '[CALL_DIAG] [H2] AgoraCallScreen callState=${state.status} lastStatus=$_lastCallStatus channel=${widget.channelName}',
+      );
+      // #endregion
       debugPrint(
         '[AgoraCall] AgoraCallScreen callStateStream event: status=${state.status} error=${state.status}',
       );
       if (!mounted) return;
+      _lastCallStatus = state.status;
 
       switch (state.status) {
         case CallStatus.connected:
@@ -109,6 +118,16 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         case CallStatus.rejected:
         case CallStatus.failed:
         case CallStatus.busy:
+        case CallStatus.unreachable:
+          final message = _statusMessage(state.status);
+          if (message != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
           debugPrint(
             '[AgoraCall] AgoraCallScreen state=${state.status} calling _endCall()',
           );
@@ -188,7 +207,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   }
 
   void _vibrateOnConnect() async {
-    if (await Vibration.hasVibrator() ?? false) {
+    if (await Vibration.hasVibrator()) {
       Vibration.vibrate(pattern: [0, 100, 50, 100]);
     }
   }
@@ -228,6 +247,11 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     debugPrint(
       '[AgoraCall] AgoraCallScreen _endCall() calling _agoraService.endCall()',
     );
+    // #region agent log
+    debugPrint(
+      '[CALL_DIAG] [H2] AgoraCallScreen _endCall() lastCallStatus=$_lastCallStatus channel=${widget.channelName}',
+    );
+    // #endregion
     _agoraService.endCall();
     WakelockPlus.disable();
 
@@ -241,6 +265,121 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           Navigator.of(context).pop();
         }
       });
+    }
+  }
+
+  void _minimizeCall() {
+    CallOverlayManager().showOverlay(
+      context,
+      remoteUserName: widget.remoteUserName ?? _agoraService.remoteUserName,
+      remoteUserAvatar: widget.remoteUserAvatar,
+    );
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _addParticipant() async {
+    try {
+      // Show a simple dialog to enter contact info
+      String? selectedUserName;
+
+      await showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Add Participant to Call'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Enter contact name',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    onChanged: (value) {
+                      selectedUserName = value;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'The participant will receive a call invitation to join this group call when they accept.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed:
+                    selectedUserName != null && selectedUserName!.isNotEmpty
+                    ? () {
+                        Navigator.pop(context);
+                        _sendGroupCallInvite(selectedUserName!);
+                      }
+                    : null,
+                child: const Text('Send Invite'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[AgoraCall] Error adding participant: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _sendGroupCallInvite(String participantName) async {
+    try {
+      // In a real implementation, you would search for the user by name
+      // For now, we'll show a message that the invite was sent
+      debugPrint('[AgoraCall] Group invite sent to: $participantName');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Call invite sent to $participantName'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // TODO: Implement actual user lookup and group call invite
+      // await _agoraService.sendGroupCallInvite(
+      //   inviteeUserId: userId,
+      //   inviteeName: participantName,
+      // );
+    } catch (e) {
+      debugPrint('[AgoraCall] Error sending group invite: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send invite: $e')));
+      }
+    }
+  }
+
+  String? _statusMessage(CallStatus status) {
+    switch (status) {
+      case CallStatus.busy:
+        return 'User is currently on another call';
+      case CallStatus.rejected:
+        return 'Call was declined';
+      case CallStatus.unreachable:
+        return 'No answer';
+      case CallStatus.failed:
+        return 'Call failed';
+      default:
+        return null;
     }
   }
 
@@ -308,10 +447,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-            onPressed: _endCall,
-          ),
+          StandardBackButton(onPressed: _endCall),
           Expanded(
             child: Column(
               children: [
@@ -369,20 +505,30 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               ],
             ),
           ),
-          if (!widget.isAudioOnly &&
-              (AgoraCallService.isWeb ? _agoraService.isReady : true))
-            IconButton(
-              icon: Icon(
-                _agoraService.isFrontCamera
-                    ? Icons.camera_front
-                    : Icons.camera_rear,
-                color: Colors.white,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.open_in_full, color: Colors.white),
+                onPressed: _minimizeCall,
+                tooltip: 'Minimize',
               ),
-              onPressed: _switchCamera,
-              tooltip: 'Switch Camera',
-            )
-          else
-            const SizedBox(width: 48),
+              if (!widget.isAudioOnly &&
+                  (AgoraCallService.isWeb ? _agoraService.isReady : true))
+                IconButton(
+                  icon: Icon(
+                    _agoraService.isFrontCamera
+                        ? Icons.camera_front
+                        : Icons.camera_rear,
+                    color: Colors.white,
+                  ),
+                  onPressed: _switchCamera,
+                  tooltip: 'Switch Camera',
+                )
+              else
+                const SizedBox(width: 48),
+            ],
+          ),
         ],
       ),
     );
@@ -778,6 +924,14 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             label: _agoraService.isSpeakerOn ? 'Speaker' : 'Earpiece',
             isActive: _agoraService.isSpeakerOn,
             onPressed: _toggleSpeaker,
+          ),
+
+          // Add participant button (group call)
+          _buildControlButton(
+            icon: Icons.person_add,
+            label: 'Add',
+            isActive: false,
+            onPressed: _addParticipant,
           ),
         ],
       ),

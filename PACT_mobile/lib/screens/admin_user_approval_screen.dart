@@ -5,6 +5,7 @@ import '../theme/app_design_system.dart';
 import '../widgets/app_widgets.dart';
 import '../services/auth_service.dart';
 import '../models/database_models.dart';
+import '../widgets/standard_back_button.dart';
 
 class AdminUserApprovalScreen extends StatefulWidget {
   const AdminUserApprovalScreen({super.key});
@@ -123,10 +124,7 @@ class _AdminUserApprovalScreenState extends State<AdminUserApprovalScreen> {
             color: AppColors.textPrimary,
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const StandardBackButton(color: AppColors.textPrimary),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

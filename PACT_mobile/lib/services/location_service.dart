@@ -51,14 +51,18 @@ class LocationService {
   }
 
   /// Update user location in database
-  static Future<void> updateUserLocation(String userId, Position position) async {
+  static Future<void> updateUserLocation(
+    String userId,
+    Position position,
+  ) async {
     try {
       // This would update the user's location in the profiles table
       // Implementation depends on your database structure
-      developer.log('User location updated: ${position.latitude}, ${position.longitude}');
+      developer.log(
+        'User location updated: ${position.latitude}, ${position.longitude}',
+      );
     } catch (e) {
       developer.log('Error updating user location: $e');
     }
   }
 }
-

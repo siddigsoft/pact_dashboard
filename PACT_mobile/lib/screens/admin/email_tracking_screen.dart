@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/standard_back_button.dart';
 
 class EmailTrackingScreen extends StatefulWidget {
   final bool isArabic;
@@ -150,10 +151,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
         appBar: AppBar(
           backgroundColor: AppColors.primaryBlue,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
+          leading: const StandardBackButton(),
           title: Text(
             widget.isArabic ? 'تتبع البريد الإلكتروني' : 'Email Tracking',
             style: GoogleFonts.poppins(

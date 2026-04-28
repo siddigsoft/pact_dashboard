@@ -534,6 +534,40 @@ class NotificationService {
     );
   }
 
+  static Future<void> showSiteDispatchedNotification({
+    required String siteCode,
+    required String siteName,
+    required String location,
+    required String budget,
+  }) async {
+    await initialize();
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'site_dispatch',
+          'Site Dispatches',
+          channelDescription: 'Notifications for site dispatch assignments',
+          importance: Importance.high,
+          priority: Priority.high,
+          showWhen: true,
+        );
+
+    const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
+
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iOSDetails,
+    );
+
+    await _notifications.show(
+      'site_dispatch_$siteCode'.hashCode,
+      'Site Dispatched: $siteName',
+      'Location: $location | Budget: $budget',
+      platformDetails,
+      payload: 'site_dispatch:$siteCode',
+    );
+  }
+
   // ==================== UTILITY METHODS ====================
 
   Future<void> cancelNotification(int id) async {

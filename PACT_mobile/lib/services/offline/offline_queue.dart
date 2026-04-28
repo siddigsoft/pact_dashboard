@@ -204,21 +204,17 @@ class OfflineQueue {
   Future<HttpResponse> _getRequest(Uri uri, Map<String, String> headers) async {
     // Use Supabase HTTP client if available, else fallback
     try {
-      final response = await _supabase.functions.invoke('http-request', body: {
-        'method': 'GET',
-        'url': uri.toString(),
-      });
+      final response = await _supabase.functions.invoke(
+        'http-request',
+        body: {'method': 'GET', 'url': uri.toString()},
+      );
       return HttpResponse(
         statusCode: 200,
         body: response.toString(),
         headers: {},
       );
     } catch (e) {
-      return HttpResponse(
-        statusCode: 500,
-        body: e.toString(),
-        headers: {},
-      );
+      return HttpResponse(statusCode: 500, body: e.toString(), headers: {});
     }
   }
 
@@ -228,23 +224,22 @@ class OfflineQueue {
     Map<String, String> headers,
   ) async {
     try {
-      final response = await _supabase.functions.invoke('http-request', body: {
-        'method': 'POST',
-        'url': uri.toString(),
-        'body': body,
-        'headers': headers,
-      });
+      final response = await _supabase.functions.invoke(
+        'http-request',
+        body: {
+          'method': 'POST',
+          'url': uri.toString(),
+          'body': body,
+          'headers': headers,
+        },
+      );
       return HttpResponse(
         statusCode: 200,
         body: response.toString(),
         headers: {},
       );
     } catch (e) {
-      return HttpResponse(
-        statusCode: 500,
-        body: e.toString(),
-        headers: {},
-      );
+      return HttpResponse(statusCode: 500, body: e.toString(), headers: {});
     }
   }
 
@@ -254,23 +249,22 @@ class OfflineQueue {
     Map<String, String> headers,
   ) async {
     try {
-      final response = await _supabase.functions.invoke('http-request', body: {
-        'method': 'PUT',
-        'url': uri.toString(),
-        'body': body,
-        'headers': headers,
-      });
+      final response = await _supabase.functions.invoke(
+        'http-request',
+        body: {
+          'method': 'PUT',
+          'url': uri.toString(),
+          'body': body,
+          'headers': headers,
+        },
+      );
       return HttpResponse(
         statusCode: 200,
         body: response.toString(),
         headers: {},
       );
     } catch (e) {
-      return HttpResponse(
-        statusCode: 500,
-        body: e.toString(),
-        headers: {},
-      );
+      return HttpResponse(statusCode: 500, body: e.toString(), headers: {});
     }
   }
 
@@ -280,43 +274,41 @@ class OfflineQueue {
     Map<String, String> headers,
   ) async {
     try {
-      final response = await _supabase.functions.invoke('http-request', body: {
-        'method': 'PATCH',
-        'url': uri.toString(),
-        'body': body,
-        'headers': headers,
-      });
+      final response = await _supabase.functions.invoke(
+        'http-request',
+        body: {
+          'method': 'PATCH',
+          'url': uri.toString(),
+          'body': body,
+          'headers': headers,
+        },
+      );
       return HttpResponse(
         statusCode: 200,
         body: response.toString(),
         headers: {},
       );
     } catch (e) {
-      return HttpResponse(
-        statusCode: 500,
-        body: e.toString(),
-        headers: {},
-      );
+      return HttpResponse(statusCode: 500, body: e.toString(), headers: {});
     }
   }
 
-  Future<HttpResponse> _deleteRequest(Uri uri, Map<String, String> headers) async {
+  Future<HttpResponse> _deleteRequest(
+    Uri uri,
+    Map<String, String> headers,
+  ) async {
     try {
-      final response = await _supabase.functions.invoke('http-request', body: {
-        'method': 'DELETE',
-        'url': uri.toString(),
-      });
+      final response = await _supabase.functions.invoke(
+        'http-request',
+        body: {'method': 'DELETE', 'url': uri.toString()},
+      );
       return HttpResponse(
         statusCode: 200,
         body: response.toString(),
         headers: {},
       );
     } catch (e) {
-      return HttpResponse(
-        statusCode: 500,
-        body: e.toString(),
-        headers: {},
-      );
+      return HttpResponse(statusCode: 500, body: e.toString(), headers: {});
     }
   }
 

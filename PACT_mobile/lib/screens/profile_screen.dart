@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../services/screen_analytics_mixin.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
+import 'dashboard_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -425,6 +426,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               title: 'Profile',
               scaffoldKey: _scaffoldKey,
               actions: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_rounded),
+                  tooltip: 'Back to Dashboard',
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DashboardScreen(),
+                      ),
+                    );
+                  },
+                ),
                 if (profile != null && !profileState.isLoading)
                   IconButton(
                     icon: Icon(_isEditMode ? Icons.close : Icons.edit),
@@ -1407,7 +1420,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             if (bankAccount.branchCode?.isNotEmpty ?? false) ...[
               const SizedBox(height: 8),
               _buildInfoRow(
-                'Branch Name',
+                'Branch Code',
                 bankAccount.branchCode!,
                 icon: Icons.location_city,
               ),
@@ -1592,12 +1605,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         ),
                       ),
                       const SizedBox(height: 14),
-                      // Branch Name (required)
+                      // Branch Code (optional)
                       TextFormField(
                         controller: branchCodeCtrl,
                         style: GoogleFonts.poppins(),
                         decoration: InputDecoration(
-                          labelText: 'Branch Name / اسم الفرع *',
+                          labelText: 'Branch Code / رمز الفرع (optional)',
                           labelStyle: GoogleFonts.poppins(
                             color: Colors.grey[600],
                           ),
@@ -1606,12 +1619,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Branch Name is required / اسم الفرع مطلوب';
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: 24),
                       // Save button
@@ -1641,7 +1648,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                                 ? null
                                                 : accountNameCtrl.text.trim(),
                                             branchCode:
-                                                branchCodeCtrl.text.trim(),
+                                                branchCodeCtrl.text
+                                                    .trim()
+                                                    .isEmpty
+                                                ? null
+                                                : branchCodeCtrl.text.trim(),
                                           ),
                                         );
                                     if (ctx.mounted) Navigator.of(ctx).pop();

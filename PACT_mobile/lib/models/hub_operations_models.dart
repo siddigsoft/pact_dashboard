@@ -15,18 +15,17 @@ class GPSCoordinates {
     this.accuracyMeters,
   });
 
-  factory GPSCoordinates.fromJson(Map<String, dynamic> json) =>
-      GPSCoordinates(
-        latitude: (json['latitude'] as num).toDouble(),
-        longitude: (json['longitude'] as num).toDouble(),
-        accuracyMeters: (json['accuracy_meters'] as num?)?.toDouble(),
-      );
+  factory GPSCoordinates.fromJson(Map<String, dynamic> json) => GPSCoordinates(
+    latitude: (json['latitude'] as num).toDouble(),
+    longitude: (json['longitude'] as num).toDouble(),
+    accuracyMeters: (json['accuracy_meters'] as num?)?.toDouble(),
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'latitude': latitude,
-        'longitude': longitude,
-        'accuracy_meters': accuracyMeters,
-      };
+    'latitude': latitude,
+    'longitude': longitude,
+    'accuracy_meters': accuracyMeters,
+  };
 }
 
 // ============================================================================
@@ -47,18 +46,18 @@ class MatchQuery {
   });
 
   factory MatchQuery.fromJson(Map<String, dynamic> json) => MatchQuery(
-        siteCode: json['siteCode'] as String,
-        siteName: json['siteName'] as String,
-        state: json['state'] as String,
-        locality: json['locality'] as String,
-      );
+    siteCode: json['siteCode'] as String,
+    siteName: json['siteName'] as String,
+    state: json['state'] as String,
+    locality: json['locality'] as String,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'siteCode': siteCode,
-        'siteName': siteName,
-        'state': state,
-        'locality': locality,
-      };
+    'siteCode': siteCode,
+    'siteName': siteName,
+    'state': state,
+    'locality': locality,
+  };
 }
 
 // ============================================================================
@@ -85,24 +84,24 @@ class MatchInfo {
   });
 
   factory MatchInfo.fromJson(Map<String, dynamic> json) => MatchInfo(
-        type: json['type'] as String,
-        confidence: (json['confidence'] as num).toDouble(),
-        confidenceLevel: json['confidence_level'] as String,
-        ruleApplied: json['rule_applied'] as String,
-        candidatesCount: (json['candidates_count'] as num).toInt(),
-        autoAccepted: json['auto_accepted'] as bool,
-        requiresReview: json['requires_review'] as bool,
-      );
+    type: json['type'] as String,
+    confidence: (json['confidence'] as num).toDouble(),
+    confidenceLevel: json['confidence_level'] as String,
+    ruleApplied: json['rule_applied'] as String,
+    candidatesCount: (json['candidates_count'] as num).toInt(),
+    autoAccepted: json['auto_accepted'] as bool,
+    requiresReview: json['requires_review'] as bool,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'type': type,
-        'confidence': confidence,
-        'confidence_level': confidenceLevel,
-        'rule_applied': ruleApplied,
-        'candidates_count': candidatesCount,
-        'auto_accepted': autoAccepted,
-        'requires_review': requiresReview,
-      };
+    'type': type,
+    'confidence': confidence,
+    'confidence_level': confidenceLevel,
+    'rule_applied': ruleApplied,
+    'candidates_count': candidatesCount,
+    'auto_accepted': autoAccepted,
+    'requires_review': requiresReview,
+  };
 }
 
 // ============================================================================
@@ -123,18 +122,18 @@ class MatchAudit {
   });
 
   factory MatchAudit.fromJson(Map<String, dynamic> json) => MatchAudit(
-        matchedAt: json['matched_at'] as String,
-        matchedBy: json['matched_by'] as String,
-        sourceWorkflow: json['source_workflow'] as String,
-        overrideReason: json['override_reason'] as String?,
-      );
+    matchedAt: json['matched_at'] as String,
+    matchedBy: json['matched_by'] as String,
+    sourceWorkflow: json['source_workflow'] as String,
+    overrideReason: json['override_reason'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'matched_at': matchedAt,
-        'matched_by': matchedBy,
-        'source_workflow': sourceWorkflow,
-        'override_reason': overrideReason,
-      };
+    'matched_at': matchedAt,
+    'matched_by': matchedBy,
+    'source_workflow': sourceWorkflow,
+    'override_reason': overrideReason,
+  };
 }
 
 // ============================================================================
@@ -154,20 +153,19 @@ class UnmatchedInfo {
     this.suggestedAction,
   });
 
-  factory UnmatchedInfo.fromJson(Map<String, dynamic> json) =>
-      UnmatchedInfo(
-        reason: json['reason'] as String,
-        details: json['details'] as String,
-        pendingReview: json['pending_review'] as bool,
-        suggestedAction: json['suggested_action'] as String?,
-      );
+  factory UnmatchedInfo.fromJson(Map<String, dynamic> json) => UnmatchedInfo(
+    reason: json['reason'] as String,
+    details: json['details'] as String,
+    pendingReview: json['pending_review'] as bool,
+    suggestedAction: json['suggested_action'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'reason': reason,
-        'details': details,
-        'pending_review': pendingReview,
-        'suggested_action': suggestedAction,
-      };
+    'reason': reason,
+    'details': details,
+    'pending_review': pendingReview,
+    'suggested_action': suggestedAction,
+  };
 }
 
 // ============================================================================
@@ -196,11 +194,11 @@ class AlternativeCandidate {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'registry_site_id': registrySiteId,
-        'site_code': siteCode,
-        'site_name': siteName,
-        'confidence': confidence,
-      };
+    'registry_site_id': registrySiteId,
+    'site_code': siteCode,
+    'site_name': siteName,
+    'confidence': confidence,
+  };
 }
 
 class RegistryLinkage {
@@ -232,44 +230,43 @@ class RegistryLinkage {
     this.alternativeCandidates,
   });
 
-  factory RegistryLinkage.fromJson(Map<String, dynamic> json) =>
-      RegistryLinkage(
-        registrySiteId: json['registry_site_id'] as String?,
-        registrySiteCode: json['registry_site_code'] as String?,
-        gps: json['gps'] == null
-            ? null
-            : GPSCoordinates.fromJson(json['gps'] as Map<String, dynamic>),
-        stateId: json['state_id'] as String?,
-        stateName: json['state_name'] as String?,
-        localityId: json['locality_id'] as String?,
-        localityName: json['locality_name'] as String?,
-        query: MatchQuery.fromJson(json['query'] as Map<String, dynamic>),
-        match: MatchInfo.fromJson(json['match'] as Map<String, dynamic>),
-        audit: MatchAudit.fromJson(json['audit'] as Map<String, dynamic>),
-        unmatched: json['unmatched'] == null
-            ? null
-            : UnmatchedInfo.fromJson(
-                json['unmatched'] as Map<String, dynamic>),
-        alternativeCandidates: (json['alternative_candidates'] as List<dynamic>?)
-            ?.map((e) =>
-                AlternativeCandidate.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+  factory RegistryLinkage.fromJson(
+    Map<String, dynamic> json,
+  ) => RegistryLinkage(
+    registrySiteId: json['registry_site_id'] as String?,
+    registrySiteCode: json['registry_site_code'] as String?,
+    gps: json['gps'] == null
+        ? null
+        : GPSCoordinates.fromJson(json['gps'] as Map<String, dynamic>),
+    stateId: json['state_id'] as String?,
+    stateName: json['state_name'] as String?,
+    localityId: json['locality_id'] as String?,
+    localityName: json['locality_name'] as String?,
+    query: MatchQuery.fromJson(json['query'] as Map<String, dynamic>),
+    match: MatchInfo.fromJson(json['match'] as Map<String, dynamic>),
+    audit: MatchAudit.fromJson(json['audit'] as Map<String, dynamic>),
+    unmatched: json['unmatched'] == null
+        ? null
+        : UnmatchedInfo.fromJson(json['unmatched'] as Map<String, dynamic>),
+    alternativeCandidates: (json['alternative_candidates'] as List<dynamic>?)
+        ?.map((e) => AlternativeCandidate.fromJson(e as Map<String, dynamic>))
+        .toList(),
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'registry_site_id': registrySiteId,
-        'registry_site_code': registrySiteCode,
-        'gps': gps,
-        'state_id': stateId,
-        'state_name': stateName,
-        'locality_id': localityId,
-        'locality_name': localityName,
-        'query': query,
-        'match': match,
-        'audit': audit,
-        'unmatched': unmatched,
-        'alternative_candidates': alternativeCandidates,
-      };
+    'registry_site_id': registrySiteId,
+    'registry_site_code': registrySiteCode,
+    'gps': gps,
+    'state_id': stateId,
+    'state_name': stateName,
+    'locality_id': localityId,
+    'locality_name': localityName,
+    'query': query,
+    'match': match,
+    'audit': audit,
+    'unmatched': unmatched,
+    'alternative_candidates': alternativeCandidates,
+  };
 }
 
 // ============================================================================
@@ -324,52 +321,52 @@ class SiteRegistry {
   });
 
   factory SiteRegistry.fromJson(Map<String, dynamic> json) => SiteRegistry(
-        id: json['id'] as String,
-        siteCode: json['site_code'] as String,
-        siteName: json['site_name'] as String,
-        stateId: json['state_id'] as String,
-        stateName: json['state_name'] as String,
-        localityId: json['locality_id'] as String,
-        localityName: json['locality_name'] as String,
-        hubId: json['hub_id'] as String?,
-        hubName: json['hub_name'] as String?,
-        gpsLatitude: (json['gps_latitude'] as num?)?.toDouble(),
-        gpsLongitude: (json['gps_longitude'] as num?)?.toDouble(),
-        gpsCapturedBy: json['gps_captured_by'] as String?,
-        gpsCapturedAt: json['gps_captured_at'] as String?,
-        activityType: json['activity_type'] as String?,
-        status: json['status'] as String,
-        mmpCount: (json['mmp_count'] as num).toInt(),
-        lastMmpDate: json['last_mmp_date'] as String?,
-        createdAt: json['created_at'] as String,
-        createdBy: json['created_by'] as String,
-        updatedAt: json['updated_at'] as String?,
-        source: json['source'] as String?,
-      );
+    id: json['id'] as String,
+    siteCode: json['site_code'] as String,
+    siteName: json['site_name'] as String,
+    stateId: json['state_id'] as String,
+    stateName: json['state_name'] as String,
+    localityId: json['locality_id'] as String,
+    localityName: json['locality_name'] as String,
+    hubId: json['hub_id'] as String?,
+    hubName: json['hub_name'] as String?,
+    gpsLatitude: (json['gps_latitude'] as num?)?.toDouble(),
+    gpsLongitude: (json['gps_longitude'] as num?)?.toDouble(),
+    gpsCapturedBy: json['gps_captured_by'] as String?,
+    gpsCapturedAt: json['gps_captured_at'] as String?,
+    activityType: json['activity_type'] as String?,
+    status: json['status'] as String,
+    mmpCount: (json['mmp_count'] as num).toInt(),
+    lastMmpDate: json['last_mmp_date'] as String?,
+    createdAt: json['created_at'] as String,
+    createdBy: json['created_by'] as String,
+    updatedAt: json['updated_at'] as String?,
+    source: json['source'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'site_code': siteCode,
-        'site_name': siteName,
-        'state_id': stateId,
-        'state_name': stateName,
-        'locality_id': localityId,
-        'locality_name': localityName,
-        'hub_id': hubId,
-        'hub_name': hubName,
-        'gps_latitude': gpsLatitude,
-        'gps_longitude': gpsLongitude,
-        'gps_captured_by': gpsCapturedBy,
-        'gps_captured_at': gpsCapturedAt,
-        'activity_type': activityType,
-        'status': status,
-        'mmp_count': mmpCount,
-        'last_mmp_date': lastMmpDate,
-        'created_at': createdAt,
-        'created_by': createdBy,
-        'updated_at': updatedAt,
-        'source': source,
-      };
+    'id': id,
+    'site_code': siteCode,
+    'site_name': siteName,
+    'state_id': stateId,
+    'state_name': stateName,
+    'locality_id': localityId,
+    'locality_name': localityName,
+    'hub_id': hubId,
+    'hub_name': hubName,
+    'gps_latitude': gpsLatitude,
+    'gps_longitude': gpsLongitude,
+    'gps_captured_by': gpsCapturedBy,
+    'gps_captured_at': gpsCapturedAt,
+    'activity_type': activityType,
+    'status': status,
+    'mmp_count': mmpCount,
+    'last_mmp_date': lastMmpDate,
+    'created_at': createdAt,
+    'created_by': createdBy,
+    'updated_at': updatedAt,
+    'source': source,
+  };
 
   SiteRegistry copyWith({
     double? gpsLatitude,
@@ -434,29 +431,28 @@ class ManagedHub {
   });
 
   factory ManagedHub.fromJson(Map<String, dynamic> json) => ManagedHub(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        description: json['description'] as String?,
-        projectId: json['project_id'] as String?,
-        states:
-            (json['states'] as List<dynamic>).map((e) => e as String).toList(),
-        coordinates: json['coordinates'] as Map<String, dynamic>?,
-        createdAt: json['created_at'] as String,
-        createdBy: json['created_by'] as String,
-        updatedAt: json['updated_at'] as String?,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    description: json['description'] as String?,
+    projectId: json['project_id'] as String?,
+    states: (json['states'] as List<dynamic>).map((e) => e as String).toList(),
+    coordinates: json['coordinates'] as Map<String, dynamic>?,
+    createdAt: json['created_at'] as String,
+    createdBy: json['created_by'] as String,
+    updatedAt: json['updated_at'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'name': name,
-        'description': description,
-        'project_id': projectId,
-        'states': states,
-        'coordinates': coordinates,
-        'created_at': createdAt,
-        'created_by': createdBy,
-        'updated_at': updatedAt,
-      };
+    'id': id,
+    'name': name,
+    'description': description,
+    'project_id': projectId,
+    'states': states,
+    'coordinates': coordinates,
+    'created_at': createdAt,
+    'created_by': createdBy,
+    'updated_at': updatedAt,
+  };
 }
 
 // ============================================================================
@@ -487,32 +483,32 @@ class ProjectScope {
   });
 
   factory ProjectScope.fromJson(Map<String, dynamic> json) => ProjectScope(
-        id: json['id'] as String,
-        projectId: json['project_id'] as String,
-        projectName: json['project_name'] as String?,
-        hubId: json['hub_id'] as String?,
-        hubName: json['hub_name'] as String?,
-        stateIds: (json['state_ids'] as List<dynamic>?)
-            ?.map((e) => e as String)
-            .toList(),
-        localityIds: (json['locality_ids'] as List<dynamic>?)
-            ?.map((e) => e as String)
-            .toList(),
-        createdAt: json['created_at'] as String,
-        updatedAt: json['updated_at'] as String?,
-      );
+    id: json['id'] as String,
+    projectId: json['project_id'] as String,
+    projectName: json['project_name'] as String?,
+    hubId: json['hub_id'] as String?,
+    hubName: json['hub_name'] as String?,
+    stateIds: (json['state_ids'] as List<dynamic>?)
+        ?.map((e) => e as String)
+        .toList(),
+    localityIds: (json['locality_ids'] as List<dynamic>?)
+        ?.map((e) => e as String)
+        .toList(),
+    createdAt: json['created_at'] as String,
+    updatedAt: json['updated_at'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'project_id': projectId,
-        'project_name': projectName,
-        'hub_id': hubId,
-        'hub_name': hubName,
-        'state_ids': stateIds,
-        'locality_ids': localityIds,
-        'created_at': createdAt,
-        'updated_at': updatedAt,
-      };
+    'id': id,
+    'project_id': projectId,
+    'project_name': projectName,
+    'hub_id': hubId,
+    'hub_name': hubName,
+    'state_ids': stateIds,
+    'locality_ids': localityIds,
+    'created_at': createdAt,
+    'updated_at': updatedAt,
+  };
 }
 
 // ============================================================================
@@ -544,12 +540,12 @@ class SiteCodeComponents {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'state_code': stateCode,
-        'locality_code': localityCode,
-        'site_name': siteName,
-        'sequence_number': sequenceNumber,
-        'activity_type': activityType,
-      };
+    'state_code': stateCode,
+    'locality_code': localityCode,
+    'site_name': siteName,
+    'sequence_number': sequenceNumber,
+    'activity_type': activityType,
+  };
 }
 
 // ============================================================================
@@ -599,7 +595,8 @@ class SiteMatchResult {
         matchedRegistry: json['matched_registry'] == null
             ? null
             : SiteRegistry.fromJson(
-                json['matched_registry'] as Map<String, dynamic>),
+                json['matched_registry'] as Map<String, dynamic>,
+              ),
         matchType: json['match_type'] as String,
         matchConfidence: (json['match_confidence'] as num).toDouble(),
         matchConfidenceLevel: json['match_confidence_level'] as String,
@@ -608,31 +605,34 @@ class SiteMatchResult {
         gpsCoordinates: json['gps_coordinates'] == null
             ? null
             : GPSCoordinates.fromJson(
-                json['gps_coordinates'] as Map<String, dynamic>),
+                json['gps_coordinates'] as Map<String, dynamic>,
+              ),
         allCandidates: (json['all_candidates'] as List<dynamic>)
-            .map((e) =>
-                AlternativeCandidate.fromJson(e as Map<String, dynamic>))
+            .map(
+              (e) => AlternativeCandidate.fromJson(e as Map<String, dynamic>),
+            )
             .toList(),
         registryLinkage: RegistryLinkage.fromJson(
-            json['registry_linkage'] as Map<String, dynamic>),
+          json['registry_linkage'] as Map<String, dynamic>,
+        ),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'site_entry_id': siteEntryId,
-        'site_name': siteName,
-        'site_code': siteCode,
-        'state': state,
-        'locality': locality,
-        'matched_registry': matchedRegistry,
-        'match_type': matchType,
-        'match_confidence': matchConfidence,
-        'match_confidence_level': matchConfidenceLevel,
-        'auto_accepted': autoAccepted,
-        'requires_review': requiresReview,
-        'gps_coordinates': gpsCoordinates,
-        'all_candidates': allCandidates,
-        'registry_linkage': registryLinkage,
-      };
+    'site_entry_id': siteEntryId,
+    'site_name': siteName,
+    'site_code': siteCode,
+    'state': state,
+    'locality': locality,
+    'matched_registry': matchedRegistry,
+    'match_type': matchType,
+    'match_confidence': matchConfidence,
+    'match_confidence_level': matchConfidenceLevel,
+    'auto_accepted': autoAccepted,
+    'requires_review': requiresReview,
+    'gps_coordinates': gpsCoordinates,
+    'all_candidates': allCandidates,
+    'registry_linkage': registryLinkage,
+  };
 }
 
 // ============================================================================
@@ -671,13 +671,13 @@ class RegistryValidationResult {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'matches': matches,
-        'registered_count': registeredCount,
-        'unregistered_count': unregisteredCount,
-        'review_required_count': reviewRequiredCount,
-        'auto_accepted_count': autoAcceptedCount,
-        'warnings': warnings,
-      };
+    'matches': matches,
+    'registered_count': registeredCount,
+    'unregistered_count': unregisteredCount,
+    'review_required_count': reviewRequiredCount,
+    'auto_accepted_count': autoAcceptedCount,
+    'warnings': warnings,
+  };
 }
 
 // ============================================================================
@@ -698,19 +698,18 @@ class GPSSaveResult {
   });
 
   factory GPSSaveResult.fromJson(Map<String, dynamic> json) => GPSSaveResult(
-        success: json['success'] as bool,
-        registrySiteId: json['registry_site_id'] as String?,
-        error: json['error'] as String?,
-        previousGps: json['previous_gps'] == null
-            ? null
-            : GPSCoordinates.fromJson(
-                json['previous_gps'] as Map<String, dynamic>),
-      );
+    success: json['success'] as bool,
+    registrySiteId: json['registry_site_id'] as String?,
+    error: json['error'] as String?,
+    previousGps: json['previous_gps'] == null
+        ? null
+        : GPSCoordinates.fromJson(json['previous_gps'] as Map<String, dynamic>),
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'success': success,
-        'registry_site_id': registrySiteId,
-        'error': error,
-        'previous_gps': previousGps,
-      };
+    'success': success,
+    'registry_site_id': registrySiteId,
+    'error': error,
+    'previous_gps': previousGps,
+  };
 }

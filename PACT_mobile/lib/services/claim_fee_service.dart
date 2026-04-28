@@ -96,7 +96,9 @@ class ClaimFeeService {
         final beforeNorm = roleScope;
         roleScope = _normalizeRoleScopeForEnum(roleScope);
         if (beforeNorm != roleScope) {
-          print('[ClaimFeeService] role_scope normalized: $beforeNorm -> $roleScope');
+          print(
+            '[ClaimFeeService] role_scope normalized: $beforeNorm -> $roleScope',
+          );
         }
 
         if (classificationLevel != null && roleScope != null) {
@@ -169,8 +171,9 @@ class ClaimFeeService {
 
       final classificationLevel =
           userClassification['classification_level'] as String?;
-      final roleScope =
-          _normalizeRoleScopeForEnum(userClassification['role_scope'] as String?);
+      final roleScope = _normalizeRoleScopeForEnum(
+        userClassification['role_scope'] as String?,
+      );
 
       if (classificationLevel == null || roleScope == null) {
         return EnumeratorFeeResult(

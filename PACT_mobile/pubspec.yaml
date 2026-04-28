@@ -83,6 +83,8 @@ dependencies:
   firebase_crashlytics: ^4.0.0
   firebase_analytics: ^11.0.0
   screenshot: ^3.0.0
+  any_link_preview: ^3.0.3
+  app_settings: ^7.0.0
 
 dev_dependencies:
   flutter_test:

@@ -195,8 +195,8 @@ final walletNotifierProvider =
 /// Filter state for transaction search
 final transactionSearchFiltersProvider =
     StateProvider<TransactionSearchFilters>(
-  (ref) => TransactionSearchFilters(),
-);
+      (ref) => TransactionSearchFilters(),
+    );
 
 /// Quick filter states
 final transactionTypeFilterProvider = StateProvider<String>((ref) => 'all');
@@ -227,8 +227,9 @@ final filteredTransactionsProvider = Provider<List<WalletTransaction>>((ref) {
         }
 
         if (searchFilters.type != null) {
-          filtered =
-              filtered.where((t) => t.type == searchFilters.type).toList();
+          filtered = filtered
+              .where((t) => t.type == searchFilters.type)
+              .toList();
         }
 
         if (searchFilters.minAmount != null) {
@@ -245,8 +246,9 @@ final filteredTransactionsProvider = Provider<List<WalletTransaction>>((ref) {
 
         if (searchFilters.startDate != null) {
           final startDate = searchFilters.startDate!;
-          filtered =
-              filtered.where((t) => t.createdAt.isAfter(startDate)).toList();
+          filtered = filtered
+              .where((t) => t.createdAt.isAfter(startDate))
+              .toList();
         }
 
         if (searchFilters.endDate != null) {
@@ -260,8 +262,9 @@ final filteredTransactionsProvider = Provider<List<WalletTransaction>>((ref) {
             59,
             999,
           );
-          filtered =
-              filtered.where((t) => t.createdAt.isBefore(endDateTime)).toList();
+          filtered = filtered
+              .where((t) => t.createdAt.isBefore(endDateTime))
+              .toList();
         }
 
         // Legacy quick filters
@@ -275,8 +278,9 @@ final filteredTransactionsProvider = Provider<List<WalletTransaction>>((ref) {
                 )
                 .toList();
           } else {
-            filtered =
-                filtered.where((t) => t.type == transactionTypeFilter).toList();
+            filtered = filtered
+                .where((t) => t.type == transactionTypeFilter)
+                .toList();
           }
         }
 
@@ -336,14 +340,14 @@ final earningsByMonthProvider = Provider<List<MapEntry<String, double>>>((ref) {
 
         walletState.transactions
             .where(
-          (t) =>
-              t.type == TRANSACTION_TYPE_EARNING ||
-              t.type == TRANSACTION_TYPE_SITE_VISIT_FEE,
-        )
+              (t) =>
+                  t.type == TRANSACTION_TYPE_EARNING ||
+                  t.type == TRANSACTION_TYPE_SITE_VISIT_FEE,
+            )
             .forEach((t) {
-          final month = DateFormat('MMM yyyy').format(t.createdAt);
-          monthlyData[month] = (monthlyData[month] ?? 0) + t.amount;
-        });
+              final month = DateFormat('MMM yyyy').format(t.createdAt);
+              monthlyData[month] = (monthlyData[month] ?? 0) + t.amount;
+            });
 
         final sorted = monthlyData.entries.toList()
           ..sort(

@@ -62,12 +62,12 @@ class SupportingDocument {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'url': url,
-        'type': type,
-        'filename': filename,
-        'uploaded_at': uploadedAt.toIso8601String(),
-      };
+    'id': id,
+    'url': url,
+    'type': type,
+    'filename': filename,
+    'uploaded_at': uploadedAt.toIso8601String(),
+  };
 }
 
 /// Main cost submission model
@@ -151,91 +151,88 @@ class CostSubmission {
   });
 
   factory CostSubmission.fromJson(Map<String, dynamic> json) => CostSubmission(
-        id: json['id'] as String,
-        siteVisitId: json['site_visit_id'] as String,
-        mmpFileId: json['mmp_file_id'] as String?,
-        projectId: json['project_id'] as String?,
-        submittedBy: json['submitted_by'] as String,
-        submittedAt: DateTime.parse(json['submitted_at'] as String),
-        transportationCostCents:
-            (json['transportation_cost_cents'] as num).toInt(),
-        accommodationCostCents:
-            (json['accommodation_cost_cents'] as num).toInt(),
-        mealAllowanceCents: (json['meal_allowance_cents'] as num).toInt(),
-        otherCostsCents: (json['other_costs_cents'] as num).toInt(),
-        totalCostCents: (json['total_cost_cents'] as num).toInt(),
-        currency: json['currency'] as String? ?? 'SDG',
-        transportationDetails: json['transportation_details'] as String?,
-        accommodationDetails: json['accommodation_details'] as String?,
-        mealDetails: json['meal_details'] as String?,
-        otherCostsDetails: json['other_costs_details'] as String?,
-        submissionNotes: json['submission_notes'] as String?,
-        supportingDocuments:
-            (json['supporting_documents'] as List<dynamic>?)
-                ?.map((e) =>
-                    SupportingDocument.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            const [],
-        status: _costSubmissionStatusFromJson(json['status'] as String?),
-        reviewedBy: json['reviewed_by'] as String?,
-        reviewedAt: json['reviewed_at'] == null
-            ? null
-            : DateTime.parse(json['reviewed_at'] as String),
-        reviewerNotes: json['reviewer_notes'] as String?,
-        approvalNotes: json['approval_notes'] as String?,
-        walletTransactionId: json['wallet_transaction_id'] as String?,
-        paidAt: json['paid_at'] == null
-            ? null
-            : DateTime.parse(json['paid_at'] as String),
-        paidAmountCents: (json['paid_amount_cents'] as num?)?.toInt(),
-        paymentNotes: json['payment_notes'] as String?,
-        classificationLevel: json['classification_level'] as String?,
-        roleScope: json['role_scope'] as String?,
-        revisionRequested: json['revision_requested'] as bool? ?? false,
-        revisionNotes: json['revision_notes'] as String?,
-        revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
-        createdAt: DateTime.parse(json['created_at'] as String),
-        updatedAt: DateTime.parse(json['updated_at'] as String),
-        siteName: null,
-        submitterName: null,
-      );
+    id: json['id'] as String,
+    siteVisitId: json['site_visit_id'] as String,
+    mmpFileId: json['mmp_file_id'] as String?,
+    projectId: json['project_id'] as String?,
+    submittedBy: json['submitted_by'] as String,
+    submittedAt: DateTime.parse(json['submitted_at'] as String),
+    transportationCostCents: (json['transportation_cost_cents'] as num).toInt(),
+    accommodationCostCents: (json['accommodation_cost_cents'] as num).toInt(),
+    mealAllowanceCents: (json['meal_allowance_cents'] as num).toInt(),
+    otherCostsCents: (json['other_costs_cents'] as num).toInt(),
+    totalCostCents: (json['total_cost_cents'] as num).toInt(),
+    currency: json['currency'] as String? ?? 'SDG',
+    transportationDetails: json['transportation_details'] as String?,
+    accommodationDetails: json['accommodation_details'] as String?,
+    mealDetails: json['meal_details'] as String?,
+    otherCostsDetails: json['other_costs_details'] as String?,
+    submissionNotes: json['submission_notes'] as String?,
+    supportingDocuments:
+        (json['supporting_documents'] as List<dynamic>?)
+            ?.map((e) => SupportingDocument.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        const [],
+    status: _costSubmissionStatusFromJson(json['status'] as String?),
+    reviewedBy: json['reviewed_by'] as String?,
+    reviewedAt: json['reviewed_at'] == null
+        ? null
+        : DateTime.parse(json['reviewed_at'] as String),
+    reviewerNotes: json['reviewer_notes'] as String?,
+    approvalNotes: json['approval_notes'] as String?,
+    walletTransactionId: json['wallet_transaction_id'] as String?,
+    paidAt: json['paid_at'] == null
+        ? null
+        : DateTime.parse(json['paid_at'] as String),
+    paidAmountCents: (json['paid_amount_cents'] as num?)?.toInt(),
+    paymentNotes: json['payment_notes'] as String?,
+    classificationLevel: json['classification_level'] as String?,
+    roleScope: json['role_scope'] as String?,
+    revisionRequested: json['revision_requested'] as bool? ?? false,
+    revisionNotes: json['revision_notes'] as String?,
+    revisionCount: (json['revision_count'] as num?)?.toInt() ?? 0,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    updatedAt: DateTime.parse(json['updated_at'] as String),
+    siteName: null,
+    submitterName: null,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'site_visit_id': siteVisitId,
-        'mmp_file_id': mmpFileId,
-        'project_id': projectId,
-        'submitted_by': submittedBy,
-        'submitted_at': submittedAt.toIso8601String(),
-        'transportation_cost_cents': transportationCostCents,
-        'accommodation_cost_cents': accommodationCostCents,
-        'meal_allowance_cents': mealAllowanceCents,
-        'other_costs_cents': otherCostsCents,
-        'total_cost_cents': totalCostCents,
-        'currency': currency,
-        'transportation_details': transportationDetails,
-        'accommodation_details': accommodationDetails,
-        'meal_details': mealDetails,
-        'other_costs_details': otherCostsDetails,
-        'submission_notes': submissionNotes,
-        'supporting_documents': supportingDocuments,
-        'status': _costSubmissionStatusToJson(status),
-        'reviewed_by': reviewedBy,
-        'reviewed_at': reviewedAt?.toIso8601String(),
-        'reviewer_notes': reviewerNotes,
-        'approval_notes': approvalNotes,
-        'wallet_transaction_id': walletTransactionId,
-        'paid_at': paidAt?.toIso8601String(),
-        'paid_amount_cents': paidAmountCents,
-        'payment_notes': paymentNotes,
-        'classification_level': classificationLevel,
-        'role_scope': roleScope,
-        'revision_requested': revisionRequested,
-        'revision_notes': revisionNotes,
-        'revision_count': revisionCount,
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    'site_visit_id': siteVisitId,
+    'mmp_file_id': mmpFileId,
+    'project_id': projectId,
+    'submitted_by': submittedBy,
+    'submitted_at': submittedAt.toIso8601String(),
+    'transportation_cost_cents': transportationCostCents,
+    'accommodation_cost_cents': accommodationCostCents,
+    'meal_allowance_cents': mealAllowanceCents,
+    'other_costs_cents': otherCostsCents,
+    'total_cost_cents': totalCostCents,
+    'currency': currency,
+    'transportation_details': transportationDetails,
+    'accommodation_details': accommodationDetails,
+    'meal_details': mealDetails,
+    'other_costs_details': otherCostsDetails,
+    'submission_notes': submissionNotes,
+    'supporting_documents': supportingDocuments,
+    'status': _costSubmissionStatusToJson(status),
+    'reviewed_by': reviewedBy,
+    'reviewed_at': reviewedAt?.toIso8601String(),
+    'reviewer_notes': reviewerNotes,
+    'approval_notes': approvalNotes,
+    'wallet_transaction_id': walletTransactionId,
+    'paid_at': paidAt?.toIso8601String(),
+    'paid_amount_cents': paidAmountCents,
+    'payment_notes': paymentNotes,
+    'classification_level': classificationLevel,
+    'role_scope': roleScope,
+    'revision_requested': revisionRequested,
+    'revision_notes': revisionNotes,
+    'revision_count': revisionCount,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+  };
 
   /// Get status label
   String get statusLabel {
@@ -304,13 +301,16 @@ class CostSubmission {
       projectId: projectId ?? this.projectId,
       submittedBy: submittedBy ?? this.submittedBy,
       submittedAt: submittedAt ?? this.submittedAt,
-      transportationCostCents: transportationCostCents ?? this.transportationCostCents,
-      accommodationCostCents: accommodationCostCents ?? this.accommodationCostCents,
+      transportationCostCents:
+          transportationCostCents ?? this.transportationCostCents,
+      accommodationCostCents:
+          accommodationCostCents ?? this.accommodationCostCents,
       mealAllowanceCents: mealAllowanceCents ?? this.mealAllowanceCents,
       otherCostsCents: otherCostsCents ?? this.otherCostsCents,
       totalCostCents: totalCostCents ?? this.totalCostCents,
       currency: currency ?? this.currency,
-      transportationDetails: transportationDetails ?? this.transportationDetails,
+      transportationDetails:
+          transportationDetails ?? this.transportationDetails,
       accommodationDetails: accommodationDetails ?? this.accommodationDetails,
       mealDetails: mealDetails ?? this.mealDetails,
       otherCostsDetails: otherCostsDetails ?? this.otherCostsDetails,
@@ -373,49 +373,47 @@ class CreateCostSubmissionRequest {
     this.roleScope,
   });
 
-  factory CreateCostSubmissionRequest.fromJson(Map<String, dynamic> json) =>
-      CreateCostSubmissionRequest(
-        siteVisitId: json['site_visit_id'] as String,
-        mmpFileId: json['mmp_file_id'] as String?,
-        projectId: json['project_id'] as String?,
-        transportationCostCents:
-            (json['transportation_cost_cents'] as num).toInt(),
-        accommodationCostCents:
-            (json['accommodation_cost_cents'] as num).toInt(),
-        mealAllowanceCents: (json['meal_allowance_cents'] as num).toInt(),
-        otherCostsCents: (json['other_costs_cents'] as num).toInt(),
-        currency: json['currency'] as String?,
-        transportationDetails: json['transportation_details'] as String?,
-        accommodationDetails: json['accommodation_details'] as String?,
-        mealDetails: json['meal_details'] as String?,
-        otherCostsDetails: json['other_costs_details'] as String?,
-        submissionNotes: json['submission_notes'] as String?,
-        supportingDocuments: (json['supporting_documents'] as List<dynamic>?)
-            ?.map((e) =>
-                SupportingDocument.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        classificationLevel: json['classification_level'] as String?,
-        roleScope: json['role_scope'] as String?,
-      );
+  factory CreateCostSubmissionRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => CreateCostSubmissionRequest(
+    siteVisitId: json['site_visit_id'] as String,
+    mmpFileId: json['mmp_file_id'] as String?,
+    projectId: json['project_id'] as String?,
+    transportationCostCents: (json['transportation_cost_cents'] as num).toInt(),
+    accommodationCostCents: (json['accommodation_cost_cents'] as num).toInt(),
+    mealAllowanceCents: (json['meal_allowance_cents'] as num).toInt(),
+    otherCostsCents: (json['other_costs_cents'] as num).toInt(),
+    currency: json['currency'] as String?,
+    transportationDetails: json['transportation_details'] as String?,
+    accommodationDetails: json['accommodation_details'] as String?,
+    mealDetails: json['meal_details'] as String?,
+    otherCostsDetails: json['other_costs_details'] as String?,
+    submissionNotes: json['submission_notes'] as String?,
+    supportingDocuments: (json['supporting_documents'] as List<dynamic>?)
+        ?.map((e) => SupportingDocument.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    classificationLevel: json['classification_level'] as String?,
+    roleScope: json['role_scope'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'site_visit_id': siteVisitId,
-        'mmp_file_id': mmpFileId,
-        'project_id': projectId,
-        'transportation_cost_cents': transportationCostCents,
-        'accommodation_cost_cents': accommodationCostCents,
-        'meal_allowance_cents': mealAllowanceCents,
-        'other_costs_cents': otherCostsCents,
-        'currency': currency,
-        'transportation_details': transportationDetails,
-        'accommodation_details': accommodationDetails,
-        'meal_details': mealDetails,
-        'other_costs_details': otherCostsDetails,
-        'submission_notes': submissionNotes,
-        'supporting_documents': supportingDocuments,
-        'classification_level': classificationLevel,
-        'role_scope': roleScope,
-      };
+    'site_visit_id': siteVisitId,
+    'mmp_file_id': mmpFileId,
+    'project_id': projectId,
+    'transportation_cost_cents': transportationCostCents,
+    'accommodation_cost_cents': accommodationCostCents,
+    'meal_allowance_cents': mealAllowanceCents,
+    'other_costs_cents': otherCostsCents,
+    'currency': currency,
+    'transportation_details': transportationDetails,
+    'accommodation_details': accommodationDetails,
+    'meal_details': mealDetails,
+    'other_costs_details': otherCostsDetails,
+    'submission_notes': submissionNotes,
+    'supporting_documents': supportingDocuments,
+    'classification_level': classificationLevel,
+    'role_scope': roleScope,
+  };
 
   /// Calculate total cost
   int get totalCostCents =>
@@ -453,12 +451,11 @@ class UpdateCostSubmissionRequest {
 
   factory UpdateCostSubmissionRequest.fromJson(Map<String, dynamic> json) =>
       UpdateCostSubmissionRequest(
-        transportationCostCents:
-            (json['transportation_cost_cents'] as num?)?.toInt(),
-        accommodationCostCents:
-            (json['accommodation_cost_cents'] as num?)?.toInt(),
-        mealAllowanceCents:
-            (json['meal_allowance_cents'] as num?)?.toInt(),
+        transportationCostCents: (json['transportation_cost_cents'] as num?)
+            ?.toInt(),
+        accommodationCostCents: (json['accommodation_cost_cents'] as num?)
+            ?.toInt(),
+        mealAllowanceCents: (json['meal_allowance_cents'] as num?)?.toInt(),
         otherCostsCents: (json['other_costs_cents'] as num?)?.toInt(),
         transportationDetails: json['transportation_details'] as String?,
         accommodationDetails: json['accommodation_details'] as String?,
@@ -466,23 +463,22 @@ class UpdateCostSubmissionRequest {
         otherCostsDetails: json['other_costs_details'] as String?,
         submissionNotes: json['submission_notes'] as String?,
         supportingDocuments: (json['supporting_documents'] as List<dynamic>?)
-            ?.map((e) =>
-                SupportingDocument.fromJson(e as Map<String, dynamic>))
+            ?.map((e) => SupportingDocument.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'transportation_cost_cents': transportationCostCents,
-        'accommodation_cost_cents': accommodationCostCents,
-        'meal_allowance_cents': mealAllowanceCents,
-        'other_costs_cents': otherCostsCents,
-        'transportation_details': transportationDetails,
-        'accommodation_details': accommodationDetails,
-        'meal_details': mealDetails,
-        'other_costs_details': otherCostsDetails,
-        'submission_notes': submissionNotes,
-        'supporting_documents': supportingDocuments,
-      };
+    'transportation_cost_cents': transportationCostCents,
+    'accommodation_cost_cents': accommodationCostCents,
+    'meal_allowance_cents': mealAllowanceCents,
+    'other_costs_cents': otherCostsCents,
+    'transportation_details': transportationDetails,
+    'accommodation_details': accommodationDetails,
+    'meal_details': mealDetails,
+    'other_costs_details': otherCostsDetails,
+    'submission_notes': submissionNotes,
+    'supporting_documents': supportingDocuments,
+  };
 }
 
 /// Cost submission statistics
@@ -533,11 +529,7 @@ class CostSubmissionException implements Exception {
 }
 
 /// Approval action enum
-enum ReviewAction {
-  approve,
-  reject,
-  requestRevision,
-}
+enum ReviewAction { approve, reject, requestRevision }
 
 ReviewAction _reviewActionFromJson(String? value) {
   switch (value) {
@@ -587,12 +579,12 @@ class ReviewCostSubmissionRequest {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'submission_id': submissionId,
-        'action': _reviewActionToJson(action),
-        'reviewer_notes': reviewerNotes,
-        'approval_notes': approvalNotes,
-        'revision_notes': revisionNotes,
-      };
+    'submission_id': submissionId,
+    'action': _reviewActionToJson(action),
+    'reviewer_notes': reviewerNotes,
+    'approval_notes': approvalNotes,
+    'revision_notes': revisionNotes,
+  };
 }
 
 /// Cost approval history model
@@ -636,15 +628,15 @@ class CostApprovalHistory {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'submission_id': submissionId,
-        'reviewer_id': reviewerId,
-        'action': action,
-        'notes': notes,
-        'previous_status': previousStatus,
-        'new_status': newStatus,
-        'created_at': createdAt.toIso8601String(),
-      };
+    'id': id,
+    'submission_id': submissionId,
+    'reviewer_id': reviewerId,
+    'action': action,
+    'notes': notes,
+    'previous_status': previousStatus,
+    'new_status': newStatus,
+    'created_at': createdAt.toIso8601String(),
+  };
 
   /// Get formatted action label
   String get actionLabel {

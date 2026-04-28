@@ -34,26 +34,27 @@ class StaffTrackingService {
     );
 
     // Start location updates
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen((position) async {
-      final log = LocationLog(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        userId: userId,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        timestamp: DateTime.now(),
-        accuracy: position.accuracy,
-        speed: position.speed,
-      );
+    _positionStream =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (position) async {
+            final log = LocationLog(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              userId: userId,
+              latitude: position.latitude,
+              longitude: position.longitude,
+              timestamp: DateTime.now(),
+              accuracy: position.accuracy,
+              speed: position.speed,
+            );
 
-      _pendingLogs.add(log);
+            _pendingLogs.add(log);
 
-      // If we have enough logs, try to upload
-      if (_pendingLogs.length >= _batchSize) {
-        await _uploadPendingLogs();
-      }
-    });
+            // If we have enough logs, try to upload
+            if (_pendingLogs.length >= _batchSize) {
+              await _uploadPendingLogs();
+            }
+          },
+        );
 
     // Set up periodic uploads
     _uploadTimer = Timer.periodic(
@@ -80,9 +81,7 @@ class StaffTrackingService {
       // Upload to Supabase
       final response = await _supabase.rpc(
         'upload_location_logs',
-        params: {
-          'log_data': logData,
-        },
+        params: {'log_data': logData},
       );
 
       // Remove uploaded logs from pending
@@ -217,8 +216,10 @@ class StaffTrackingService {
   }
 
   /// Get cached location logs for user
-  Future<List<LocationLog>> getCachedLocationLogs(String userId,
-      {int limit = 100}) async {
+  Future<List<LocationLog>> getCachedLocationLogs(
+    String userId, {
+    int limit = 100,
+  }) async {
     try {
       final box = await _getStaffLocationLogsBox();
       final logs = <LocationLog>[];
@@ -230,17 +231,19 @@ class StaffTrackingService {
       for (final key in keys) {
         final logData = box.get(key);
         if (logData != null) {
-          logs.add(LocationLog(
-            id: logData['id'],
-            userId: logData['userId'],
-            latitude: logData['latitude'],
-            longitude: logData['longitude'],
-            timestamp: DateTime.parse(logData['timestamp']),
-            accuracy: logData['accuracy'],
-            speed: logData['speed'],
-            heading: logData['heading'],
-            altitude: logData['altitude'],
-          ));
+          logs.add(
+            LocationLog(
+              id: logData['id'],
+              userId: logData['userId'],
+              latitude: logData['latitude'],
+              longitude: logData['longitude'],
+              timestamp: DateTime.parse(logData['timestamp']),
+              accuracy: logData['accuracy'],
+              speed: logData['speed'],
+              heading: logData['heading'],
+              altitude: logData['altitude'],
+            ),
+          );
         }
       }
 
@@ -256,7 +259,9 @@ class StaffTrackingService {
 
   /// Cache staff status and data
   Future<void> cacheStaffData(
-      String userId, Map<String, dynamic> staffData) async {
+    String userId,
+    Map<String, dynamic> staffData,
+  ) async {
     try {
       final box = await _getStaffDataBox();
 
@@ -385,17 +390,19 @@ class StaffTrackingService {
       for (final key in keys) {
         final logData = box.get(key);
         if (logData != null && !(logData['synced'] ?? false)) {
-          unsyncedLogs.add(LocationLog(
-            id: logData['id'],
-            userId: logData['userId'],
-            latitude: logData['latitude'],
-            longitude: logData['longitude'],
-            timestamp: DateTime.parse(logData['timestamp']),
-            accuracy: logData['accuracy'],
-            speed: logData['speed'],
-            heading: logData['heading'],
-            altitude: logData['altitude'],
-          ));
+          unsyncedLogs.add(
+            LocationLog(
+              id: logData['id'],
+              userId: logData['userId'],
+              latitude: logData['latitude'],
+              longitude: logData['longitude'],
+              timestamp: DateTime.parse(logData['timestamp']),
+              accuracy: logData['accuracy'],
+              speed: logData['speed'],
+              heading: logData['heading'],
+              altitude: logData['altitude'],
+            ),
+          );
         }
       }
 
@@ -461,13 +468,15 @@ class StaffTrackingService {
       return cachedLogs
           .where((log) => log.timestamp.isAfter(cutoff))
           .take(limit)
-          .map((log) => {
-                'latitude': log.latitude,
-                'longitude': log.longitude,
-                'timestamp': log.timestamp.toIso8601String(),
-                'accuracy': log.accuracy,
-                'speed': log.speed,
-              })
+          .map(
+            (log) => {
+              'latitude': log.latitude,
+              'longitude': log.longitude,
+              'timestamp': log.timestamp.toIso8601String(),
+              'accuracy': log.accuracy,
+              'speed': log.speed,
+            },
+          )
           .toList();
     } catch (e) {
       developer.log('Error getting staff location history: $e');
@@ -507,8 +516,9 @@ class StaffTrackingService {
       final staffBox = await _getStaffDataBox();
 
       // Remove location logs for user
-      final logKeys =
-          logsBox.keys.where((key) => key.toString().startsWith('${userId}_'));
+      final logKeys = logsBox.keys.where(
+        (key) => key.toString().startsWith('${userId}_'),
+      );
       for (final key in logKeys) {
         await logsBox.delete(key);
       }

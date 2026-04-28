@@ -16,9 +16,9 @@ class Report {
     List<String>? photoUrls,
     DateTime? createdAt,
     this.isSynced = false,
-  })  : id = id ?? const Uuid().v4(),
-        photoUrls = photoUrls ?? [],
-        createdAt = createdAt ?? DateTime.now();
+  }) : id = id ?? const Uuid().v4(),
+       photoUrls = photoUrls ?? [],
+       createdAt = createdAt ?? DateTime.now();
 
   // Convert Report to a Map
   Map<String, dynamic> toMap() {

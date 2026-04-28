@@ -35,6 +35,8 @@ import '../screens/advance_requests_report_screen.dart';
 import '../services/advance_report_service.dart';
 import '../screens/approval_dashboard_screen.dart';
 import '../screens/down_payment_approval_screen.dart';
+import '../screens/admin/monitoring_dashboard_screen.dart';
+import 'main_layout.dart';
 
 class CustomDrawerMenu extends ConsumerStatefulWidget {
   final User? currentUser;
@@ -56,6 +58,40 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
   String _buildNumber = '';
   int? _patchNumber;
   int _pendingReclaimCount = 0;
+
+  String get _role => _userRole.toLowerCase().trim();
+
+  bool get _isCoordinator =>
+      _role == 'coordinator' ||
+      _role == 'field_coordinator' ||
+      _role == 'state_coordinator';
+
+  bool get _isSupervisor =>
+      _role == 'supervisor' ||
+      _role == 'hubsupervisor' ||
+      _role.contains('supervisor');
+
+  bool get _isAdmin =>
+      _role == 'admin' ||
+      _role == 'super_admin' ||
+      _role == 'superadmin' ||
+      _role == 'fom';
+
+  bool get _isFinance =>
+      _role == 'finance' ||
+      _role == 'finance_manager' ||
+      _role == 'financialadmin';
+
+  bool get _canManageOps => _isAdmin || _isSupervisor || _isCoordinator;
+
+  bool get _showAllForAdmin => _isAdmin;
+
+  bool get _canApproveFinance => _isAdmin || _isSupervisor || _isFinance;
+
+  bool get _canSeeReports =>
+      _isAdmin || _isSupervisor || _isCoordinator || _isFinance;
+
+  bool get _canSeeFinanceFeatures => _canApproveFinance;
 
   @override
   void initState() {
@@ -296,6 +332,16 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
     }
   }
 
+  void _openInMainLayout(Widget screen, {required int currentIndex}) {
+    widget.onClose();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => MainLayout(currentIndex: currentIndex, child: screen),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Get profile data from Riverpod provider
@@ -461,13 +507,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'View dashboard',
                         iconColor: AppColors.primaryOrange,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const DashboardScreen(),
-                            ),
+                          _openInMainLayout(
+                            const DashboardScreen(),
+                            currentIndex: 0,
                           );
-                          widget.onClose();
                         },
                       ),
 
@@ -477,33 +520,25 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'Manage site visits and tasks',
                         iconColor: AppColors.primaryOrange,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  FieldOperationsEnhancedScreen(),
-                            ),
+                          _openInMainLayout(
+                            FieldOperationsEnhancedScreen(),
+                            currentIndex: 2,
                           );
-                          widget.onClose();
                         },
                       ),
 
-                      // Site Verification - Only for Coordinators
-                      if (_userRole.toLowerCase() == 'coordinator')
+                      // Site Verification - Coordinator + Admin only
+                      if (_isCoordinator || _showAllForAdmin)
                         _MenuItemData(
                           icon: Icons.verified_user_rounded,
                           title: 'Site Verification',
                           subtitle: 'Verify and approve sites',
                           iconColor: Colors.purple,
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const SiteVerificationScreen(),
-                              ),
+                            _openInMainLayout(
+                              const SiteVerificationScreen(),
+                              currentIndex: 1,
                             );
-                            widget.onClose();
                           },
                         ),
 
@@ -513,88 +548,52 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'View balance and transactions',
                         iconColor: Colors.green,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const WalletScreen(),
-                            ),
+                          _openInMainLayout(
+                            const WalletScreen(),
+                            currentIndex: 4,
                           );
-                          widget.onClose();
                         },
                       ),
-                      _MenuItemData(
-                        icon: Icons.receipt_long_rounded,
-                        title: 'Cost Submission',
-                        subtitle: 'Submit operational expenses',
-                        iconColor: Colors.orange,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => CostSubmissionScreen(
-                                userRole: _userRole,
-                                hubId: profile?.hubId,
-                              ),
-                            ),
-                          );
-                          widget.onClose();
-                        },
-                      ),
-                      if (_userRole.toLowerCase() == 'supervisor' ||
-                          _userRole.toLowerCase() == 'hubsupervisor' ||
-                          _userRole.toLowerCase() == 'fom' ||
-                          _userRole.toLowerCase() == 'admin' ||
-                          _userRole.toLowerCase() == 'super_admin' ||
-                          _userRole.toLowerCase() == 'superadmin')
+                      if (_canManageOps || _isFinance)
+                        _MenuItemData(
+                          icon: Icons.receipt_long_rounded,
+                          title: 'Cost Submission',
+                          subtitle: 'Submit operational expenses',
+                          iconColor: Colors.orange,
+                          onTap: () {
+                            _openInMainLayout(
+                              CostSubmissionScreen(userRole: _userRole),
+                              currentIndex: 4,
+                            );
+                          },
+                        ),
+                      if (_canApproveFinance)
                         _MenuItemData(
                           icon: Icons.approval_rounded,
                           title: 'Approvals',
                           subtitle: 'Tier 1 cost and withdrawal approvals',
                           iconColor: Colors.indigo,
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const ApprovalDashboardScreen(),
-                              ),
+                            _openInMainLayout(
+                              const ApprovalDashboardScreen(),
+                              currentIndex: 0,
                             );
-                            widget.onClose();
                           },
                         ),
-                      if (_userRole.toLowerCase() == 'supervisor' ||
-                          _userRole.toLowerCase() == 'hubsupervisor' ||
-                          _userRole.toLowerCase() == 'fom' ||
-                          _userRole.toLowerCase() == 'admin' ||
-                          _userRole.toLowerCase() == 'super_admin' ||
-                          _userRole.toLowerCase() == 'superadmin')
+                      if (_canApproveFinance)
                         _MenuItemData(
                           icon: Icons.payments_rounded,
                           title: 'Down-Payment Approval',
                           subtitle: 'Approve transportation advances',
                           iconColor: Colors.teal,
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const DownPaymentApprovalScreen(),
-                              ),
+                            _openInMainLayout(
+                              const DownPaymentApprovalScreen(),
+                              currentIndex: 0,
                             );
-                            widget.onClose();
                           },
                         ),
-                      if (_userRole.toLowerCase() == 'admin' ||
-                          _userRole.toLowerCase() == 'super_admin' ||
-                          _userRole.toLowerCase() == 'superadmin' ||
-                          _userRole.toLowerCase() == 'supervisor' ||
-                          _userRole.toLowerCase() == 'coordinator' ||
-                          _userRole.toLowerCase() == 'field_coordinator' ||
-                          _userRole.toLowerCase() == 'state_coordinator' ||
-                          _userRole.toLowerCase() == 'fom' ||
-                          _userRole.toLowerCase() == 'finance' ||
-                          _userRole.toLowerCase() == 'country_director' ||
-                          _userRole.toLowerCase() == 'data_team')
+                      if (_canSeeReports)
                         _MenuItemData(
                           icon: Icons.assessment_rounded,
                           title: 'Advance Reports',
@@ -604,14 +603,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                               ? _pendingReclaimCount.toString()
                               : null,
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const AdvanceRequestsReportScreen(),
-                              ),
+                            _openInMainLayout(
+                              const AdvanceRequestsReportScreen(),
+                              currentIndex: 0,
                             );
-                            widget.onClose();
                           },
                         ),
                       _MenuItemData(
@@ -620,13 +615,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'Schedule and planning',
                         iconColor: Colors.purple,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const CalendarScreen(),
-                            ),
+                          _openInMainLayout(
+                            const CalendarScreen(),
+                            currentIndex: 0,
                           );
-                          widget.onClose();
                         },
                       ),
                       _MenuItemData(
@@ -635,13 +627,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'Files and permits',
                         iconColor: Colors.amber,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const DocumentsScreen(),
-                            ),
+                          _openInMainLayout(
+                            const DocumentsScreen(),
+                            currentIndex: 0,
                           );
-                          widget.onClose();
                         },
                       ),
 
@@ -651,13 +640,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'View and edit profile',
                         iconColor: Colors.teal,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ProfileScreen(),
-                            ),
+                          _openInMainLayout(
+                            const ProfileScreen(),
+                            currentIndex: 0,
                           );
-                          widget.onClose();
                         },
                       ),
                       _MenuItemData(
@@ -666,13 +652,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'App preferences and account',
                         iconColor: AppColors.primaryBlue,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SettingsScreen(),
-                            ),
+                          _openInMainLayout(
+                            const SettingsScreen(),
+                            currentIndex: 0,
                           );
-                          widget.onClose();
                         },
                       ),
                       _MenuItemData(
@@ -681,13 +664,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'Messages and conversations',
                         iconColor: Colors.blue,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ChatsScreen(),
-                            ),
+                          _openInMainLayout(
+                            const ChatsScreen(),
+                            currentIndex: 3,
                           );
-                          widget.onClose();
                         },
                       ),
                       _MenuItemData(
@@ -696,13 +676,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'Get help and find answers',
                         iconColor: Colors.purple,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const HelpSupportScreen(),
-                            ),
+                          _openInMainLayout(
+                            const HelpSupportScreen(),
+                            currentIndex: 0,
                           );
-                          widget.onClose();
                         },
                       ),
                       _MenuItemData(
@@ -711,13 +688,10 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'Submit and view support requests',
                         iconColor: Colors.orange,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SupportScreen(),
-                            ),
+                          _openInMainLayout(
+                            const SupportScreen(),
+                            currentIndex: 0,
                           );
-                          widget.onClose();
                         },
                       ),
                       _MenuItemData(
@@ -726,88 +700,79 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                         subtitle: 'Calls and messages',
                         iconColor: Colors.indigo,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const CommunicationsScreen(),
-                            ),
+                          _openInMainLayout(
+                            const CommunicationsScreen(),
+                            currentIndex: 3,
                           );
-                          widget.onClose();
                         },
                       ),
-                      _MenuItemData(
-                        icon: Icons.draw_rounded,
-                        title: 'Digital Signatures',
-                        subtitle: 'Manage your signatures',
-                        iconColor: Colors.deepOrange,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const DigitalSignaturesScreen(),
-                            ),
-                          );
-                          widget.onClose();
-                        },
-                      ),
+                      if (_showAllForAdmin)
+                        _MenuItemData(
+                          icon: Icons.draw_rounded,
+                          title: 'Digital Signatures',
+                          subtitle: 'Manage your signatures',
+                          iconColor: Colors.deepOrange,
+                          onTap: () {
+                            _openInMainLayout(
+                              const DigitalSignaturesScreen(),
+                              currentIndex: 0,
+                            );
+                          },
+                        ),
                       // Field Team Map - Only for admins
-                      if (_userRole.toLowerCase() == 'admin' ||
-                          _userRole.toLowerCase() == 'super_admin' ||
-                          _userRole.toLowerCase() == 'superadmin')
+                      if (_isAdmin)
                         _MenuItemData(
                           icon: Icons.map_rounded,
                           title: 'Field Team Map',
                           subtitle: 'Monitor team locations',
                           iconColor: Colors.teal,
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const FieldTeamMapScreen(),
-                              ),
+                            _openInMainLayout(
+                              const FieldTeamMapScreen(),
+                              currentIndex: 0,
                             );
-                            widget.onClose();
                           },
                         ),
                       // Admin Dashboard - Only for admins
-                      if (_userRole.toLowerCase() == 'admin' ||
-                          _userRole.toLowerCase() == 'super_admin' ||
-                          _userRole.toLowerCase() == 'superadmin')
+                      if (_isAdmin)
                         _MenuItemData(
                           icon: Icons.admin_panel_settings_rounded,
                           title: 'Admin Dashboard',
                           subtitle: 'Manage contacts and users',
                           iconColor: Colors.deepPurple,
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const AdminDashboardScreen(),
-                              ),
+                            _openInMainLayout(
+                              const AdminDashboardScreen(),
+                              currentIndex: 0,
                             );
-                            widget.onClose();
+                          },
+                        ),
+                      // System Monitoring - Only for super admins
+                      if (_role == 'super_admin' || _role == 'superadmin')
+                        _MenuItemData(
+                          icon: Icons.visibility_rounded,
+                          title: 'System Monitoring',
+                          subtitle: 'Review and manage actions',
+                          iconColor: Colors.indigo,
+                          onTap: () {
+                            _openInMainLayout(
+                              const MonitoringDashboardScreen(),
+                              currentIndex: 0,
+                            );
                           },
                         ),
                       // Super Admin - Only for super admins
-                      if (_userRole.toLowerCase() == 'super_admin' ||
-                          _userRole.toLowerCase() == 'superadmin')
+                      if (_role == 'super_admin' || _role == 'superadmin')
                         _MenuItemData(
                           icon: Icons.security_rounded,
                           title: 'Super Admin',
                           subtitle: 'System administration',
                           iconColor: Colors.red,
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const SuperAdminScreen(),
-                              ),
+                            _openInMainLayout(
+                              const SuperAdminScreen(),
+                              currentIndex: 0,
                             );
-                            widget.onClose();
                           },
                         ),
                       // _MenuItemData(

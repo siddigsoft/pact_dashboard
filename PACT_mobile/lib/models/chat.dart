@@ -15,6 +15,7 @@ class Chat {
   DateTime createdAt;
   DateTime updatedAt;
   String? pairKey; // For private chats, sorted user IDs like "user1-user2"
+  int? disappearingTimer; // 0 = off, >0 = hours till deletion
   List<ChatParticipant> participants;
 
   Chat({
@@ -24,14 +25,15 @@ class Chat {
     required this.isGroup,
     this.createdBy,
     this.createdByName,
-  this.otherParticipantId,
-  this.otherParticipantName,
+    this.otherParticipantId,
+    this.otherParticipantName,
     this.stateId,
     this.relatedEntityId,
     this.relatedEntityType,
     required this.createdAt,
     required this.updatedAt,
     this.pairKey,
+    this.disappearingTimer,
     List<ChatParticipant>? participants,
   }) : participants = participants ?? <ChatParticipant>[];
 
@@ -50,6 +52,7 @@ class Chat {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'pair_key': pairKey,
+      'disappearing_timer': disappearingTimer ?? 0,
     };
   }
 
@@ -58,8 +61,10 @@ class Chat {
     data['created_by_name'] = createdByName;
     data['other_participant_id'] = otherParticipantId;
     data['other_participant_name'] = otherParticipantName;
-    data['participants'] =
-        participants.map((participant) => participant.toJson()).toList();
+    data['disappearing_timer'] = disappearingTimer ?? 0;
+    data['participants'] = participants
+        .map((participant) => participant.toJson())
+        .toList();
     return data;
   }
 
@@ -72,9 +77,7 @@ class Chat {
           participants.add(ChatParticipant.fromJson(item));
         } else if (item is Map) {
           participants.add(
-            ChatParticipant.fromJson(
-              Map<String, dynamic>.from(item),
-            ),
+            ChatParticipant.fromJson(Map<String, dynamic>.from(item)),
           );
         }
       }
@@ -87,14 +90,15 @@ class Chat {
       isGroup: json['is_group'] ?? false,
       createdBy: json['created_by'],
       createdByName: json['created_by_name'],
-  otherParticipantId: json['other_participant_id'],
-  otherParticipantName: json['other_participant_name'],
+      otherParticipantId: json['other_participant_id'],
+      otherParticipantName: json['other_participant_name'],
       stateId: json['state_id'],
       relatedEntityId: json['related_entity_id'],
       relatedEntityType: json['related_entity_type'],
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
       pairKey: json['pair_key'],
+      disappearingTimer: json['disappearing_timer'] as int? ?? 0,
       participants: participants,
     );
   }

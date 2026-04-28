@@ -2,11 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/cost_submission_models.dart';
 import '../models/cost_submission.dart' as ops;
+import '../models/site_visit.dart';
 import '../repositories/cost_submission_repository.dart';
 import '../services/cost_submission_service.dart';
 import '../services/budget_restriction_service.dart';
 import '../services/cache_service.dart';
 import '../services/notification_service.dart';
+import '../services/site_visit_service.dart';
+import '../providers/profile_provider.dart';
 import 'auth_provider.dart';
 
 // Cost submission repository provider
@@ -29,6 +32,34 @@ final budgetRestrictionServiceProvider = Provider<BudgetRestrictionService>((
 ) {
   return BudgetRestrictionService();
 });
+
+// Budget blocked state — mirrors React's setBudgetBlocked(true) in checkBudgetBeforeSubmit.
+// True when the submission would exceed the allocated budget and cannot be overridden.
+final budgetBlockedProvider = StateProvider.autoDispose<bool>((ref) => false);
+
+// Budget warning message — mirrors React's setBudgetWarning.
+// Non-null when the submission approaches or exceeds a soft budget threshold (e.g. 80% usage).
+final budgetWarningProvider = StateProvider.autoDispose<String?>((ref) => null);
+
+// Mirrors React's internal useSiteVisits() / useQuery('siteVisits') inside CostSubmissionForm.
+// Fetches completed site visits for the current user (filtered by assignment unless admin).
+final userCompletedSiteVisitsProvider =
+    FutureProvider.autoDispose<List<SiteVisit>>((ref) async {
+      final userId = ref.watch(currentUserIdProvider);
+      if (userId == null || userId.isEmpty) return [];
+
+      final siteVisitService = SiteVisitService();
+      final visits = await siteVisitService.getCompletedSiteVisits(userId);
+
+      final profile = ref.read(currentUserProfileProvider);
+      final isAdminOrSupervisor =
+          profile?.role == 'admin' ||
+          profile?.role == 'supervisor' ||
+          profile?.role == 'financeAdmin';
+
+      if (isAdminOrSupervisor) return visits;
+      return visits.where((v) => v.assignedTo == userId).toList();
+    });
 
 // Stream provider for user's cost submissions (real-time)
 final userCostSubmissionsStreamProvider =
@@ -102,9 +133,12 @@ final costSubmissionSearchQueryProvider = StateProvider.autoDispose<String>(
   (ref) => '',
 );
 
-// Provider for pending cost submissions (for approval dashboard)
+// Provider for pending cost submissions (for approval dashboard).
+// Uses operational_cost_submissions + tier1_status='pending' — matches React fetchOperationalCosts.
 final pendingCostSubmissionsProvider =
-    FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
+    FutureProvider.autoDispose<List<ops.OperationalCostSubmission>>((
+      ref,
+    ) async {
       final supabase = ref.watch(supabaseClientProvider);
       final currentUserId = supabase.auth.currentUser?.id;
 
@@ -113,8 +147,6 @@ final pendingCostSubmissionsProvider =
       }
 
       try {
-        // Fetch pending cost submissions for approvers
-        // Note: Database uses state_id and hub_id columns (not state/hub)
         final profileResponse = await supabase
             .from('profiles')
             .select('role, state_id, hub_id')
@@ -124,35 +156,22 @@ final pendingCostSubmissionsProvider =
         final userRole =
             profileResponse?['role']?.toString().toLowerCase() ?? '';
 
-        // Admins, super admins, coordinators, FOMs, and supervisors see tier-1 pending submissions
+        // Admins, super admins, coordinators, and FOMs see tier-1 pending submissions
         if (userRole.contains('admin') ||
             userRole.contains('super') ||
             userRole.contains('coordinator') ||
-            userRole.contains('fom') ||
-            userRole.contains('supervisor')) {
-          final response = await supabase
-              .from('site_visit_cost_submissions')
-              .select()
-              .eq('status', 'pending')
-              .order('submitted_at', ascending: false);
-
-          return (response as List)
-              .map(
-                (json) => CostSubmission.fromJson(json as Map<String, dynamic>),
-              )
-              .toList();
-        } else if (userRole.contains('coordinator') ||
             userRole.contains('fom')) {
-          // Coordinators and FOM can see pending submissions
           final response = await supabase
-              .from('site_visit_cost_submissions')
+              .from('operational_cost_submissions')
               .select()
-              .eq('status', 'pending')
-              .order('submitted_at', ascending: false);
+              .eq('tier1_status', 'pending')
+              .order('created_at', ascending: false);
 
           return (response as List)
               .map(
-                (json) => CostSubmission.fromJson(json as Map<String, dynamic>),
+                (json) => ops.OperationalCostSubmission.fromJson(
+                  json as Map<String, dynamic>,
+                ),
               )
               .toList();
         }
@@ -164,22 +183,8 @@ final pendingCostSubmissionsProvider =
       }
     });
 
-/// Team submissions for Cost Submission screen (supervisors/admins).
-/// Fetches all operational cost submissions for the given hub.
-/// Pass null or empty hubId to get empty list (e.g. when user has no hub).
-final teamSubmissionsProvider = FutureProvider.autoDispose
-    .family<List<ops.OperationalCostSubmission>, String?>((ref, hubId) async {
-  if (hubId == null || hubId.isEmpty) return [];
-  final service = ref.watch(costSubmissionServiceProvider);
-  return service.getAllSubmissions(hubId: hubId);
-});
-
-/// Pending operational cost submissions for the approval dashboard (Tier 1).
-final operationalPendingSubmissionsProvider =
-    FutureProvider.autoDispose<List<ops.OperationalCostSubmission>>((ref) async {
-  final service = ref.watch(costSubmissionServiceProvider);
-  return service.getPendingApprovals(tier: 1);
-});
+// Alias for backward compatibility
+final operationalPendingSubmissionsProvider = pendingCostSubmissionsProvider;
 
 // Provider for filtered and searched cost submissions
 final filteredCostSubmissionsProvider =
@@ -192,7 +197,9 @@ final filteredCostSubmissionsProvider =
 
       // Apply status filter
       if (statusFilter != null) {
-        filtered = filtered.where((s) => s.status == statusFilter).toList();
+        filtered = filtered
+            .where((submission) => submission.status == statusFilter)
+            .toList();
       }
 
       // Apply search filter
@@ -219,9 +226,8 @@ final filteredCostSubmissionsProvider =
 // State notifier for creating cost submission.
 // Mirrors React's useCreateSubmission hook + checkBudgetBeforeSubmit logic
 // from CostSubmissionForm.tsx.
-// Uses repository for site_visit_cost_submissions (4-part cost model).
 class CreateCostSubmissionNotifier
-    extends StateNotifier<AsyncValue<CostSubmission?>> {
+    extends StateNotifier<AsyncValue<ops.OperationalCostSubmission?>> {
   CreateCostSubmissionNotifier(this.ref) : super(const AsyncValue.data(null));
 
   final Ref ref;
@@ -229,8 +235,12 @@ class CreateCostSubmissionNotifier
   Future<void> create(CreateCostSubmissionRequest request) async {
     state = const AsyncValue.loading();
 
+    // Clear prior budget feedback — mirrors React clearing state before each submit
+    ref.read(budgetBlockedProvider.notifier).state = false;
+    ref.read(budgetWarningProvider.notifier).state = null;
+
     try {
-      final repository = ref.read(costSubmissionRepositoryProvider);
+      final service = ref.read(costSubmissionServiceProvider);
       final userId = ref.read(currentUserIdProvider);
       final budgetService = ref.read(budgetRestrictionServiceProvider);
 
@@ -250,8 +260,9 @@ class CreateCostSubmissionNotifier
       final isOnline = connectivityResult != ConnectivityResult.none;
 
       if (isOnline) {
-        // Online: Perform normal validation and submission
-        // Check budget restrictions
+        // Budget check — mirrors React checkBudgetBeforeSubmit:
+        //   !allowed → set budgetBlocked=true, throw to caller (escalateToSeniorOps equivalent).
+        //   allowed + message → soft warning (setBudgetWarning), continue submission.
         final budgetCheck = await budgetService.checkCostSubmissionBudget(
           siteVisitId: request.siteVisitId,
           totalCostCents: totalCostCents,
@@ -259,9 +270,15 @@ class CreateCostSubmissionNotifier
         );
 
         if (!budgetCheck.allowed) {
+          ref.read(budgetBlockedProvider.notifier).state = true;
           throw CostSubmissionException(
             budgetCheck.message ?? 'Budget restriction violated',
           );
+        }
+
+        // Soft budget warning (e.g. 80%+ usage) — expose to UI without blocking
+        if (budgetCheck.message != null) {
+          ref.read(budgetWarningProvider.notifier).state = budgetCheck.message;
         }
 
         // Check monthly submission limits
@@ -276,11 +293,26 @@ class CreateCostSubmissionNotifier
           );
         }
 
-        final submission = await repository.createCostSubmission(
-          request,
-          userId,
+        // Build request map for operational_cost_submissions
+        // (spreads snake_case fields from CreateCostSubmissionRequest.toJson())
+        final requestMap = <String, dynamic>{
+          ...request.toJson(),
+          'total_cost_cents': totalCostCents,
+          if (request.supportingDocuments != null)
+            'supporting_documents': request.supportingDocuments!
+                .map((d) => d.toJson())
+                .toList(),
+        };
+
+        final submission = await service.createCostSubmission(
+          request: requestMap,
         );
-        state = AsyncValue.data(submission);
+
+        if (submission != null) {
+          state = AsyncValue.data(submission);
+        } else {
+          throw CostSubmissionException('Failed to create submission');
+        }
       } else {
         // Offline: Cache submission for later sync
         final submissionData = {
@@ -305,42 +337,36 @@ class CreateCostSubmissionNotifier
 
         await SubmissionCacheService.cacheSubmissionForOffline(submissionData);
 
-        // Create a temporary offline submission object
-        final offlineSubmission = CostSubmission(
+        // Create a temporary offline OperationalCostSubmission placeholder
+        final offlineSubmission = ops.OperationalCostSubmission(
           id: 'offline_${DateTime.now().millisecondsSinceEpoch}',
-          siteVisitId: request.siteVisitId,
-          mmpFileId: null,
-          projectId: null,
+          expenseCategory: ops.OperationalExpenseCategory.other,
           submittedBy: userId,
-          submittedAt: DateTime.now(),
-          transportationCostCents: request.transportationCostCents,
-          accommodationCostCents: request.accommodationCostCents,
-          mealAllowanceCents: request.mealAllowanceCents,
-          otherCostsCents: request.otherCostsCents,
-          totalCostCents: totalCostCents,
-          currency: request.currency ?? 'UGX',
-          transportationDetails: request.transportationDetails,
-          accommodationDetails: request.accommodationDetails,
-          mealDetails: request.mealDetails,
-          otherCostsDetails: request.otherCostsDetails,
-          submissionNotes: request.submissionNotes,
-          supportingDocuments: request.supportingDocuments ?? [],
-          status: CostSubmissionStatus.pending,
-          reviewedBy: null,
-          reviewedAt: null,
-          reviewerNotes: null,
-          approvalNotes: null,
-          walletTransactionId: null,
-          paidAt: null,
-          paidAmountCents: null,
-          paymentNotes: null,
-          classificationLevel: null,
-          roleScope: null,
-          revisionRequested: false,
-          revisionNotes: null,
-          revisionCount: 0,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
+          submittedAt: DateTime.now().toIso8601String(),
+          submitterRole: '',
+          amountCents: totalCostCents,
+          currency: request.currency ?? 'SDG',
+          description: request.submissionNotes ?? '',
+          expenseDate: DateTime.now().toIso8601String(),
+          mmpFileId: request.mmpFileId,
+          projectId: request.projectId,
+          supportingDocuments:
+              request.supportingDocuments
+                  ?.map(
+                    (doc) => ops.SupportingDocument(
+                      url: doc.url,
+                      type: doc.type,
+                      filename: doc.filename,
+                      uploadedAt: doc.uploadedAt.toIso8601String(),
+                    ),
+                  )
+                  .toList() ??
+              [],
+          status: ops.CostSubmissionStatus.pending,
+          tier1Status: ops.TierApprovalStatus.pending,
+          tier2Status: ops.TierApprovalStatus.pending,
+          createdAt: DateTime.now().toIso8601String(),
+          updatedAt: DateTime.now().toIso8601String(),
         );
 
         state = AsyncValue.data(offlineSubmission);
@@ -357,13 +383,16 @@ class CreateCostSubmissionNotifier
 
   void reset() {
     state = const AsyncValue.data(null);
+    // Also clear budget feedback state on form reset
+    ref.read(budgetBlockedProvider.notifier).state = false;
+    ref.read(budgetWarningProvider.notifier).state = null;
   }
 }
 
 final createCostSubmissionProvider =
     StateNotifierProvider.autoDispose<
       CreateCostSubmissionNotifier,
-      AsyncValue<CostSubmission?>
+      AsyncValue<ops.OperationalCostSubmission?>
     >((ref) {
       return CreateCostSubmissionNotifier(ref);
     });

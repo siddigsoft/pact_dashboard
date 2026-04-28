@@ -41,7 +41,9 @@ class _JitsiCallScreenState extends State<JitsiCallScreen>
   @override
   void initState() {
     super.initState();
-    debugPrint('[JitsiCall] JitsiCallScreen initState() room=${widget.roomName} serverUrl=${widget.serverUrl} remoteUserName=${widget.remoteUserName}');
+    debugPrint(
+      '[JitsiCall] JitsiCallScreen initState() room=${widget.roomName} serverUrl=${widget.serverUrl} remoteUserName=${widget.remoteUserName}',
+    );
     _initAnimations();
     _subscribeToCallState();
     _startCall();
@@ -68,14 +70,20 @@ class _JitsiCallScreenState extends State<JitsiCallScreen>
   }
 
   void _subscribeToCallState() {
-    debugPrint('[JitsiCall] JitsiCallScreen _subscribeToCallState() subscribing to callStateStream');
+    debugPrint(
+      '[JitsiCall] JitsiCallScreen _subscribeToCallState() subscribing to callStateStream',
+    );
     _callStateSubscription = _jitsiService.callStateStream.listen((state) {
-      debugPrint('[JitsiCall] JitsiCallScreen callStateStream event: status=${state.status} roomName=${state.roomName} error=${state.error}');
+      debugPrint(
+        '[JitsiCall] JitsiCallScreen callStateStream event: status=${state.status} roomName=${state.roomName} error=${state.error}',
+      );
       if (!mounted) return;
 
       switch (state.status) {
         case JitsiCallStatus.connected:
-          debugPrint('[JitsiCall] JitsiCallScreen state=connected, setting _isConnected=true');
+          debugPrint(
+            '[JitsiCall] JitsiCallScreen state=connected, setting _isConnected=true',
+          );
           setState(() {
             _isConnecting = false;
             _isConnected = true;
@@ -86,23 +94,31 @@ class _JitsiCallScreenState extends State<JitsiCallScreen>
         case JitsiCallStatus.ended:
         case JitsiCallStatus.rejected:
         case JitsiCallStatus.failed:
-          debugPrint('[JitsiCall] JitsiCallScreen state=${state.status} calling _endCall()');
+          debugPrint(
+            '[JitsiCall] JitsiCallScreen state=${state.status} calling _endCall()',
+          );
           _endCall();
           break;
         default:
-          debugPrint('[JitsiCall] JitsiCallScreen state=${state.status} (no UI change)');
+          debugPrint(
+            '[JitsiCall] JitsiCallScreen state=${state.status} (no UI change)',
+          );
           break;
       }
     });
   }
 
   Future<void> _startCall() async {
-    debugPrint('[JitsiCall] JitsiCallScreen _startCall() ENTER room=${widget.roomName} serverUrl=${widget.serverUrl} isOutgoing=${widget.isOutgoing}');
+    debugPrint(
+      '[JitsiCall] JitsiCallScreen _startCall() ENTER room=${widget.roomName} serverUrl=${widget.serverUrl} isOutgoing=${widget.isOutgoing}',
+    );
     // Simulate connection delay for UX
     await Future.delayed(const Duration(seconds: 2));
 
     if (mounted) {
-      debugPrint('[JitsiCall] JitsiCallScreen _startCall() after delay, launching meeting');
+      debugPrint(
+        '[JitsiCall] JitsiCallScreen _startCall() after delay, launching meeting',
+      );
       setState(() {
         _isConnecting = false;
         _isConnected = true;
@@ -132,7 +148,9 @@ class _JitsiCallScreenState extends State<JitsiCallScreen>
 
     final fullUrl = '$meetingUrl#$queryString';
 
-    debugPrint('[JitsiCall] JitsiCallScreen _launchJitsiMeeting() room=$meetingUrl fullUrl=$fullUrl');
+    debugPrint(
+      '[JitsiCall] JitsiCallScreen _launchJitsiMeeting() room=$meetingUrl fullUrl=$fullUrl',
+    );
 
     try {
       final uri = Uri.parse(fullUrl);
@@ -142,7 +160,9 @@ class _JitsiCallScreenState extends State<JitsiCallScreen>
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         debugPrint('[JitsiCall] JitsiCallScreen launchUrl() completed');
       } else {
-        debugPrint('[JitsiCall] JitsiCallScreen canLaunchUrl=false, showing SnackBar');
+        debugPrint(
+          '[JitsiCall] JitsiCallScreen canLaunchUrl=false, showing SnackBar',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -155,7 +175,9 @@ class _JitsiCallScreenState extends State<JitsiCallScreen>
       }
     } catch (e, st) {
       debugPrint('[JitsiCall] JitsiCallScreen _launchJitsiMeeting() ERROR: $e');
-      debugPrint('[JitsiCall] JitsiCallScreen _launchJitsiMeeting() stackTrace: $st');
+      debugPrint(
+        '[JitsiCall] JitsiCallScreen _launchJitsiMeeting() stackTrace: $st',
+      );
     }
   }
 
@@ -197,7 +219,9 @@ class _JitsiCallScreenState extends State<JitsiCallScreen>
   }
 
   void _endCall() {
-    debugPrint('[JitsiCall] JitsiCallScreen _endCall() calling _jitsiService.endCall()');
+    debugPrint(
+      '[JitsiCall] JitsiCallScreen _endCall() calling _jitsiService.endCall()',
+    );
     _jitsiService.endCall();
     WakelockPlus.disable();
 

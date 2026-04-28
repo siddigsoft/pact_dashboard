@@ -16,7 +16,8 @@ class HelpService {
       errorAr: 'تم رفض الإذن',
       meaning: 'You do not have permission to access this resource',
       meaningAr: 'ليس لديك إذن للوصول إلى هذا المورد',
-      solution: 'Contact your administrator to request the necessary permissions',
+      solution:
+          'Contact your administrator to request the necessary permissions',
       solutionAr: 'تواصل مع المسؤول لطلب الأذونات اللازمة',
     ),
     'network_error': ErrorMessage(
@@ -24,15 +25,18 @@ class HelpService {
       errorAr: 'خطأ في الشبكة',
       meaning: 'Cannot connect to the server',
       meaningAr: 'لا يمكن الاتصال بالخادم',
-      solution: 'Check your internet connection and try again. If offline, your data will sync when connection is restored',
-      solutionAr: 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى. إذا كنت غير متصل، ستتم مزامنة بياناتك عند استعادة الاتصال',
+      solution:
+          'Check your internet connection and try again. If offline, your data will sync when connection is restored',
+      solutionAr:
+          'تحقق من اتصالك بالإنترنت وحاول مرة أخرى. إذا كنت غير متصل، ستتم مزامنة بياناتك عند استعادة الاتصال',
     ),
     'validation_failed': ErrorMessage(
       error: 'Validation Failed',
       errorAr: 'فشل التحقق',
       meaning: 'The data you entered does not meet the required format',
       meaningAr: 'البيانات التي أدخلتها لا تتوافق مع التنسيق المطلوب',
-      solution: 'Review the error messages on each field and correct the invalid data',
+      solution:
+          'Review the error messages on each field and correct the invalid data',
       solutionAr: 'راجع رسائل الخطأ في كل حقل وصحح البيانات غير الصالحة',
     ),
     'server_error': ErrorMessage(
@@ -40,7 +44,8 @@ class HelpService {
       errorAr: 'خطأ في الخادم',
       meaning: 'An error occurred on the server while processing your request',
       meaningAr: 'حدث خطأ في الخادم أثناء معالجة طلبك',
-      solution: 'Try again in a few moments. If the problem persists, contact support',
+      solution:
+          'Try again in a few moments. If the problem persists, contact support',
       solutionAr: 'حاول مرة أخرى بعد لحظات. إذا استمرت المشكلة، تواصل مع الدعم',
     ),
     'duplicate_site': ErrorMessage(
@@ -64,16 +69,20 @@ class HelpService {
       errorAr: 'دقة GPS منخفضة',
       meaning: 'Your current GPS accuracy is below the required 5 meters',
       meaningAr: 'دقة GPS الحالية أقل من الـ 5 أمتار المطلوبة',
-      solution: 'Move to an area with clear sky view. Avoid indoor locations and tall buildings',
-      solutionAr: 'انتقل إلى منطقة مفتوحة بدون عوائق. تجنب الأماكن الداخلية والمباني العالية',
+      solution:
+          'Move to an area with clear sky view. Avoid indoor locations and tall buildings',
+      solutionAr:
+          'انتقل إلى منطقة مفتوحة بدون عوائق. تجنب الأماكن الداخلية والمباني العالية',
     ),
     'storage_full': ErrorMessage(
       error: 'Storage Full',
       errorAr: 'التخزين ممتلئ',
       meaning: 'Your device storage is full',
       meaningAr: 'مساحة تخزين جهازك ممتلئة',
-      solution: 'Free up space by deleting unused apps or files, then try again',
-      solutionAr: 'قم بتحرير مساحة بحذف التطبيقات أو الملفات غير المستخدمة، ثم حاول مرة أخرى',
+      solution:
+          'Free up space by deleting unused apps or files, then try again',
+      solutionAr:
+          'قم بتحرير مساحة بحذف التطبيقات أو الملفات غير المستخدمة، ثم حاول مرة أخرى',
     ),
     'file_too_large': ErrorMessage(
       error: 'File Too Large',
@@ -81,7 +90,8 @@ class HelpService {
       meaning: 'The file you are trying to upload exceeds the size limit',
       meaningAr: 'الملف الذي تحاول رفعه يتجاوز الحد المسموح به',
       solution: 'Compress the file or choose a smaller file (max 5MB per file)',
-      solutionAr: 'قم بضغط الملف أو اختر ملفاً أصغر (الحد الأقصى 5 ميجابايت لكل ملف)',
+      solutionAr:
+          'قم بضغط الملف أو اختر ملفاً أصغر (الحد الأقصى 5 ميجابايت لكل ملف)',
     ),
     'unsupported_file': ErrorMessage(
       error: 'Unsupported File Type',
@@ -96,23 +106,28 @@ class HelpService {
       errorAr: 'فشلت المزامنة',
       meaning: 'Unable to synchronize your local data with the server',
       meaningAr: 'تعذرت مزامنة بياناتك المحلية مع الخادم',
-      solution: 'Check your internet connection. Your data is saved locally and will sync automatically when connection is restored',
-      solutionAr: 'تحقق من اتصالك بالإنترنت. بياناتك محفوظة محلياً وستتم مزامنتها تلقائياً عند استعادة الاتصال',
+      solution:
+          'Check your internet connection. Your data is saved locally and will sync automatically when connection is restored',
+      solutionAr:
+          'تحقق من اتصالك بالإنترنت. بياناتك محفوظة محلياً وستتم مزامنتها تلقائياً عند استعادة الاتصال',
     ),
     'draft_not_found': ErrorMessage(
       error: 'Draft Not Found',
       errorAr: 'المسودة غير موجودة',
       meaning: 'The saved draft could not be loaded',
       meaningAr: 'تعذر تحميل المسودة المحفوظة',
-      solution: 'The draft may have been corrupted. Check your offline queue or create a new entry',
-      solutionAr: 'قد تكون المسودة تالفة. تحقق من قائمة الانتظار غير المتصلة أو أنشئ إدخالاً جديداً',
+      solution:
+          'The draft may have been corrupted. Check your offline queue or create a new entry',
+      solutionAr:
+          'قد تكون المسودة تالفة. تحقق من قائمة الانتظار غير المتصلة أو أنشئ إدخالاً جديداً',
     ),
     'submission_queued': ErrorMessage(
       error: 'Submission Queued',
       errorAr: 'الإرسال في قائمة الانتظار',
       meaning: 'Your submission is waiting to be sent (offline mode)',
       meaningAr: 'إرسالك في انتظار الإرسال (وضع عدم الاتصال)',
-      solution: 'This is not an error. Your data will be submitted automatically when internet is available',
+      solution:
+          'This is not an error. Your data will be submitted automatically when internet is available',
       solutionAr: 'هذا ليس خطأ. ستُرسل بياناتك تلقائياً عند توفر الإنترنت',
     ),
     'biometric_failed': ErrorMessage(
@@ -120,24 +135,30 @@ class HelpService {
       errorAr: 'فشل التحقق البيومتري',
       meaning: 'Fingerprint or face recognition was not recognized',
       meaningAr: 'لم يتم التعرف على بصمة الإصبع أو الوجه',
-      solution: 'Try again or use your password. Ensure finger is clean and properly placed. You may need to re-register biometrics in device settings',
-      solutionAr: 'حاول مرة أخرى أو استخدم كلمة المرور. تأكد من نظافة الإصبع ووضعه بشكل صحيح. قد تحتاج إلى إعادة تسجيل البيومترية في إعدادات الجهاز',
+      solution:
+          'Try again or use your password. Ensure finger is clean and properly placed. You may need to re-register biometrics in device settings',
+      solutionAr:
+          'حاول مرة أخرى أو استخدم كلمة المرور. تأكد من نظافة الإصبع ووضعه بشكل صحيح. قد تحتاج إلى إعادة تسجيل البيومترية في إعدادات الجهاز',
     ),
     'call_failed': ErrorMessage(
       error: 'Call Failed',
       errorAr: 'فشلت المكالمة',
       meaning: 'Unable to connect the voice or video call',
       meaningAr: 'تعذر الاتصال بالمكالمة الصوتية أو المرئية',
-      solution: 'Check your internet connection. Ensure microphone/camera permissions are granted. Try calling again',
-      solutionAr: 'تحقق من اتصالك بالإنترنت. تأكد من منح أذونات الميكروفون/الكاميرا. حاول الاتصال مرة أخرى',
+      solution:
+          'Check your internet connection. Ensure microphone/camera permissions are granted. Try calling again',
+      solutionAr:
+          'تحقق من اتصالك بالإنترنت. تأكد من منح أذونات الميكروفون/الكاميرا. حاول الاتصال مرة أخرى',
     ),
     'chat_message_failed': ErrorMessage(
       error: 'Message Not Sent',
       errorAr: 'لم يتم إرسال الرسالة',
       meaning: 'Your chat message could not be delivered',
       meaningAr: 'تعذر تسليم رسالتك',
-      solution: 'Check your internet connection and try sending again. Messages require an active connection',
-      solutionAr: 'تحقق من اتصالك بالإنترنت وحاول الإرسال مرة أخرى. الرسائل تتطلب اتصالاً نشطاً',
+      solution:
+          'Check your internet connection and try sending again. Messages require an active connection',
+      solutionAr:
+          'تحقق من اتصالك بالإنترنت وحاول الإرسال مرة أخرى. الرسائل تتطلب اتصالاً نشطاً',
     ),
   };
 
@@ -312,7 +333,8 @@ If you cannot log in, try these steps:
    - أعد تشغيل التطبيق
 ''',
           solution: 'If still unable to login, contact your administrator',
-          solutionAr: 'إذا كنت لا تزال غير قادر على تسجيل الدخول، تواصل مع المسؤول',
+          solutionAr:
+              'إذا كنت لا تزال غير قادر على تسجيل الدخول، تواصل مع المسؤول',
           tags: ['login', 'troubleshooting', 'password'],
         ),
         HelpArticle(
@@ -367,8 +389,10 @@ If GPS location is not working:
    - أعد تشغيل الموقع
    - أعد تشغيل التطبيق
 ''',
-          solution: 'If GPS continues to have issues, your device may have hardware problems. Contact support.',
-          solutionAr: 'إذا استمرت مشاكل GPS، قد يكون لدى جهازك مشاكل في الأجهزة. تواصل مع الدعم.',
+          solution:
+              'If GPS continues to have issues, your device may have hardware problems. Contact support.',
+          solutionAr:
+              'إذا استمرت مشاكل GPS، قد يكون لدى جهازك مشاكل في الأجهزة. تواصل مع الدعم.',
           tags: ['gps', 'location', 'troubleshooting'],
         ),
         HelpArticle(
@@ -1023,7 +1047,9 @@ Requirements:
             article.titleAr.toLowerCase().contains(lowercaseQuery) ||
             article.content.toLowerCase().contains(lowercaseQuery) ||
             article.contentAr.toLowerCase().contains(lowercaseQuery) ||
-            article.tags.any((tag) => tag.toLowerCase().contains(lowercaseQuery))) {
+            article.tags.any(
+              (tag) => tag.toLowerCase().contains(lowercaseQuery),
+            )) {
           results.add(article);
         }
       }
@@ -1036,12 +1062,8 @@ Requirements:
   static List<HelpArticle> getArticlesByCategory(String categoryId) {
     final category = helpCategories.firstWhere(
       (cat) => cat.id == categoryId,
-      orElse: () => HelpCategory(
-        id: '',
-        title: '',
-        description: '',
-        articles: [],
-      ),
+      orElse: () =>
+          HelpCategory(id: '', title: '', description: '', articles: []),
     );
     return category.articles;
   }

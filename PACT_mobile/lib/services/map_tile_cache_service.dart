@@ -125,7 +125,7 @@ class MapTileCacheService {
               // Calculate overall progress across all regions
               final overallProgress =
                   ((totalCompleted + (regionProgress / 100)) / totalLocations) *
-                      100;
+                  100;
               onProgress(overallProgress);
             }
           },
@@ -144,11 +144,7 @@ class MapTileCacheService {
   /// Get cache statistics
   static Future<Map<String, dynamic>> getCacheStats() async {
     if (kIsWeb) {
-      return {
-        'tileCount': 0,
-        'sizeInBytes': 0,
-        'sizeInMB': '0.00',
-      };
+      return {'tileCount': 0, 'sizeInBytes': 0, 'sizeInMB': '0.00'};
     }
 
     try {
@@ -163,11 +159,7 @@ class MapTileCacheService {
       };
     } catch (e) {
       debugPrint('Error getting cache stats: $e');
-      return {
-        'tileCount': 0,
-        'sizeInBytes': 0,
-        'sizeInMB': '0.00',
-      };
+      return {'tileCount': 0, 'sizeInBytes': 0, 'sizeInMB': '0.00'};
     }
   }
 

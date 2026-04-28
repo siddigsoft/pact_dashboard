@@ -45,9 +45,9 @@ class _NetworkStatusIndicatorState extends State<NetworkStatusIndicator> {
   }
 
   void _setupConnectivityListener() {
-    _connectivitySubscription = Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
       if (mounted) {
         setState(() {
           _isOnline = !results.contains(ConnectivityResult.none);
@@ -139,9 +139,9 @@ class _OfflineModeBannerState extends State<OfflineModeBanner> {
   }
 
   void _setupConnectivityListener() {
-    _connectivitySubscription = Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) {
       final wasOnline = _isOnline;
       final isOnlineNow = !results.contains(ConnectivityResult.none);
 

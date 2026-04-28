@@ -34,7 +34,13 @@ class CallStateNotifier extends StateNotifier<CallStateData> {
       state = state.copyWith(callState: callState);
 
       if (callState == CallState.connected) {
-        CallNotificationService().dismissIncomingCallNotification();
+        if (state.incomingCallId != null) {
+          CallNotificationService().dismissIncomingCallNotification(
+            state.incomingCallId!,
+          );
+        } else {
+          CallNotificationService().dismissAllIncomingCallNotifications();
+        }
       }
     });
 
@@ -72,6 +78,7 @@ class CallStateNotifier extends StateNotifier<CallStateData> {
       final from = payload['from'] as String? ?? '';
       final fromAvatar = payload['fromAvatar'] as String?;
       final isAudioOnly = payload['isAudioOnly'] as bool? ?? true;
+      final callId = payload['callId'] as String?;
 
       state = state.copyWith(
         callState: CallState.incoming,
@@ -79,6 +86,7 @@ class CallStateNotifier extends StateNotifier<CallStateData> {
         incomingCallerName: fromName,
         incomingCallerAvatar: fromAvatar,
         isAudioOnly: isAudioOnly,
+        incomingCallId: callId,
       );
     });
   }
@@ -120,12 +128,24 @@ class CallStateNotifier extends StateNotifier<CallStateData> {
   }
 
   Future<void> acceptCall() async {
-    await CallNotificationService().dismissIncomingCallNotification();
+    if (state.incomingCallId != null) {
+      await CallNotificationService().dismissIncomingCallNotification(
+        state.incomingCallId!,
+      );
+    } else {
+      await CallNotificationService().dismissAllIncomingCallNotifications();
+    }
     await _callService.acceptCall();
   }
 
   Future<void> rejectCall() async {
-    await CallNotificationService().dismissIncomingCallNotification();
+    if (state.incomingCallId != null) {
+      await CallNotificationService().dismissIncomingCallNotification(
+        state.incomingCallId!,
+      );
+    } else {
+      await CallNotificationService().dismissAllIncomingCallNotifications();
+    }
     await _callService.rejectCall();
 
     if (state.incomingCallerId != null && state.incomingCallerName != null) {
@@ -187,6 +207,7 @@ class CallStateData {
   final String? incomingCallerId;
   final String? incomingCallerName;
   final String? incomingCallerAvatar;
+  final String? incomingCallId;
 
   CallStateData({
     this.callState = CallState.idle,
@@ -201,6 +222,7 @@ class CallStateData {
     this.incomingCallerId,
     this.incomingCallerName,
     this.incomingCallerAvatar,
+    this.incomingCallId,
   });
 
   CallStateData copyWith({
@@ -216,6 +238,7 @@ class CallStateData {
     String? incomingCallerId,
     String? incomingCallerName,
     String? incomingCallerAvatar,
+    String? incomingCallId,
   }) {
     return CallStateData(
       callState: callState ?? this.callState,
@@ -230,6 +253,7 @@ class CallStateData {
       incomingCallerId: incomingCallerId ?? this.incomingCallerId,
       incomingCallerName: incomingCallerName ?? this.incomingCallerName,
       incomingCallerAvatar: incomingCallerAvatar ?? this.incomingCallerAvatar,
+      incomingCallId: incomingCallId ?? this.incomingCallId,
     );
   }
 }

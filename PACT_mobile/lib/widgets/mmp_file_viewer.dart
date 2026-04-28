@@ -39,8 +39,9 @@ class MMPFileViewer extends StatelessWidget {
 
       if (!await file.exists()) {
         final supabase = Supabase.instance.client;
-        final bytes =
-            await supabase.storage.from('mmps').download(mmpFile.filePath!);
+        final bytes = await supabase.storage
+            .from('mmps')
+            .download(mmpFile.filePath!);
         await file.writeAsBytes(bytes);
       }
 

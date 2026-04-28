@@ -1,6 +1,7 @@
 // lib/theme/app_colors.dart
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   // Primary Colors - These are your company's brand colors
@@ -65,6 +66,8 @@ class AppColors {
   static const Color textSecondary = textLight;
   static const Color textTertiary = Color(0xFFB0B7BF); // Even lighter gray
   static const Color secondary = primaryBlue;
+  static const Color background = backgroundGray;
+  static const Color primaryDark = darkBlue;
 
   // Gradient definitions - For beautiful backgrounds
   static const LinearGradient primaryGradient = LinearGradient(
@@ -122,17 +125,26 @@ class AppColors {
     brightness: Brightness.light,
   );
 
-  // App Bar Theme
-  static AppBarTheme get appBarTheme => const AppBarTheme(
-    backgroundColor: Colors.transparent,
-    elevation: 0, // Removes shadow
-    centerTitle: true,
-    iconTheme: IconThemeData(color: textDark),
-    titleTextStyle: TextStyle(
-      color: textDark,
-      fontSize: 22,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.5,
+  // App Bar Theme — matches the ModernAppHeader / ReusableAppBar design language.
+  // White surface · deep-navy text · orange bottom border accent.
+  static AppBarTheme get appBarTheme => AppBarTheme(
+    backgroundColor: Colors.white,
+    foregroundColor: const Color(0xFF0C1A2E),
+    elevation: 0,
+    scrolledUnderElevation: 0,
+    surfaceTintColor: Colors.transparent,
+    shadowColor: Colors.transparent,
+    centerTitle: false,
+    iconTheme: const IconThemeData(color: Color(0xFF0C1A2E), size: 22),
+    actionsIconTheme: const IconThemeData(color: Color(0xFF0C1A2E), size: 22),
+    titleTextStyle: GoogleFonts.outfit(
+      color: const Color(0xFF0C1A2E),
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.1,
+    ),
+    shape: const Border(
+      bottom: BorderSide(color: primaryOrange, width: 3),
     ),
   );
 

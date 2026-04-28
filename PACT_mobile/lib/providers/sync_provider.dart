@@ -8,9 +8,12 @@ class SyncProvider extends ChangeNotifier {
   final OfflineSyncService _syncService;
   final ConnectivityService _connectivityService;
 
-  SyncProvider(SupabaseClient supabase, LocalStorageService localStorage, ConnectivityService connectivity)
-      : _syncService = OfflineSyncService(supabase, localStorage, connectivity),
-        _connectivityService = connectivity {
+  SyncProvider(
+    SupabaseClient supabase,
+    LocalStorageService localStorage,
+    ConnectivityService connectivity,
+  ) : _syncService = OfflineSyncService(supabase, localStorage, connectivity),
+      _connectivityService = connectivity {
     // Listen to sync status changes
     _syncService.syncStatus.listen((status) {
       notifyListeners();

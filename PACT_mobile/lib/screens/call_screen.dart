@@ -6,11 +6,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:proximity_sensor/proximity_sensor.dart';
 import 'package:vibration/vibration.dart';
+import 'package:uuid/uuid.dart';
 import '../services/jitsi_call_service.dart';
 import '../services/call_history_service.dart';
 import '../models/call_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/floating_call_overlay.dart';
+import '../widgets/standard_back_button.dart';
 import 'dart:async';
 import '../services/screen_analytics_mixin.dart';
 import '../services/event_tracker.dart';
@@ -235,6 +237,21 @@ class _CallScreenState extends State<CallScreen>
           }
         });
       } else if (state.status == CallStatus.ended) {
+        // Phase 8b: Detect if call was answered elsewhere (ringing -> ended without connecting)
+        if (previousStatus == CallStatus.ringing ||
+            previousStatus == CallStatus.calling) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'You answered this call on another device',
+                style: GoogleFonts.poppins(),
+              ),
+              backgroundColor: Colors.blue.shade600,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
         _vibrateOnEvent('call_ended');
         // Track call completion
         unawaited(
@@ -264,25 +281,24 @@ class _CallScreenState extends State<CallScreen>
   void _saveCallToHistory(CallState state, CallStatus previousStatus) {
     if (state.remoteUserId == null) return;
 
-    // TODO: Implement call history saving
-    // final entry = CallHistoryEntry(
-    //   id: const Uuid().v4(),
-    //   callId: state.callId,
-    //   remoteUserId: state.remoteUserId!,
-    //   remoteUserName:
-    //       state.remoteUserName ?? widget.remoteUserName ?? 'Unknown',
-    //   remoteUserAvatar: state.remoteUserAvatar ?? widget.remoteUserAvatar,
-    //   isOutgoing: true,
-    //   isVideoCall: !state.isAudioOnly,
-    //   endStatus: state.status,
-    //   startTime: state.startTime ?? DateTime.now(),
-    //   endTime: DateTime.now(),
-    //   duration: _callDuration,
-    //   notes: state.callNotes,
-    //   wasRecorded: state.isRecording,
-    // );
-    //
-    // _callHistoryService.addEntry(entry);
+    final entry = CallHistoryEntry(
+      id: const Uuid().v4(),
+      callId: state.callId,
+      remoteUserId: state.remoteUserId!,
+      remoteUserName:
+          state.remoteUserName ?? widget.remoteUserName ?? 'Unknown',
+      remoteUserAvatar: state.remoteUserAvatar ?? widget.remoteUserAvatar,
+      isOutgoing: true,
+      isVideoCall: !state.isAudioOnly,
+      endStatus: state.status,
+      startTime: state.startTime ?? DateTime.now(),
+      endTime: DateTime.now(),
+      duration: _callDuration,
+      notes: state.callNotes,
+      wasRecorded: state.isRecording,
+    );
+
+    _callHistoryService.addEntry(entry);
   }
 
   Widget _buildCallQualityIndicator() {
@@ -740,12 +756,7 @@ class _CallScreenState extends State<CallScreen>
             borderRadius: BorderRadius.circular(30),
             border: Border.all(color: Colors.white.withOpacity(0.2)),
           ),
-          child: IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              color: Colors.white,
-              size: 20,
-            ),
+          child: StandardBackButton(
             onPressed: () async {
               await _callService.endCall();
             },
@@ -885,6 +896,37 @@ class _CallScreenState extends State<CallScreen>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        // Phase 8a: Call quality warning banner
+        if (_callState.qualityBars < 2 &&
+            _callState.status == CallStatus.connected)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withOpacity(0.1),
+              border: Border.all(color: Colors.redAccent, width: 1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.signal_cellular_null,
+                  color: Colors.redAccent,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Poor network connection',
+                  style: GoogleFonts.poppins(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         const Spacer(flex: 2),
         Stack(
           alignment: Alignment.center,

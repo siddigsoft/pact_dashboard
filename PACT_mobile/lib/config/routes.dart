@@ -1,36 +1,16 @@
 // lib/config/routes.dart
-// Navigation route configuration — call screens + project flow screens
+// Navigation route configuration for professional call screens and admin monitoring
 
 import 'package:flutter/material.dart';
 import '../models/call_state.dart';
 import '../screens/calls/professional_incoming_call_screen.dart';
 import '../screens/calls/professional_active_call_screen.dart';
-import '../screens/projects_screen.dart';
-import '../screens/project_detail_screen.dart';
+import '../screens/admin/monitoring_dashboard_screen.dart';
 
 /// Route generator for named routes
 class RouteGenerator {
   static Route<dynamic> generateRoute(RouteSettings settings) {
-    final name = settings.name ?? '';
-
-    // Project routes
-    if (name == RouteNames.projectsList) {
-      return MaterialPageRoute(
-        builder: (_) => const ProjectsScreen(),
-        settings: settings,
-      );
-    }
-    if (name.startsWith('/projects/')) {
-      final projectId = name.replaceFirst('/projects/', '');
-      if (projectId.isNotEmpty) {
-        return MaterialPageRoute(
-          builder: (_) => ProjectDetailScreen(projectId: projectId),
-          settings: settings,
-        );
-      }
-    }
-
-    switch (name) {
+    switch (settings.name) {
       case '/incoming-call-professional':
         return MaterialPageRoute(
           builder: (_) => _buildIncomingCallScreen(settings.arguments),
@@ -43,6 +23,12 @@ class RouteGenerator {
           settings: settings,
         );
 
+      case '/admin_monitoring':
+        return MaterialPageRoute(
+          builder: (_) => _buildMonitoringDashboard(settings.arguments),
+          settings: settings,
+        );
+
       default:
         return _errorRoute();
     }
@@ -51,7 +37,7 @@ class RouteGenerator {
   /// Build incoming call screen with arguments
   static Widget _buildIncomingCallScreen(dynamic arguments) {
     if (arguments is! Map<String, dynamic>) {
-      return const Scaffold(body: Center(child: Text('Invalid call arguments')));
+      return Scaffold(body: Center(child: Text('Invalid call arguments')));
     }
 
     return ProfessionalIncomingCallScreen(
@@ -71,7 +57,7 @@ class RouteGenerator {
   /// Build active call screen with arguments
   static Widget _buildActiveCallScreen(dynamic arguments) {
     if (arguments is! Map<String, dynamic>) {
-      return const Scaffold(body: Center(child: Text('Invalid call arguments')));
+      return Scaffold(body: Center(child: Text('Invalid call arguments')));
     }
 
     return ProfessionalActiveCallScreen(
@@ -79,6 +65,22 @@ class RouteGenerator {
       remoteUserName: arguments['remoteUserName'] ?? 'Unknown',
       remoteUserAvatar: arguments['remoteUserAvatar'],
       isVideoCall: arguments['isVideoCall'] ?? false,
+    );
+  }
+
+  /// Build monitoring dashboard with optional arguments from notification
+  static Widget _buildMonitoringDashboard(dynamic arguments) {
+    String? actionId;
+    String? category;
+
+    if (arguments is Map<String, dynamic>) {
+      actionId = arguments['actionId'] as String?;
+      category = arguments['category'] as String?;
+    }
+
+    return MonitoringDashboardScreen(
+      initialActionId: actionId,
+      initialCategory: category,
     );
   }
 
@@ -99,10 +101,6 @@ class RouteNames {
   static const String incomingCallProfessional = '/incoming-call-professional';
   static const String activeCallProfessional = '/active-call-professional';
 
-  // Project routes
-  static const String projectsList = '/projects';
-  static const String projectDetail = '/projects/:id';
-
-  /// Builds a concrete project detail path for a given id.
-  static String projectDetailPath(String id) => '/projects/$id';
+  // Admin routes
+  static const String adminMonitoring = '/admin_monitoring';
 }

@@ -70,10 +70,7 @@ class SiteVisitAssignmentService {
     try {
       final response = await _supabase.rpc(
         'assign_site_visit',
-        params: {
-          'p_site_id': siteVisitId,
-          'p_user_id': userId,
-        },
+        params: {'p_site_id': siteVisitId, 'p_user_id': userId},
       );
 
       final result = response as Map<String, dynamic>;
@@ -86,7 +83,8 @@ class SiteVisitAssignmentService {
 
   /// Get all MMPs associated with a site visit
   Future<List<Map<String, dynamic>>> getSiteVisitMMPs(
-      String siteVisitId) async {
+    String siteVisitId,
+  ) async {
     try {
       final response = await _supabase
           .from('mmp_files')
@@ -109,8 +107,5 @@ class _VisitWithDistance {
   final SiteVisit visit;
   final double distance;
 
-  _VisitWithDistance({
-    required this.visit,
-    required this.distance,
-  });
+  _VisitWithDistance({required this.visit, required this.distance});
 }

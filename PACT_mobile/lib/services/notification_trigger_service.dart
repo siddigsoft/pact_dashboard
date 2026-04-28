@@ -77,29 +77,34 @@ class NotificationTriggerService {
         return false;
       }
 
-      // Insert notification into database
-      final response = await _supabase.from('notifications').insert({
-        'user_id': options.userId,
-        'title': options.title,
-        'message': options.message,
-        'type': options.type.toString().split('.').last,
-        'category': options.category.toString().split('.').last,
-        'priority': options.priority.toString().split('.').last,
-        'link': options.link,
-        'related_entity_id': options.relatedEntityId,
-        'related_entity_type': options.relatedEntityType
-            ?.toString()
-            .split('.')
-            .last,
-        'target_roles': options.targetRoles,
-        'project_id': options.projectId,
-        'is_read': false,
-      });
+      // Insert notification into database and return inserted row so we have the ID
+      final inserted = await _supabase
+          .from('notifications')
+          .insert({
+            'user_id': options.userId,
+            'title': options.title,
+            if (options.titleAr != null) 'title_ar': options.titleAr,
+            'message': options.message,
+            if (options.messageAr != null) 'message_ar': options.messageAr,
+            'type': options.type.toString().split('.').last,
+            'category': options.category.toString().split('.').last,
+            'priority': options.priority.toString().split('.').last,
+            'link': options.link,
+            'related_entity_id': options.relatedEntityId,
+            'related_entity_type': options.relatedEntityType
+                ?.toString()
+                .split('.')
+                .last,
+            'target_roles': options.targetRoles,
+            'project_id': options.projectId,
+            'is_read': false,
+          })
+          .select('id')
+          .maybeSingle();
 
-      if (response != null) {
-        // Show local notification
+      if (inserted != null && inserted['id'] != null) {
         await NotificationService.showUserNotification(
-          notificationId: response['id'] ?? '',
+          notificationId: inserted['id'].toString(),
           title: options.title,
           body: options.message,
           type: options.type.toString().split('.').last,
@@ -212,7 +217,13 @@ class NotificationTriggerService {
         title: hoursUntilDeadline <= 0
             ? 'Site Visit Overdue'
             : 'Site Visit Reminder',
+        titleAr: hoursUntilDeadline <= 0
+            ? 'تأخر زيارة الموقع'
+            : 'تذكير بزيارة الموقع',
         message: message,
+        messageAr: hoursUntilDeadline <= 0
+            ? 'تأخرت زيارة الموقع "$siteName"!'
+            : 'يحين موعد زيارة الموقع "$siteName" خلال $hoursUntilDeadline ساعة',
         type: type,
         category: NotificationCategory.assignments,
         priority: urgency,
@@ -268,7 +279,9 @@ class NotificationTriggerService {
       final options = NotificationTriggerOptions(
         userId: '', // Will be set per user
         title: 'Site Claimed',
+        titleAr: 'تم حجز الموقع',
         message: '$claimerName has claimed the site "$siteName"',
+        messageAr: 'قام $claimerName بحجز الموقع "$siteName"',
         type: NotificationType.info,
         category: NotificationCategory.assignments,
         priority: NotificationPriority.medium,
@@ -298,8 +311,10 @@ class NotificationTriggerService {
               NotificationTriggerOptions(
                 userId: supervisorId,
                 title: 'Site Claimed by Coordinator',
+                titleAr: 'تم حجز الموقع من قبل المنسق',
                 message:
                     '$claimerName (Coordinator) has claimed the site "$siteName"',
+                messageAr: 'قام $claimerName (منسق) بحجز الموقع "$siteName"',
                 type: NotificationType.info,
                 category: NotificationCategory.assignments,
                 priority: NotificationPriority.medium,
@@ -333,12 +348,17 @@ class NotificationTriggerService {
     final feeInfo = enumeratorFee != null && transportFee != null
         ? ' Fee: $enumeratorFee SDG (enumerator) + $transportFee SDG (transport)'
         : '';
+    final feeInfoAr = enumeratorFee != null && transportFee != null
+        ? ' الأجر: $enumeratorFee جنيه (للباحث) + $transportFee جنيه (للمواصلات)'
+        : '';
 
     await send(
       NotificationTriggerOptions(
         userId: userId,
         title: 'Site Assigned',
+        titleAr: 'تم تعيين الموقع',
         message: 'You have been assigned to visit "$siteName".$feeInfo',
+        messageAr: 'تم تعيينك لزيارة الموقع "$siteName".$feeInfoAr',
         type: NotificationType.info,
         category: NotificationCategory.assignments,
         priority: NotificationPriority.high,
@@ -359,8 +379,11 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'Site Released',
+        titleAr: 'تم سحب الموقع',
         message:
             'Your claim on "$siteName" has been automatically released due to no confirmation before the deadline.',
+        messageAr:
+            'تم سحب حجزك للموقع "$siteName" تلقائياً بسبب عدم التأكيد قبل الموعد النهائي.',
         type: NotificationType.warning,
         category: NotificationCategory.assignments,
         priority: NotificationPriority.high,
@@ -371,7 +394,7 @@ class NotificationTriggerService {
     );
   }
 
-  /// Site visit completed notification
+  /// Site visit completed notification (to coordinator/supervisor)
   Future<void> siteVisitCompleted(
     String userId,
     String siteName,
@@ -382,13 +405,85 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'Site Visit Completed',
+        titleAr: 'تم إكمال زيارة الموقع',
         message: '$collectorName has completed the visit to "$siteName"',
+        messageAr: 'أكمل $collectorName الزيارة إلى "$siteName"',
         type: NotificationType.success,
         category: NotificationCategory.assignments,
         priority: NotificationPriority.medium,
         link: '/mmp',
         relatedEntityId: siteId,
         relatedEntityType: RelatedEntityType.siteVisit,
+      ),
+    );
+  }
+
+  /// Notify the user who completed the visit (e.g. "You have completed site A").
+  Future<void> siteVisitCompletedBySelf(
+    String userId,
+    String siteName,
+    String siteId,
+  ) async {
+    await send(
+      NotificationTriggerOptions(
+        userId: userId,
+        title: 'Site Visit Completed',
+        titleAr: 'تم إكمال زيارة الموقع',
+        message: 'You have completed the visit to "$siteName".',
+        messageAr: 'لقد قمت بإكمال زيارة الموقع "$siteName".',
+        type: NotificationType.success,
+        category: NotificationCategory.assignments,
+        priority: NotificationPriority.medium,
+        link: '/site-visits?status=completed',
+        relatedEntityId: siteId,
+        relatedEntityType: RelatedEntityType.siteVisit,
+      ),
+    );
+  }
+
+  /// Notify the user who claimed the site (e.g. "You have claimed site A").
+  Future<void> siteClaimedBySelf(
+    String userId,
+    String siteName,
+    String siteId,
+  ) async {
+    await send(
+      NotificationTriggerOptions(
+        userId: userId,
+        title: 'Site Claimed',
+        titleAr: 'تم حجز الموقع',
+        message: 'You have claimed the site "$siteName".',
+        messageAr: 'لقد قمت بحجز الموقع "$siteName".',
+        type: NotificationType.success,
+        category: NotificationCategory.assignments,
+        priority: NotificationPriority.medium,
+        link: '/site-visits?status=dispatched',
+        relatedEntityId: siteId,
+        relatedEntityType: RelatedEntityType.siteVisit,
+      ),
+    );
+  }
+
+  /// Notify the user who requested a withdrawal (e.g. "You have requested a withdrawal of X SDG").
+  Future<void> withdrawalRequestedBySelf(
+    String userId,
+    double amount,
+    String currency,
+  ) async {
+    await send(
+      NotificationTriggerOptions(
+        userId: userId,
+        title: 'Withdrawal Requested',
+        titleAr: 'تم طلب سحب',
+        message:
+            'You have requested a withdrawal of $currency ${amount.toStringAsFixed(0)}.',
+        messageAr:
+            'لقد قمت بطلب سحب مبلغ ${amount.toStringAsFixed(0)} $currency.',
+        type: NotificationType.info,
+        category: NotificationCategory.financial,
+        priority: NotificationPriority.medium,
+        link: '/wallet',
+        relatedEntityType: RelatedEntityType.wallet,
       ),
     );
   }
@@ -406,7 +501,9 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'Approval Required',
+        titleAr: 'مطلوب موافقة',
         message: '$itemType "$itemName" requires your approval',
+        messageAr: '$itemType "$itemName" يتطلب موافقتك',
         type: NotificationType.warning,
         category: NotificationCategory.approvals,
         priority: NotificationPriority.high,
@@ -424,16 +521,16 @@ class NotificationTriggerService {
     String status,
     int amount,
   ) async {
-    final (title, message, type, priority) = _getWithdrawalStatusMessage(
-      status,
-      amount,
-    );
+    final (title, titleAr, message, messageAr, type, priority) =
+        _getWithdrawalStatusMessage(status, amount);
 
     await send(
       NotificationTriggerOptions(
         userId: userId,
         title: title,
+        titleAr: titleAr,
         message: message,
+        messageAr: messageAr,
         type: type,
         category: NotificationCategory.financial,
         priority: priority,
@@ -443,34 +540,42 @@ class NotificationTriggerService {
     );
   }
 
-  (String, String, NotificationType, NotificationPriority)
+  (String, String, String, String, NotificationType, NotificationPriority)
   _getWithdrawalStatusMessage(String status, int amount) {
     switch (status) {
       case 'approved':
         return (
           'Withdrawal Approved',
+          'تمت الموافقة على السحب',
           'Your withdrawal of SDG $amount has been approved',
+          'تمت الموافقة على سحب مبلغ $amount جنيه',
           NotificationType.success,
           NotificationPriority.high,
         );
       case 'rejected':
         return (
           'Withdrawal Rejected',
+          'تم رفض السحب',
           'Your withdrawal of SDG $amount has been rejected',
+          'تم رفض سحب مبلغ $amount جنيه',
           NotificationType.error,
           NotificationPriority.high,
         );
       case 'pending_final':
         return (
           'Withdrawal Pending Final Approval',
+          'السحب بانتظار الموافقة النهائية',
           'Your withdrawal of SDG $amount is pending final approval',
+          'سحب مبلغ $amount جنيه بانتظار الموافقة النهائية',
           NotificationType.info,
           NotificationPriority.medium,
         );
       default:
         return (
           'Withdrawal Status Updated',
+          'تم تحديث حالة السحب',
           'Your withdrawal of SDG $amount status has been updated',
+          'تم تحديث حالة سحب مبلغ $amount جنيه',
           NotificationType.info,
           NotificationPriority.medium,
         );
@@ -493,7 +598,9 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: percentUsed >= 100 ? 'Budget Exceeded' : 'Budget Alert',
+        titleAr: percentUsed >= 100 ? 'تجاوز الميزانية' : 'تنبيه الميزانية',
         message: '$projectName has used $percentUsed% of its allocated budget',
+        messageAr: 'استهلك $projectName $percentUsed% من ميزانيته المخصصة',
         type: type,
         category: NotificationCategory.financial,
         priority: priority,
@@ -515,7 +622,9 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'MMP Upload Complete',
+        titleAr: 'اكتمل رفع ملف MMP',
         message: 'Successfully uploaded "$mmpName" with $siteCount sites',
+        messageAr: 'تم بنجاح رفع "$mmpName" مع $siteCount مواقع',
         type: NotificationType.success,
         category: NotificationCategory.system,
         priority: NotificationPriority.medium,
@@ -536,7 +645,9 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'MMP Upload Failed',
+        titleAr: 'فشل رفع ملف MMP',
         message: 'Failed to upload "$fileName": $errorMessage',
+        messageAr: 'فشل رفع "$fileName": $errorMessage',
         type: NotificationType.error,
         category: NotificationCategory.system,
         priority: NotificationPriority.high,
@@ -556,7 +667,9 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'Signature Required',
+        titleAr: 'مطلوب توقيع',
         message: 'Your signature is required for "$documentTitle"',
+        messageAr: 'توقيعك مطلوب للإجراء: "$documentTitle"',
         type: NotificationType.warning,
         category: NotificationCategory.signatures,
         priority: NotificationPriority.high,
@@ -578,8 +691,10 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'Transaction Signed',
+        titleAr: 'تم توقيع المعاملة',
         message:
             'Your transaction of $currency $amount has been digitally signed and recorded',
+        messageAr: 'تم توقيع وتسجيل معاملتك بقيمة $amount $currency رقمياً',
         type: NotificationType.success,
         category: NotificationCategory.signatures,
         priority: NotificationPriority.medium,
@@ -607,7 +722,9 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'New Message',
+        titleAr: 'رسالة جديدة',
         message: '$senderName: $preview',
+        messageAr: '$senderName: $preview',
         type: NotificationType.info,
         category: NotificationCategory.messages,
         priority: NotificationPriority.medium,
@@ -620,17 +737,24 @@ class NotificationTriggerService {
 
   // ==================== CALL NOTIFICATIONS ====================
 
-  /// Incoming call notification
+  /// Incoming call notification (Phase 8a: Enhanced with action context)
   Future<void> incomingCall(
     String userId,
     String callerName,
-    String callerId,
-  ) async {
+    String callerId, {
+    bool isVideoCall = false,
+    String? callerRole,
+    String? callerAvatar,
+  }) async {
     await send(
       NotificationTriggerOptions(
         userId: userId,
-        title: 'Incoming Call',
-        message: '$callerName is calling you',
+        title: 'Incoming ${isVideoCall ? 'Video' : 'Voice'} Call',
+        titleAr: 'مكالمة ${isVideoCall ? 'فيديو' : 'صوتية'} واردة',
+        message:
+            '$callerName is calling you${callerRole != null ? ' ($callerRole)' : ''}',
+        messageAr:
+            'يتصل بك $callerName${callerRole != null ? ' ($callerRole)' : ''}',
         type: NotificationType.info,
         category: NotificationCategory.calls,
         priority: NotificationPriority.urgent,
@@ -639,6 +763,8 @@ class NotificationTriggerService {
         relatedEntityType: RelatedEntityType.call,
       ),
     );
+    // Phase 8a: Action buttons will be handled by notification_service listener
+    // Maps to Answer/Decline buttons in native notification handlers
   }
 
   /// Missed call notification
@@ -651,7 +777,9 @@ class NotificationTriggerService {
       NotificationTriggerOptions(
         userId: userId,
         title: 'Missed Call',
+        titleAr: 'مكالمة فائتة',
         message: 'You missed a call from $callerName',
+        messageAr: 'لديك مكالمة فائتة من $callerName',
         type: NotificationType.warning,
         category: NotificationCategory.calls,
         priority: NotificationPriority.high,
@@ -796,6 +924,35 @@ class NotificationTriggerService {
       );
     } catch (e) {
       debugPrint('[Notification] Error sending write-off alert: $e');
+      return false;
+    }
+  }
+
+  // ==================== SITE DISPATCH NOTIFICATIONS ====================
+
+  /// Send bilingual site dispatch notification to field staff
+  /// Shows notification in both English and Arabic with sound and vibration
+  Future<bool> sendSiteDispatchedNotification({
+    required String siteCode,
+    required String siteName,
+    required String location,
+    required String budget,
+  }) async {
+    try {
+      // Show the bilingual notification with high priority
+      await NotificationService.showSiteDispatchedNotification(
+        siteCode: siteCode,
+        siteName: siteName,
+        location: location,
+        budget: budget,
+      );
+
+      debugPrint(
+        '[Notification] Site dispatch notification sent for site $siteCode',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[Notification] Error sending site dispatch notification: $e');
       return false;
     }
   }

@@ -75,8 +75,9 @@ class UpdateService {
   }
 
   // Start periodic update checks (every 30 minutes)
-  void startPeriodicUpdateCheck(
-      {Duration interval = const Duration(minutes: 30)}) {
+  void startPeriodicUpdateCheck({
+    Duration interval = const Duration(minutes: 30),
+  }) {
     _updateCheckTimer?.cancel();
     _updateCheckTimer = Timer.periodic(interval, (_) async {
       if (!_isCheckingForUpdate) {

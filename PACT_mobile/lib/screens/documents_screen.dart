@@ -136,14 +136,50 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         final costReceipts = await Supabase.instance.client
             .from('cost_submissions')
             .select(
-              'id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id',
+              'id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, submitted_by',
             )
             .eq('status', 'approved')
             .order('created_at', ascending: false);
 
+        // Fetch submitter profiles to get state_id and hub_id
+        final submitterIds = <String>{};
+        final submitterProfiles = <String, Map<String, dynamic>>{};
+
+        for (var doc in (costReceipts ?? [])) {
+          final submitterId = doc['submitted_by'] as String?;
+          if (submitterId != null) {
+            submitterIds.add(submitterId);
+          }
+        }
+
+        // Fetch profiles for all submitters
+        if (submitterIds.isNotEmpty) {
+          final profiles = await Supabase.instance.client
+              .from('profiles')
+              .select('id, state_id, hub_id')
+              .inFilter('id', submitterIds.toList());
+
+          for (var profile in profiles) {
+            submitterProfiles[profile['id'] as String] = profile;
+          }
+        }
+
         for (var doc in (costReceipts ?? [])) {
           final monthBucket = getMonthBucket(doc['created_at']);
           if (monthBucket != null) monthsSet.add(monthBucket);
+
+          final submitterId = doc['submitted_by'] as String?;
+          String? submitterStateId;
+          String? submitterHubId;
+
+          // Get submitter's state and hub
+          if (submitterId != null) {
+            final submitterProfile = submitterProfiles[submitterId];
+            if (submitterProfile != null) {
+              submitterStateId = submitterProfile['state_id'] as String?;
+              submitterHubId = submitterProfile['hub_id'] as String?;
+            }
+          }
 
           // Add main receipt if exists
           if (doc['receipt_url'] != null) {
@@ -169,6 +205,9 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                 'projectId': doc['project_id'],
                 'monthBucket': monthBucket,
                 'sourceType': 'cost',
+                'dataCollectorId': submitterId,
+                'creatorStateId': submitterStateId,
+                'creatorHubId': submitterHubId,
               });
             }
           }
@@ -204,6 +243,9 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                     'projectId': doc['project_id'],
                     'monthBucket': docMonth,
                     'sourceType': 'cost',
+                    'dataCollectorId': submitterId,
+                    'creatorStateId': submitterStateId,
+                    'creatorHubId': submitterHubId,
                   });
                 }
               }
@@ -228,6 +270,32 @@ class _DocumentsScreenState extends State<DocumentsScreen>
             .isFilter('deleted_at', null)
             .order('created_at', ascending: false);
 
+        // Fetch creator profiles to get state_id and hub_id for each photo
+        final creatorIds = <String>{};
+        final creatorProfiles = <String, Map<String, dynamic>>{};
+
+        for (var photo in reportPhotos) {
+          if (photo['reports'] is Map) {
+            final reports = photo['reports'] as Map<String, dynamic>;
+            final creatorId = reports['created_by'] as String?;
+            if (creatorId != null) {
+              creatorIds.add(creatorId);
+            }
+          }
+        }
+
+        // Fetch profiles for all creators
+        if (creatorIds.isNotEmpty) {
+          final profiles = await Supabase.instance.client
+              .from('profiles')
+              .select('id, state_id, hub_id')
+              .inFilter('id', creatorIds.toList());
+
+          for (var profile in profiles) {
+            creatorProfiles[profile['id'] as String] = profile;
+          }
+        }
+
         for (var photo in reportPhotos) {
           if (photo['photo_url'] == null) continue;
 
@@ -250,10 +318,21 @@ class _DocumentsScreenState extends State<DocumentsScreen>
             String? dataCollectorId;
             String? deviceId;
             String? siteVisitId = photo['site_visit_id'] as String?;
+            String? creatorStateId;
+            String? creatorHubId;
 
             if (photo['reports'] is Map && photo['reports'] != null) {
               final reports = photo['reports'] as Map<String, dynamic>;
               dataCollectorId = reports['created_by'] as String?;
+
+              // Get creator's state and hub
+              if (dataCollectorId != null) {
+                final creatorProfile = creatorProfiles[dataCollectorId];
+                if (creatorProfile != null) {
+                  creatorStateId = creatorProfile['state_id'] as String?;
+                  creatorHubId = creatorProfile['hub_id'] as String?;
+                }
+              }
 
               if (reports['visit_reports'] is List &&
                   (reports['visit_reports'] as List).isNotEmpty) {
@@ -282,6 +361,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
               'siteVisitId': siteVisitId,
               'dataCollectorId': dataCollectorId,
               'deviceId': deviceId,
+              'creatorStateId': creatorStateId,
+              'creatorHubId': creatorHubId,
             });
           }
         }
@@ -750,41 +831,57 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     }
   }
 
-  // Check if user can view a document based on role and ownership
+  // Check if user can view a document based on role-based ACL
   bool _canViewDocument(Map<String, dynamic> doc) {
-    final category = doc['category'] as String?;
-    final dataCollectorId = doc['dataCollectorId'] as String?;
+    final role = (_currentUserRole ?? '').toLowerCase();
+    final documentCreatorId = doc['dataCollectorId'] as String?;
+    final creatorStateId = doc['creatorStateId'] as String?;
+    final creatorHubId = doc['creatorHubId'] as String?;
 
-    // Senior roles can see everything
-    final seniorRoles = [
-      'fom',
-      'data_team',
-      'admin',
-      'super_admin',
-      'country_director',
-      'supervisor',
-    ];
-
-    if (_currentUserRole != null && seniorRoles.contains(_currentUserRole)) {
+    // FOM and above roles (admin, super_admin, country_director, fom, data_team) can see all documents
+    if (role == 'fom' ||
+        role == 'admin' ||
+        role == 'super_admin' ||
+        role == 'country_director' ||
+        role == 'data_team') {
       return true;
     }
 
-    // For site_visit_photo and report, apply stricter filtering
-    if (category == 'site_visit_photo' || category == 'report') {
-      // Coordinators can only see their own photos/reports
-      if (_currentUserRole?.contains('coordinator') == true ||
-          _currentUserRole == 'field_coordinator' ||
-          _currentUserRole == 'state_coordinator') {
-        return dataCollectorId == _currentUserId;
-      }
-
-      // If data collector is known, restrict visibility
-      if (dataCollectorId != null && dataCollectorId != _currentUserId) {
-        return false;
-      }
+    // Data Collector: can only see their own documents
+    if (role == 'data_collector' || role == 'datacollector') {
+      return documentCreatorId == _currentUserId;
     }
 
-    return true;
+    // Coordinator (state level): can see documents from their state
+    if (role == 'coordinator' ||
+        role == 'field_coordinator' ||
+        role == 'state_coordinator') {
+      // Can see their own documents
+      if (documentCreatorId == _currentUserId) {
+        return true;
+      }
+      // Can see documents from their state
+      if (_currentUserState != null && creatorStateId == _currentUserState) {
+        return true;
+      }
+      return false;
+    }
+
+    // Supervisor (hub level): can see documents from their hub states
+    if (role == 'supervisor' || role == 'hub_supervisor') {
+      // Can see their own documents
+      if (documentCreatorId == _currentUserId) {
+        return true;
+      }
+      // Can see documents from their hub
+      if (_currentUserHubs.isNotEmpty && creatorHubId != null) {
+        return _currentUserHubs.contains(creatorHubId);
+      }
+      return false;
+    }
+
+    // Default: deny access for unknown roles
+    return false;
   }
 
   Future<Map<String, dynamic>?> _getSiteVisitDetailsData(
@@ -993,18 +1090,18 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     final displayedDocs = _displayedDocuments;
     final hasMore = _displayedCount < filteredDocs.length;
 
-    // Calculate statistics
+    // Calculate statistics from FILTERED documents (applies role-based access control)
     final stats = {
-      'total': _documents.length,
-      'verified': _documents
+      'total': filteredDocs.length,
+      'verified': filteredDocs
           .where((d) => d['status'] == 'verified' || d['status'] == 'approved')
           .length,
-      'pending': _documents.where((d) => d['status'] == 'pending').length,
-      'mmpFiles': _documents.where((d) => d['category'] == 'mmp_file').length,
-      'permits': _documents
+      'pending': filteredDocs.where((d) => d['status'] == 'pending').length,
+      'mmpFiles': filteredDocs.where((d) => d['category'] == 'mmp_file').length,
+      'permits': filteredDocs
           .where((d) => (d['category']?.toString() ?? '').contains('permit'))
           .length,
-      'receipts': _documents
+      'receipts': filteredDocs
           .where((d) => d['category'] == 'cost_receipt')
           .length,
     };

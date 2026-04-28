@@ -926,150 +926,147 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return MainLayout(
-      currentIndex: 0,
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: AppColors.backgroundGray,
-        drawer: CustomDrawerMenu(
-          currentUser: Supabase.instance.client.auth.currentUser,
-          onClose: () => _scaffoldKey.currentState?.closeDrawer(),
-        ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              ReusableAppBar(
-                title: 'Dashboard',
-                scaffoldKey: _scaffoldKey,
-                showLanguageSwitcher: false,
-                showNotifications: true,
-                onNotificationTap: () => NotificationsPanel.show(context),
-                showUserAvatar: true,
-              ),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : RefreshIndicator(
-                        onRefresh: _initializeDashboard,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Compact State/Hub indicator (skip header for Data Collectors)
-                              if (_isCoordinator)
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.dashboard_outlined,
-                                      color: AppColors.primaryBlue,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Operations Center',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textDark,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              if (_userState != null || _userHub != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.accentGreen.withValues(
-                                        alpha: 0.1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.location_on,
-                                          size: 14,
-                                          color: AppColors.accentGreen,
-                                        ),
-                                        const SizedBox(width: 3),
-                                        Text(
-                                          _userState != null
-                                              ? 'State: $_userState'
-                                              : 'Hub: $_userHub',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 11,
-                                            color: AppColors.accentGreen,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: AppColors.backgroundGray,
+      drawer: CustomDrawerMenu(
+        currentUser: Supabase.instance.client.auth.currentUser,
+        onClose: () => _scaffoldKey.currentState?.closeDrawer(),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReusableAppBar(
+              title: 'Dashboard',
+              scaffoldKey: _scaffoldKey,
+              showLanguageSwitcher: false,
+              showNotifications: true,
+              onNotificationTap: () => NotificationsPanel.show(context),
+              showUserAvatar: true,
+            ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : RefreshIndicator(
+                      onRefresh: _initializeDashboard,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Compact State/Hub indicator (skip header for Data Collectors)
+                            if (_isCoordinator)
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.dashboard_outlined,
+                                    color: AppColors.primaryBlue,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Operations Center',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textDark,
                                     ),
                                   ),
-                                ),
-                              const SizedBox(height: 8),
-
-                              // MMP Filter Bar (Coordinator only)
-                              if (_isCoordinator &&
-                                  _availableMmps.isNotEmpty) ...[
-                                MmpFilterBar(
-                                  mmpOptions: _availableMmps,
-                                  selectedMmpId: _selectedMmpId,
-                                  onChanged: (mmpId) {
-                                    setState(() {
-                                      _selectedMmpId = mmpId;
-                                    });
-                                  },
-                                  totalCount: _coordinatorVisits.length,
-                                  filteredCount: _selectedMmpId == null
-                                      ? _coordinatorVisits.length
-                                      : _coordinatorVisits
-                                            .where(
-                                              (v) =>
-                                                  v.mmpFileId == _selectedMmpId,
-                                            )
-                                            .length,
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-
-                              // Dashboard Cards (Coordinator) or skip for Data Collector
-                              if (_isCoordinator) ...[
-                                const SizedBox(height: 12),
-                                _buildCoordinatorCards(),
-                                const SizedBox(height: 12),
-                              ],
-
-                              // Assignments Section Header
+                                ],
+                              ),
+                            if (_userState != null || _userHub != null)
                               Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: 12,
-                                  top: 4,
-                                ),
-                                child: Text(
-                                  _isCoordinator ? 'Sites' : 'My Assignments',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textDark,
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accentGreen.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.location_on,
+                                        size: 14,
+                                        color: AppColors.accentGreen,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        _userState != null
+                                            ? 'State: $_userState'
+                                            : 'Hub: $_userHub',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 11,
+                                          color: AppColors.accentGreen,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                              _buildTabsSection(),
+                            const SizedBox(height: 8),
+
+                            // MMP Filter Bar (Coordinator only)
+                            if (_isCoordinator &&
+                                _availableMmps.isNotEmpty) ...[
+                              MmpFilterBar(
+                                mmpOptions: _availableMmps,
+                                selectedMmpId: _selectedMmpId,
+                                onChanged: (mmpId) {
+                                  setState(() {
+                                    _selectedMmpId = mmpId;
+                                  });
+                                },
+                                totalCount: _coordinatorVisits.length,
+                                filteredCount: _selectedMmpId == null
+                                    ? _coordinatorVisits.length
+                                    : _coordinatorVisits
+                                          .where(
+                                            (v) =>
+                                                v.mmpFileId == _selectedMmpId,
+                                          )
+                                          .length,
+                              ),
+                              const SizedBox(height: 12),
                             ],
-                          ),
+
+                            // Dashboard Cards (Coordinator) or skip for Data Collector
+                            if (_isCoordinator) ...[
+                              const SizedBox(height: 12),
+                              _buildCoordinatorCards(),
+                              const SizedBox(height: 12),
+                            ],
+
+                            // Assignments Section Header
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: 12,
+                                top: 4,
+                              ),
+                              child: Text(
+                                _isCoordinator ? 'Sites' : 'My Assignments',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                            ),
+                            _buildTabsSection(),
+                          ],
                         ),
                       ),
-              ),
-            ],
-          ),
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -1117,6 +1114,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Expanded(
               child: DashboardCard(
+                height: 150,
                 title: 'Total Operations',
                 value: total.toString(),
                 subtitle: 'All site visits',
@@ -1127,6 +1125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: DashboardCard(
+                height: 150,
                 title: 'Completed Visits',
                 value: completed.toString(),
                 subtitle:
@@ -1143,6 +1142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Expanded(
               child: DashboardCard(
+                height: 150,
                 title: 'Active Operations',
                 value: active.toString(),
                 subtitle: 'In progress now',
@@ -1153,6 +1153,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: DashboardCard(
+                height: 150,
                 title: 'Pending Queue',
                 value: pending.toString(),
                 subtitle: 'Awaiting assignment',
@@ -1164,346 +1165,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ],
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0);
-  }
-
-  Widget _buildDataCollectorCards() {
-    return Column(
-      children: [
-        // First row
-        Row(
-          children: [
-            Expanded(
-              child: DashboardCard(
-                title: 'Assigned',
-                value: _assigned.toString(),
-                icon: Icons.assignment_outlined,
-                color: AppColors.primaryBlue,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DashboardCard(
-                title: 'Today',
-                value: _today.toString(),
-                icon: Icons.today_outlined,
-                color: AppColors.primaryOrange,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // Second row
-        Row(
-          children: [
-            Expanded(
-              child: DashboardCard(
-                title: 'In Progress',
-                value: _inProgress.toString(),
-                icon: Icons.work_outline,
-                color: Colors.cyan,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DashboardCard(
-                title: 'Completed',
-                value: _completed.toString(),
-                icon: Icons.check_circle_outline,
-                color: AppColors.accentGreen,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // Third row
-        Row(
-          children: [
-            Expanded(
-              child: DashboardCard(
-                title: 'Overdue',
-                value: _overdue.toString(),
-                icon: Icons.warning_amber_rounded,
-                color: AppColors.accentRed,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DashboardCard(
-                title: 'Earnings',
-                value: _walletService.formatCurrency(_earnings),
-                icon: Icons.account_balance_wallet_outlined,
-                color: Colors.purple,
-              ),
-            ),
-          ],
-        ),
-      ],
-    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0);
-  }
-
-  Widget _buildLocationCard() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade600,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.location_on,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Location Sharing',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue.shade900,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _hasLocation ? Colors.green : Colors.red,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _hasLocation
-                                    ? Icons.check_circle
-                                    : Icons.cancel,
-                                size: 12,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _hasLocation ? 'Enabled' : 'Not Set',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Share your location to appear on the team map and receive nearby site visit assignments.',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.blue.shade800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (_hasLocation && _currentLocation != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Current Location:',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue.shade900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Lat: ${_currentLocation!['latitude']!.toStringAsFixed(6)}, '
-                    'Lng: ${_currentLocation!['longitude']!.toStringAsFixed(6)}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      color: Colors.blue.shade700,
-                    ),
-                  ),
-                  if (_locationLastUpdated != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Last Updated: ${DateFormat('MMM dd, yyyy h:mm:ss a').format(DateTime.parse(_locationLastUpdated!))}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: Colors.blue.shade600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _isUpdatingLocation ? null : _updateLocation,
-              icon: _isUpdatingLocation
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.refresh),
-              label: Text(
-                _isUpdatingLocation
-                    ? 'Updating...'
-                    : (_hasLocation ? 'Update Location' : 'Share Location'),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPerformanceBanner() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.orange.shade50, Colors.amber.shade50],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Row(
-        children: [
-          if (_streak > 0) ...[
-            Row(
-              children: [
-                Icon(
-                  Icons.local_fire_department,
-                  color: Colors.orange.shade600,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$_streak Day Streak',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.orange.shade900,
-                      ),
-                    ),
-                    Text(
-                      'Keep it up!',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: Colors.orange.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(width: 24),
-          ],
-          if (_averageVisitTime != null) ...[
-            Row(
-              children: [
-                Icon(Icons.access_time, color: Colors.blue.shade600, size: 24),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Avg: $_averageVisitTime min',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue.shade900,
-                      ),
-                    ),
-                    Text(
-                      'Per visit',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: Colors.blue.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(width: 24),
-          ],
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${_completionRateDC.toStringAsFixed(0)}%',
-                style: GoogleFonts.poppins(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade900,
-                ),
-              ),
-              Text(
-                'Completion Rate',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: Colors.orange.shade700,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildTabsSection() {
@@ -2315,7 +1976,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  visit.siteName ?? 'Unknown Site',
+                  visit.siteName,
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -2324,7 +1985,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${visit.locality ?? ''}, ${visit.state ?? ''}',
+                  '${visit.locality}, ${visit.state}',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: AppColors.textLight,

@@ -47,9 +47,12 @@ extension SiteVisitSync on SiteVisit {
     };
 
     // Merge notes - combine if different
-    final mergedNotes = notes.isNotEmpty && other.notes.isNotEmpty && notes != other.notes
+    final mergedNotes =
+        notes.isNotEmpty && other.notes.isNotEmpty && notes != other.notes
         ? '$notes\n${other.notes}'
-        : other.notes.isNotEmpty ? other.notes : notes;
+        : other.notes.isNotEmpty
+        ? other.notes
+        : notes;
 
     // Create new instance with merged data
     return SiteVisit(

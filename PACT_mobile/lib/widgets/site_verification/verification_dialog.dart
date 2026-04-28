@@ -1,4 +1,4 @@
-part of 'site_verification_screen.dart';
+part of '../../screens/site_verification_screen.dart';
 
 /// Verification Dialog with Visit Date Input
 /// Supports both single date (non-DM) and date range (DM activities like GFA, CBT, EBSFP)
@@ -26,6 +26,11 @@ class _VerificationDialogState extends State<_VerificationDialog> {
   DateTime? _distributionEnd;
   DateTime? _followUpDate; // For multi-visit activities
   bool _requiresFollowUp = false; // For multi-visit activities
+
+  /// Date-only "today" so picker boundaries are calendar-based (fixes mobile
+  /// issue where time component prevented selecting expected date).
+  static DateTime get _today =>
+      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
   @override
   void dispose() {
@@ -257,13 +262,11 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                           onTap: () async {
                             final date = await showDatePicker(
                               context: context,
-                              initialDate: _distributionStart ?? DateTime.now(),
-                              firstDate: DateTime.now().subtract(
+                              initialDate: _distributionStart ?? _today,
+                              firstDate: _today.subtract(
                                 const Duration(days: 30),
                               ),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
-                              ),
+                              lastDate: _today.add(const Duration(days: 365)),
                             );
                             if (date != null) {
                               setState(() => _distributionStart = date);
@@ -286,11 +289,9 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                               initialDate:
                                   _distributionEnd ??
                                   _distributionStart ??
-                                  DateTime.now(),
-                              firstDate: _distributionStart ?? DateTime.now(),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
-                              ),
+                                  _today,
+                              firstDate: _distributionStart ?? _today,
+                              lastDate: _today.add(const Duration(days: 365)),
                             );
                             if (date != null) {
                               setState(() => _distributionEnd = date);
@@ -313,15 +314,13 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                           onTap: () async {
                             final firstDate =
                                 _distributionStart ??
-                                DateTime.now().subtract(
-                                  const Duration(days: 30),
-                                );
+                                _today.subtract(const Duration(days: 30));
                             final lastDate =
                                 _distributionEnd ??
-                                DateTime.now().add(const Duration(days: 365));
+                                _today.add(const Duration(days: 365));
                             final date = await showDatePicker(
                               context: context,
-                              initialDate: _visitDate ?? DateTime.now(),
+                              initialDate: _visitDate ?? _today,
                               firstDate: firstDate,
                               lastDate: lastDate,
                             );
@@ -349,15 +348,11 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                           onTap: () async {
                             final date = await showDatePicker(
                               context: context,
-                              initialDate: _visitDate ?? DateTime.now(),
+                              initialDate: _visitDate ?? _today,
                               firstDate: isUrgent
-                                  ? DateTime.now()
-                                  : DateTime.now().subtract(
-                                      const Duration(days: 30),
-                                    ),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
-                              ),
+                                  ? _today
+                                  : _today.subtract(const Duration(days: 30)),
+                              lastDate: _today.add(const Duration(days: 365)),
                             );
                             if (date != null) {
                               setState(() => _visitDate = date);
@@ -420,13 +415,9 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                                     (_visitDate?.add(
                                           const Duration(days: 30),
                                         ) ??
-                                        DateTime.now().add(
-                                          const Duration(days: 30),
-                                        )),
-                                firstDate: _visitDate ?? DateTime.now(),
-                                lastDate: DateTime.now().add(
-                                  const Duration(days: 365),
-                                ),
+                                        _today.add(const Duration(days: 30))),
+                                firstDate: _visitDate ?? _today,
+                                lastDate: _today.add(const Duration(days: 365)),
                               );
                               if (date != null) {
                                 setState(() => _followUpDate = date);
@@ -453,11 +444,9 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                           onTap: () async {
                             final date = await showDatePicker(
                               context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 1),
-                              ),
+                              initialDate: _today,
+                              firstDate: _today,
+                              lastDate: _today.add(const Duration(days: 1)),
                             );
                             if (date != null) {
                               setState(() => _visitDate = date);
@@ -479,13 +468,11 @@ class _VerificationDialogState extends State<_VerificationDialog> {
                           onTap: () async {
                             final date = await showDatePicker(
                               context: context,
-                              initialDate: _visitDate ?? DateTime.now(),
-                              firstDate: DateTime.now().subtract(
+                              initialDate: _visitDate ?? _today,
+                              firstDate: _today.subtract(
                                 const Duration(days: 30),
                               ),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
-                              ),
+                              lastDate: _today.add(const Duration(days: 365)),
                             );
                             if (date != null) {
                               setState(() => _visitDate = date);
@@ -833,4 +820,3 @@ class _VerificationDialogState extends State<_VerificationDialog> {
     );
   }
 }
-

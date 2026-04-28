@@ -9,6 +9,7 @@ class IncidentReport {
   DateTime incidentDate;
   List<String>? witnesses;
   String? immediateActionTaken;
+  List<String>? evidencePhotosBase64;
   bool requiresFollowUp;
   DateTime createdAt;
   DateTime updatedAt;
@@ -24,6 +25,7 @@ class IncidentReport {
     required this.incidentDate,
     this.witnesses,
     this.immediateActionTaken,
+    this.evidencePhotosBase64,
     required this.requiresFollowUp,
     required this.createdAt,
     required this.updatedAt,
@@ -41,6 +43,7 @@ class IncidentReport {
       'incident_date': incidentDate.toIso8601String(),
       'witnesses': witnesses,
       'immediate_action_taken': immediateActionTaken,
+      'evidence_photos_base64': evidencePhotosBase64,
       'requires_follow_up': requiresFollowUp,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
@@ -57,8 +60,13 @@ class IncidentReport {
       severity: json['severity'],
       location: json['location'],
       incidentDate: DateTime.parse(json['incident_date']),
-      witnesses: json['witnesses'] != null ? List<String>.from(json['witnesses']) : null,
+      witnesses: json['witnesses'] != null
+          ? List<String>.from(json['witnesses'])
+          : null,
       immediateActionTaken: json['immediate_action_taken'],
+      evidencePhotosBase64: json['evidence_photos_base64'] != null
+          ? List<String>.from(json['evidence_photos_base64'])
+          : null,
       requiresFollowUp: json['requires_follow_up'] ?? false,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),

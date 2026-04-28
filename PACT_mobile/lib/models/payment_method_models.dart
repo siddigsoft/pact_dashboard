@@ -33,7 +33,8 @@ enum PaymentType {
 class PaymentMethod {
   final String id;
   final String type; // 'bank', 'mobile_money', 'card'
-  final String name; // Display name (bank name, provider name, or cardholder name)
+  final String
+  name; // Display name (bank name, provider name, or cardholder name)
   final bool isDefault;
   final String userId;
   final DateTime createdAt;
@@ -74,7 +75,7 @@ class PaymentMethod {
   factory PaymentMethod.fromJson(Map<String, dynamic> json) {
     // Get type first to help generate default name if needed
     final type = json['type']?.toString() ?? 'bank';
-    
+
     // Generate default name based on type if name is null
     String name = json['name']?.toString() ?? '';
     if (name.isEmpty) {
@@ -92,7 +93,7 @@ class PaymentMethod {
           name = 'Payment Method';
       }
     }
-    
+
     return PaymentMethod(
       id: json['id']?.toString() ?? '',
       type: type,
@@ -113,18 +114,18 @@ class PaymentMethod {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'name': name,
-        'is_default': isDefault,
-        'user_id': userId,
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt?.toIso8601String(),
-        'bank_name': bankName,
-        'account_number': accountNumber,
-        'phone_number': phoneNumber,
-        'card_number': cardNumber,
-      };
+    'id': id,
+    'type': type,
+    'name': name,
+    'is_default': isDefault,
+    'user_id': userId,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt?.toIso8601String(),
+    'bank_name': bankName,
+    'account_number': accountNumber,
+    'phone_number': phoneNumber,
+    'card_number': cardNumber,
+  };
 
   /// Get masked details string for display
   String get maskedDetails {
@@ -227,13 +228,13 @@ class CreatePaymentMethodRequest {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'type': _paymentTypeToJson(type),
-        'name': name,
-        'bank_name': bankName,
-        'account_number': accountNumber,
-        'phone_number': phoneNumber,
-        'card_number': cardNumber,
-      };
+    'type': _paymentTypeToJson(type),
+    'name': name,
+    'bank_name': bankName,
+    'account_number': accountNumber,
+    'phone_number': phoneNumber,
+    'card_number': cardNumber,
+  };
 }
 
 /// Validation result for payment method

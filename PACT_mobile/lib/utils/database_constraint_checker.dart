@@ -11,13 +11,14 @@ class DatabaseConstraintChecker {
 
     // 1. Check location_logs table
     results['location_logs_table'] = await _checkTable('location_logs');
-    results['location_logs_insert'] = await _checkInsertPermission('location_logs', {
-      'visit_id': '00000000-0000-0000-0000-000000000000',
-      'user_id': _supabase.auth.currentUser?.id,
-      'latitude': 0.0,
-      'longitude': 0.0,
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    results['location_logs_insert'] =
+        await _checkInsertPermission('location_logs', {
+          'visit_id': '00000000-0000-0000-0000-000000000000',
+          'user_id': _supabase.auth.currentUser?.id,
+          'latitude': 0.0,
+          'longitude': 0.0,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
 
     // 2. Check equipment table
     results['equipment_table'] = await _checkTable('equipment');
@@ -45,16 +46,19 @@ class DatabaseConstraintChecker {
 
     // 6. Check site_locations table (actual site coordinate capture)
     results['site_locations_table'] = await _checkTable('site_locations');
-    results['site_locations_insert'] = await _checkInsertPermission('site_locations', {
-      // Note: This will likely fail FK unless a dummy site exists; that's fine for permission probing
-      'site_id': '00000000-0000-0000-0000-000000000000',
-      'user_id': _supabase.auth.currentUser?.id,
-      'latitude': 0.0,
-      'longitude': 0.0,
-      'accuracy': 1.0,
-      'recorded_at': DateTime.now().toIso8601String(),
-      'notes': 'TEST - DELETE ME',
-    });
+    results['site_locations_insert'] = await _checkInsertPermission(
+      'site_locations',
+      {
+        // Note: This will likely fail FK unless a dummy site exists; that's fine for permission probing
+        'site_id': '00000000-0000-0000-0000-000000000000',
+        'user_id': _supabase.auth.currentUser?.id,
+        'latitude': 0.0,
+        'longitude': 0.0,
+        'accuracy': 1.0,
+        'recorded_at': DateTime.now().toIso8601String(),
+        'notes': 'TEST - DELETE ME',
+      },
+    );
 
     // 7. Check authentication
     results['user_authenticated'] = _supabase.auth.currentUser != null;
@@ -87,21 +91,25 @@ class DatabaseConstraintChecker {
   }
 
   static Future<bool> _checkInsertPermission(
-      String tableName, Map<String, dynamic> testData) async {
+    String tableName,
+    Map<String, dynamic> testData,
+  ) async {
     try {
       // Try to insert a test record
       await _supabase.from(tableName).insert(testData).select();
       print('✅ Insert permission granted for "$tableName"');
-      
+
       // Try to delete the test record
       await _supabase.from(tableName).delete().eq('id', testData['id'] ?? '');
       return true;
     } catch (e) {
       final errorMsg = e.toString();
-      
+
       // Check for specific errors
       if (errorMsg.contains('foreign key constraint')) {
-        print('⚠️  Insert into "$tableName" blocked by foreign key (expected for test data)');
+        print(
+          '⚠️  Insert into "$tableName" blocked by foreign key (expected for test data)',
+        );
         return true; // This is actually OK - table exists and accepts inserts
       } else if (errorMsg.contains('violates not-null constraint')) {
         print('⚠️  Insert into "$tableName" blocked by NOT NULL constraint');
@@ -110,10 +118,12 @@ class DatabaseConstraintChecker {
         print('❌ Insert into "$tableName" blocked by RLS policy');
         return false;
       } else if (errorMsg.contains('duplicate key value')) {
-        print('✅ Insert permission granted for "$tableName" (duplicate key expected)');
+        print(
+          '✅ Insert permission granted for "$tableName" (duplicate key expected)',
+        );
         return true;
       }
-      
+
       print('❌ Insert permission denied for "$tableName": $e');
       return false;
     }
@@ -123,17 +133,18 @@ class DatabaseConstraintChecker {
     try {
       // Try to select first, then update
       final records = await _supabase.from(tableName).select('id').limit(1);
-      
+
       if (records.isEmpty) {
         print('⚠️  No records in "$tableName" to test update permission');
         return true; // Can't test, but not necessarily a failure
       }
-      
+
       final recordId = records.first['id'];
-      await _supabase.from(tableName)
+      await _supabase
+          .from(tableName)
           .update({'last_modified': DateTime.now().toIso8601String()})
           .eq('id', recordId);
-      
+
       print('✅ Update permission granted for "$tableName"');
       return true;
     } catch (e) {
@@ -242,14 +253,20 @@ END \$\$;
 
   /// Check if all critical tables exist
   static Future<bool> allTablesExist() async {
-    final tables = ['location_logs', 'equipment', 'site_visits', 'reports', 'report_photos'];
-    
+    final tables = [
+      'location_logs',
+      'equipment',
+      'site_visits',
+      'reports',
+      'report_photos',
+    ];
+
     for (final table in tables) {
       if (!await _checkTable(table)) {
         return false;
       }
     }
-    
+
     return true;
   }
 }

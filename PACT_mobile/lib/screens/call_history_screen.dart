@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../widgets/reusable_app_bar.dart';
 import '../services/call_history_service.dart';
-import '../services/webrtc_service.dart';
+import '../services/chat_service.dart';
+import '../models/chat.dart';
+import '../screens/agora_call_screen.dart';
 
 class CallHistoryScreen extends StatefulWidget {
   const CallHistoryScreen({super.key});
@@ -14,7 +18,6 @@ class CallHistoryScreen extends StatefulWidget {
 
 class _CallHistoryScreenState extends State<CallHistoryScreen> {
   final CallHistoryService _callHistoryService = CallHistoryService();
-  final WebRTCService _webrtcService = WebRTCService();
   final TextEditingController _searchController = TextEditingController();
 
   late Future<List<Map<String, dynamic>>> _callHistory;
@@ -28,22 +31,28 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   }
 
   void _loadCallHistory() {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    debugPrint(
+      '[CallHistory] Loading history for userId: $userId, filterType: $_filterType',
+    );
+
     setState(() {
       _callHistory = _callHistoryService.getCallHistory(
-        userId: _webrtcService.userId ?? '',
+        userId: userId,
         filterType: _filterType != 'all' ? _filterType : null,
       );
     });
   }
 
   void _performSearch(String query) {
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
     setState(() {
       _searchQuery = query;
       if (query.isEmpty) {
         _loadCallHistory();
       } else {
         _callHistory = _callHistoryService.searchCallHistory(
-          userId: _webrtcService.userId ?? '',
+          userId: userId,
           query: query,
         );
       }
@@ -54,18 +63,6 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(
-          'Call History',
-          style: GoogleFonts.poppins(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: AppColors.primaryBlue,
-        elevation: 0,
-      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -213,18 +210,22 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   }
 
   Widget _buildCallListItem(BuildContext context, Map<String, dynamic> call) {
-    final callType = call['call_type'] as String?;
     final status = call['status'] as String?;
+    final callerId = call['caller_id'] as String?;
     final callerName = call['caller_name'] ?? 'Unknown';
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+
+    // Determine if this is an incoming or outgoing call based on caller_id
+    final isIncoming = callerId != currentUserId;
+
+    // For display, always show the remote person's name (caller_name is always the other person)
+    final displayName = callerName;
+
     final startedAt = DateTime.parse(call['started_at']);
     final durationSeconds = call['duration_seconds'] ?? 0;
     final qualityRating = call['quality_rating'] as int?;
 
-    final icon = callType == 'incoming'
-        ? Icons.call_received
-        : callType == 'outgoing'
-        ? Icons.call_made
-        : Icons.call_missed;
+    final icon = isIncoming ? Icons.call_received : Icons.call_made;
 
     final iconColor = status == 'completed'
         ? Colors.green
@@ -238,7 +239,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
         child: Icon(icon, color: iconColor),
       ),
       title: Text(
-        callerName,
+        displayName,
         style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
       ),
       subtitle: Row(
@@ -329,12 +330,25 @@ class CallHistoryDetailsScreen extends StatefulWidget {
 
 class _CallHistoryDetailsScreenState extends State<CallHistoryDetailsScreen> {
   final CallHistoryService _callHistoryService = CallHistoryService();
+  final ChatService _chatService = ChatService();
   final TextEditingController _noteController = TextEditingController();
   late Future<List<Map<String, dynamic>>> _notes;
 
   @override
   void initState() {
     super.initState();
+    // Initialize _notes Future that converts string to list format
+    _notes = _callHistoryService.getCallNotes(widget.callHistory['id']).then((
+      noteString,
+    ) {
+      // Convert single note string to list format for FutureBuilder
+      if (noteString.isEmpty) {
+        return [];
+      }
+      return [
+        {'text': noteString, 'timestamp': DateTime.now().toString()},
+      ];
+    });
     _loadNotes();
   }
 
@@ -367,22 +381,118 @@ class _CallHistoryDetailsScreenState extends State<CallHistoryDetailsScreen> {
     }
   }
 
+  Future<void> _initiateCall() async {
+    try {
+      final receiverId = widget.callHistory['receiver_id'] as String?;
+      final remoteUserName =
+          widget.callHistory['caller_name'] ??
+          widget.callHistory['receiver_name'] as String?;
+
+      if (receiverId == null || receiverId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot make call: Remote user not found'),
+          ),
+        );
+        return;
+      }
+
+      debugPrint(
+        '[CallHistory] Initiating call with $remoteUserName ($receiverId)',
+      );
+
+      // Navigate to call screen
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AgoraCallScreen(
+              channelName:
+                  'call-$receiverId-${DateTime.now().millisecondsSinceEpoch}',
+              remoteUserId: receiverId,
+              remoteUserName: remoteUserName ?? 'Unknown',
+              isAudioOnly: true,
+              isOutgoing: true,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[CallHistory] Error initiating call: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _initiateMessage() async {
+    try {
+      final receiverId = widget.callHistory['receiver_id'] as String?;
+      final remoteUserName =
+          widget.callHistory['caller_name'] ??
+          widget.callHistory['receiver_name'] as String?;
+
+      if (receiverId == null || receiverId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot message: Remote user not found'),
+          ),
+        );
+        return;
+      }
+
+      debugPrint(
+        '[CallHistory] Opening message with $remoteUserName ($receiverId)',
+      );
+
+      // Try to find existing chat or create new one
+      final chats = await _chatService.getUserChats();
+      Chat? existingChat;
+
+      for (final chat in chats) {
+        if (chat.otherParticipantId == receiverId) {
+          existingChat = chat;
+          break;
+        }
+      }
+
+      if (mounted) {
+        if (existingChat != null) {
+          // Open existing chat
+          Navigator.pushNamed(context, '/chat', arguments: existingChat);
+        } else {
+          // Create new private chat
+          final newChat = await _chatService.createPrivateChat(
+            receiverId,
+            chatName: remoteUserName ?? 'Unknown',
+          );
+
+          if (newChat != null && mounted) {
+            Navigator.pushNamed(context, '/chat', arguments: newChat);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[CallHistory] Error initiating message: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(
-          'Call Details',
-          style: GoogleFonts.poppins(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: AppColors.primaryBlue,
-      ),
-      body: ListView(
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReusableAppBar(
+              title: 'Call Details',
+              showBackButton: true,
+            ),
+            Expanded(
+              child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Call details card
@@ -433,6 +543,43 @@ class _CallHistoryDetailsScreenState extends State<CallHistoryDetailsScreen> {
                 ],
               ),
             ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Action buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // Call button
+              ElevatedButton.icon(
+                onPressed: _initiateCall,
+                icon: const Icon(Icons.call),
+                label: const Text('Call'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+              // Message button
+              ElevatedButton.icon(
+                onPressed: _initiateMessage,
+                icon: const Icon(Icons.message),
+                label: const Text('Message'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
 
           const SizedBox(height: 24),
@@ -514,6 +661,10 @@ class _CallHistoryDetailsScreenState extends State<CallHistoryDetailsScreen> {
             },
           ),
         ],
+      ),
+            ),
+          ],
+        ),
       ),
     );
   }

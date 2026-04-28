@@ -5,7 +5,7 @@ import 'package:pact_mobile/models/site_visit.dart';
 void main() {
   group('NearestSiteVisits', () {
     final testLocation = Location(latitude: 0, longitude: 0);
-    
+
     late List<SiteVisit> testVisits;
 
     setUp(() {
@@ -55,10 +55,7 @@ void main() {
       expect(result[1].visit.id, '2');
 
       // Distances should be in ascending order
-      expect(
-        result[0].distanceMeters < result[1].distanceMeters,
-        true,
-      );
+      expect(result[0].distanceMeters < result[1].distanceMeters, true);
     });
 
     test('findNearest should respect maxRadiusMeters', () {
@@ -85,14 +82,13 @@ void main() {
       expect(result.length, 2);
 
       // Verify no assigned visits are included
-      expect(
-        result.every((v) => v.visit.status == 'available'),
-        true,
-      );
+      expect(result.every((v) => v.visit.status == 'available'), true);
 
       // Verify no null coordinates are included
       expect(
-        result.every((v) => v.visit.latitude != null && v.visit.longitude != null),
+        result.every(
+          (v) => v.visit.latitude != null && v.visit.longitude != null,
+        ),
         true,
       );
     });

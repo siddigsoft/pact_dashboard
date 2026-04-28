@@ -11,10 +11,17 @@ import '../services/presence_service.dart';
 import '../services/webrtc_service.dart';
 import '../services/agora_call_service.dart';
 import '../services/chat_service.dart';
+import '../services/call_history_service.dart'; // Phase 8b
+import '../models/call_state.dart';
+import '../widgets/standard_back_button.dart';
+import '../widgets/reusable_app_bar.dart';
+import '../widgets/dnd_widgets.dart';
 import 'agora_call_screen.dart';
 import 'missed_calls_screen.dart';
-import 'call_history_screen.dart';
+import 'calls_tabs_screen.dart';
 import 'call_analytics_dashboard_screen.dart';
+import 'chat_list_screen.dart';
+import '../widgets/cached_notifications_view.dart';
 
 class CommunicationsScreen extends StatefulWidget {
   const CommunicationsScreen({super.key});
@@ -29,6 +36,8 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   final WebRTCService _webrtcService = WebRTCService();
   final AgoraCallService _agoraService = AgoraCallService();
   final ChatService _chatService = ChatService();
+  final CallHistoryService _callHistoryService =
+      CallHistoryService(); // Phase 8b
   final TextEditingController _searchController = TextEditingController();
 
   late TabController _tabController;
@@ -38,10 +47,16 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
   List<UserPresence> _allUsers = [];
   List<UserPresence> _filteredUsers = [];
+  // ignore: unused_field
   bool _isLoading = true;
   bool _isOnline = true;
   String _searchQuery = '';
   int _selectedTabIndex = 0;
+
+  // Phase 8b: Favorites, missed calls, and unread tracking
+  final Set<String> _favoriteUserIds = {}; // IDs of favorited users
+  List<CallHistoryEntry> _recentMissedCalls = []; // Recent missed call entries
+  final Map<String, int> _unreadMessageCounts = {}; // userId -> count
 
   // Current user info for role-based calling
   String? _currentUserRole;
@@ -86,6 +101,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     _loadUsers();
     _subscribeToPresence();
     _subscribeToErrors();
+    _loadFavorites(); // Phase 8b
+    _loadMissedCalls(); // Phase 8b
+    _loadUnreadCounts(); // Phase 8b
     // Reset any stuck call states when entering the screen
     _resetStuckCallState();
   }
@@ -171,6 +189,81 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
   String _getCallRestrictionMessage(UserPresence targetUser) {
     return 'You can only call users from your state/hub or supervisors. ${targetUser.userName} is in a different area.';
+  }
+
+  /// Phase 8b: Load favorite users from local storage
+  Future<void> _loadFavorites() async {
+    try {
+      // TODO: Load from SharedPreferences or Hive
+      // For now, using in-memory set
+      setState(() {});
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error loading favorites: $e');
+    }
+  }
+
+  /// Phase 8b: Toggle user as favorite
+  Future<void> _toggleFavorite(UserPresence user) async {
+    try {
+      setState(() {
+        if (_favoriteUserIds.contains(user.odId)) {
+          _favoriteUserIds.remove(user.odId);
+        } else {
+          _favoriteUserIds.add(user.odId);
+        }
+      });
+      // TODO: Persist to storage
+      _showMessage(
+        _favoriteUserIds.contains(user.odId)
+            ? 'Added to favorites'
+            : 'Removed from favorites',
+      );
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error toggling favorite: $e');
+    }
+  }
+
+  /// Phase 8b: Load recent missed calls from history service
+  Future<void> _loadMissedCalls() async {
+    try {
+      await _callHistoryService.initialize();
+      if (mounted) {
+        setState(() {
+          _recentMissedCalls = _callHistoryService
+              .getMissedCalls()
+              .take(5)
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error loading missed calls: $e');
+    }
+  }
+
+  /// Phase 8b: Call back most recent missed caller (resolve to UserPresence if in list)
+  Future<void> _callBackMissedEntry(CallHistoryEntry entry) async {
+    final found = _allUsers.where((u) => u.odId == entry.remoteUserId).toList();
+    final user = found.isNotEmpty ? found.first : null;
+    if (user != null) {
+      _initiateCall(user);
+    } else {
+      _showMessage(
+        '${entry.remoteUserName} is not in your contacts. Open Missed Calls to try again.',
+        isError: true,
+      );
+    }
+  }
+
+  /// Phase 8b: Load unread message counts from chat service
+  Future<void> _loadUnreadCounts() async {
+    try {
+      // Note: For full implementation, iterate through all conversations
+      // and call _chatService.getUnreadCount(chatId) for each
+      // For now, display unread badges when there are pending messages
+      debugPrint('[CommunicationsScreen] Unread counts loading initialized');
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error loading unread counts: $e');
+    }
   }
 
   @override
@@ -539,41 +632,45 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   }
 
   Future<void> _initiateCall(UserPresence user) async {
+    debugPrint(
+      '[CALL_DEBUG] _initiateCall START for user: ${user.userName} (${user.odId})',
+    );
+
     if (!_isOnline) {
+      debugPrint('[CALL_DEBUG] BLOCKED: Device is OFFLINE');
       _showOfflineMessage('Calls require an internet connection');
       return;
     }
+    debugPrint('[CALL_DEBUG] ✓ Device is ONLINE');
 
     // Check role-based calling restrictions
     if (!_canCallUser(user)) {
+      debugPrint('[CALL_DEBUG] BLOCKED: Role-based restriction');
       _showMessage(_getCallRestrictionMessage(user), isError: true);
       return;
     }
-
-    // Check if target user is online
-    if (!user.isOnline) {
-      _showMessage(
-        '${user.userName} is offline. Send a message instead.',
-        isError: true,
-      );
-      return;
-    }
+    debugPrint('[CALL_DEBUG] ✓ Role check passed');
 
     if (user.isInCall) {
+      debugPrint('[CALL_DEBUG] BLOCKED: User is already in call');
       _showMessage(
         '${user.userName} is currently in another call',
         isError: true,
       );
       return;
     }
+    debugPrint('[CALL_DEBUG] ✓ User not in call');
 
     // Check if already in a call (Agora)
     if (_agoraService.isInCall) {
+      debugPrint('[CALL_DEBUG] BLOCKED: You are already in call');
       _showMessage('You are already in a call', isError: true);
       return;
     }
+    debugPrint('[CALL_DEBUG] ✓ You are not in call');
 
     HapticFeedback.mediumImpact();
+    debugPrint('[CALL_DEBUG] → Calling _agoraService.startCall()...');
 
     // Agora is initialized in main_screen; start call
     final result = await _agoraService.startCall(
@@ -583,7 +680,12 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       audioOnly: true,
     );
 
+    debugPrint(
+      '[CALL_DEBUG] startCall returned: success=${result.success}, channel=${result.channelName}, error=${result.error}',
+    );
+
     if (result.success && result.channelName != null && mounted) {
+      debugPrint('[CALL_DEBUG] ✓ SUCCESS - Navigating to AgoraCallScreen');
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => AgoraCallScreen(
@@ -597,8 +699,13 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         ),
       );
     } else if (!result.success && mounted) {
+      debugPrint('[CALL_DEBUG] ✗ FAILED: ${result.error}');
       final message = result.error ?? 'Could not start call. Please try again.';
       _showMessage(message, isError: true);
+    } else {
+      debugPrint(
+        '[CALL_DEBUG] ✗ FAILED: Not mounted or no channelName (mounted=$mounted, channelName=${result.channelName})',
+      );
     }
   }
 
@@ -614,14 +721,6 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
     if (!_canCallUser(user)) {
       _showMessage(_getCallRestrictionMessage(user), isError: true);
-      return;
-    }
-
-    if (!user.isOnline) {
-      _showMessage(
-        '${user.userName} is offline. Send a message instead.',
-        isError: true,
-      );
       return;
     }
 
@@ -689,9 +788,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         debugPrint('[CommunicationsScreen] Offline - looking for cached chat');
         final cachedChats = await _chatService.getCachedUserChats();
         final existingChat = cachedChats
-            .where(
-              (c) => c.participants.any((p) => p.userId == user.odId) ?? false,
-            )
+            .where((c) => c.participants.any((p) => p.userId == user.odId))
             .toList();
 
         if (existingChat.isNotEmpty && mounted) {
@@ -758,25 +855,91 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.backgroundGray,
-      appBar: _buildAppBar(),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildSearchBar(),
-            _buildTabBar(),
-            _buildOnlineIndicator(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primaryOrange,
+  /// Phase 8a: Show group call dialog to invite team members
+  Future<void> _showGroupCallDialog() async {
+    final List<UserPresence> selectedUsers = [];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(
+            'Start Team Call',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select team members to invite:',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (_allUsers.isEmpty)
+                  Center(
+                    child: Text(
+                      'No contacts available',
+                      style: GoogleFonts.poppins(color: Colors.grey[500]),
+                    ),
+                  )
+                else
+                  ...(_allUsers
+                          .where((u) => u.isOnline && !u.isInCall)
+                          .toList())
+                      .map(
+                        (user) => CheckboxListTile(
+                          title: Text(
+                            user.userName,
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                          subtitle: Text(
+                            user.role ?? 'User',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          value: selectedUsers.contains(user),
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked ?? false) {
+                                selectedUsers.add(user);
+                              } else {
+                                selectedUsers.remove(user);
+                              }
+                            });
+                          },
+                          activeColor: AppColors.primaryBlue,
+                        ),
                       ),
-                    )
-                  : _buildUsersList(),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: GoogleFonts.poppins()),
+            ),
+            ElevatedButton(
+              onPressed: selectedUsers.isEmpty
+                  ? null
+                  : () {
+                      _startGroupCall(selectedUsers);
+                      Navigator.pop(context);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                disabledBackgroundColor: Colors.grey[300],
+              ),
+              child: Text(
+                'Start Call (${selectedUsers.length})',
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -784,16 +947,104 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     );
   }
 
+  /// Phase 8a: Start group call with selected users using GroupCallService
+  Future<void> _startGroupCall(List<UserPresence> invitees) async {
+    try {
+      _showMessage(
+        'Group calls coming soon! First 1-on-1 communication framework in place.',
+      );
+      // TODO: Integrate GroupCallService for actual group calling
+      // final groupCallService = GroupCallService();
+      // final roomId = await groupCallService.createRoom('Team Call');
+      // await groupCallService.inviteUsers(invitees.map((u) => u.odId).toList());
+    } catch (e) {
+      _showMessage(
+        'Failed to start group call: ${e.toString()}',
+        isError: true,
+      );
+    }
+  }
+
+  bool _showingNotifications = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
+    final notificationTop = topInset + kToolbarHeight + 64;
+
+    return DefaultTabController(
+      length: 2,
+      child: Stack(
+        children: [
+          Scaffold(
+            backgroundColor: AppColors.backgroundGray,
+            body: Column(
+              children: [
+                ReusableAppBar(
+                  title: 'Communication',
+                  showBackButton: true,
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_active),
+                      tooltip: 'Show Missed Notifications',
+                      onPressed: () {
+                        setState(() {
+                          _showingNotifications = !_showingNotifications;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const TabBar(
+                  tabs: [
+                    Tab(text: 'Calls'),
+                    Tab(text: 'Messages'),
+                  ],
+                ),
+                const Expanded(
+                  child: TabBarView(
+                    children: [CallsTabsScreen(), ChatListScreen()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_showingNotifications)
+            Positioned(
+              top: notificationTop,
+              right: 16,
+              left: 16,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: CachedNotificationsView(
+                    onClose: () {
+                      setState(() {
+                        _showingNotifications = false;
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
   PreferredSizeWidget _buildAppBar() {
     final onlineCount = _allUsers.where((u) => u.isOnline).length;
 
     return AppBar(
       backgroundColor: AppColors.primaryBlue,
       elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => Navigator.pop(context),
-      ),
+      leading: const StandardBackButton(),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -815,6 +1066,16 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         ],
       ),
       actions: [
+        // DND Status Indicator
+        const DNDStatusIndicator(),
+        const SizedBox(width: 8),
+        // Group Call button (Phase 8a enhancement)
+        if (_agoraService.isReady)
+          IconButton(
+            icon: const Icon(Icons.group_add, color: Colors.white),
+            onPressed: _showGroupCallDialog,
+            tooltip: 'Start Team Call',
+          ),
         // Call readiness indicator
         Container(
           margin: const EdgeInsets.only(right: 8),
@@ -849,6 +1110,13 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
             ],
           ),
         ),
+        // DND Toggle Button
+        DNDToggleButton(
+          onChanged: (_) {
+            // Refresh UI to show updated DND status
+            setState(() {});
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.bar_chart, color: Colors.white),
           onPressed: () {
@@ -860,18 +1128,6 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
             );
           },
           tooltip: 'Call Analytics',
-        ),
-        IconButton(
-          icon: const Icon(Icons.history, color: Colors.white),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CallHistoryScreen(),
-              ),
-            );
-          },
-          tooltip: 'Call History',
         ),
         IconButton(
           icon: const Icon(Icons.call_missed, color: Colors.white),
@@ -894,6 +1150,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -930,6 +1187,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildTabBar() {
     return Container(
       color: Colors.white,
@@ -991,6 +1249,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildOnlineIndicator() {
     if (_isOnline) return const SizedBox.shrink();
 
@@ -1014,6 +1273,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildUsersList() {
     if (_filteredUsers.isEmpty) {
       return Center(
@@ -1078,10 +1338,72 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       color: AppColors.primaryOrange,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _filteredUsers.length,
+        itemCount:
+            _filteredUsers.length + (_recentMissedCalls.isNotEmpty ? 2 : 0),
         itemBuilder: (context, index) {
-          final user = _filteredUsers[index];
-          return _buildUserCard(user);
+          // Phase 8b: Missed calls banner (if not searching)
+          if (_recentMissedCalls.isNotEmpty &&
+              _searchQuery.isEmpty &&
+              index == 0) {
+            return Container(
+              margin: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                border: Border.all(color: Colors.red.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.missed_video_call, color: Colors.red.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${_recentMissedCalls.length} missed call${_recentMissedCalls.length > 1 ? 's' : ''}',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () =>
+                        _callBackMissedEntry(_recentMissedCalls.first),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                    ),
+                    child: Text(
+                      'Call Back',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // Adjust index after missed calls banner
+          int adjustedIndex = index;
+          if (_recentMissedCalls.isNotEmpty && _searchQuery.isEmpty) {
+            if (index == 1) {
+              return const Divider(height: 16, indent: 12, endIndent: 12);
+            }
+            adjustedIndex = index - 2;
+          }
+
+          if (adjustedIndex < _filteredUsers.length) {
+            final user = _filteredUsers[adjustedIndex];
+            return _buildUserCard(user);
+          }
+
+          return const SizedBox.shrink();
         },
       ),
     );
@@ -1191,6 +1513,23 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                                 ),
                               ),
                             ),
+                          // Phase 8b: Unread message badge
+                          if ((_unreadMessageCounts[user.odId] ?? 0) > 0)
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '${_unreadMessageCounts[user.odId]}',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -1238,41 +1577,55 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                     IconButton(
                       icon: Icon(
                         Icons.call,
-                        color: (user.isOnline && !user.isInCall && _isOnline)
+                        color: (_isOnline && !user.isInCall)
                             ? AppColors.primaryGreen
                             : Colors.grey.withOpacity(0.5),
                       ),
                       iconSize: 22,
-                      onPressed: (user.isOnline && !user.isInCall && _isOnline)
+                      onPressed: (_isOnline && !user.isInCall)
                           ? () => _initiateCall(user)
                           : null,
                       tooltip: !_isOnline
                           ? 'You are offline'
-                          : (!user.isOnline
-                                ? 'User is offline'
-                                : (user.isInCall
-                                      ? 'User is busy'
-                                      : 'Direct Call')),
+                          : (user.isInCall
+                                ? 'User is busy'
+                                : (user.isOnline
+                                      ? 'Direct Call'
+                                      : 'User may be offline – they will be notified if possible')),
                     ),
                     // Video Call button
                     IconButton(
                       icon: Icon(
                         Icons.video_camera_front,
-                        color: (user.isOnline && !user.isInCall && _isOnline)
+                        color: (_isOnline && !user.isInCall)
                             ? Colors.green
                             : Colors.grey.withOpacity(0.5),
                       ),
                       iconSize: 22,
-                      onPressed: (user.isOnline && !user.isInCall && _isOnline)
+                      onPressed: (_isOnline && !user.isInCall)
                           ? () => _initiateJitsiCall(user)
                           : null,
                       tooltip: !_isOnline
                           ? 'You are offline'
-                          : (!user.isOnline
-                                ? 'User is offline - send a message instead'
-                                : (user.isInCall
-                                      ? 'User is currently in a call'
-                                      : 'Video Call')),
+                          : (user.isInCall
+                                ? 'User is currently in a call'
+                                : (user.isOnline
+                                      ? 'Video Call'
+                                      : 'User may be offline – they will be notified if possible')),
+                    ),
+                    // Phase 8b: Favorite star button
+                    IconButton(
+                      icon: Icon(
+                        _favoriteUserIds.contains(user.odId)
+                            ? Icons.star
+                            : Icons.star_outline,
+                        color: _favoriteUserIds.contains(user.odId)
+                            ? Colors.amber
+                            : Colors.grey[400],
+                      ),
+                      iconSize: 20,
+                      onPressed: () => _toggleFavorite(user),
+                      tooltip: 'Add to favorites',
                     ),
                   ],
                 ),

@@ -8,12 +8,14 @@ class Profile {
   final String? phone;
   final String? avatarUrl;
   final String? employeeId;
-  final String role; // 'dataCollector', 'coordinator', 'supervisor', 'admin', etc.
+  final String
+  role; // 'dataCollector', 'coordinator', 'supervisor', 'admin', etc.
   final String status; // 'pending', 'approved', 'rejected'
   final String? stateId;
   final String? localityId;
   final String? hubId;
-  final Map<String, dynamic>? location; // {latitude, longitude, accuracy, lastUpdated, isSharing}
+  final Map<String, dynamic>?
+  location; // {latitude, longitude, accuracy, lastUpdated, isSharing}
   final bool locationSharing;
   final String availability; // 'online', 'offline', 'busy'
   final String? createdAt;
@@ -54,60 +56,60 @@ class Profile {
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) => Profile(
-        id: json['id'] as String,
-        fullName: json['fullName'] as String?,
-        username: json['username'] as String?,
-        email: json['email'] as String?,
-        phone: json['phone'] as String?,
-        avatarUrl: json['avatarUrl'] as String?,
-        employeeId: json['employeeId'] as String?,
-        role: json['role'] as String? ?? 'dataCollector',
-        status: json['status'] as String? ?? 'pending',
-        stateId: json['stateId'] as String?,
-        localityId: json['localityId'] as String?,
-        hubId: json['hubId'] as String?,
-        location: json['location'] as Map<String, dynamic>?,
-        locationSharing: json['locationSharing'] as bool? ?? false,
-        availability: json['availability'] as String? ?? 'offline',
-        createdAt: json['createdAt'] as String?,
-        updatedAt: json['updatedAt'] as String?,
-        lastActive: json['lastActive'] as String?,
-        fcmTokens: (json['fcmTokens'] as List<dynamic>?)
-            ?.map((e) => e as String)
-            .toList(),
-        classificationLevel: json['classificationLevel'] as String?,
-        roleScope: json['roleScope'] as String?,
-        hasRetainer: json['hasRetainer'] as bool?,
-        retainerAmountCents: (json['retainerAmountCents'] as num?)?.toInt(),
-        retainerCurrency: json['retainerCurrency'] as String?,
-      );
+    id: json['id'] as String,
+    fullName: json['fullName'] as String?,
+    username: json['username'] as String?,
+    email: json['email'] as String?,
+    phone: json['phone'] as String?,
+    avatarUrl: json['avatarUrl'] as String?,
+    employeeId: json['employeeId'] as String?,
+    role: json['role'] as String? ?? 'dataCollector',
+    status: json['status'] as String? ?? 'pending',
+    stateId: json['stateId'] as String?,
+    localityId: json['localityId'] as String?,
+    hubId: json['hubId'] as String?,
+    location: json['location'] as Map<String, dynamic>?,
+    locationSharing: json['locationSharing'] as bool? ?? false,
+    availability: json['availability'] as String? ?? 'offline',
+    createdAt: json['createdAt'] as String?,
+    updatedAt: json['updatedAt'] as String?,
+    lastActive: json['lastActive'] as String?,
+    fcmTokens: (json['fcmTokens'] as List<dynamic>?)
+        ?.map((e) => e as String)
+        .toList(),
+    classificationLevel: json['classificationLevel'] as String?,
+    roleScope: json['roleScope'] as String?,
+    hasRetainer: json['hasRetainer'] as bool?,
+    retainerAmountCents: (json['retainerAmountCents'] as num?)?.toInt(),
+    retainerCurrency: json['retainerCurrency'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'fullName': fullName,
-        'username': username,
-        'email': email,
-        'phone': phone,
-        'avatarUrl': avatarUrl,
-        'employeeId': employeeId,
-        'role': role,
-        'status': status,
-        'stateId': stateId,
-        'localityId': localityId,
-        'hubId': hubId,
-        'location': location,
-        'locationSharing': locationSharing,
-        'availability': availability,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-        'lastActive': lastActive,
-        'fcmTokens': fcmTokens,
-        'classificationLevel': classificationLevel,
-        'roleScope': roleScope,
-        'hasRetainer': hasRetainer,
-        'retainerAmountCents': retainerAmountCents,
-        'retainerCurrency': retainerCurrency,
-      };
+    'id': id,
+    'fullName': fullName,
+    'username': username,
+    'email': email,
+    'phone': phone,
+    'avatarUrl': avatarUrl,
+    'employeeId': employeeId,
+    'role': role,
+    'status': status,
+    'stateId': stateId,
+    'localityId': localityId,
+    'hubId': hubId,
+    'location': location,
+    'locationSharing': locationSharing,
+    'availability': availability,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+    'lastActive': lastActive,
+    'fcmTokens': fcmTokens,
+    'classificationLevel': classificationLevel,
+    'roleScope': roleScope,
+    'hasRetainer': hasRetainer,
+    'retainerAmountCents': retainerAmountCents,
+    'retainerCurrency': retainerCurrency,
+  };
 
   Profile copyWith({
     String? id,
@@ -182,20 +184,20 @@ class UserRole {
   });
 
   factory UserRole.fromJson(Map<String, dynamic> json) => UserRole(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        role: json['role'] as String,
-        assignedAt: json['assignedAt'] as String?,
-        assignedBy: json['assignedBy'] as String?,
-      );
+    id: json['id'] as String,
+    userId: json['userId'] as String,
+    role: json['role'] as String,
+    assignedAt: json['assignedAt'] as String?,
+    assignedBy: json['assignedBy'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'userId': userId,
-        'role': role,
-        'assignedAt': assignedAt,
-        'assignedBy': assignedBy,
-      };
+    'id': id,
+    'userId': userId,
+    'role': role,
+    'assignedAt': assignedAt,
+    'assignedBy': assignedBy,
+  };
 }
 
 /// Wallet - financial account per user
@@ -229,34 +231,34 @@ class Wallet {
   });
 
   factory Wallet.fromJson(Map<String, dynamic> json) => Wallet(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        currency: json['currency'] as String? ?? 'SDG',
-        balanceCents: (json['balanceCents'] as num?)?.toInt() ?? 0,
-        totalEarnedCents: (json['totalEarnedCents'] as num?)?.toInt() ?? 0,
-        totalPaidOutCents: (json['totalPaidOutCents'] as num?)?.toInt() ?? 0,
-        pendingPayoutCents: (json['pendingPayoutCents'] as num?)?.toInt() ?? 0,
-        balances: json['balances'] as Map<String, dynamic>?,
-        totalEarned: (json['totalEarned'] as num?)?.toDouble(),
-        totalWithdrawn: (json['totalWithdrawn'] as num?)?.toDouble(),
-        createdAt: json['createdAt'] as String?,
-        updatedAt: json['updatedAt'] as String?,
-      );
+    id: json['id'] as String,
+    userId: json['userId'] as String,
+    currency: json['currency'] as String? ?? 'SDG',
+    balanceCents: (json['balanceCents'] as num?)?.toInt() ?? 0,
+    totalEarnedCents: (json['totalEarnedCents'] as num?)?.toInt() ?? 0,
+    totalPaidOutCents: (json['totalPaidOutCents'] as num?)?.toInt() ?? 0,
+    pendingPayoutCents: (json['pendingPayoutCents'] as num?)?.toInt() ?? 0,
+    balances: json['balances'] as Map<String, dynamic>?,
+    totalEarned: (json['totalEarned'] as num?)?.toDouble(),
+    totalWithdrawn: (json['totalWithdrawn'] as num?)?.toDouble(),
+    createdAt: json['createdAt'] as String?,
+    updatedAt: json['updatedAt'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'userId': userId,
-        'currency': currency,
-        'balanceCents': balanceCents,
-        'totalEarnedCents': totalEarnedCents,
-        'totalPaidOutCents': totalPaidOutCents,
-        'pendingPayoutCents': pendingPayoutCents,
-        'balances': balances,
-        'totalEarned': totalEarned,
-        'totalWithdrawn': totalWithdrawn,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    'id': id,
+    'userId': userId,
+    'currency': currency,
+    'balanceCents': balanceCents,
+    'totalEarnedCents': totalEarnedCents,
+    'totalPaidOutCents': totalPaidOutCents,
+    'pendingPayoutCents': pendingPayoutCents,
+    'balances': balances,
+    'totalEarned': totalEarned,
+    'totalWithdrawn': totalWithdrawn,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 
   Wallet copyWith({
     String? id,
@@ -311,12 +313,7 @@ enum WalletTransactionType {
   earning,
 }
 
-enum WalletTransactionStatus {
-  pending,
-  posted,
-  reversed,
-  failed,
-}
+enum WalletTransactionStatus { pending, posted, reversed, failed }
 
 class WalletTransaction {
   final String id;
@@ -388,27 +385,27 @@ class WalletTransaction {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'walletId': walletId,
-        'userId': userId,
-        'amountCents': amountCents,
-        'currency': currency,
-        'type': type,
-        'status': status,
-        'createdAt': createdAt,
-        'postedAt': postedAt,
-        'memo': memo,
-        'relatedSiteVisitId': relatedSiteVisitId,
-        'visitCode': visitCode,
-        'amount': amount,
-        'siteVisitId': siteVisitId,
-        'withdrawalRequestId': withdrawalRequestId,
-        'description': description,
-        'metadata': metadata,
-        'balanceBefore': balanceBefore,
-        'balanceAfter': balanceAfter,
-        'createdBy': createdBy,
-      };
+    'id': id,
+    'walletId': walletId,
+    'userId': userId,
+    'amountCents': amountCents,
+    'currency': currency,
+    'type': type,
+    'status': status,
+    'createdAt': createdAt,
+    'postedAt': postedAt,
+    'memo': memo,
+    'relatedSiteVisitId': relatedSiteVisitId,
+    'visitCode': visitCode,
+    'amount': amount,
+    'siteVisitId': siteVisitId,
+    'withdrawalRequestId': withdrawalRequestId,
+    'description': description,
+    'metadata': metadata,
+    'balanceBefore': balanceBefore,
+    'balanceAfter': balanceAfter,
+    'createdBy': createdBy,
+  };
 
   WalletTransaction copyWith({
     String? id,
@@ -461,19 +458,9 @@ class WalletTransaction {
 }
 
 /// Payout/Withdrawal request
-enum PayoutMethod {
-  bank,
-  mobileMoney,
-  manual,
-}
+enum PayoutMethod { bank, mobileMoney, manual }
 
-enum PayoutStatus {
-  requested,
-  approved,
-  declined,
-  paid,
-  cancelled,
-}
+enum PayoutStatus { requested, approved, declined, paid, cancelled }
 
 class PayoutRequest {
   final String id;
@@ -481,7 +468,8 @@ class PayoutRequest {
   final int amountCents;
   final String method; // 'bank', 'mobile_money', 'manual'
   final Map<String, dynamic>? destination;
-  final String status; // 'requested', 'approved', 'declined', 'paid', 'cancelled'
+  final String
+  status; // 'requested', 'approved', 'declined', 'paid', 'cancelled'
   final String? requestedAt;
   final String? decidedAt;
   final String? decidedBy;
@@ -523,52 +511,52 @@ class PayoutRequest {
   });
 
   factory PayoutRequest.fromJson(Map<String, dynamic> json) => PayoutRequest(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        amountCents: (json['amountCents'] as num).toInt(),
-        method: json['method'] as String,
-        destination: json['destination'] as Map<String, dynamic>?,
-        status: json['status'] as String? ?? 'requested',
-        requestedAt: json['requestedAt'] as String?,
-        decidedAt: json['decidedAt'] as String?,
-        decidedBy: json['decidedBy'] as String?,
-        paidAt: json['paidAt'] as String?,
-        walletId: json['walletId'] as String?,
-        currency: json['currency'] as String? ?? 'SDG',
-        requestReason: json['requestReason'] as String?,
-        supervisorId: json['supervisorId'] as String?,
-        supervisorNotes: json['supervisorNotes'] as String?,
-        approvedAt: json['approvedAt'] as String?,
-        rejectedAt: json['rejectedAt'] as String?,
-        paymentMethod: json['paymentMethod'] as String?,
-        paymentDetails: json['paymentDetails'] as Map<String, dynamic>?,
-        createdAt: json['createdAt'] as String?,
-        updatedAt: json['updatedAt'] as String?,
-      );
+    id: json['id'] as String,
+    userId: json['userId'] as String,
+    amountCents: (json['amountCents'] as num).toInt(),
+    method: json['method'] as String,
+    destination: json['destination'] as Map<String, dynamic>?,
+    status: json['status'] as String? ?? 'requested',
+    requestedAt: json['requestedAt'] as String?,
+    decidedAt: json['decidedAt'] as String?,
+    decidedBy: json['decidedBy'] as String?,
+    paidAt: json['paidAt'] as String?,
+    walletId: json['walletId'] as String?,
+    currency: json['currency'] as String? ?? 'SDG',
+    requestReason: json['requestReason'] as String?,
+    supervisorId: json['supervisorId'] as String?,
+    supervisorNotes: json['supervisorNotes'] as String?,
+    approvedAt: json['approvedAt'] as String?,
+    rejectedAt: json['rejectedAt'] as String?,
+    paymentMethod: json['paymentMethod'] as String?,
+    paymentDetails: json['paymentDetails'] as Map<String, dynamic>?,
+    createdAt: json['createdAt'] as String?,
+    updatedAt: json['updatedAt'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'userId': userId,
-        'amountCents': amountCents,
-        'method': method,
-        'destination': destination,
-        'status': status,
-        'requestedAt': requestedAt,
-        'decidedAt': decidedAt,
-        'decidedBy': decidedBy,
-        'paidAt': paidAt,
-        'walletId': walletId,
-        'currency': currency,
-        'requestReason': requestReason,
-        'supervisorId': supervisorId,
-        'supervisorNotes': supervisorNotes,
-        'approvedAt': approvedAt,
-        'rejectedAt': rejectedAt,
-        'paymentMethod': paymentMethod,
-        'paymentDetails': paymentDetails,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    'id': id,
+    'userId': userId,
+    'amountCents': amountCents,
+    'method': method,
+    'destination': destination,
+    'status': status,
+    'requestedAt': requestedAt,
+    'decidedAt': decidedAt,
+    'decidedBy': decidedBy,
+    'paidAt': paidAt,
+    'walletId': walletId,
+    'currency': currency,
+    'requestReason': requestReason,
+    'supervisorId': supervisorId,
+    'supervisorNotes': supervisorNotes,
+    'approvedAt': approvedAt,
+    'rejectedAt': rejectedAt,
+    'paymentMethod': paymentMethod,
+    'paymentDetails': paymentDetails,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 
   PayoutRequest copyWith({
     String? id,
@@ -679,19 +667,19 @@ class UserClassificationRecord {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'userId': userId,
-        'classificationLevel': classificationLevel,
-        'roleScope': roleScope,
-        'hasRetainer': hasRetainer,
-        'retainerAmountCents': retainerAmountCents,
-        'retainerCurrency': retainerCurrency,
-        'effectiveFrom': effectiveFrom,
-        'effectiveUntil': effectiveUntil,
-        'isActive': isActive,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    'id': id,
+    'userId': userId,
+    'classificationLevel': classificationLevel,
+    'roleScope': roleScope,
+    'hasRetainer': hasRetainer,
+    'retainerAmountCents': retainerAmountCents,
+    'retainerCurrency': retainerCurrency,
+    'effectiveFrom': effectiveFrom,
+    'effectiveUntil': effectiveUntil,
+    'isActive': isActive,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 }
 
 /// User bank account (stored separately for security)
@@ -726,12 +714,12 @@ class UserBankAccount {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'userId': userId,
-        'accountName': accountName,
-        'accountNumber': accountNumber,
-        'branch': branch,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    'id': id,
+    'userId': userId,
+    'accountName': accountName,
+    'accountNumber': accountNumber,
+    'branch': branch,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 }

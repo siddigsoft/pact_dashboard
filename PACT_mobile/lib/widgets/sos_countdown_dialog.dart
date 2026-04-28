@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../theme/app_colors.dart';
 
 String _bi(String en, String ar) =>
     '\u2066$en\u2069 \u200B|\u200B \u2067$ar\u2069';
@@ -79,16 +82,16 @@ Future<Map<String, String>?> showSosCountdownDialog(
   List<Map<String, String>> buildContactOptions() {
     final options = <Map<String, String>>[];
     if (preferredContact != null &&
-        (preferredContact!['number'] ?? '').trim().isNotEmpty) {
-      options.add(preferredContact!);
+        (preferredContact['number'] ?? '').trim().isNotEmpty) {
+      options.add(preferredContact);
     }
     if (alternateContact != null &&
-        (alternateContact!['number'] ?? '').trim().isNotEmpty) {
+        (alternateContact['number'] ?? '').trim().isNotEmpty) {
       final alreadyAdded = options.any(
-        (option) => option['number'] == alternateContact!['number'],
+        (option) => option['number'] == alternateContact['number'],
       );
       if (!alreadyAdded) {
-        options.add(alternateContact!);
+        options.add(alternateContact);
       }
     }
     return options;
@@ -140,142 +143,317 @@ Future<Map<String, String>?> showSosCountdownDialog(
 
           return PopScope(
             canPop: false,
-            child: AlertDialog(
-              title: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(label('Emergency SOS', 'نداء استغاثة طارئ')),
+            child: Dialog.fullscreen(
+              backgroundColor: const Color(0xFF0A0A0A),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 16.0,
                   ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (contactOptions.length > 1)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: contactOptions.map((contact) {
-                        final isSelected =
-                            currentContact?['number'] == contact['number'];
-                        return OutlinedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              currentContact = contact;
-                              remaining = seconds;
-                            });
-                          },
-                          icon: Icon(
-                            isSelected
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_unchecked,
-                            size: 16,
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: isSelected
-                                ? Colors.white
-                                : Theme.of(context).colorScheme.primary,
-                            backgroundColor: isSelected
-                                ? Colors.red
-                                : Colors.transparent,
-                            side: BorderSide(
-                              color: isSelected
-                                  ? Colors.red
-                                  : Theme.of(context).dividerColor,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 32),
+                      // SOS PULSING ICON
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                                width: 140,
+                                height: 140,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: AppColors.accentRed.withOpacity(0.15),
+                                ),
+                              )
+                              .animate(onPlay: (c) => c.repeat())
+                              .scale(
+                                begin: const Offset(1, 1),
+                                end: const Offset(1.3, 1.3),
+                                duration: 1200.ms,
+                              )
+                              .fade(begin: 1.0, end: 0.0, duration: 1200.ms),
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.accentRed,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.accentRed.withOpacity(0.6),
+                                  blurRadius: 30,
+                                  spreadRadius: 10,
+                                ),
+                              ],
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                            child: const Center(
+                              child: Icon(
+                                Icons.sos_rounded,
+                                color: Colors.white,
+                                size: 54,
+                              ),
                             ),
                           ),
-                          label: Text(
-                            isSelected
-                                ? '${callButtonLabel(contact)} ${label('(Selected)', '(محدد)')}'
-                                : callButtonLabel(contact),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  if (contactOptions.length > 1) const SizedBox(height: 12),
-                  if (!hasContact)
-                    Text(
-                      label(
-                        'No emergency contact selected. You can cancel and open Safety Hub to choose manually.',
-                        'لم يتم تحديد جهة اتصال طوارئ. يمكنك الإلغاء وفتح مركز السلامة للاختيار يدويًا.',
+                        ],
                       ),
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  if (!hasContact) const SizedBox(height: 8),
-                  Text(
-                    [
-                      if (selectedName.isNotEmpty)
+                      const SizedBox(height: 48),
+
+                      // HUGE COUNTDOWN
+                      Text(
+                            '$remaining',
+                            style: GoogleFonts.manrope(
+                              fontSize: 96,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.0,
+                            ),
+                          )
+                          .animate(key: ValueKey(remaining))
+                          .scale(
+                            begin: const Offset(1.5, 1.5),
+                            end: const Offset(1, 1),
+                            duration: 300.ms,
+                          ),
+
+                      const SizedBox(height: 16),
+                      Text(
+                        label('EMERGENCY SOS', 'طوارئ SOS'),
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.accentRed,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
                         label(
-                          'Calling: ${currentContact!['name']!.trim()} [${sourceTag(currentContact!['source_key'])}]${(currentContact!['number'] ?? '').trim().isNotEmpty ? ' (${currentContact!['number']!.trim()})' : ''}',
-                          'سيتم الاتصال بـ: ${currentContact!['name']!.trim()} [${sourceTag(currentContact!['source_key'])}]${(currentContact!['number'] ?? '').trim().isNotEmpty ? ' (${currentContact!['number']!.trim()})' : ''}',
+                          'Calling emergency contact automatically...',
+                          'جاري الاتصال بجهة الطوارئ تلقائياً...',
                         ),
-                      label(
-                        'Starting emergency call in $remaining second${remaining == 1 ? '' : 's'}...',
-                        'بدء الاتصال بالطوارئ خلال $remaining ${remaining == 1 ? 'ثانية' : 'ثوانٍ'}...',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.white70,
+                        ),
                       ),
-                    ].join('\n\n'),
-                  ),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      value: progressValue.clamp(0, 1),
-                      minHeight: 6,
-                      backgroundColor: Colors.grey.shade300,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Colors.red,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                if (hasContact)
-                  TextButton(
-                    onPressed: () {
-                      HapticFeedback.selectionClick();
-                      final messenger = ScaffoldMessenger.maybeOf(
-                        dialogContext,
-                      );
-                      messenger?.showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            label(
-                              'Long press to call immediately.',
-                              'اضغط مطولاً لإجراء الاتصال فورًا.',
+
+                      const SizedBox(height: 48),
+
+                      // CONTACT SELECTOR CARDS
+                      if (contactOptions.length > 1) ...[
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            label('SELECT CONTACT', 'اختر جهة الاتصال'),
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white54,
+                              letterSpacing: 1.5,
                             ),
                           ),
-                          duration: const Duration(seconds: 2),
                         ),
-                      );
-                    },
-                    onLongPress: () async {
-                      HapticFeedback.heavyImpact();
-                      final contact = currentContact;
-                      if (contact == null) return;
-                      final confirmed = await confirmImmediateCall(
-                        dialogContext,
-                        contact,
-                      );
-                      if (!confirmed || !dialogContext.mounted) return;
-                      HapticFeedback.mediumImpact();
-                      Navigator.of(dialogContext).pop(contact);
-                    },
-                    child: Text(
-                      label('Long Press: Call Now', 'اضغط مطولاً: اتصال الآن'),
-                    ),
+                        const SizedBox(height: 16),
+                        ...contactOptions.map((contact) {
+                          final isSelected =
+                              currentContact?['number'] == contact['number'];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12.0),
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  currentContact = contact;
+                                  remaining = seconds; // Reset timer on switch
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppColors.accentRed.withOpacity(0.15)
+                                      : Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppColors.accentRed
+                                        : Colors.white12,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? AppColors.accentRed
+                                            : Colors.white12,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.person,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : Colors.white70,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            callButtonLabel(contact),
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                              color: isSelected
+                                                  ? Colors.white
+                                                  : Colors.white70,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            contact['name'] ?? '',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 13,
+                                              color: Colors.white54,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isSelected)
+                                      const Icon(
+                                        Icons.check_circle_rounded,
+                                        color: AppColors.accentRed,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ] else ...[
+                        // SINGLE CONTACT DISPLAY
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.contact_phone_rounded,
+                                color: Colors.white54,
+                                size: 32,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      currentContact?['name'] ?? '',
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 18,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      sourceTag(currentContact?['source_key']),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        color: AppColors.accentRed,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      const Spacer(),
+
+                      // GIANT CALL NOW BUTTON
+                      if (hasContact)
+                        SizedBox(
+                          width: double.infinity,
+                          height: 64,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentRed,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              elevation: 8,
+                              shadowColor: AppColors.accentRed.withOpacity(0.5),
+                            ),
+                            onPressed: () async {
+                              HapticFeedback.heavyImpact();
+                              final contact = currentContact;
+                              if (contact == null) return;
+                              final confirmed = await confirmImmediateCall(
+                                dialogContext,
+                                contact,
+                              );
+                              if (!confirmed || !dialogContext.mounted) return;
+                              HapticFeedback.mediumImpact();
+                              Navigator.of(dialogContext).pop(contact);
+                            },
+                            child: Text(
+                              label('CALL IMMEDIATELY', 'اتصال فوراً'),
+                              style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      const SizedBox(height: 24),
+
+                      // DISCRETE CANCEL BUTTON
+                      TextButton(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.of(dialogContext).pop(null);
+                        },
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 60),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                        ),
+                        child: Text(
+                          label('CANCEL', 'إلغاء'),
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white54,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                   ),
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(null),
-                  child: Text(label('Cancel', 'إلغاء')),
                 ),
-              ],
+              ),
             ),
           );
         },

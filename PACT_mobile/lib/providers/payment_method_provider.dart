@@ -15,7 +15,8 @@ final paymentMethodServiceProvider = Provider<PaymentMethodService>((ref) {
 });
 
 /// Payment methods notifier
-class PaymentMethodsNotifier extends StateNotifier<AsyncValue<List<PaymentMethod>>> {
+class PaymentMethodsNotifier
+    extends StateNotifier<AsyncValue<List<PaymentMethod>>> {
   PaymentMethodsNotifier(this._service) : super(const AsyncValue.loading()) {
     loadPaymentMethods();
   }
@@ -63,15 +64,19 @@ class PaymentMethodsNotifier extends StateNotifier<AsyncValue<List<PaymentMethod
 }
 
 /// Provider for payment methods list
-final paymentMethodsProvider = StateNotifierProvider<PaymentMethodsNotifier, AsyncValue<List<PaymentMethod>>>((ref) {
-  final service = ref.watch(paymentMethodServiceProvider);
-  return PaymentMethodsNotifier(service);
-});
+final paymentMethodsProvider =
+    StateNotifierProvider<
+      PaymentMethodsNotifier,
+      AsyncValue<List<PaymentMethod>>
+    >((ref) {
+      final service = ref.watch(paymentMethodServiceProvider);
+      return PaymentMethodsNotifier(service);
+    });
 
 /// Provider for default payment method
 final defaultPaymentMethodProvider = Provider<PaymentMethod?>((ref) {
   final paymentMethodsAsync = ref.watch(paymentMethodsProvider);
-  
+
   return paymentMethodsAsync.whenOrNull(
     data: (methods) {
       try {
@@ -84,61 +89,57 @@ final defaultPaymentMethodProvider = Provider<PaymentMethod?>((ref) {
 });
 
 /// Provider for payment methods by type
-final paymentMethodsByTypeProvider = Provider.family<List<PaymentMethod>, PaymentType>((ref, type) {
-  final paymentMethodsAsync = ref.watch(paymentMethodsProvider);
-  
-  return paymentMethodsAsync.whenOrNull(
-    data: (methods) => methods.where((method) => method.type == type).toList(),
-  ) ?? [];
-});
+final paymentMethodsByTypeProvider =
+    Provider.family<List<PaymentMethod>, PaymentType>((ref, type) {
+      final paymentMethodsAsync = ref.watch(paymentMethodsProvider);
+
+      return paymentMethodsAsync.whenOrNull(
+            data: (methods) =>
+                methods.where((method) => method.type == type).toList(),
+          ) ??
+          [];
+    });
 
 /// Provider for checking if user has payment methods
 final hasPaymentMethodsProvider = Provider<bool>((ref) {
   final paymentMethodsAsync = ref.watch(paymentMethodsProvider);
-  
+
   return paymentMethodsAsync.whenOrNull(
-    data: (methods) => methods.isNotEmpty,
-  ) ?? false;
+        data: (methods) => methods.isNotEmpty,
+      ) ??
+      false;
 });
 
 /// Provider for payment method count
 final paymentMethodCountProvider = Provider<int>((ref) {
   final paymentMethodsAsync = ref.watch(paymentMethodsProvider);
-  
-  return paymentMethodsAsync.whenOrNull(
-    data: (methods) => methods.length,
-  ) ?? 0;
+
+  return paymentMethodsAsync.whenOrNull(data: (methods) => methods.length) ?? 0;
 });
 
 /// Create payment method action provider
-final createPaymentMethodProvider = Provider.autoDispose.family<
-    Future<void> Function(CreatePaymentMethodRequest), 
-    void
->((ref, _) {
-  return (CreatePaymentMethodRequest request) async {
-    final notifier = ref.read(paymentMethodsProvider.notifier);
-    await notifier.addPaymentMethod(request);
-  };
-});
+final createPaymentMethodProvider = Provider.autoDispose
+    .family<Future<void> Function(CreatePaymentMethodRequest), void>((ref, _) {
+      return (CreatePaymentMethodRequest request) async {
+        final notifier = ref.read(paymentMethodsProvider.notifier);
+        await notifier.addPaymentMethod(request);
+      };
+    });
 
 /// Delete payment method action provider
-final deletePaymentMethodProvider = Provider.autoDispose.family<
-    Future<void> Function(String), 
-    void
->((ref, _) {
-  return (String id) async {
-    final notifier = ref.read(paymentMethodsProvider.notifier);
-    await notifier.removePaymentMethod(id);
-  };
-});
+final deletePaymentMethodProvider = Provider.autoDispose
+    .family<Future<void> Function(String), void>((ref, _) {
+      return (String id) async {
+        final notifier = ref.read(paymentMethodsProvider.notifier);
+        await notifier.removePaymentMethod(id);
+      };
+    });
 
 /// Set default payment method action provider
-final setDefaultPaymentMethodActionProvider = Provider.autoDispose.family<
-    Future<void> Function(String), 
-    void
->((ref, _) {
-  return (String id) async {
-    final notifier = ref.read(paymentMethodsProvider.notifier);
-    await notifier.setDefaultPaymentMethod(id);
-  };
-});
+final setDefaultPaymentMethodActionProvider = Provider.autoDispose
+    .family<Future<void> Function(String), void>((ref, _) {
+      return (String id) async {
+        final notifier = ref.read(paymentMethodsProvider.notifier);
+        await notifier.setDefaultPaymentMethod(id);
+      };
+    });

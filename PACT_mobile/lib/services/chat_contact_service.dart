@@ -26,7 +26,7 @@ class ChatContactService {
     try {
       // Check if contact already exists
       final existing = await getContact(userId, contactUserId);
-      
+
       if (existing != null) {
         // Update existing contact
         return await updateContactName(

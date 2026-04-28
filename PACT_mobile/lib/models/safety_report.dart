@@ -66,16 +66,24 @@ class SafetyReport {
       description: json['description'],
       status: json['status'],
       createdAt: DateTime.parse(json['createdAt']),
-      submittedAt: json['submittedAt'] != null ? DateTime.parse(json['submittedAt']) : null,
+      submittedAt: json['submittedAt'] != null
+          ? DateTime.parse(json['submittedAt'])
+          : null,
       location: json['location'],
       hazards: List<String>.from(json['hazards']),
       recommendations: List<String>.from(json['recommendations']),
       incidentType: json['incidentType'],
-      incidentDate: json['incidentDate'] != null ? DateTime.parse(json['incidentDate']) : null,
-      witnesses: json['witnesses'] != null ? List<String>.from(json['witnesses']) : null,
+      incidentDate: json['incidentDate'] != null
+          ? DateTime.parse(json['incidentDate'])
+          : null,
+      witnesses: json['witnesses'] != null
+          ? List<String>.from(json['witnesses'])
+          : null,
       requiresImmediate: json['requiresImmediate'],
       actionTaken: json['actionTaken'],
-      mediaUrls: json['mediaUrls'] != null ? List<String>.from(json['mediaUrls']) : null,
+      mediaUrls: json['mediaUrls'] != null
+          ? List<String>.from(json['mediaUrls'])
+          : null,
       reportedBy: json['reportedBy'],
       metadata: json['metadata'],
     );

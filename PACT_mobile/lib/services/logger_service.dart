@@ -1,9 +1,4 @@
-enum LogLevel {
-  info,
-  warning,
-  error,
-  debug
-}
+enum LogLevel { info, warning, error, debug }
 
 class LoggerService {
   static void log(String message, {LogLevel level = LogLevel.info}) {

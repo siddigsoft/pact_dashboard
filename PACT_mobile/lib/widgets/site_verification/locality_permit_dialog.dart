@@ -1,4 +1,4 @@
-part of 'site_verification_screen.dart';
+part of '../../screens/site_verification_screen.dart';
 
 /// Locality Permit Dialog for sites in Locality Permit tab
 /// First asks if state permit is already uploaded, then proceeds to locality permit upload
@@ -1201,4 +1201,3 @@ class _LocalityPermitDialogState extends State<_LocalityPermitDialog> {
     });
   }
 }
-

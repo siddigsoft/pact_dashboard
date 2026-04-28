@@ -13,19 +13,9 @@ enum NotificationCategory {
   messages,
 }
 
-enum NotificationPriority {
-  low,
-  medium,
-  high,
-  urgent,
-}
+enum NotificationPriority { low, medium, high, urgent }
 
-enum NotificationType {
-  info,
-  success,
-  warning,
-  error,
-}
+enum NotificationType { info, success, warning, error }
 
 enum RelatedEntityType {
   siteVisit,
@@ -56,7 +46,9 @@ class AppNotification {
   final String id;
   final String userId;
   final String title;
+  final String? titleAr;
   final String message;
+  final String? messageAr;
   final NotificationType type;
   final bool isRead;
   final DateTime createdAt;
@@ -75,7 +67,9 @@ class AppNotification {
     required this.id,
     required this.userId,
     required this.title,
+    this.titleAr,
     required this.message,
+    this.messageAr,
     this.type = NotificationType.info,
     this.isRead = false,
     required this.createdAt,
@@ -93,7 +87,9 @@ class AppNotification {
         id: json['id'] as String,
         userId: json['userId'] as String,
         title: json['title'] as String,
+        titleAr: json['title_ar'] as String?,
         message: json['message'] as String,
+        messageAr: json['message_ar'] as String?,
         type: json['type'] == null
             ? NotificationType.info
             : _notificationTypeFromJson(json['type'] as String?),
@@ -102,7 +98,8 @@ class AppNotification {
         link: json['link'] as String?,
         relatedEntityId: json['related_entity_id'] as String?,
         relatedEntityType: _relatedEntityTypeFromJson(
-            json['related_entity_type'] as String?),
+          json['related_entity_type'] as String?,
+        ),
         category: _notificationCategoryFromJson(json['category'] as String?),
         priority: json['priority'] == null
             ? NotificationPriority.medium
@@ -114,21 +111,23 @@ class AppNotification {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'userId': userId,
-        'title': title,
-        'message': message,
-        'type': _notificationTypeToJson(type),
-        'is_read': isRead,
-        'created_at': createdAt.toIso8601String(),
-        'link': link,
-        'related_entity_id': relatedEntityId,
-        'related_entity_type': _relatedEntityTypeToJson(relatedEntityType),
-        'category': _notificationCategoryToJson(category),
-        'priority': _notificationPriorityToJson(priority),
-        'target_roles': targetRoles,
-        'project_id': projectId,
-      };
+    'id': id,
+    'userId': userId,
+    'title': title,
+    if (titleAr != null) 'title_ar': titleAr,
+    'message': message,
+    if (messageAr != null) 'message_ar': messageAr,
+    'type': _notificationTypeToJson(type),
+    'is_read': isRead,
+    'created_at': createdAt.toIso8601String(),
+    'link': link,
+    'related_entity_id': relatedEntityId,
+    'related_entity_type': _relatedEntityTypeToJson(relatedEntityType),
+    'category': _notificationCategoryToJson(category),
+    'priority': _notificationPriorityToJson(priority),
+    'target_roles': targetRoles,
+    'project_id': projectId,
+  };
 
   AppNotification copyWith({
     String? id,
@@ -213,7 +212,8 @@ class NotificationPreferences {
         sound: json['sound'] as bool? ?? true,
         browserPush: json['browser_push'] as bool? ?? true,
         vibration: json['vibration'] as bool? ?? true,
-        categories: (json['categories'] as Map<String, dynamic>?)?.map(
+        categories:
+            (json['categories'] as Map<String, dynamic>?)?.map(
               (k, e) => MapEntry(k, e as bool),
             ) ??
             {
@@ -234,16 +234,16 @@ class NotificationPreferences {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'enabled': enabled,
-        'email': email,
-        'sound': sound,
-        'browser_push': browserPush,
-        'vibration': vibration,
-        'categories': categories,
-        'quiet_hours': quietHours,
-        'frequency': frequency,
-        'auto_delete_days': autoDeleteDays,
-      };
+    'enabled': enabled,
+    'email': email,
+    'sound': sound,
+    'browser_push': browserPush,
+    'vibration': vibration,
+    'categories': categories,
+    'quiet_hours': quietHours,
+    'frequency': frequency,
+    'auto_delete_days': autoDeleteDays,
+  };
 
   NotificationPreferences copyWith({
     bool? enabled,
@@ -289,18 +289,18 @@ class QuietHours {
   });
 
   factory QuietHours.fromJson(Map<String, dynamic> json) => QuietHours(
-        enabled: json['enabled'] as bool,
-        startHour: (json['start_hour'] as num).toInt(),
-        endHour: (json['end_hour'] as num).toInt(),
-        timezone: json['timezone'] as String?,
-      );
+    enabled: json['enabled'] as bool,
+    startHour: (json['start_hour'] as num).toInt(),
+    endHour: (json['end_hour'] as num).toInt(),
+    timezone: json['timezone'] as String?,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'enabled': enabled,
-        'start_hour': startHour,
-        'end_hour': endHour,
-        'timezone': timezone,
-      };
+    'enabled': enabled,
+    'start_hour': startHour,
+    'end_hour': endHour,
+    'timezone': timezone,
+  };
 
   bool isWithinQuietHours() {
     if (!enabled) return false;
@@ -322,7 +322,9 @@ class QuietHours {
 class NotificationTriggerOptions {
   final String userId;
   final String title;
+  final String? titleAr;
   final String message;
+  final String? messageAr;
   final NotificationType type;
   final NotificationCategory category;
   final NotificationPriority priority;
@@ -338,7 +340,9 @@ class NotificationTriggerOptions {
   NotificationTriggerOptions({
     required this.userId,
     required this.title,
+    this.titleAr,
     required this.message,
+    this.messageAr,
     this.type = NotificationType.info,
     this.category = NotificationCategory.system,
     this.priority = NotificationPriority.medium,
@@ -365,12 +369,15 @@ class NotificationTriggerOptions {
     if (json['priority'] != null) {
       priority = _notificationPriorityFromJson(json['priority'] as String?)!;
     }
-    RelatedEntityType? relatedEntityType =
-        _relatedEntityTypeFromJson(json['related_entity_type'] as String?);
+    RelatedEntityType? relatedEntityType = _relatedEntityTypeFromJson(
+      json['related_entity_type'] as String?,
+    );
     return NotificationTriggerOptions(
       userId: json['userId'] as String,
       title: json['title'] as String,
+      titleAr: json['title_ar'] as String?,
       message: json['message'] as String,
+      messageAr: json['message_ar'] as String?,
       type: type,
       category: category,
       priority: priority,
@@ -388,21 +395,23 @@ class NotificationTriggerOptions {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'userId': userId,
-        'title': title,
-        'message': message,
-        'type': _notificationTypeToJson(type),
-        'category': _notificationCategoryToJson(category)!,
-        'priority': _notificationPriorityToJson(priority)!,
-        'link': link,
-        'related_entity_id': relatedEntityId,
-        'related_entity_type': _relatedEntityTypeToJson(relatedEntityType),
-        'target_roles': targetRoles,
-        'project_id': projectId,
-        'send_email': sendEmail,
-        'email_action_url': emailActionUrl,
-        'email_action_label': emailActionLabel,
-      };
+    'userId': userId,
+    'title': title,
+    'title_ar': titleAr,
+    'message': message,
+    'message_ar': messageAr,
+    'type': _notificationTypeToJson(type),
+    'category': _notificationCategoryToJson(category)!,
+    'priority': _notificationPriorityToJson(priority)!,
+    'link': link,
+    'related_entity_id': relatedEntityId,
+    'related_entity_type': _relatedEntityTypeToJson(relatedEntityType),
+    'target_roles': targetRoles,
+    'project_id': projectId,
+    'send_email': sendEmail,
+    'email_action_url': emailActionUrl,
+    'email_action_label': emailActionLabel,
+  };
 }
 
 // ==================== NOTIFICATION STATS ====================
@@ -431,11 +440,11 @@ class NotificationStats {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'total': total,
-        'unread': unread,
-        'byCategory': byCategory,
-        'last_read_at': lastReadAt?.toIso8601String(),
-      };
+    'total': total,
+    'unread': unread,
+    'byCategory': byCategory,
+    'last_read_at': lastReadAt?.toIso8601String(),
+  };
 }
 
 // ==================== JSON CONVERSION HELPERS ====================

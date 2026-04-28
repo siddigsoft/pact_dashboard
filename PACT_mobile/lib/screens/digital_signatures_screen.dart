@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import '../theme/app_colors.dart';
 import '../widgets/custom_drawer_menu.dart';
+import '../widgets/reusable_app_bar.dart';
 
 class DigitalSignaturesScreen extends StatefulWidget {
   const DigitalSignaturesScreen({super.key});
@@ -168,79 +169,65 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen> {
           currentUser: Supabase.instance.client.auth.currentUser,
           onClose: () => _scaffoldKey.currentState?.closeDrawer(),
         ),
-        appBar: AppBar(
-          backgroundColor: AppColors.primaryBlue,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-          ),
-          title: Text(
-            isArabic ? 'التوقيعات الرقمية' : 'Digital Signatures',
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          actions: [
-            TextButton.icon(
-              onPressed: _toggleLanguage,
-              icon: const Icon(Icons.language, color: Colors.white, size: 20),
-              label: Text(
-                isArabic ? 'EN' : 'عربي',
-                style: GoogleFonts.poppins(
+        body: SafeArea(
+          child: Column(
+            children: [
+              ReusableAppBar(
+                title: isArabic ? 'التوقيعات الرقمية' : 'Digital Signatures',
+                scaffoldKey: _scaffoldKey,
+                actions: [
+                  TextButton.icon(
+                    onPressed: _toggleLanguage,
+                    icon: const Icon(Icons.language, size: 20),
+                    label: Text(
+                      isArabic ? 'EN' : 'عربي',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              if (_isLoading)
+                const Expanded(child: Center(child: CircularProgressIndicator()))
+              else ...[
+                // ── Bilingual tab row ──────────────────────────────
+                Container(
                   color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SafeArea(
-                top: false,
-                child: Column(
-                  children: [
-                    // ── Bilingual tab row ──────────────────────────────
-                    Container(
-                      color: Colors.white,
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildTabButton(
-                              'signatures',
-                              'My Signatures',
-                              'توقيعاتي',
-                              Icons.draw_rounded,
-                              isArabic,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildTabButton(
-                              'history',
-                              'Signing History',
-                              'سجل التوقيع',
-                              Icons.history_rounded,
-                              isArabic,
-                            ),
-                          ),
-                        ],
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildTabButton(
+                          'signatures',
+                          'My Signatures',
+                          'توقيعاتي',
+                          Icons.draw_rounded,
+                          isArabic,
+                        ),
                       ),
-                    ),
-                    const Divider(height: 1),
-                    // ── Tab content ────────────────────────────────────
-                    Expanded(
-                      child: _activeTab == 'signatures'
-                          ? _buildSignaturesTab(isArabic)
-                          : _buildHistoryTab(isArabic),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildTabButton(
+                          'history',
+                          'Signing History',
+                          'سجل التوقيع',
+                          Icons.history_rounded,
+                          isArabic,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const Divider(height: 1),
+                // ── Tab content ────────────────────────────────────
+                Expanded(
+                  child: _activeTab == 'signatures'
+                      ? _buildSignaturesTab(isArabic)
+                      : _buildHistoryTab(isArabic),
+                ),
+              ],
+            ],
+          ),
+        ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showCreateSignatureDialog(isArabic),
           backgroundColor: AppColors.primaryBlue,

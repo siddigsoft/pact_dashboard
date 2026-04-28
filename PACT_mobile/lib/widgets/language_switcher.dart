@@ -23,10 +23,7 @@ class LanguageSwitcher extends StatelessWidget {
           value: const Locale('en', ''),
           child: Row(
             children: [
-              const Text(
-                '🇺🇸',
-                style: TextStyle(fontSize: 18),
-              ),
+              const Text('🇺🇸', style: TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
               Text(
                 'English',
@@ -43,10 +40,7 @@ class LanguageSwitcher extends StatelessWidget {
           value: const Locale('ar', ''),
           child: Row(
             children: [
-              const Text(
-                '🇸🇦',
-                style: TextStyle(fontSize: 18),
-              ),
+              const Text('🇸🇦', style: TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
               Text(
                 'العربية',

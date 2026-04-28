@@ -2,7 +2,8 @@ class SafetyChecklist {
   String id;
   String userId;
   String? siteVisitId;
-  String checklistType; // 'pre_visit', 'during_visit', 'post_visit', 'equipment_check'
+  String
+  checklistType; // 'pre_visit', 'during_visit', 'post_visit', 'equipment_check'
   List<Map<String, dynamic>> items; // JSON array of checklist items with status
   DateTime? completedAt;
   DateTime createdAt;
@@ -39,7 +40,9 @@ class SafetyChecklist {
       siteVisitId: json['site_visit_id'],
       checklistType: json['checklist_type'],
       items: List<Map<String, dynamic>>.from(json['items'] ?? []),
-      completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at']) : null,
+      completedAt: json['completed_at'] != null
+          ? DateTime.parse(json['completed_at'])
+          : null,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
     );

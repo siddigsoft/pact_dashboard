@@ -14,13 +14,13 @@ class ConflictResolutionService {
     switch (mergeStrategy) {
       case MergeStrategy.lastWriteWins:
         return serverTimestamp.isAfter(localTimestamp) ? serverData : localData;
-      
+
       case MergeStrategy.serverWins:
         return serverData;
-      
+
       case MergeStrategy.localWins:
         return localData;
-      
+
       case MergeStrategy.custom:
         // Implement custom merge logic if needed
         throw UnimplementedError('Custom merge strategy not implemented');
@@ -41,7 +41,7 @@ class ConflictResolutionService {
     }
 
     // If both are assigned to different users, server wins (single source of truth)
-    if (localVisit.status == 'assigned' && 
+    if (localVisit.status == 'assigned' &&
         serverVisit.status == 'assigned' &&
         localVisit.assignedTo != serverVisit.assignedTo) {
       return serverVisit;
@@ -89,13 +89,13 @@ class ConflictResolutionService {
 enum MergeStrategy {
   /// Use the most recently modified version
   lastWriteWins,
-  
+
   /// Always use the server version
   serverWins,
-  
+
   /// Always use the local version
   localWins,
-  
+
   /// Use a custom merge strategy
   custom,
 }

@@ -9,8 +9,6 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/mmp_filter_bar.dart';
-import '../services/agora_call_service.dart';
-import 'agora_call_screen.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/notifications_panel.dart';
 import '../widgets/main_layout.dart';
@@ -29,6 +27,7 @@ import 'visit_report_detail_screen.dart';
 import '../widgets/complete_visit_flow.dart';
 import '../l10n/app_localizations.dart';
 import '../services/claim_fee_service.dart';
+import '../utils/user_identity_resolver.dart';
 
 class FieldOperationsEnhancedScreen extends StatefulWidget {
   const FieldOperationsEnhancedScreen({super.key});
@@ -81,6 +80,9 @@ class _MMPScreenState extends State<MMPScreen> {
 
   // Grouped data
   Map<String, List<Map<String, dynamic>>> _groupedByStateLocality = {};
+  final Map<String, _MmpSectionExpansionState> _claimMmpExpansionState = {};
+  final Map<String, bool> _claimMmpCardExpanded = {};
+  final Map<String, String> _userDisplayNamesById = {};
 
   // Search
   final TextEditingController _searchController = TextEditingController();
@@ -92,17 +94,27 @@ class _MMPScreenState extends State<MMPScreen> {
   Position? _lastReportedLocation;
   bool _isTrackingLocation = false;
 
+  // Phase 8b: Task and call status tracking
+  String? _currentTaskName;
+  DateTime? _currentTaskStartTime;
+  final bool _isInCall = false;
+  final int _offlineSyncPendingCount = 0;
+  Timer? _callDurationTimer;
+
   RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _initializeMMP();
+    _loadOfflineSyncCount(); // Phase 8b
+    _setupCallStateListener(); // Phase 8b
   }
 
   @override
   void dispose() {
     _locationTrackingTimer?.cancel();
+    _callDurationTimer?.cancel(); // Phase 8b
     _realtimeChannel?.unsubscribe();
     _searchController.dispose();
     super.dispose();
@@ -292,13 +304,12 @@ class _MMPScreenState extends State<MMPScreen> {
       await Supabase.instance.client
           .from('profiles')
           .update({
-            'last_location': {
+            'location': {
               'latitude': position.latitude,
               'longitude': position.longitude,
               'accuracy': position.accuracy,
               'timestamp': DateTime.now().toIso8601String(),
             },
-            'last_location_updated_at': DateTime.now().toIso8601String(),
           })
           .eq('id', _userId!);
 
@@ -307,6 +318,42 @@ class _MMPScreenState extends State<MMPScreen> {
       );
     } catch (e) {
       debugPrint('[_updateUserLocation] Error: $e');
+    }
+  }
+
+  /// Phase 8b: Load offline sync pending count
+  void _loadOfflineSyncCount() {
+    try {
+      final offlineDb = OfflineDb();
+      // This will be updated when sync manager runs
+      // For now, just initialize - actual count updates from SyncManager
+      debugPrint(
+        '[_loadOfflineSyncCount] Offline sync count tracking initialized',
+      );
+    } catch (e) {
+      debugPrint('[_loadOfflineSyncCount] Error: $e');
+    }
+  }
+
+  /// Phase 8b: Set up call state listener to track if user is in a call
+  void _setupCallStateListener() {
+    try {
+      // Listen to Agora service or similar for call state
+      // For now, this is a placeholder - integrate with your call service
+      debugPrint('[_setupCallStateListener] Call state listener initialized');
+    } catch (e) {
+      debugPrint('[_setupCallStateListener] Error: $e');
+    }
+  }
+
+  /// Phase 8b: Update call duration display
+  void _updateCallDuration() {
+    if (_isInCall && _currentTaskStartTime != null) {
+      if (mounted) {
+        setState(() {
+          // Duration will be calculated in widget
+        });
+      }
     }
   }
 
@@ -693,6 +740,9 @@ class _MMPScreenState extends State<MMPScreen> {
       // Load advance requests
       await _loadAdvanceRequests();
 
+      // Resolve user UUID fields to display names for metadata cards
+      await _preloadUserNamesForLoadedSites();
+
       // Group available sites by state-locality
       _groupAvailableSites();
 
@@ -975,7 +1025,7 @@ class _MMPScreenState extends State<MMPScreen> {
       var query = supabase
           .from('mmp_site_entries')
           .select('*, mmp_files(id, name, project_id)')
-          .or('status.eq.Dispatched,status.eq.dispatched');
+          .ilike('status', 'Dispatched');
 
       // Filter by state - must match web behavior exactly
       // Web app: Users MUST have a state_id assigned to see claimable sites
@@ -1166,7 +1216,7 @@ class _MMPScreenState extends State<MMPScreen> {
       final response = await supabase
           .from('mmp_site_entries')
           .select('*, mmp_files(id, name, project_id)')
-          .or('status.eq.Assigned,status.eq.assigned')
+          .ilike('status', 'Assigned')
           .eq('accepted_by', _userId!)
           .order('created_at', ascending: false)
           .limit(1000);
@@ -1579,16 +1629,6 @@ class _MMPScreenState extends State<MMPScreen> {
     return {};
   }
 
-  /// Safely get a nested map (e.g. start_location) from additional_data.
-  Map<String, dynamic>? _safeStartLocation(
-    Map<String, dynamic> additionalData,
-  ) {
-    final raw = additionalData['start_location'];
-    if (raw == null) return null;
-    if (raw is Map) return Map<String, dynamic>.from(raw);
-    return null;
-  }
-
   /// Merge server/cached sites with pending offline data from OfflineDb
   Future<List<Map<String, dynamic>>> _mergeWithOfflineData(
     List<Map<String, dynamic>> sites,
@@ -1690,7 +1730,7 @@ class _MMPScreenState extends State<MMPScreen> {
           .from('mmp_site_entries')
           .select('*, mmp_files(id, name, project_id)')
           .eq('accepted_by', _userId!)
-          .or('status.eq.Completed,status.eq.completed')
+          .ilike('status', 'Completed')
           .order('created_at', ascending: false)
           .limit(100);
 
@@ -2208,6 +2248,50 @@ class _MMPScreenState extends State<MMPScreen> {
     final locality = site['locality'] ?? 'Unknown';
     final siteType = site['site_type'] ?? site['siteType'] ?? '';
     final hub = site['hub_name'] ?? site['hubName'] ?? site['hub_office'] ?? '';
+    final additionalData = _safeParseAdditionalData(site['additional_data']);
+    final activityType =
+        site['activity'] ??
+        site['main_activity'] ??
+        site['activity_at_site'] ??
+        additionalData['activity'] ??
+        additionalData['main_activity'] ??
+        '';
+    final priority = site['priority'] ?? additionalData['priority'] ?? '';
+    final notes =
+        site['notes'] ??
+        site['comments'] ??
+        additionalData['notes'] ??
+        additionalData['comments'] ??
+        '';
+    final dueDateRaw =
+        site['due_date'] ??
+        site['visit_date'] ??
+        additionalData['due_date'] ??
+        additionalData['visit_date'];
+
+    String formatDate(dynamic raw) {
+      if (raw == null) return '';
+      final rawString = raw.toString();
+      if (rawString.isEmpty) return '';
+      final parsed = DateTime.tryParse(rawString);
+      if (parsed == null) return rawString;
+      return '${parsed.day}/${parsed.month}/${parsed.year}';
+    }
+
+    final dueDateLabel = formatDate(dueDateRaw);
+    final cpName = site['cp_name'] ?? additionalData['cp_name'] ?? '';
+    final visitType = site['visit_type'] ?? additionalData['visit_type'] ?? '';
+    final monitoringBy =
+        site['monitoring_by'] ?? additionalData['monitoring_by'] ?? '';
+    final surveyTool =
+        site['survey_tool'] ?? additionalData['survey_tool'] ?? '';
+    final registryLinkage = additionalData['registry_linkage'] is Map
+        ? additionalData['registry_linkage'] as Map<String, dynamic>
+        : null;
+    final topLevelRegId = site['registry_site_id']?.toString().trim() ?? '';
+    final registrySiteId = topLevelRegId.isNotEmpty
+        ? topLevelRegId
+        : (registryLinkage?['registry_site_id']?.toString().trim() ?? '');
 
     return showDialog<bool>(
       context: context,
@@ -2434,6 +2518,157 @@ class _MMPScreenState extends State<MMPScreen> {
                                         : 'Site Type',
                                     siteType,
                                   ),
+                                ],
+
+                                // Activity Type (if available)
+                                if (activityType.toString().isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _buildSiteDetailRow(
+                                    Icons.work_rounded,
+                                    Localizations.localeOf(
+                                              context,
+                                            ).languageCode ==
+                                            'ar'
+                                        ? 'نوع النشاط'
+                                        : 'Activity Type',
+                                    activityType.toString(),
+                                  ),
+                                ],
+
+                                // Priority (if available)
+                                if (priority.toString().isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _buildSiteDetailRow(
+                                    Icons.flag_rounded,
+                                    Localizations.localeOf(
+                                              context,
+                                            ).languageCode ==
+                                            'ar'
+                                        ? 'الأولوية'
+                                        : 'Priority',
+                                    priority.toString(),
+                                  ),
+                                ],
+
+                                // Due Date (if available)
+                                if (dueDateLabel.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _buildSiteDetailRow(
+                                    Icons.event_rounded,
+                                    Localizations.localeOf(
+                                              context,
+                                            ).languageCode ==
+                                            'ar'
+                                        ? 'تاريخ الاستحقاق'
+                                        : 'Due Date',
+                                    dueDateLabel,
+                                  ),
+                                ],
+
+                                // Notes (if available)
+                                if (notes.toString().trim().isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _buildSiteDetailRow(
+                                    Icons.notes_rounded,
+                                    Localizations.localeOf(
+                                              context,
+                                            ).languageCode ==
+                                            'ar'
+                                        ? 'ملاحظات'
+                                        : 'Notes',
+                                    notes.toString().trim(),
+                                  ),
+                                ],
+
+                                // Additional Details (from additional_data)
+                                if ([
+                                  cpName,
+                                  visitType,
+                                  monitoringBy,
+                                  surveyTool,
+                                  registrySiteId,
+                                ].any(
+                                  (value) => value.toString().isNotEmpty,
+                                )) ...[
+                                  const SizedBox(height: 18),
+                                  Text(
+                                    Localizations.localeOf(
+                                              context,
+                                            ).languageCode ==
+                                            'ar'
+                                        ? 'تفاصيل إضافية'
+                                        : 'ADDITIONAL DETAILS',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1,
+                                      color: AppColors.textLight,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (cpName.toString().isNotEmpty) ...[
+                                    _buildSiteDetailRow(
+                                      Icons.person_rounded,
+                                      Localizations.localeOf(
+                                                context,
+                                              ).languageCode ==
+                                              'ar'
+                                          ? 'نقطة الاتصال'
+                                          : 'CP',
+                                      cpName.toString(),
+                                    ),
+                                    const SizedBox(height: 14),
+                                  ],
+                                  if (visitType.toString().isNotEmpty) ...[
+                                    _buildSiteDetailRow(
+                                      Icons.assignment_rounded,
+                                      Localizations.localeOf(
+                                                context,
+                                              ).languageCode ==
+                                              'ar'
+                                          ? 'نوع الزيارة'
+                                          : 'Visit Type',
+                                      visitType.toString(),
+                                    ),
+                                    const SizedBox(height: 14),
+                                  ],
+                                  if (monitoringBy.toString().isNotEmpty) ...[
+                                    _buildSiteDetailRow(
+                                      Icons.supervisor_account_rounded,
+                                      Localizations.localeOf(
+                                                context,
+                                              ).languageCode ==
+                                              'ar'
+                                          ? 'المراقبة بواسطة'
+                                          : 'Monitoring By',
+                                      monitoringBy.toString(),
+                                    ),
+                                    const SizedBox(height: 14),
+                                  ],
+                                  if (surveyTool.toString().isNotEmpty) ...[
+                                    _buildSiteDetailRow(
+                                      Icons.build_rounded,
+                                      Localizations.localeOf(
+                                                context,
+                                              ).languageCode ==
+                                              'ar'
+                                          ? 'أداة المسح'
+                                          : 'Survey Tool',
+                                      surveyTool.toString(),
+                                    ),
+                                    const SizedBox(height: 14),
+                                  ],
+                                  if (registrySiteId.toString().isNotEmpty)
+                                    _buildSiteDetailRow(
+                                      Icons.badge_rounded,
+                                      Localizations.localeOf(
+                                                context,
+                                              ).languageCode ==
+                                              'ar'
+                                          ? 'معرف السجل'
+                                          : 'Registry ID',
+                                      registrySiteId.toString(),
+                                    ),
                                 ],
                               ],
                             ),
@@ -2744,6 +2979,591 @@ class _MMPScreenState extends State<MMPScreen> {
     );
   }
 
+  _MmpSectionExpansionState _getClaimMmpExpansionState(String siteId) {
+    return _claimMmpExpansionState.putIfAbsent(
+      siteId,
+      () => _MmpSectionExpansionState(),
+    );
+  }
+
+  String _normalizeLookupKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  bool _isLikelyUuid(String value) => UserIdentityResolver.isLikelyUuid(value);
+
+  bool _labelExpectsUserIdentity(String label) {
+    return UserIdentityResolver.labelExpectsUserIdentity(label);
+  }
+
+  Future<void> _preloadUserNamesForLoadedSites() async {
+    final ids = <String>{};
+
+    final allSiteLists = <List<Map<String, dynamic>>>[
+      _availableSites,
+      _smartAssignedSites,
+      _mySites,
+      _coordinatorSites,
+      _unsyncedCompletedVisits,
+    ];
+
+    for (final siteList in allSiteLists) {
+      ids.addAll(UserIdentityResolver.collectPotentialUserIdsFromList(siteList));
+    }
+
+    if (ids.isEmpty) return;
+
+    final unresolved = ids
+        .where((id) => !_userDisplayNamesById.containsKey(id))
+        .toList();
+    if (unresolved.isEmpty) return;
+
+    try {
+      final resolvedNames = await UserIdentityResolver.resolveUserDisplayNames(
+        client: Supabase.instance.client,
+        userIds: unresolved,
+      );
+
+      for (final id in unresolved) {
+        _userDisplayNamesById[id] = resolvedNames[id] ?? id;
+      }
+    } catch (e) {
+      debugPrint(
+        '[_preloadUserNamesForLoadedSites] Failed to resolve names: $e',
+      );
+    }
+  }
+
+  String _stringifyMmpValue(dynamic value, bool isArabic) {
+    if (value == null) return '';
+
+    if (value is bool) {
+      return isArabic ? (value ? 'نعم' : 'لا') : (value ? 'Yes' : 'No');
+    }
+
+    if (value is Map || value is List) {
+      return _formatComplexObject(value, isArabic);
+    }
+
+    final text = value.toString().trim();
+    if (text.isEmpty) return '';
+
+    if (_isLikelyUuid(text) && _userDisplayNamesById.containsKey(text)) {
+      return _userDisplayNamesById[text]!;
+    }
+
+    final lowered = text.toLowerCase();
+    if (lowered == 'null' || lowered == 'n/a' || lowered == 'na') {
+      return '';
+    }
+
+    return text;
+  }
+
+  String _formatComplexObject(dynamic obj, bool isArabic) {
+    try {
+      if (obj is Map) {
+        final map = Map<String, dynamic>.from(obj);
+
+        if (map.containsKey('status') &&
+            (map.containsKey('verified_at') ||
+                map.containsKey('verified_by'))) {
+          final status = map['status'] ?? 'unknown';
+          final verifiedAt = map['verified_at'] as String?;
+          final verifiedBy = map['verified_by'] as String?;
+          final verifiedByDisplay = (verifiedBy != null && verifiedBy.isNotEmpty)
+              ? (_userDisplayNamesById[verifiedBy] ?? verifiedBy)
+              : null;
+
+          if (verifiedAt != null && verifiedAt.isNotEmpty) {
+            try {
+              final dt = DateTime.parse(verifiedAt);
+              final formatted =
+                  '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+              return isArabic
+                  ? 'الحالة: $status | التاريخ: $formatted${verifiedByDisplay != null ? ' | التحقق من قبل: $verifiedByDisplay' : ''}'
+                  : 'Status: $status | Date: $formatted${verifiedByDisplay != null ? ' | Verified By: $verifiedByDisplay' : ''}';
+            } catch (_) {}
+          }
+
+          return isArabic
+              ? 'الحالة: $status${verifiedByDisplay != null ? ' | التحقق من قبل: $verifiedByDisplay' : ''}'
+              : 'Status: $status${verifiedByDisplay != null ? ' | Verified By: $verifiedByDisplay' : ''}';
+        }
+
+        final pairs = <String>[];
+        map.forEach((key, value) {
+          if (value != null && value.toString().isNotEmpty) {
+            final formattedKey = _formatMmpKeyLabel(key);
+            final formattedValue = _stringifyMmpValue(value, isArabic);
+            if (formattedValue.isNotEmpty) {
+              pairs.add('$formattedKey: $formattedValue');
+            }
+          }
+        });
+
+        if (pairs.isNotEmpty) {
+          return pairs.join(' | ');
+        }
+      } else if (obj is List) {
+        final items = <String>[];
+        for (int i = 0; i < obj.length; i++) {
+          final item = obj[i];
+          if (item is Map) {
+            items.add(_formatComplexObject(item, isArabic));
+          } else {
+            final str = _stringifyMmpValue(item, isArabic);
+            if (str.isNotEmpty) items.add(str);
+          }
+        }
+        return items.join(' | ');
+      }
+
+      return jsonEncode(obj);
+    } catch (_) {
+      final fallback = obj.toString().trim();
+      return fallback.toLowerCase() == 'null' ? '' : fallback;
+    }
+  }
+
+  Map<String, dynamic>? _toMapValue(dynamic value) {
+    if (value == null) return null;
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  String _formatMmpKeyLabel(String key) {
+    final cleaned = key
+        .replaceAll(RegExp(r'[^A-Za-z0-9_ ]'), ' ')
+        .replaceAll('_', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (cleaned.isEmpty) return key;
+
+    return cleaned
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          return '${word[0].toUpperCase()}${word.substring(1)}';
+        })
+        .join(' ');
+  }
+
+  String _normalizeLabelKey(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[\s_:\-]+'), '').trim();
+  }
+
+  String _formatNumberWithCommas(String numericText) {
+    final parts = numericText.split('.');
+    final integerPart = parts.first;
+    final decimalPart = parts.length > 1 ? parts[1] : '';
+
+    final buffer = StringBuffer();
+    for (int i = 0; i < integerPart.length; i++) {
+      final reverseIndex = integerPart.length - i;
+      buffer.write(integerPart[i]);
+      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+
+    if (decimalPart.isNotEmpty) {
+      return '${buffer.toString()}.$decimalPart';
+    }
+
+    return buffer.toString();
+  }
+
+  String _enhanceMmpDetailValue(String label, String value) {
+    if (value.isEmpty) return value;
+
+    final normalizedLabel = _normalizeLabelKey(label);
+    if (_labelExpectsUserIdentity(label) && _isLikelyUuid(value)) {
+      return _userDisplayNamesById[value] ?? value;
+    }
+    if (value.contains(' | ') ||
+        value.contains('Status:') ||
+        value.contains('الحالة:')) {
+      return value;
+    }
+
+    final shouldFormatAmount =
+        normalizedLabel.contains('payout') ||
+        normalizedLabel.contains('cost') ||
+        normalizedLabel.contains('budget') ||
+        normalizedLabel.contains('fee') ||
+        normalizedLabel.contains('transport') ||
+        normalizedLabel.contains('مطالبة') ||
+        normalizedLabel.contains('ارسال');
+
+    if (!shouldFormatAmount) return value;
+
+    final cleaned = value.replaceAll(',', '').trim();
+    final parsed = num.tryParse(cleaned);
+    if (parsed == null) return value;
+
+    final normalizedNumber = parsed % 1 == 0
+        ? parsed.toInt().toString()
+        : parsed.toStringAsFixed(2);
+    final withCommas = _formatNumberWithCommas(normalizedNumber);
+
+    return '$withCommas SDG';
+  }
+
+  String _bi(bool isArabic, String en, String ar) => isArabic ? ar : en;
+
+  List<MapEntry<String, String>> _collectMmpUploadedDetails(
+    Map<String, dynamic> siteData,
+    Map<String, dynamic> additionalData,
+    bool isArabic,
+  ) {
+    final details = <MapEntry<String, String>>[];
+    final seen = <String>{};
+
+    void addLabeledEntry(String label, String value) {
+      final normalized = _normalizeLabelKey(label);
+      if (normalized.isEmpty || seen.contains(normalized) || value.isEmpty) {
+        return;
+      }
+      seen.add(normalized);
+      details.add(MapEntry(label, _enhanceMmpDetailValue(label, value)));
+    }
+
+    void addEntry(String key, dynamic rawValue) {
+      final normalizedKey = _normalizeLookupKey(key);
+
+      if (normalizedKey == 'claimfeecalculation') {
+        final mapValue = _toMapValue(rawValue);
+        if (mapValue != null) {
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Calculation Source', 'حساب المطالبة - المصدر'),
+            _stringifyMmpValue(mapValue['fee_source'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Calculation Scope', 'حساب المطالبة - النطاق'),
+            _stringifyMmpValue(mapValue['role_scope'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Total Payout', 'حساب المطالبة - إجمالي الدفع'),
+            _stringifyMmpValue(mapValue['total_payout'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(
+              isArabic,
+              'Claim Transport Cost',
+              'حساب المطالبة - تكلفة النقل',
+            ),
+            _stringifyMmpValue(mapValue['calculated_transport_cost'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Claim Enumerator Fee', 'حساب المطالبة - أجر الباحث'),
+            _stringifyMmpValue(mapValue['enumerator_fee'], isArabic),
+          );
+          return;
+        }
+      }
+
+      if (normalizedKey == 'dispatchcosts') {
+        final mapValue = _toMapValue(rawValue);
+        if (mapValue != null) {
+          addLabeledEntry(
+            _bi(isArabic, 'Dispatch Cost Status', 'تكاليف الإرسال - الحالة'),
+            _stringifyMmpValue(mapValue['cost_status'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(
+              isArabic,
+              'Dispatch Cost Calculated By',
+              'تكاليف الإرسال - حسب',
+            ),
+            _stringifyMmpValue(mapValue['calculated_by'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(isArabic, 'Dispatch Transport Cost', 'تكاليف الإرسال - نقل'),
+            _stringifyMmpValue(mapValue['transportation_cost'], isArabic),
+          );
+          addLabeledEntry(
+            _bi(
+              isArabic,
+              'Dispatch Transport Budget',
+              'تكاليف الإرسال - ميزانية النقل',
+            ),
+            _stringifyMmpValue(mapValue['transport_budget_total'], isArabic),
+          );
+          return;
+        }
+      }
+
+      if (rawValue is Map || rawValue is List) return;
+
+      final value = _stringifyMmpValue(rawValue, isArabic);
+      if (value.isEmpty) return;
+      if (normalizedKey.isEmpty || seen.contains(normalizedKey)) return;
+      seen.add(normalizedKey);
+      details.add(
+        MapEntry(
+          _formatMmpKeyLabel(key),
+          _enhanceMmpDetailValue(_formatMmpKeyLabel(key), value),
+        ),
+      );
+    }
+
+    const preferredKeys = [
+      'mmp_name',
+      'mmp_file_name',
+      'cp_name',
+      'monitoring_by',
+      'tool_to_be_used',
+      'tools_to_be_used',
+      'survey_tool',
+      'main_activity',
+      'activity_at_site',
+      'activity_type',
+      'activity',
+      'use_market_diversion',
+      'use_warehouse_monitoring',
+      'market_name',
+      'warehouse_name',
+      'whm_warehouse_name',
+      'mmp_status',
+    ];
+    for (final key in preferredKeys) {
+      addEntry(key, siteData[key]);
+      addEntry(key, additionalData[key]);
+    }
+
+    const excludedPrefixes = [
+      'draft_',
+      'visit_',
+      'start_',
+      'final_',
+      'permit_',
+      'state_permit_',
+      'locality_permit_',
+      'registry_',
+      '_',
+    ];
+    const excludedExact = {
+      'assigned_to',
+      'assigned_at',
+      'accepted_at',
+      'accepted_by',
+      'claimed_at',
+      'claimed_by',
+      'updated_at',
+      'created_at',
+    };
+    final sortedKeys = additionalData.keys.toList()..sort();
+    for (final key in sortedKeys) {
+      if (excludedExact.contains(key)) continue;
+      if (excludedPrefixes.any((p) => key.startsWith(p))) continue;
+      addEntry(key, additionalData[key]);
+    }
+    return details;
+  }
+
+  List<Widget> _buildUploadedMmpDetailSections(
+    String siteId,
+    bool isArabic,
+    List<MapEntry<String, String>> uploadedDetails,
+  ) {
+    final core = <MapEntry<String, String>>[];
+    final claim = <MapEntry<String, String>>[];
+    final dispatch = <MapEntry<String, String>>[];
+
+    for (final entry in uploadedDetails) {
+      final label = entry.key.toLowerCase();
+      if (label.contains('dispatch') || label.contains('إرسال')) {
+        dispatch.add(entry);
+      } else if (label.contains('claim') || label.contains('مطالبة')) {
+        claim.add(entry);
+      } else {
+        core.add(entry);
+      }
+    }
+
+    final expansionState = _getClaimMmpExpansionState(siteId);
+    if (!expansionState.initialized) {
+      expansionState.showCore = core.isNotEmpty;
+      expansionState.showClaim = false;
+      expansionState.showDispatch = false;
+      expansionState.initialized = true;
+    }
+
+    Widget buildSection({
+      required String title,
+      required List<MapEntry<String, String>> entries,
+      required bool isExpanded,
+      required VoidCallback onToggle,
+    }) {
+      return Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: Colors.grey[800],
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryOrange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        entries.length.toString(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryOrange,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: Colors.grey[700],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (isExpanded) ...[
+              const SizedBox(height: 8),
+              ...entries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          entry.key,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 6,
+                        child: Text(
+                          entry.value,
+                          textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                          textDirection: isArabic
+                              ? TextDirection.rtl
+                              : TextDirection.ltr,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            height: 1.4,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final sections = <Widget>[];
+    if (core.isNotEmpty) {
+      sections.add(
+        buildSection(
+          title: 'Core Details | البيانات الأساسية',
+          entries: core,
+          isExpanded: expansionState.showCore,
+          onToggle: () => setState(() {
+            expansionState.showCore = !expansionState.showCore;
+          }),
+        ),
+      );
+    }
+    if (claim.isNotEmpty || dispatch.isNotEmpty) {
+      // Intentionally ignore claim/dispatch sections for claim tiles.
+    }
+
+    return sections;
+  }
+
+  String _resolveMmpValue({
+    required Map<String, dynamic> siteData,
+    required Map<String, dynamic> additionalData,
+    required List<String> exactKeys,
+    required List<String> normalizedKeys,
+    required bool isArabic,
+  }) {
+    for (final key in exactKeys) {
+      final fromSite = _stringifyMmpValue(siteData[key], isArabic);
+      if (fromSite.isNotEmpty) return fromSite;
+
+      final fromAdditional = _stringifyMmpValue(additionalData[key], isArabic);
+      if (fromAdditional.isNotEmpty) return fromAdditional;
+    }
+
+    for (final normalizedTarget in normalizedKeys) {
+      for (final entry in siteData.entries) {
+        if (_normalizeLookupKey(entry.key) == normalizedTarget) {
+          final value = _stringifyMmpValue(entry.value, isArabic);
+          if (value.isNotEmpty) return value;
+        }
+      }
+      for (final entry in additionalData.entries) {
+        if (_normalizeLookupKey(entry.key) == normalizedTarget) {
+          final value = _stringifyMmpValue(entry.value, isArabic);
+          if (value.isNotEmpty) return value;
+        }
+      }
+    }
+
+    return '';
+  }
+
   /// Reclaim a site - release it back to the dispatch pool (Admin/Super Admin only)
   Future<void> _reclaimSite(Map<String, dynamic> site) async {
     // Strict admin check - only admin/super_admin can reclaim
@@ -2984,7 +3804,7 @@ class _MMPScreenState extends State<MMPScreen> {
       final finalHubId = hubId ?? profile?['hub_id'] as String?;
 
       // Create advance request
-      final newRequest = await Supabase.instance.client
+      await Supabase.instance.client
           .from('down_payment_requests')
           .insert({
             'mmp_site_entry_id': site['id'],
@@ -3379,79 +4199,6 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
-  /// Initiate an in-app Agora call to a PACT user
-  Future<void> _initiateInAppCall(
-    String targetUserId,
-    String targetUserName, {
-    bool isAudioOnly = true,
-  }) async {
-    try {
-      final agoraService = AgoraCallService();
-
-      // Check if user is logged in
-      if (_userId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Unable to initiate call. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Check if already in a call
-      if (agoraService.isInCall) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('You are already in a call'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Start Agora call (service initialized at app startup in main_screen.dart)
-      final result = await agoraService.startCall(
-        remoteUserId: targetUserId,
-        remoteUserName: targetUserName,
-        audioOnly: isAudioOnly,
-      );
-
-      if (result.success && result.channelName != null && mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => AgoraCallScreen(
-              channelName: result.channelName!,
-              remoteUserId: targetUserId,
-              remoteUserName: targetUserName,
-              isAudioOnly: isAudioOnly,
-              isOutgoing: true,
-            ),
-          ),
-        );
-      } else if (mounted) {
-        final message = result.error ?? 'Unable to connect call';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: Colors.orange),
-        );
-      }
-    } catch (e) {
-      debugPrint('[_initiateInAppCall] Error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to start call: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   /// Build contact buttons row for a site
   Widget _buildContactButtons(Map<String, dynamic> site) {
     // Try to get phone number from various possible fields
@@ -3468,11 +4215,6 @@ class _MMPScreenState extends State<MMPScreen> {
         site['assigned_to'] ??
         site['enumerator_id'] ??
         site['coordinator_id'];
-    final contactName =
-        site['enumerator_name'] ??
-        site['assigned_name'] ??
-        site['coordinator_name'] ??
-        'PACT User';
     final isPactUser =
         contactUserId != null && contactUserId.toString().isNotEmpty;
 
@@ -4158,37 +4900,34 @@ class _MMPScreenState extends State<MMPScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return MainLayout(
-      currentIndex: 1, // MMP is typically index 1
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: AppColors.backgroundGray,
-        drawer: CustomDrawerMenu(
-          currentUser: Supabase.instance.client.auth.currentUser,
-          onClose: () => _scaffoldKey.currentState?.closeDrawer(),
-        ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              ReusableAppBar(
-                title:
-                    AppLocalizations.of(context)?.mmpManagement ??
-                    'MMP Management',
-                scaffoldKey: _scaffoldKey,
-                showLanguageSwitcher: false,
-                showNotifications: true,
-                onNotificationTap: () => NotificationsPanel.show(context),
-                showUserAvatar: true,
-              ),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : (_isDataCollector || _isCoordinator)
-                    ? _buildDataCollectorView()
-                    : _buildNoAccessView(),
-              ),
-            ],
-          ),
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: AppColors.backgroundGray,
+      drawer: CustomDrawerMenu(
+        currentUser: Supabase.instance.client.auth.currentUser,
+        onClose: () => _scaffoldKey.currentState?.closeDrawer(),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReusableAppBar(
+              title:
+                  AppLocalizations.of(context)?.mmpManagement ??
+                  'MMP Management',
+              scaffoldKey: _scaffoldKey,
+              showLanguageSwitcher: false,
+              showNotifications: true,
+              onNotificationTap: () => NotificationsPanel.show(context),
+              showUserAvatar: true,
+            ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : (_isDataCollector || _isCoordinator)
+                  ? _buildDataCollectorView()
+                  : _buildNoAccessView(),
+            ),
+          ],
         ),
       ),
     );
@@ -4308,6 +5047,111 @@ class _MMPScreenState extends State<MMPScreen> {
             _initializeMMP();
           },
         ),
+
+        // Phase 8b: Task Status and Offline Sync Badges
+        if (_currentTaskName != null ||
+            _offlineSyncPendingCount > 0 ||
+            _isInCall)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: Colors.grey[100],
+            child: Row(
+              children: [
+                // Task status badge
+                if (_currentTaskName != null)
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        border: Border.all(color: Colors.blue.shade300),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.task,
+                            size: 14,
+                            color: Colors.blue.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _currentTaskName!,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.blue.shade700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_isInCall) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                'on call',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                // Offline sync badge
+                if (_offlineSyncPendingCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      border: Border.all(color: Colors.amber.shade300),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.cloud_upload,
+                          size: 14,
+                          color: Colors.amber.shade700,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Syncing: $_offlineSyncPendingCount',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
 
         // Search Bar will be moved to claimable tab section
 
@@ -5005,6 +5849,59 @@ class _MMPScreenState extends State<MMPScreen> {
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
     final status = site['status'] ?? 'Pending';
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final siteId = site['id']?.toString() ?? siteCode;
+    final additionalData = _safeParseAdditionalData(site['additional_data']);
+    final toolsToBeUsed = _resolveMmpValue(
+      siteData: site,
+      additionalData: additionalData,
+      exactKeys: const [
+        'tool_to_be_used',
+        'tool_to_be_use',
+        'tools_to_be_used',
+        'tools_to_be_use',
+        'survey_tool',
+        'tool_used',
+        'tool',
+      ],
+      normalizedKeys: const ['tooltobeused', 'tools', 'surveytool'],
+      isArabic: isArabic,
+    );
+    final mainActivity = _resolveMmpValue(
+      siteData: site,
+      additionalData: additionalData,
+      exactKeys: const [
+        'main_activity',
+        'activity_at_site',
+        'activity_type',
+        'activity',
+      ],
+      normalizedKeys: const [
+        'mainactivity',
+        'activityatsite',
+        'activitytype',
+        'activity',
+      ],
+      isArabic: isArabic,
+    ).toUpperCase();
+    final mmpStatus = _resolveMmpValue(
+      siteData: site,
+      additionalData: additionalData,
+      exactKeys: const ['mmp_status', 'status'],
+      normalizedKeys: const ['mmpstatus', 'status'],
+      isArabic: isArabic,
+    );
+    final toolsDisplay = toolsToBeUsed.isNotEmpty
+        ? toolsToBeUsed
+        : (mainActivity.isNotEmpty ? mainActivity : '');
+    final mainActivityDisplay = mainActivity.isNotEmpty ? mainActivity : '';
+    final mmpStatusDisplay = mmpStatus.isNotEmpty ? mmpStatus : status;
+    final uploadedDetails = _collectMmpUploadedDetails(
+      site,
+      additionalData,
+      isArabic,
+    );
+    final isMmpExpanded = _claimMmpCardExpanded[siteId] ?? false;
     final storedEnumeratorFee =
         (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
     final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
@@ -5087,7 +5984,184 @@ class _MMPScreenState extends State<MMPScreen> {
             ],
           ),
 
-          // Show only Total (no Transport/Enumerator breakdown)
+          if (showClaimButton) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primaryOrange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.primaryOrange.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => setState(() {
+                      _claimMmpCardExpanded[siteId] = !isMmpExpanded;
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_rounded,
+                            color: AppColors.primaryOrange,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'MMP DETAILS | تفاصيل الخطة',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryOrange,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            isMmpExpanded
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            size: 20,
+                            color: Colors.grey[700],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (isMmpExpanded) ...[
+                    const SizedBox(height: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isArabic ? 'الأدوات المستخدمة' : 'Tools to be Used',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          toolsDisplay.isEmpty ? 'N/A' : toolsDisplay,
+                          textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                          textDirection: isArabic
+                              ? TextDirection.rtl
+                              : TextDirection.ltr,
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryOrange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isArabic ? 'النشاط الرئيسي' : 'Main Activity',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                mainActivityDisplay.isEmpty
+                                    ? 'N/A'
+                                    : mainActivityDisplay,
+                                textAlign: isArabic
+                                    ? TextAlign.start
+                                    : TextAlign.end,
+                                textDirection: isArabic
+                                    ? TextDirection.rtl
+                                    : TextDirection.ltr,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primaryOrange,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isArabic ? 'الحالة' : 'Status',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentGreen.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  mmpStatusDisplay,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.accentGreen,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (uploadedDetails.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        isArabic ? 'بيانات MMP المرفوعة' : 'Uploaded MMP Data',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._buildUploadedMmpDetailSections(
+                        siteId,
+                        isArabic,
+                        uploadedDetails,
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ],
+
+          // Show Fee Details
           // Hide total for claimable sites - it will be shown in the claim confirmation dialog
           if (cost > 0 && !showClaimButton) ...[
             const SizedBox(height: 12),
@@ -5097,24 +6171,73 @@ class _MMPScreenState extends State<MMPScreen> {
                 color: AppColors.backgroundGray,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
                 children: [
-                  Text(
-                    'Total',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
+                  if (_mySitesSubTab == 'sent' ||
+                      _mySitesSubTab == 'outbox') ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Enumerator Fee',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                        Text(
+                          '${enumeratorFee.toStringAsFixed(0)} SDG',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  Text(
-                    '${cost.toStringAsFixed(0)} SDG',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryBlue,
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Transport Fee',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                        Text(
+                          '${transportFee.toStringAsFixed(0)} SDG',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
+                    const Divider(height: 16),
+                  ],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      Text(
+                        '${cost.toStringAsFixed(0)} SDG',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -5136,238 +6259,31 @@ class _MMPScreenState extends State<MMPScreen> {
     );
   }
 
-  Widget _buildCoordinatorView() {
-    final filtered = _getFilteredSites(_coordinatorSites);
-
-    return Column(
-      children: [
-        // Header
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF2563EB), Color(0xFF1E40AF)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blue.withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.verified_user,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Verified Sites',
-                          style: GoogleFonts.poppins(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          'Sites forwarded to you for verification',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.9),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // Search
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (value) {
-              setState(() => _searchQuery = value);
-            },
-            decoration: InputDecoration(
-              hintText: 'Search sites...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-          ),
-        ),
-
-        // Sites list
-        Expanded(
-          child: filtered.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.assignment_outlined,
-                          size: 64,
-                          color: AppColors.textLight,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No sites found',
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textDark,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No sites have been forwarded to you yet.',
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: AppColors.textLight,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: filtered
-                      .map((site) => _buildCoordinatorSiteCard(site))
-                      .toList(),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCoordinatorSiteCard(Map<String, dynamic> site) {
-    final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
-    final siteCode = site['site_code'] ?? site['siteCode'] ?? '';
-    final state = site['state'] ?? '';
-    final locality = site['locality'] ?? '';
-    final status = site['status'] ?? 'Pending';
-    final isCompleted =
-        status.toString().toLowerCase() == 'completed' ||
-        status.toString().toLowerCase() == 'complete';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.backgroundGray),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      siteName.toString(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$locality, $state',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: AppColors.textLight,
-                      ),
-                    ),
-                    if (siteCode.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        'Code: $siteCode',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: AppColors.textLight,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getStatusColor(status).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  status.toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: _getStatusColor(status),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (isCompleted && (_isAdminOrSuperUser || _userRole == 'fom')) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _viewVisitReport(site),
-                icon: const Icon(Icons.visibility, size: 18),
-                label: const Text('View Visit Report'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  // Unused method removed for cleanup
 
   void _viewVisitReport(Map<String, dynamic> site) {
+    final role = (_userRole ?? '').toLowerCase();
+    final hasVisitReportAccess =
+        role == 'admin' ||
+        role == 'super_admin' ||
+        role == 'superadmin' ||
+        role == 'fom' ||
+        role == 'ict';
+
+    if (!hasVisitReportAccess) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Access denied. Only Admin, FOM, and ICT roles can view visit reports.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     final siteVisit = SiteVisit(
       id: site['id']?.toString() ?? '',
       siteName:
@@ -5455,6 +6371,13 @@ class _MMPScreenState extends State<MMPScreen> {
   int _getSentCount() {
     return _mySites.where((site) => _hasSyncedReport(site)).length;
   }
+}
+
+class _MmpSectionExpansionState {
+  bool initialized = false;
+  bool showCore = false;
+  bool showClaim = false;
+  bool showDispatch = false;
 }
 
 // Cost Acknowledgment Dialog

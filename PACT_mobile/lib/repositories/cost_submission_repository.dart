@@ -134,12 +134,16 @@ class CostSubmissionRepository {
       };
 
       // Calculate new total if cost fields are provided
-      final transportCents = request.transportationCostCents ?? existing.transportationCostCents;
-      final accommodationCents = request.accommodationCostCents ?? existing.accommodationCostCents;
-      final mealCents = request.mealAllowanceCents ?? existing.mealAllowanceCents;
+      final transportCents =
+          request.transportationCostCents ?? existing.transportationCostCents;
+      final accommodationCents =
+          request.accommodationCostCents ?? existing.accommodationCostCents;
+      final mealCents =
+          request.mealAllowanceCents ?? existing.mealAllowanceCents;
       final otherCents = request.otherCostsCents ?? existing.otherCostsCents;
-      
-      data['total_cost_cents'] = transportCents + accommodationCents + mealCents + otherCents;
+
+      data['total_cost_cents'] =
+          transportCents + accommodationCents + mealCents + otherCents;
 
       final response = await _supabase
           .from('site_visit_cost_submissions')
@@ -199,10 +203,7 @@ class CostSubmissionRepository {
         );
       }
 
-      await _supabase
-          .from('site_visit_cost_submissions')
-          .delete()
-          .eq('id', id);
+      await _supabase.from('site_visit_cost_submissions').delete().eq('id', id);
     } catch (e) {
       if (e is CostSubmissionException) rethrow;
       throw CostSubmissionException('Failed to delete cost submission: $e');
@@ -216,7 +217,9 @@ class CostSubmissionRepository {
         .stream(primaryKey: ['id'])
         .eq('submitted_by', userId)
         .order('submitted_at', ascending: false)
-        .map((data) => data.map((json) => CostSubmission.fromJson(json)).toList());
+        .map(
+          (data) => data.map((json) => CostSubmission.fromJson(json)).toList(),
+        );
   }
 
   /// Get cost submission statistics
@@ -245,7 +248,8 @@ class CostSubmissionRepository {
             break;
           case CostSubmissionStatus.paid:
             paidCount++;
-            totalPaidAmountCents += submission.paidAmountCents ?? submission.totalCostCents;
+            totalPaidAmountCents +=
+                submission.paidAmountCents ?? submission.totalCostCents;
             break;
           case CostSubmissionStatus.rejected:
             rejectedCount++;
@@ -330,7 +334,8 @@ class CostSubmissionRepository {
       switch (request.action) {
         case ReviewAction.approve:
           updateData['status'] = 'approved';
-          updateData['approval_notes'] = request.approvalNotes ?? request.reviewerNotes;
+          updateData['approval_notes'] =
+              request.approvalNotes ?? request.reviewerNotes;
           updateData['reviewer_notes'] = request.reviewerNotes;
           break;
 
@@ -342,7 +347,8 @@ class CostSubmissionRepository {
         case ReviewAction.requestRevision:
           updateData['status'] = 'under_review';
           updateData['revision_requested'] = true;
-          updateData['revision_notes'] = request.revisionNotes ?? request.reviewerNotes;
+          updateData['revision_notes'] =
+              request.revisionNotes ?? request.reviewerNotes;
           updateData['reviewer_notes'] = request.reviewerNotes;
           break;
       }
@@ -361,12 +367,14 @@ class CostSubmissionRepository {
   }
 
   /// Get approval history for a submission
-  Future<List<CostApprovalHistory>> getApprovalHistory(String submissionId) async {
+  Future<List<CostApprovalHistory>> getApprovalHistory(
+    String submissionId,
+  ) async {
     try {
-      final response = await _supabase
-          .rpc('get_cost_submission_history', params: {
-        'submission_id_param': submissionId,
-      });
+      final response = await _supabase.rpc(
+        'get_cost_submission_history',
+        params: {'submission_id_param': submissionId},
+      );
 
       return (response as List)
           .map((json) => CostApprovalHistory.fromJson(json))
@@ -413,21 +421,21 @@ class CostSubmissionRepository {
     String? notes,
   }) async {
     try {
-      final response = await _supabase.rpc(
-        'rpc_pay_cost_submission',
-        params: {
-          'in_cost_submission_id': costSubmissionId,
-          'in_admin_id': adminId,
-          'in_notes': notes,
-        },
-      ).select().single();
+      final response = await _supabase
+          .rpc(
+            'rpc_pay_cost_submission',
+            params: {
+              'in_cost_submission_id': costSubmissionId,
+              'in_admin_id': adminId,
+              'in_notes': notes,
+            },
+          )
+          .select()
+          .single();
 
       // Response format: {success: bool, error_text: text, transaction_id: uuid}
       if (response['success'] == true) {
-        return {
-          'success': true,
-          'transaction_id': response['transaction_id'],
-        };
+        return {'success': true, 'transaction_id': response['transaction_id']};
       } else {
         throw CostSubmissionException(
           response['error_text'] ?? 'Payment failed',
@@ -477,4 +485,3 @@ class CostSubmissionRepository {
     return results;
   }
 }
-

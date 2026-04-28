@@ -4,21 +4,23 @@ import 'package:pact_mobile/models/site_visit.dart';
 
 void main() {
   group('ConflictResolutionService', () {
-    test('resolveConflict with lastWriteWins strategy should pick newer data',
-        () {
-      final now = DateTime.now();
-      final older = now.subtract(const Duration(hours: 1));
+    test(
+      'resolveConflict with lastWriteWins strategy should pick newer data',
+      () {
+        final now = DateTime.now();
+        final older = now.subtract(const Duration(hours: 1));
 
-      final result = ConflictResolutionService.resolveConflict<String>(
-        localData: 'local',
-        serverData: 'server',
-        localTimestamp: older,
-        serverTimestamp: now,
-        mergeStrategy: MergeStrategy.lastWriteWins,
-      );
+        final result = ConflictResolutionService.resolveConflict<String>(
+          localData: 'local',
+          serverData: 'server',
+          localTimestamp: older,
+          serverTimestamp: now,
+          mergeStrategy: MergeStrategy.lastWriteWins,
+        );
 
-      expect(result, equals('server'));
-    });
+        expect(result, equals('server'));
+      },
+    );
 
     test('resolveSiteVisitConflict should prefer assigned status', () {
       final localVisit = SiteVisit(
@@ -43,27 +45,28 @@ void main() {
     });
 
     test(
-        'resolveSiteVisitConflict should resolve assignment conflicts using server data',
-        () {
-      final localVisit = SiteVisit(
-        id: '1',
-        status: 'assigned',
-        assignedTo: 'user1',
-      );
+      'resolveSiteVisitConflict should resolve assignment conflicts using server data',
+      () {
+        final localVisit = SiteVisit(
+          id: '1',
+          status: 'assigned',
+          assignedTo: 'user1',
+        );
 
-      final serverVisit = SiteVisit(
-        id: '1',
-        status: 'assigned',
-        assignedTo: 'user2',
-      );
+        final serverVisit = SiteVisit(
+          id: '1',
+          status: 'assigned',
+          assignedTo: 'user2',
+        );
 
-      final result = ConflictResolutionService.resolveSiteVisitConflict(
-        localVisit: localVisit,
-        serverVisit: serverVisit,
-      );
+        final result = ConflictResolutionService.resolveSiteVisitConflict(
+          localVisit: localVisit,
+          serverVisit: serverVisit,
+        );
 
-      expect(result.assignedTo, equals('user2'));
-    });
+        expect(result.assignedTo, equals('user2'));
+      },
+    );
 
     test('mergeMetadata should properly merge complex data structures', () {
       final local = {

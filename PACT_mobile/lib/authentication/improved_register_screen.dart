@@ -41,6 +41,7 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
   bool _acceptTerms = false;
   bool _isLoading = false;
   dynamic _profilePhoto; // File on mobile, Uint8List on web
+  // ignore: unused_field
   String? _profilePhotoUrl;
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -89,7 +90,6 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
 
   // Services
   final _authService = AuthService();
-  final _storageService = StorageService();
 
   Future<void> _pickProfilePhoto(ImageSource source) async {
     try {
@@ -179,51 +179,6 @@ class _ImprovedRegisterScreenState extends State<ImprovedRegisterScreen>
   }
 
   /// Move uploaded avatar from temp location to proper user location after signup
-  Future<String?> _uploadProfilePhoto(String userId) async {
-    if (_profilePhotoUrl == null) return null;
-
-    try {
-      final storage = StorageService();
-
-      // If avatar was already uploaded during signup, move it to proper location
-      if (_profilePhotoUrl!.contains('temp/')) {
-        // Extract temp path from URL
-        final uri = Uri.parse(_profilePhotoUrl!);
-        final tempPath = uri.pathSegments.lastWhere(
-          (segment) => segment.contains('temp/'),
-        );
-
-        // Move file from temp to user location
-        final userPath = '$userId/avatar';
-
-        // Copy file to user location
-        await storage.supabase.storage.from('avatars').copy(tempPath, userPath);
-
-        // Remove temp file
-        await storage.supabase.storage.from('avatars').remove([tempPath]);
-
-        // Get new public URL
-        final newUrl = storage.supabase.storage
-            .from('avatars')
-            .getPublicUrl(userPath);
-
-        // Update profile with correct avatar URL
-        await storage.supabase
-            .from('profiles')
-            .update({'avatar_url': newUrl})
-            .eq('id', userId);
-
-        debugPrint('Avatar moved to user location: $newUrl');
-        return newUrl;
-      }
-
-      return _profilePhotoUrl;
-    } catch (e) {
-      debugPrint('Error moving avatar to user location: $e');
-      return _profilePhotoUrl; // Return original URL if move fails
-    }
-  }
-
   void _showPhotoOptions() {
     showModalBottomSheet(
       context: context,

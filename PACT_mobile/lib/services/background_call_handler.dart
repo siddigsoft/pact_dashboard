@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'call_notification_service.dart';
+import 'call_state_persistence_service.dart';
 
 class BackgroundCallHandler {
   static final BackgroundCallHandler _instance =
@@ -22,6 +23,9 @@ class BackgroundCallHandler {
   Stream<Map<String, dynamic>> get incomingCallStream =>
       _incomingCallController.stream;
 
+  /// Persistence service for tracking call state
+  final _callStatePersistence = CallStatePersistenceService();
+
   Future<void> initialize({
     required String userId,
     required String userName,
@@ -32,6 +36,7 @@ class BackgroundCallHandler {
     _currentUserName = userName;
 
     await CallNotificationService().initialize();
+    await _callStatePersistence.initialize();
     await _setupBackgroundSignaling();
 
     _isInitialized = true;
@@ -43,10 +48,11 @@ class BackgroundCallHandler {
 
     final supabase = Supabase.instance.client;
 
-    _backgroundChannel = supabase.channel('calls:user:$_currentUserId');
+    // Use same channel name & event as AgoraCallService for unified signaling
+    _backgroundChannel = supabase.channel('agora-signaling:$_currentUserId');
 
     _backgroundChannel!.onBroadcast(
-      event: 'call-signal',
+      event: 'agora-signal',
       callback: (payload) async {
         debugPrint('[BackgroundCall] Received signal in background: $payload');
         await _handleBackgroundSignal(payload);
@@ -70,16 +76,32 @@ class BackgroundCallHandler {
     final to = payload['to'] as String?;
     final callId = payload['callId'] as String?;
     final isAudioOnly = payload['isAudioOnly'] as bool? ?? true;
+    final fromAvatar = payload['fromAvatar'] as String?;
 
     if (to != _currentUserId) return;
 
     if (type == 'call-request' || type == 'callRequest') {
       _incomingCallController.add(payload);
 
+      // Record as active call for potential recovery
+      if (callId != null && from != null && fromName != null) {
+        await _callStatePersistence.recordActiveCall(
+          callId: callId,
+          remoteUserId: from,
+          remoteUserName: fromName,
+          remoteUserAvatar: fromAvatar,
+          isAudioOnly: isAudioOnly,
+          isOutgoing: false,
+        );
+      }
+
       await CallNotificationService().showIncomingCallNotification(
+        callId:
+            callId ?? 'unknown-$from-${DateTime.now().millisecondsSinceEpoch}',
         callerId: from ?? '',
         callerName: fromName ?? 'Unknown Caller',
         isVideoCall: !isAudioOnly,
+        channelName: (payload['channelName'] ?? '').toString(),
       );
 
       debugPrint(
@@ -89,7 +111,23 @@ class BackgroundCallHandler {
         type == 'callEnd' ||
         type == 'call-rejected' ||
         type == 'callReject') {
-      await CallNotificationService().dismissIncomingCallNotification();
+      // If call was missed (not answered), record it
+      if (callId != null && from != null && fromName != null) {
+        await _callStatePersistence.recordMissedCall(
+          callId: callId,
+          callerId: from,
+          callerName: fromName,
+          callerAvatar: fromAvatar,
+          isAudioOnly: isAudioOnly,
+        );
+        await _callStatePersistence.clearActiveCall(callId);
+      }
+
+      if (callId != null) {
+        await CallNotificationService().dismissIncomingCallNotification(callId);
+      } else {
+        await CallNotificationService().dismissAllIncomingCallNotifications();
+      }
       debugPrint('[BackgroundCall] Call ended/rejected');
     }
   }
@@ -101,8 +139,8 @@ class BackgroundCallHandler {
     );
   }
 
-  Future<void> dismissCallNotification() async {
-    await CallNotificationService().dismissIncomingCallNotification();
+  Future<void> dismissCallNotification(String callId) async {
+    await CallNotificationService().dismissIncomingCallNotification(callId);
   }
 
   Future<void> dispose() async {
@@ -112,7 +150,6 @@ class BackgroundCallHandler {
     }
 
     await _incomingCallController.close();
-    CallNotificationService().dispose();
     _isInitialized = false;
 
     debugPrint('[BackgroundCall] Handler disposed');

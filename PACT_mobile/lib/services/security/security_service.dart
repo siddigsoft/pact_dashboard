@@ -26,27 +26,34 @@ class SecurityService {
     try {
       await _encryption.initialize();
       _sessionManager.startSession();
-      _networkSecurity.setBaseUrl('YOUR_API_BASE_URL'); // Replace with actual base URL
-      
+      _networkSecurity.setBaseUrl(
+        'YOUR_API_BASE_URL',
+      ); // Replace with actual base URL
+
       // Enable certificate verification in production
       _networkSecurity.setCertificateVerification(verify: true);
-      
+
       LoggerService.log('Security service initialized successfully');
     } catch (e) {
-      LoggerService.log('Failed to initialize security service: $e', level: LogLevel.error);
+      LoggerService.log(
+        'Failed to initialize security service: $e',
+        level: LogLevel.error,
+      );
       rethrow;
     }
   }
 
   // Secure Storage Operations
-  Future<void> secureStore(String key, String value) => _secureStorage.write(key, value);
+  Future<void> secureStore(String key, String value) =>
+      _secureStorage.write(key, value);
   Future<String?> secureRetrieve(String key) => _secureStorage.read(key);
   Future<void> secureDelete(String key) => _secureStorage.delete(key);
   Future<void> secureClearAll() => _secureStorage.deleteAll();
 
   // Encryption Operations
   String encrypt(String data) => _encryption.encryptData(data);
-  String decrypt(String encryptedData) => _encryption.decryptData(encryptedData);
+  String decrypt(String encryptedData) =>
+      _encryption.decryptData(encryptedData);
 
   // Session Management
   bool get isSessionActive => _sessionManager.isSessionActive;

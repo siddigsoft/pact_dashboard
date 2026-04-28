@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../models/chat.dart';
 import '../models/chat_message.dart';
 import '../models/chat_participant.dart';
@@ -15,110 +19,120 @@ class ChatService {
   static const String _messageCacheBoxName = 'message_cache_box';
 
   final Map<String, List<ChatParticipant>> _participantCache = {};
-  
+
   /// Check if device is online
   Future<bool> _isOnline() async {
     final result = await Connectivity().checkConnectivity();
     return !result.contains(ConnectivityResult.none);
   }
-  
+
   /// Open message queue box for offline messages
   Future<Box> _openMessageQueueBox() async {
     return Hive.openBox(_messageQueueBoxName);
   }
-  
+
   /// Open message cache box
   Future<Box> _openMessageCacheBox() async {
     return Hive.openBox(_messageCacheBoxName);
   }
-  
+
   /// Queue a message for later sync
-  Future<ChatMessage> _queueMessageOffline(String chatId, String content, String contentType) async {
+  Future<ChatMessage> _queueMessageOffline(
+    String chatId,
+    String content,
+    String contentType, {
+    Map<String, dynamic>? metadata,
+  }) async {
     final currentUser = _supabase.auth.currentUser;
     final localId = const Uuid().v4();
     final now = DateTime.now();
-    
+
     final pendingMessage = {
       'local_id': localId,
       'chat_id': chatId,
       'sender_id': currentUser?.id,
       'content': content,
       'content_type': contentType,
+      'metadata': ?metadata,
       'status': 'pending',
       'created_at': now.toIso8601String(),
       'synced': false,
     };
-    
+
     // Save to queue
     final box = await _openMessageQueueBox();
     await box.put(localId, pendingMessage);
-    
+
     debugPrint('[ChatService] Message queued offline: $localId');
-    
+
     return ChatMessage(
       id: localId,
       chatId: chatId,
       senderId: currentUser?.id ?? '',
       content: content,
       contentType: contentType,
+      metadata: metadata,
       status: 'pending',
       createdAt: now,
     );
   }
-  
+
   /// Get pending messages count
   Future<int> getPendingMessagesCount() async {
     final box = await _openMessageQueueBox();
     return box.length;
   }
-  
+
   /// Get pending messages for a chat
   Future<List<ChatMessage>> getPendingMessages(String chatId) async {
     final box = await _openMessageQueueBox();
     final messages = <ChatMessage>[];
-    
+
     for (var key in box.keys) {
       final data = box.get(key);
       if (data != null && data is Map) {
         final map = Map<String, dynamic>.from(data);
         if (map['chat_id'] == chatId && map['synced'] != true) {
-          messages.add(ChatMessage(
-            id: map['local_id'] ?? key.toString(),
-            chatId: map['chat_id'],
-            senderId: map['sender_id'] ?? '',
-            content: map['content'] ?? '',
-            contentType: map['content_type'] ?? 'text',
-            status: 'pending',
-            createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
-          ));
+          messages.add(
+            ChatMessage(
+              id: map['local_id'] ?? key.toString(),
+              chatId: map['chat_id'],
+              senderId: map['sender_id'] ?? '',
+              content: map['content'] ?? '',
+              contentType: map['content_type'] ?? 'text',
+              status: 'pending',
+              createdAt:
+                  DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
+            ),
+          );
         }
       }
     }
-    
+
     return messages;
   }
-  
+
   /// Sync all pending messages
   Future<int> syncPendingMessages() async {
     if (!await _isOnline()) {
       debugPrint('[ChatService] Cannot sync - offline');
       return 0;
     }
-    
+
     final box = await _openMessageQueueBox();
     int syncedCount = 0;
     final keysToRemove = <dynamic>[];
-    
+
     for (var key in box.keys) {
       final data = box.get(key);
       if (data == null || data is! Map) continue;
-      
+
       final map = Map<String, dynamic>.from(data);
       if (map['synced'] == true) {
         keysToRemove.add(key);
         continue;
       }
-      
+
       try {
         await _supabase.from('chat_messages').insert({
           'chat_id': map['chat_id'],
@@ -127,7 +141,7 @@ class ChatService {
           'content_type': map['content_type'] ?? 'text',
           'status': 'sent',
         });
-        
+
         keysToRemove.add(key);
         syncedCount++;
         debugPrint('[ChatService] Synced message: $key');
@@ -135,47 +149,51 @@ class ChatService {
         debugPrint('[ChatService] Failed to sync message $key: $e');
       }
     }
-    
+
     // Remove synced messages
     for (var key in keysToRemove) {
       await box.delete(key);
     }
-    
+
     debugPrint('[ChatService] Synced $syncedCount messages');
     return syncedCount;
   }
-  
+
   /// Cache messages for a chat
   Future<void> cacheMessages(String chatId, List<ChatMessage> messages) async {
     try {
       final box = await _openMessageCacheBox();
       await box.put('messages_$chatId', {
         'updated_at': DateTime.now().toIso8601String(),
-        'messages': messages.map((m) => {
-          'id': m.id,
-          'chat_id': m.chatId,
-          'sender_id': m.senderId,
-          'content': m.content,
-          'content_type': m.contentType,
-          'status': m.status,
-          'created_at': m.createdAt.toIso8601String(),
-        }).toList(),
+        'messages': messages
+            .map(
+              (m) => {
+                'id': m.id,
+                'chat_id': m.chatId,
+                'sender_id': m.senderId,
+                'content': m.content,
+                'content_type': m.contentType,
+                'status': m.status,
+                'created_at': m.createdAt.toIso8601String(),
+              },
+            )
+            .toList(),
       });
     } catch (e) {
       debugPrint('[ChatService] Error caching messages: $e');
     }
   }
-  
+
   /// Get cached messages for a chat
   Future<List<ChatMessage>> getCachedMessages(String chatId) async {
     try {
       final box = await _openMessageCacheBox();
       final cache = box.get('messages_$chatId');
       if (cache == null || cache is! Map) return [];
-      
+
       final rawMessages = cache['messages'];
       if (rawMessages is! List) return [];
-      
+
       return rawMessages.map((item) {
         final map = Map<String, dynamic>.from(item as Map);
         return ChatMessage(
@@ -185,7 +203,8 @@ class ChatService {
           content: map['content'] ?? '',
           contentType: map['content_type'] ?? 'text',
           status: map['status'] ?? 'sent',
-          createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
+          createdAt:
+              DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
         );
       }).toList();
     } catch (e) {
@@ -773,7 +792,7 @@ class ChatService {
   }) async {
     // Check connectivity
     final isOnline = await _isOnline();
-    
+
     if (!isOnline) {
       debugPrint('[ChatService] Offline - loading cached messages');
       final cached = await getCachedMessages(chatId);
@@ -783,7 +802,7 @@ class ChatService {
       all.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       return all;
     }
-    
+
     try {
       final response = await _supabase
           .from('chat_messages')
@@ -792,16 +811,18 @@ class ChatService {
           .order('created_at', ascending: true)
           .limit(limit);
 
-      final messages = response.map((json) => ChatMessage.fromJson(json)).toList();
-      
+      final messages = response
+          .map((json) => ChatMessage.fromJson(json))
+          .toList();
+
       // Cache messages for offline use
       await cacheMessages(chatId, messages);
-      
+
       // Also include pending messages not yet synced
       final pending = await getPendingMessages(chatId);
       final all = [...messages, ...pending];
       all.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      
+
       return all;
     } catch (e) {
       debugPrint('[ChatService] Error getting messages, using cache: $e');
@@ -813,11 +834,32 @@ class ChatService {
     }
   }
 
+  // Get the last message for a chat
+  Future<ChatMessage?> getLastMessage(String chatId) async {
+    try {
+      final response = await _supabase
+          .from('chat_messages')
+          .select()
+          .eq('chat_id', chatId)
+          .order('created_at', ascending: false)
+          .limit(1);
+
+      if (response.isNotEmpty) {
+        return ChatMessage.fromJson(response.first);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[ChatService] Error getting last message: $e');
+      return null;
+    }
+  }
+
   // Send a message
   Future<ChatMessage?> sendMessage(
     String chatId,
     String content, {
     String contentType = 'text',
+    Map<String, dynamic>? metadata,
   }) async {
     final currentUser = _supabase.auth.currentUser;
     if (currentUser == null) return null;
@@ -826,7 +868,12 @@ class ChatService {
     final isOnline = await _isOnline();
     if (!isOnline) {
       debugPrint('[ChatService] Offline - queuing message for later sync');
-      return _queueMessageOffline(chatId, content, contentType);
+      return _queueMessageOffline(
+        chatId,
+        content,
+        contentType,
+        metadata: metadata,
+      );
     }
 
     try {
@@ -837,16 +884,57 @@ class ChatService {
             'sender_id': currentUser.id,
             'content': content,
             'content_type': contentType,
+            'metadata': ?metadata,
             'status': 'sent',
           })
           .select()
           .single();
 
-      return ChatMessage.fromJson(response);
+      final message = ChatMessage.fromJson(response);
+
+      // Update message status to 'delivered' if online (showing 2 ticks to recipient)
+      unawaited(_markMessageDelivered(message.id));
+
+      // Trigger push notifications for other chat participants
+      unawaited(
+        _triggerMessageNotificationsForChat(
+          chatId: chatId,
+          senderId: currentUser.id,
+          messageId: message.id,
+          messagePreview: content.length > 150
+              ? '${content.substring(0, 150)}...'
+              : content,
+        ),
+      );
+
+      return message;
     } catch (e) {
       debugPrint('[ChatService] Error sending message, queuing offline: $e');
       // Network error - queue for later
-      return _queueMessageOffline(chatId, content, contentType);
+      return _queueMessageOffline(
+        chatId,
+        content,
+        contentType,
+        metadata: metadata,
+      );
+    }
+  }
+
+  // Update message metadata (e.g. for reactions)
+  Future<void> updateMessageMetadata(
+    String messageId,
+    Map<String, dynamic> metadata,
+  ) async {
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser == null) return;
+
+    try {
+      await _supabase
+          .from('chat_messages')
+          .update({'metadata': metadata})
+          .eq('id', messageId);
+    } catch (e) {
+      debugPrint('[ChatService] Error updating metadata: $e');
     }
   }
 
@@ -856,6 +944,11 @@ class ChatService {
     if (currentUser == null) return;
 
     try {
+      await _supabase
+          .from('chat_messages')
+          .update({'status': 'read'})
+          .eq('id', messageId);
+
       await _supabase.from('chat_message_reads').upsert({
         'message_id': messageId,
         'user_id': currentUser.id,
@@ -863,6 +956,19 @@ class ChatService {
       });
     } catch (e) {
       print('Error marking message as read: $e');
+    }
+  }
+
+  /// Mark a message as delivered (shows 2 ticks to sender when recipient is online)
+  Future<void> _markMessageDelivered(String messageId) async {
+    try {
+      await _supabase
+          .from('chat_messages')
+          .update({'status': 'delivered'})
+          .eq('id', messageId);
+      debugPrint('[ChatService] Message $messageId marked as delivered');
+    } catch (e) {
+      debugPrint('[ChatService] Error marking message as delivered: $e');
     }
   }
 
@@ -893,6 +999,35 @@ class ChatService {
     } catch (e) {
       print('Error getting unread count: $e');
       return 0;
+    }
+  }
+
+  // Get latest message metadata for multiple chats
+  Future<Map<String, Map<String, dynamic>>> getLatestMessageMeta(
+    List<String> chatIds,
+  ) async {
+    if (chatIds.isEmpty) return {};
+
+    try {
+      final response = await _supabase
+          .from('chat_messages')
+          .select('chat_id, sender_id, content, content_type, created_at')
+          .inFilter('chat_id', chatIds)
+          .order('created_at', ascending: false)
+          .limit(500);
+
+      final latestByChat = <String, Map<String, dynamic>>{};
+      for (final row in response) {
+        final map = Map<String, dynamic>.from(row);
+        final chatId = map['chat_id'] as String?;
+        if (chatId == null || chatId.isEmpty) continue;
+        latestByChat.putIfAbsent(chatId, () => map);
+      }
+
+      return latestByChat;
+    } catch (e) {
+      debugPrint('[ChatService] Error loading latest message metadata: $e');
+      return {};
     }
   }
 
@@ -1018,10 +1153,17 @@ class ChatService {
           .from('chat_messages')
           .select('id')
           .eq('chat_id', chatId)
-          .neq('sender_id', currentUser.id);
+          .neq('sender_id', currentUser.id)
+          .neq('status', 'read');
 
       if (unreadMessages.isNotEmpty) {
         final messageIds = unreadMessages.map((msg) => msg['id']).toList();
+
+        // Update status in chat_messages table to trigger broadcast
+        await _supabase
+            .from('chat_messages')
+            .update({'status': 'read'})
+            .inFilter('id', messageIds);
 
         // Mark as read (upsert to avoid duplicates)
         await _supabase
@@ -1110,7 +1252,9 @@ class ChatService {
       return null;
     }
 
-    print('[ChatService] findOrCreateDirectChat: currentUser=$currentUserId, target=$targetUserId');
+    print(
+      '[ChatService] findOrCreateDirectChat: currentUser=$currentUserId, target=$targetUserId',
+    );
 
     try {
       // First, check if a direct chat already exists between these users
@@ -1122,7 +1266,7 @@ class ChatService {
       // Check for existing chat with this pair key
       // Fallback: also check by participants if pair_key query fails
       List<dynamic> existingChats = [];
-      
+
       try {
         existingChats = await _supabase
             .from('chats')
@@ -1131,7 +1275,9 @@ class ChatService {
             .eq('is_group', false)
             .limit(1);
       } catch (pairKeyError) {
-        print('[ChatService] pair_key query failed, trying participant lookup: $pairKeyError');
+        print(
+          '[ChatService] pair_key query failed, trying participant lookup: $pairKeyError',
+        );
         // Fallback: Find chat by looking at participants
         // This handles cases where pair_key column might not exist
         try {
@@ -1139,18 +1285,23 @@ class ChatService {
               .from('chat_participants')
               .select('chat_id')
               .eq('user_id', currentUserId);
-          
+
           if (myChats.isNotEmpty) {
-            final chatIds = (myChats as List).map((c) => c['chat_id'] as String).toList();
-            
+            final chatIds = (myChats as List)
+                .map((c) => c['chat_id'] as String)
+                .toList();
+
             for (final chatId in chatIds) {
               final participants = await _supabase
                   .from('chat_participants')
                   .select('user_id')
                   .eq('chat_id', chatId);
-              
-              final participantIds = (participants as List).map((p) => p['user_id'] as String).toSet();
-              if (participantIds.contains(targetUserId) && participantIds.length == 2) {
+
+              final participantIds = (participants as List)
+                  .map((p) => p['user_id'] as String)
+                  .toSet();
+              if (participantIds.contains(targetUserId) &&
+                  participantIds.length == 2) {
                 // Found existing direct chat
                 final chatData = await _supabase
                     .from('chats')
@@ -1166,18 +1317,20 @@ class ChatService {
             }
           }
         } catch (fallbackError) {
-          print('[ChatService] Fallback participant lookup also failed: $fallbackError');
+          print(
+            '[ChatService] Fallback participant lookup also failed: $fallbackError',
+          );
         }
       }
 
       if (existingChats.isNotEmpty) {
         final chatData = Map<String, dynamic>.from(existingChats.first as Map);
         final chat = Chat.fromJson(chatData);
-        
+
         // Load participants
         final participants = await getChatParticipants(chat.id);
         chat.participants = List.from(participants);
-        
+
         // Set other participant info
         final otherParticipant = participants.firstWhere(
           (p) => p.userId != currentUserId,
@@ -1190,7 +1343,7 @@ class ChatService {
         );
         chat.otherParticipantId = otherParticipant.userId;
         chat.otherParticipantName = otherParticipant.userName;
-        
+
         return chat;
       }
 
@@ -1207,7 +1360,7 @@ class ChatService {
             .select('full_name')
             .eq('id', targetUserId)
             .maybeSingle();
-        
+
         if (profileResponse != null) {
           targetUserName = profileResponse['full_name'] as String?;
         }
@@ -1219,7 +1372,8 @@ class ChatService {
       try {
         await _supabase.from('chats').insert({
           'id': chatId,
-          'type': 'private',  // REQUIRED: must be 'private' or 'group' per chats_type_check constraint
+          'type':
+              'private', // REQUIRED: must be 'private' or 'group' per chats_type_check constraint
           'is_group': false,
           'pair_key': pairKey,
           'created_by': currentUserId,
@@ -1227,11 +1381,14 @@ class ChatService {
           'updated_at': now,
         });
       } catch (insertError) {
-        print('[ChatService] Insert with pair_key failed, trying without: $insertError');
+        print(
+          '[ChatService] Insert with pair_key failed, trying without: $insertError',
+        );
         // Try without pair_key in case column doesn't exist
         await _supabase.from('chats').insert({
           'id': chatId,
-          'type': 'private',  // REQUIRED: must be 'private' or 'group' per chats_type_check constraint
+          'type':
+              'private', // REQUIRED: must be 'private' or 'group' per chats_type_check constraint
           'is_group': false,
           'created_by': currentUserId,
           'created_at': now,
@@ -1241,16 +1398,8 @@ class ChatService {
 
       // Add both users as participants
       await _supabase.from('chat_participants').insert([
-        {
-          'chat_id': chatId,
-          'user_id': currentUserId,
-          'joined_at': now,
-        },
-        {
-          'chat_id': chatId,
-          'user_id': targetUserId,
-          'joined_at': now,
-        },
+        {'chat_id': chatId, 'user_id': currentUserId, 'joined_at': now},
+        {'chat_id': chatId, 'user_id': targetUserId, 'joined_at': now},
       ]);
 
       // Create and return the chat object
@@ -1273,6 +1422,158 @@ class ChatService {
       print('[ChatService] Error in findOrCreateDirectChat: $e');
       print('[ChatService] Stack trace: $stackTrace');
       rethrow; // Rethrow so the caller can show a more detailed error
+    }
+  }
+
+  // --- Local Storage for Pinned & Archived Chats ---
+
+  Future<List<String>> getPinnedChats() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('pinned_chats') ?? [];
+  }
+
+  Future<void> togglePinChat(String chatId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final pinned = prefs.getStringList('pinned_chats') ?? [];
+    if (pinned.contains(chatId)) {
+      pinned.remove(chatId);
+    } else {
+      pinned.add(chatId);
+    }
+    await prefs.setStringList('pinned_chats', pinned);
+  }
+
+  Future<List<String>> getArchivedChats() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('archived_chats') ?? [];
+  }
+
+  Future<void> toggleArchiveChat(String chatId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final archived = prefs.getStringList('archived_chats') ?? [];
+    if (archived.contains(chatId)) {
+      archived.remove(chatId);
+    } else {
+      archived.add(chatId);
+    }
+    await prefs.setStringList('archived_chats', archived);
+  }
+
+  // --- Disappearing Messages ---
+
+  Future<void> updateDisappearingTimer(String chatId, int timer) async {
+    try {
+      await _supabase
+          .from('chats')
+          .update({'disappearing_timer': timer})
+          .eq('id', chatId);
+    } catch (e) {
+      debugPrint('[ChatService] Error updating disappearing timer: $e');
+    }
+  }
+
+  Future<void> pruneExpiredMessages(String chatId, int timer) async {
+    if (timer <= 0) return;
+    try {
+      final cutoff = DateTime.now().subtract(Duration(hours: timer));
+      await _supabase
+          .from('chat_messages')
+          .delete()
+          .eq('chat_id', chatId)
+          .lt('created_at', cutoff.toIso8601String());
+    } catch (e) {
+      debugPrint('[ChatService] Error pruning messages: $e');
+    }
+  }
+
+  /// Notify Edge Function of new message for push notification
+  Future<void> _triggerMessageNotificationsForChat({
+    required String chatId,
+    required String senderId,
+    required String messageId,
+    required String messagePreview,
+  }) async {
+    try {
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser == null) return;
+
+      // Get sender's name from profiles
+      final senderProfile = await _supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', senderId)
+          .single();
+
+      final senderName = senderProfile['full_name'] ?? 'User';
+
+      // Get all chat participants except sender
+      final participants = await _supabase
+          .from('chat_participants')
+          .select('user_id')
+          .eq('chat_id', chatId)
+          .neq('user_id', senderId);
+
+      // Trigger notification for each recipient
+      for (final participant in participants) {
+        final recipientId = participant['user_id'] as String;
+        await _triggerMessageNotification(
+          recipientUserId: recipientId,
+          senderId: senderId,
+          senderName: senderName,
+          chatId: chatId,
+          messageId: messageId,
+          messagePreview: messagePreview,
+        );
+      }
+    } catch (e) {
+      debugPrint('[ChatService] Error triggering message notifications: $e');
+    }
+  }
+
+  /// Notify Edge Function of new message for push notification
+  Future<void> _triggerMessageNotification({
+    required String recipientUserId,
+    required String senderId,
+    required String senderName,
+    required String chatId,
+    required String messageId,
+    required String messagePreview,
+  }) async {
+    try {
+      final session = _supabase.auth.currentSession;
+      if (session == null) {
+        debugPrint('[ChatService] No session - cannot trigger notification');
+        return;
+      }
+
+      // Call the Edge Function with proper authentication
+      final response = await http.post(
+        Uri.parse(
+          'https://abznugnirnlrqnnfkein.supabase.co/functions/v1/send-message-notification',
+        ),
+        headers: {
+          'Authorization': 'Bearer ${session.accessToken}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'recipient_user_id': recipientUserId,
+          'sender_user_id': senderId,
+          'sender_name': senderName,
+          'chat_id': chatId,
+          'message_id': messageId,
+          'message_preview': messagePreview,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint('[ChatService] Message notification triggered');
+      } else {
+        debugPrint(
+          '[ChatService] Failed to trigger notification: ${response.statusCode} ${response.body}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[ChatService] Error triggering message notification: $e');
     }
   }
 }

@@ -27,7 +27,6 @@ part '../widgets/site_verification/locality_permit_dialog.dart';
 part '../widgets/site_verification/verification_dialog.dart';
 part '../widgets/site_verification/bulk_permit_dialogs.dart';
 
-
 String _bi(String en, String ar) =>
     '\u2066$en\u2069 \u200B|\u200B \u2067$ar\u2069';
 
@@ -182,6 +181,14 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   String _searchQuery = '';
   String? _selectedMmpId; // null = All MMPs
   List<Map<String, dynamic>> _availableMmps = []; // [{id, name, count}]
+
+  // Activity filter: 'all' | 'dm' | 'non_dm' (DM = 3 dates, Non-DM = 1 date)
+  String _activityFilter = 'all';
+
+  // Selected site IDs for bulk verify (CP Verification tab); cleared when switching tabs
+  final Set<String> _selectedSiteIds = {};
+  // Selected site IDs for bulk return actions (State/Locality/CP groups)
+  final Set<String> _selectedReturnSiteIds = {};
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
@@ -513,43 +520,16 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
       // CATEGORIZE SITES INTO 6 TABS (matching web app CoordinatorSites.tsx)
       // ============================================================================
 
-      // Tab 1: NEW - Show sites in pre-pipeline statuses (matching web app)
-      // Includes: pending, inprogress, in_progress, forwarded, forwarded_to_coordinator, forwarded_to_coordinators, new
-      final prePipelineStatuses = [
-        'pending',
-        'inprogress',
-        'in_progress',
-        'forwarded',
-        'forwarded_to_coordinator',
-        'forwarded_to_coordinators',
-        'new',
-      ];
+      // Tab 1: NEW - Strict coordinator inbox rule:
+      // only sites explicitly forwarded to the current user and still pending.
       _newSites = sites.where((s) {
+        final forwardedToUserId = s['forwarded_to_user_id']?.toString();
         final rawStatus = s['status']?.toString() ?? '';
         final normalizedStatus = rawStatus.toLowerCase().trim().replaceAll(
           RegExp(r'\s+'),
           '_',
         );
-
-        if (prePipelineStatuses.contains(normalizedStatus)) return true;
-        if ([
-          'dispatched',
-          'assigned',
-          'accepted',
-          'permits_attached',
-          'cp_verified',
-          'cp_verification',
-          'verified',
-          'approved',
-          'costed',
-          'approved_and_costed',
-          'completed',
-          'rejected',
-          'returned_to_fom',
-        ].contains(normalizedStatus)) {
-          return false;
-        }
-        return true;
+        return forwardedToUserId == _userId && normalizedStatus == 'pending';
       }).toList();
 
       debugPrint('New sites count: ${_newSites.length}');
@@ -592,11 +572,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
         return status == 'completed';
       }).toList();
 
-      // Tab 6: REJECTED - Sites rejected during verification
+      // Tab 6: REJECTED - Sites rejected during verification or returned from FOM
       _rejectedSites = sites.where((s) {
         final status = s['status']?.toString().toLowerCase() ?? '';
-        // Match web app: rejected tab only shows explicit rejected status
-        return status == 'rejected';
+        // Include both rejected and returned_to_fom statuses
+        return status == 'rejected' || status == 'returned_to_fom';
       }).toList();
 
       debugPrint(
@@ -891,19 +871,62 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
     return {'success': true}; // All checks passed
   }
 
-  /// Helper: Check if activity is DM type (requires distribution period)
-  /// Based on CoordinatorSites.tsx - only GFA, CBT, EBSFP
+  /// Helper: Check if activity is DM type (requires 3 dates: distribution start, end, expected visit).
+  /// DM = 3 dates; anything else = 1 date.
+  /// Based on: (1) survey_tool/tool_to_be_used == 'DM', or (2) activity text GFA/CBT/EBSFP.
   bool _isDmActivity(Map<String, dynamic> site) {
-    // Check main_activity, activity, and activity_at_site (some records use this key)
+    // Database: survey_tool or tool_to_be_used = 'DM' means distribution monitoring → 3 dates
+    final surveyTool = (site['survey_tool'] ?? site['tool_to_be_used'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final ad = site['additional_data'] as Map<String, dynamic>?;
+    final fromAdditional = (ad != null)
+        ? ((ad['survey_tool'] ?? ad['tool_to_be_used'] ?? '')
+              .toString()
+              .trim()
+              .toUpperCase())
+        : '';
+    if (surveyTool == 'DM' || fromAdditional == 'DM') return true;
+
+    // Activity labels: GFA, CBT, EBSFP require distribution period
     final main = (site['main_activity'] ?? '').toString();
     final activity = (site['activity'] ?? '').toString();
     final activityAtSite = (site['activity_at_site'] ?? '').toString();
-
     final combined = '$main $activity $activityAtSite'.toUpperCase();
 
     return combined.contains('GFA') ||
         combined.contains('CBT') ||
         combined.contains('EBSFP');
+  }
+
+  /// Helper: Check if activity is TSFP type (single date, like non-DM).
+  /// Used for bulk verify filter: DM = 3 dates, TSFP = 1 date.
+  bool _isTsfpActivity(Map<String, dynamic> site) {
+    final surveyTool = (site['survey_tool'] ?? site['tool_to_be_used'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final ad = site['additional_data'] as Map<String, dynamic>?;
+    final fromAdditional = (ad != null)
+        ? ((ad['survey_tool'] ?? ad['tool_to_be_used'] ?? '')
+              .toString()
+              .trim()
+              .toUpperCase())
+        : '';
+    if (surveyTool == 'TSFP' || fromAdditional == 'TSFP') return true;
+    final main = (site['main_activity'] ?? '').toString();
+    final activity = (site['activity'] ?? '').toString();
+    final activityAtSite = (site['activity_at_site'] ?? '').toString();
+    final combined = '$main $activity $activityAtSite'.toUpperCase();
+    return combined.contains('TSFP');
+  }
+
+  /// Helper: Activity type label for bulk verify (DM, TSFP, or Other).
+  String _activityFilterLabel(Map<String, dynamic> site) {
+    if (_isDmActivity(site)) return 'DM';
+    if (_isTsfpActivity(site)) return 'TSFP';
+    return 'Other';
   }
 
   /// Helper: Check if activity requires multiple visits
@@ -1092,6 +1115,29 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                         : 0),
             ),
 
+            // Activity filter (All / DM / Non-DM)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    _bi('Activity:', 'النشاط:'),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                  _buildActivityChip('all', 'All', 'الكل'),
+                  _buildActivityChip('dm', 'DM', 'DM'),
+                  _buildActivityChip('non_dm', 'Non-DM', 'غير DM'),
+                ],
+              ),
+            ),
+
             // Content
             Expanded(
               child: _isLoading
@@ -1114,6 +1160,58 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
     );
   }
 
+  void _toggleSiteSelection(String? id) {
+    if (id == null) return;
+    setState(() {
+      if (_selectedSiteIds.contains(id)) {
+        _selectedSiteIds.remove(id);
+      } else {
+        _selectedSiteIds.add(id);
+      }
+    });
+  }
+
+  void _toggleReturnSiteSelection(String? id) {
+    if (id == null) return;
+    setState(() {
+      if (_selectedReturnSiteIds.contains(id)) {
+        _selectedReturnSiteIds.remove(id);
+      } else {
+        _selectedReturnSiteIds.add(id);
+      }
+    });
+  }
+
+  List<Map<String, dynamic>> _getSelectedReturnSites(
+    List<Map<String, dynamic>> candidates,
+  ) {
+    return candidates
+        .where((s) => _selectedReturnSiteIds.contains(s['id']?.toString()))
+        .toList();
+  }
+
+  List<Map<String, dynamic>> _getSelectedSitesForBulkVerify() {
+    return _cpVerificationSites
+        .where((s) => _selectedSiteIds.contains(s['id']?.toString()))
+        .toList();
+  }
+
+  Widget _buildActivityChip(String value, String labelEn, String labelAr) {
+    final isSelected = _activityFilter == value;
+    return FilterChip(
+      label: Text(
+        labelEn,
+        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) setState(() => _activityFilter = value);
+      },
+      selectedColor: AppColors.primaryBlue.withValues(alpha: 0.2),
+      checkmarkColor: AppColors.primaryBlue,
+    );
+  }
+
   /// Bilingual animated pill tab button for site verification tabs
   Widget _buildVerifTabButton(
     String tab,
@@ -1125,7 +1223,15 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   ) {
     final isActive = _activeTab == tab;
     return GestureDetector(
-      onTap: () => setState(() => _activeTab = tab),
+      onTap: () {
+        setState(() {
+          if (_activeTab == 'cp_verification' && tab != 'cp_verification') {
+            _selectedSiteIds.clear();
+          }
+          _selectedReturnSiteIds.clear();
+          _activeTab = tab;
+        });
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -1202,3 +1308,4 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   }
 
   /// Build New tab content with sub-tabs for State Permit and Locality Permit
+}

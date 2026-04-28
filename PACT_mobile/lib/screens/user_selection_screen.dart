@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/chat_service.dart';
+import '../services/contact_visibility_service.dart';
 import '../theme/app_colors.dart';
 
 class UserSelectionScreen extends StatefulWidget {
@@ -24,11 +25,17 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
 
   Future<void> _loadUsers() async {
     setState(() => _isLoading = true);
-    final users = await _chatService.getAllUsers();
+
+    // Use visibility service to get filtered users based on role
+    final visibilityService = ContactVisibilityService();
+    final visibleUsers = await visibilityService.getVisibleContacts();
+
     setState(() {
-      _users = users;
+      _users = visibleUsers;
       _isLoading = false;
     });
+
+    debugPrint('UserSelectionScreen: Loaded ${_users.length} visible users');
   }
 
   List<Map<String, dynamic>> get _filteredUsers {

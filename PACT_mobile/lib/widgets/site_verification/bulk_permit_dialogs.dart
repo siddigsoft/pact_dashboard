@@ -1,4 +1,4 @@
-part of 'site_verification_screen.dart';
+part of '../../screens/site_verification_screen.dart';
 
 // Bulk Locality Permit Requirement Dialog
 class _BulkLocalityPermitRequirementDialog extends StatefulWidget {

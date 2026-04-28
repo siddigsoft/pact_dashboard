@@ -7,6 +7,7 @@ import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/app_widgets.dart';
 import '../services/help_enhancements_service.dart';
+import '../services/analytics_service.dart';
 import 'support_ticket_detail_screen.dart';
 
 class SupportScreen extends StatefulWidget {
@@ -51,6 +52,8 @@ class _SupportScreenState extends State<SupportScreen>
   @override
   void initState() {
     super.initState();
+    // Log screen view for analytics
+    AnalyticsService.logScreenView('SupportScreen');
     _tabController = TabController(length: 2, vsync: this);
     _loadTickets();
   }

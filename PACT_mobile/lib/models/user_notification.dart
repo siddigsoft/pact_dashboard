@@ -35,8 +35,8 @@ class UserNotification {
       eventType == 'broadcast' || relatedEntityType == 'broadcast_batch';
 
   factory UserNotification.fromJson(Map<String, dynamic> json) {
-    final userId =
-        (json['user_id'] as String?) ?? (json['recipient_id'] as String?) ?? '';
+    final rawUserId = json['user_id'] ?? json['recipient_id'];
+    final userId = (rawUserId?.toString() ?? '').trim();
 
     final title =
         (json['title'] as String?)?.trim() ??
@@ -52,8 +52,27 @@ class UserNotification {
 
     final messageAr = (json['message_ar'] as String?)?.trim() ?? '';
 
+    final rawId = json['id'];
+    final id = rawId != null ? rawId.toString() : '';
+
+    final rawCreatedAt = json['created_at'];
+    DateTime createdAt;
+    if (rawCreatedAt == null) {
+      createdAt = DateTime.now();
+    } else if (rawCreatedAt is String) {
+      try {
+        createdAt = DateTime.parse(rawCreatedAt);
+      } catch (_) {
+        createdAt = DateTime.now();
+      }
+    } else if (rawCreatedAt is DateTime) {
+      createdAt = rawCreatedAt;
+    } else {
+      createdAt = DateTime.now();
+    }
+
     return UserNotification(
-      id: json['id'] as String,
+      id: id,
       userId: userId,
       title: title,
       titleAr: titleAr,
@@ -63,7 +82,7 @@ class UserNotification {
       priority: (json['priority'] as String?)?.trim() ?? 'normal',
       eventType: (json['event_type'] as String?)?.trim(),
       isRead: json['is_read'] == true,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: createdAt,
       link:
           (json['link'] as String?)?.trim() ??
           (json['action_url'] as String?)?.trim(),

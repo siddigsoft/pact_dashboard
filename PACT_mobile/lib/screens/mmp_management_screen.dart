@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../theme/app_colors.dart';
 import '../widgets/shimmer_loading.dart';
+import '../widgets/reusable_app_bar.dart';
 
 class MmpManagementScreen extends StatefulWidget {
   const MmpManagementScreen({super.key});
@@ -23,7 +24,15 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
   static const int _pageSize = 20;
   late final ScrollController _scrollController;
 
-  final List<String> _statuses = ['all', 'draft', 'active', 'submitted', 'approved', 'closed', 'recalled'];
+  final List<String> _statuses = [
+    'all',
+    'draft',
+    'active',
+    'submitted',
+    'approved',
+    'closed',
+    'recalled',
+  ];
 
   @override
   void initState() {
@@ -39,8 +48,11 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 &&
-        !_isLoadingMore && _hasMore && _searchQuery.isEmpty) {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_isLoadingMore &&
+        _hasMore &&
+        _searchQuery.isEmpty) {
       _loadMore();
     }
   }
@@ -48,12 +60,19 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
   Future<void> _loadMMPs({bool refresh = false}) async {
     setState(() {
       _isLoading = true;
-      if (refresh) { _page = 0; _hasMore = true; _mmps = []; _isOffline = false; }
+      if (refresh) {
+        _page = 0;
+        _hasMore = true;
+        _mmps = [];
+        _isOffline = false;
+      }
     });
     try {
       final data = await _supabase
           .from('monthly_monitoring_plans')
-          .select('id, mmp_code, status, month, year, project_name, total_sites, covered_sites, created_at, submitted_by')
+          .select(
+            'id, mmp_code, status, month, year, project_name, total_sites, covered_sites, created_at, submitted_by',
+          )
           .order('created_at', ascending: false)
           .range(0, _pageSize - 1);
       final list = List<Map<String, dynamic>>.from(data);
@@ -75,7 +94,8 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
         if (cached != null) {
           setState(() {
             _mmps = List<Map<String, dynamic>>.from(
-                (cached as List).map((e) => Map<String, dynamic>.from(e)));
+              (cached as List).map((e) => Map<String, dynamic>.from(e)),
+            );
             _isLoading = false;
             _isOffline = true;
             _hasMore = false;
@@ -94,7 +114,9 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
       final offset = (_page + 1) * _pageSize;
       final data = await _supabase
           .from('monthly_monitoring_plans')
-          .select('id, mmp_code, status, month, year, project_name, total_sites, covered_sites, created_at, submitted_by')
+          .select(
+            'id, mmp_code, status, month, year, project_name, total_sites, covered_sites, created_at, submitted_by',
+          )
           .order('created_at', ascending: false)
           .range(offset, offset + _pageSize - 1);
       final list = List<Map<String, dynamic>>.from(data);
@@ -112,34 +134,54 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
   }
 
   List<Map<String, dynamic>> get _filtered => _mmps.where((m) {
-    final matchSearch = _searchQuery.isEmpty ||
-        (m['mmp_code'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        (m['project_name'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase());
-    final matchStatus = _filterStatus == 'all' || (m['status'] ?? '') == _filterStatus;
+    final matchSearch =
+        _searchQuery.isEmpty ||
+        (m['mmp_code'] ?? '').toLowerCase().contains(
+          _searchQuery.toLowerCase(),
+        ) ||
+        (m['project_name'] ?? '').toLowerCase().contains(
+          _searchQuery.toLowerCase(),
+        );
+    final matchStatus =
+        _filterStatus == 'all' || (m['status'] ?? '') == _filterStatus;
     return matchSearch && matchStatus;
   }).toList();
 
   Color _statusColor(String? s) {
     switch (s) {
-      case 'active': return Colors.green;
-      case 'submitted': return Colors.blue;
-      case 'approved': return Colors.teal;
-      case 'draft': return Colors.orange;
-      case 'closed': return Colors.grey;
-      case 'recalled': return Colors.red;
-      default: return Colors.grey;
+      case 'active':
+        return Colors.green;
+      case 'submitted':
+        return Colors.blue;
+      case 'approved':
+        return Colors.teal;
+      case 'draft':
+        return Colors.orange;
+      case 'closed':
+        return Colors.grey;
+      case 'recalled':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
   IconData _statusIcon(String? s) {
     switch (s) {
-      case 'active': return Icons.play_circle;
-      case 'submitted': return Icons.upload;
-      case 'approved': return Icons.check_circle;
-      case 'draft': return Icons.edit;
-      case 'closed': return Icons.archive;
-      case 'recalled': return Icons.undo;
-      default: return Icons.assignment;
+      case 'active':
+        return Icons.play_circle;
+      case 'submitted':
+        return Icons.upload;
+      case 'approved':
+        return Icons.check_circle;
+      case 'draft':
+        return Icons.edit;
+      case 'closed':
+        return Icons.archive;
+      case 'recalled':
+        return Icons.undo;
+      default:
+        return Icons.assignment;
     }
   }
 
@@ -157,21 +199,36 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
     final filtered = _filtered;
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _loadMMPs(refresh: true),
         backgroundColor: AppColors.primaryDark,
-        title: const Text('MMP Management', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => _loadMMPs(refresh: true))],
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text(
+          'New MMP',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
       ),
-      body: Column(
-        children: [
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReusableAppBar(
+              title: 'MMP Management',
+              showBackButton: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => _loadMMPs(refresh: true),
+                ),
+              ],
+            ),
           if (_isOffline) const OfflineBanner(),
+          // ── Status Summary Row ──────────────────────────────────────
           Container(
-            height: 80,
+            height: 100,
             color: AppColors.primaryDark.withOpacity(0.05),
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
                 _statPill('Total', counts['total'] ?? 0, Colors.blueGrey),
                 _statPill('Active', counts['active'] ?? 0, Colors.green),
@@ -182,93 +239,300 @@ class _MmpManagementScreenState extends State<MmpManagementScreen> {
               ],
             ),
           ),
+          // ── Search & Filter Section ─────────────────────────────────
           Container(
-            padding: const EdgeInsets.all(12), color: Colors.white,
-            child: Column(children: [
-              TextField(
-                decoration: InputDecoration(hintText: 'Search MMPs...', prefixIcon: const Icon(Icons.search), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(vertical: 8)),
-                onChanged: (v) => setState(() => _searchQuery = v),
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: _statuses.map((s) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: FilterChip(label: Text(s == 'all' ? 'All' : s), selected: _filterStatus == s, onSelected: (_) => setState(() => _filterStatus = s), selectedColor: AppColors.primaryDark.withOpacity(0.2)),
-                )).toList()),
-              ),
-            ]),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+            color: Colors.white,
+            child: Column(
+              children: [
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search MMPs...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 14,
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _statuses
+                        .map(
+                          (s) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(s == 'all' ? 'All' : s),
+                              selected: _filterStatus == s,
+                              onSelected: (_) =>
+                                  setState(() => _filterStatus = s),
+                              selectedColor: AppColors.primaryDark.withOpacity(
+                                0.2,
+                              ),
+                              backgroundColor: Colors.grey.shade100,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: _isLoading
                 ? const ShimmerBody(layout: ShimmerLayout.mmp, listItems: 5)
                 : filtered.isEmpty
-                    ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.assignment, size: 60, color: Colors.grey),
-                        const SizedBox(height: 12),
-                        const Text('No MMPs found.', style: TextStyle(color: Colors.grey)),
-                      ]))
-                    : RefreshIndicator(
-                        onRefresh: () => _loadMMPs(refresh: true),
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(12),
-                          itemCount: filtered.length + (_isLoadingMore ? 1 : 0),
-                          itemBuilder: (_, i) {
-                            if (i == filtered.length) {
-                              return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
-                            }
-                            final m = filtered[i];
-                            final total = (m['total_sites'] ?? 0) as num;
-                            final covered = (m['covered_sites'] ?? 0) as num;
-                            final coverage = total > 0 ? (covered / total).clamp(0.0, 1.0) : 0.0;
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(10),
-                                onTap: () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('MMP: ${m["mmp_code"] ?? ""}'))),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(14),
-                                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Row(children: [
-                                      Icon(_statusIcon(m['status']), color: _statusColor(m['status']), size: 20),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: Text(m['mmp_code'] ?? 'Unknown MMP', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(color: _statusColor(m['status']).withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-                                        child: Text(m['status'] ?? '', style: TextStyle(color: _statusColor(m['status']), fontSize: 12, fontWeight: FontWeight.w600)),
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.assignment,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No MMPs found.',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: () => _loadMMPs(refresh: true),
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      itemCount: filtered.length + (_isLoadingMore ? 1 : 0),
+                      itemBuilder: (_, i) {
+                        if (i == filtered.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        }
+                        final m = filtered[i];
+                        final total = (m['total_sites'] ?? 0) as num;
+                        final covered = (m['covered_sites'] ?? 0) as num;
+                        final coverage = total > 0
+                            ? (covered / total).clamp(0.0, 1.0)
+                            : 0.0;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Card(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () =>
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'MMP: ${m["mmp_code"] ?? ""}',
                                       ),
-                                    ]),
-                                    if (m['project_name'] != null) ...[const SizedBox(height: 3), Text(m['project_name'], style: TextStyle(color: Colors.grey.shade600, fontSize: 13))],
-                                    if (m['month'] != null) ...[const SizedBox(height: 2), Text('${m['month']} / ${m['year'] ?? ''}', style: const TextStyle(fontSize: 12, color: Colors.grey))],
+                                    ),
+                                  ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // ── Header Row ──────────────────────
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: _statusColor(
+                                              m['status'],
+                                            ).withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            _statusIcon(m['status']),
+                                            color: _statusColor(m['status']),
+                                            size: 18,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                m['mmp_code'] ?? 'Unknown MMP',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                              if (m['project_name'] !=
+                                                  null) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  m['project_name'],
+                                                  style: TextStyle(
+                                                    color: Colors.grey.shade600,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _statusColor(
+                                              m['status'],
+                                            ).withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            m['status'] ?? '',
+                                            style: TextStyle(
+                                              color: _statusColor(m['status']),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+
+                                    const SizedBox(height: 12),
+
+                                    // ── Meta Info Row ────────────────────
+                                    if (m['month'] != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 12,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.calendar_today,
+                                              size: 14,
+                                              color: Colors.grey.shade500,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '${m['month']} / ${m['year'] ?? ''}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                    // ── Coverage Progress ─────────────────
                                     if (total > 0) ...[
-                                      const SizedBox(height: 10),
-                                      LinearProgressIndicator(value: coverage, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(coverage > 0.8 ? Colors.green : coverage > 0.5 ? Colors.orange : Colors.red), minHeight: 5),
-                                      const SizedBox(height: 3),
-                                      Text('Coverage: ${(coverage * 100).toStringAsFixed(0)}% ($covered/$total sites)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                      Text(
+                                        'Coverage: ${(coverage * 100).toStringAsFixed(0)}% ($covered/$total sites)',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: LinearProgressIndicator(
+                                          value: coverage,
+                                          backgroundColor: Colors.grey.shade200,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                coverage > 0.8
+                                                    ? Colors.green
+                                                    : coverage > 0.5
+                                                    ? Colors.orange
+                                                    : Colors.red,
+                                              ),
+                                          minHeight: 6,
+                                        ),
+                                      ),
                                     ],
-                                  ]),
+                                  ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _statPill(String label, int count, Color color) => Container(
-    margin: const EdgeInsets.only(right: 8),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.3))),
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Text('$count', style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
-      Text(label, style: TextStyle(fontSize: 10, color: color)),
-    ]),
+    margin: const EdgeInsets.only(right: 10),
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: color.withOpacity(0.25), width: 1.5),
+      boxShadow: [
+        BoxShadow(
+          color: color.withOpacity(0.1),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '$count',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: color,
+            fontSize: 18,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
   );
 }

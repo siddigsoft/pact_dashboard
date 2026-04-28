@@ -1,6 +1,4 @@
-part of 'site_verification_screen.dart';
-
-}
+part of '../../screens/site_verification_screen.dart';
 
 // Site Details Bottom Sheet
 class _SiteDetailsSheet extends StatelessWidget {
@@ -54,6 +52,10 @@ class _SiteDetailsSheet extends StatelessWidget {
         ? DateTime.tryParse(verifiedAtRaw)
         : null;
     final verifiedBy = site['verified_by']?.toString() ?? '';
+    final verifiedByName =
+        site['verified_by_name']?.toString() ??
+        additionalData['verified_by_name']?.toString() ??
+        '';
     final verificationNotes =
         (site['verification_notes']?.toString() ??
         additionalData['verification_notes']?.toString() ??
@@ -70,8 +72,74 @@ class _SiteDetailsSheet extends StatelessWidget {
                 '')
             .toString()
             .trim();
-    final marketDiversion = additionalData['market_diversion_monitoring'];
-    final warehouseMonitoring = additionalData['warehouse_monitoring'];
+    final marketDiversion =
+        additionalData['market_diversion_monitoring'] ??
+        site['use_market_diversion'];
+    final warehouseMonitoring =
+        additionalData['warehouse_monitoring'] ??
+        site['use_warehouse_monitoring'];
+
+    // All site-detail fields from schema (mmp_site_entries + additional_data)
+    final activityAtSite = site['activity_at_site']?.toString() ?? '';
+    final monitoringBy = site['monitoring_by']?.toString() ?? '';
+    final surveyTool = site['survey_tool']?.toString() ?? '';
+    final cost = site['cost'];
+    final enumeratorFee = site['enumerator_fee'];
+    final transportFee = site['transport_fee'];
+    final dispatchedBy = site['dispatched_by']?.toString() ?? '';
+    final dispatchedByName =
+        site['dispatched_by_name']?.toString() ??
+        additionalData['dispatched_by_name']?.toString() ??
+        '';
+    final dispatchedAtRaw = site['dispatched_at']?.toString();
+    final dispatchedAt = dispatchedAtRaw != null && dispatchedAtRaw.isNotEmpty
+        ? DateTime.tryParse(dispatchedAtRaw)
+        : null;
+    final acceptedBy = site['accepted_by']?.toString() ?? '';
+    final acceptedByName =
+        site['accepted_by_name']?.toString() ??
+        additionalData['accepted_by_name']?.toString() ??
+        '';
+    final acceptedAtRaw = site['accepted_at']?.toString();
+    final acceptedAt = acceptedAtRaw != null && acceptedAtRaw.isNotEmpty
+        ? DateTime.tryParse(acceptedAtRaw)
+        : null;
+    final visitStartedAtRaw = site['visit_started_at']?.toString();
+    final visitStartedAt =
+        visitStartedAtRaw != null && visitStartedAtRaw.isNotEmpty
+        ? DateTime.tryParse(visitStartedAtRaw)
+        : null;
+    final visitCompletedAtRaw = site['visit_completed_at']?.toString();
+    final visitCompletedAt =
+        visitCompletedAtRaw != null && visitCompletedAtRaw.isNotEmpty
+        ? DateTime.tryParse(visitCompletedAtRaw)
+        : null;
+    final rejectionComments = site['rejection_comments']?.toString() ?? '';
+    final rejectedBy = site['rejected_by']?.toString() ?? '';
+    final rejectedByName =
+        site['rejected_by_name']?.toString() ??
+        additionalData['rejected_by_name']?.toString() ??
+        '';
+    final rejectedAtRaw = site['rejected_at']?.toString();
+    final rejectedAt = rejectedAtRaw != null && rejectedAtRaw.isNotEmpty
+        ? DateTime.tryParse(rejectedAtRaw)
+        : null;
+    // registry_site_id: top-level or inside additional_data.registry_linkage (pactdb)
+    final registryLinkage = additionalData['registry_linkage'] is Map
+        ? additionalData['registry_linkage'] as Map<String, dynamic>
+        : null;
+    final topLevelRegId = site['registry_site_id']?.toString().trim() ?? '';
+    final registrySiteId = topLevelRegId.isNotEmpty
+        ? topLevelRegId
+        : (registryLinkage?['registry_site_id']?.toString().trim() ?? '');
+
+    String fmtDate(DateTime? d) =>
+        d != null ? '${d.day}/${d.month}/${d.year}' : '';
+    String fmtNum(dynamic v) {
+      if (v == null) return '';
+      if (v is num) return v.toString();
+      return v.toString();
+    }
 
     return Container(
       constraints: BoxConstraints(
@@ -168,32 +236,104 @@ class _SiteDetailsSheet extends StatelessWidget {
               ],
             ),
           ),
-          // Content
+          // Content — all site details from schema, grouped by section
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildInfoRow('Location', '$locality, $state'),
+                  _buildSectionHeader('Location & identity'),
+                  _buildInfoRow(
+                    'Location',
+                    [locality, state].where((s) => s.isNotEmpty).join(', '),
+                  ),
                   _buildInfoRow('Hub Office', hubOffice),
                   _buildInfoRow('CP Name', cpName),
+                  if (registrySiteId.isNotEmpty)
+                    _buildInfoRow('Registry Site ID', registrySiteId),
+
+                  _buildSectionHeader('Visit & activity'),
                   if (site['status'] != null)
                     _buildInfoRow(
                       'Status',
                       formatStatus(site['status'].toString()),
                     ),
                   if (visitDate != null)
+                    _buildInfoRow('Visit Date', fmtDate(visitDate)),
+                  if (visitType.isNotEmpty)
+                    _buildInfoRow('Visit Type', visitType),
+                  if (mainActivity.isNotEmpty)
+                    _buildInfoRow('Main Activity', mainActivity),
+                  if (activityAtSite.isNotEmpty)
+                    _buildInfoRow('Activity at Site', activityAtSite),
+                  if (monitoringBy.isNotEmpty)
+                    _buildInfoRow('Monitoring By', monitoringBy),
+                  if (surveyTool.isNotEmpty)
+                    _buildInfoRow('Survey Tool', surveyTool),
+                  if (toolsToBeUsed.isNotEmpty)
+                    _buildInfoRow('Tools to be Used', toolsToBeUsed),
+
+                  if (cost != null ||
+                      enumeratorFee != null ||
+                      transportFee != null) ...[
+                    _buildSectionHeader('Cost'),
+                    if (cost != null) _buildInfoRow('Cost', fmtNum(cost)),
+                    if (enumeratorFee != null)
+                      _buildInfoRow('Enumerator Fee', fmtNum(enumeratorFee)),
+                    if (transportFee != null)
+                      _buildInfoRow('Transport Fee', fmtNum(transportFee)),
+                  ],
+
+                  _buildSectionHeader('Workflow'),
+                  if (dispatchedBy.isNotEmpty || dispatchedAt != null)
                     _buildInfoRow(
-                      'Visit Date',
-                      '${visitDate.day}/${visitDate.month}/${visitDate.year}',
+                      'Dispatched',
+                      [
+                        if (dispatchedAt != null) fmtDate(dispatchedAt),
+                        if (dispatchedBy.isNotEmpty ||
+                            dispatchedByName.isNotEmpty)
+                          'by ${dispatchedByName.isNotEmpty ? dispatchedByName : dispatchedBy}',
+                      ].join(' ').trim(),
                     ),
-                  if (verificationNotes.isNotEmpty)
-                    _buildInfoRow('Verification Notes', verificationNotes),
+                  if (acceptedBy.isNotEmpty || acceptedAt != null)
+                    _buildInfoRow(
+                      'Accepted',
+                      [
+                        if (acceptedAt != null) fmtDate(acceptedAt),
+                        if (acceptedBy.isNotEmpty || acceptedByName.isNotEmpty)
+                          'by ${acceptedByName.isNotEmpty ? acceptedByName : acceptedBy}',
+                      ].join(' ').trim(),
+                    ),
+                  if (visitStartedAt != null)
+                    _buildInfoRow('Visit Started', fmtDate(visitStartedAt)),
+                  if (visitCompletedAt != null)
+                    _buildInfoRow('Visit Completed', fmtDate(visitCompletedAt)),
                   if (verifiedAt != null)
                     _buildInfoRow(
-                      'Verified At',
-                      '${verifiedAt.day}/${verifiedAt.month}/${verifiedAt.year} by ${verifiedBy.isNotEmpty ? verifiedBy : 'Unknown'}',
+                      'Verified',
+                      '${fmtDate(verifiedAt)}${(verifiedBy.isNotEmpty || verifiedByName.isNotEmpty) ? ' by ${verifiedByName.isNotEmpty ? verifiedByName : verifiedBy}' : ''}',
+                    ),
+                  if (rejectedBy.isNotEmpty || rejectedAt != null)
+                    _buildInfoRow(
+                      'Rejected',
+                      [
+                        if (rejectedAt != null) fmtDate(rejectedAt),
+                        if (rejectedBy.isNotEmpty || rejectedByName.isNotEmpty)
+                          'by ${rejectedByName.isNotEmpty ? rejectedByName : rejectedBy}',
+                      ].join(' ').trim(),
+                    ),
+
+                  _buildSectionHeader('Permit & options'),
+                  if (additionalData['state_permit_issue_date'] != null)
+                    _buildInfoRow(
+                      'State Permit Issue',
+                      additionalData['state_permit_issue_date'].toString(),
+                    ),
+                  if (additionalData['state_permit_expiry_date'] != null)
+                    _buildInfoRow(
+                      'State Permit Expiry',
+                      additionalData['state_permit_expiry_date'].toString(),
                     ),
                   if (additionalData['locality_permit_issue_date'] != null)
                     _buildInfoRow(
@@ -207,7 +347,7 @@ class _SiteDetailsSheet extends StatelessWidget {
                     ),
                   if (marketDiversion != null)
                     _buildInfoRow(
-                      'Market Diversion Monitoring',
+                      'Market Diversion',
                       marketDiversion is bool
                           ? (marketDiversion ? 'Yes' : 'No')
                           : marketDiversion.toString(),
@@ -225,22 +365,29 @@ class _SiteDetailsSheet extends StatelessWidget {
                       'Flag Reason',
                       additionalData['flagReason'].toString(),
                     ),
-                  const SizedBox(height: 16),
-                  _buildInfoRow('Visit Type', visitType),
-                  if (toolsToBeUsed.isNotEmpty)
-                    _buildInfoRow('Tools to be Used', toolsToBeUsed),
-                  _buildInfoRow('Main Activity', mainActivity),
-                  if (comments.isNotEmpty) _buildInfoRow('Comments', comments),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(
                     'Permit Status',
                     style: GoogleFonts.poppins(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
+                      color: const Color(0xFF374151),
                     ),
                   ),
                   const SizedBox(height: 8),
                   _buildPermitStatus(additionalData),
+
+                  if (verificationNotes.isNotEmpty ||
+                      comments.isNotEmpty ||
+                      rejectionComments.isNotEmpty) ...[
+                    _buildSectionHeader('Notes'),
+                    if (verificationNotes.isNotEmpty)
+                      _buildInfoRow('Verification Notes', verificationNotes),
+                    if (comments.isNotEmpty)
+                      _buildInfoRow('Comments', comments),
+                    if (rejectionComments.isNotEmpty)
+                      _buildInfoRow('Rejection Comments', rejectionComments),
+                  ],
                   const SizedBox(height: 24),
                   // Action buttons
                   if (category == 'pending') ...[
@@ -364,6 +511,21 @@ class _SiteDetailsSheet extends StatelessWidget {
     );
   }
 
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Text(
+        title,
+        style: GoogleFonts.poppins(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: AppColors.primaryBlue,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoRow(String label, String value) {
     if (value.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -466,4 +628,3 @@ class _SiteDetailsSheet extends StatelessWidget {
     );
   }
 }
-

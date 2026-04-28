@@ -65,27 +65,12 @@ class RealtimeNotificationService {
         return;
       }
 
-      // Get sender information
-      final senderResponse = await _supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', newMessage['sender_id'])
-          .single();
-
-      final senderName =
-          senderResponse['full_name'] ?? senderResponse['email'] ?? 'Someone';
-
-      final message = newMessage['content'] ?? 'Sent a message';
-      final chatId = newMessage['chat_id'];
-
-      // Show notification
-      await NotificationService.showChatMessageNotification(
-        senderName: senderName,
-        message: message,
-        chatId: chatId,
+      // NOTE: Message notifications are already handled by FCM (BackgroundNotificationHandler + MessageNotificationService)
+      // Showing notifications here would cause duplicates
+      // Only keep this for logging/analytics if needed
+      print(
+        'Chat message detected: ${newMessage['content']} from ${newMessage['sender_id']}',
       );
-
-      print('Chat notification sent for message from $senderName');
     } catch (e) {
       print('Error handling new chat message: $e');
     }

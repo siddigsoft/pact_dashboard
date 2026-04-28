@@ -18,12 +18,16 @@ class NotificationRouteDecision {
   final Map<String, dynamic>? mainArgs;
   final String? panelTab;
 
+  /// Full FCM/data payload for incoming call (call_id, channel_name, from, etc.)
+  final Map<String, dynamic>? callData;
+
   const NotificationRouteDecision({
     required this.kind,
     this.chatId,
     this.walletTab,
     this.mainArgs,
     this.panelTab,
+    this.callData,
   });
 
   const NotificationRouteDecision.none()
@@ -31,7 +35,8 @@ class NotificationRouteDecision {
       chatId = null,
       walletTab = null,
       mainArgs = null,
-      panelTab = null;
+      panelTab = null,
+      callData = null;
 }
 
 class NotificationRouteResolver {
@@ -133,6 +138,87 @@ class NotificationRouteResolver {
     return const NotificationRouteDecision.none();
   }
 
+  /// Parse web-style link (e.g. /wallet, /site-visits?status=dispatched) for in-app navigation.
+  /// When link is null/empty, derives destination from eventType and relatedEntityType.
+  static NotificationRouteDecision fromLink(
+    String? link, {
+    String? eventType,
+    String? relatedEntityType,
+  }) {
+    final hasLink = link != null && link.trim().isNotEmpty;
+    if (hasLink) {
+      final path = link.split('?').first.toLowerCase();
+      if (path == '/wallet' || path.contains('wallet')) {
+        final tab = link.contains('advances')
+            ? 3
+            : link.contains('cost')
+            ? 4
+            : 3;
+        return NotificationRouteDecision(
+          kind: NotificationRouteKind.wallet,
+          walletTab: tab,
+        );
+      }
+      if (path.contains('site-visit') ||
+          path.contains('site_visit') ||
+          path == '/mmp') {
+        return const NotificationRouteDecision(
+          kind: NotificationRouteKind.main,
+          mainArgs: {'tab': 'site_visits'},
+        );
+      }
+      if (path.contains('approval') || path.contains('down-payment')) {
+        return const NotificationRouteDecision(
+          kind: NotificationRouteKind.main,
+          mainArgs: {'tab': 'approvals'},
+        );
+      }
+      if (path == '/main' || path == '/') {
+        return const NotificationRouteDecision(
+          kind: NotificationRouteKind.main,
+          mainArgs: <String, dynamic>{},
+        );
+      }
+    }
+
+    // When link is missing, derive from eventType / relatedEntityType so tap still navigates
+    final ev = (eventType ?? '').toLowerCase();
+    final rel = (relatedEntityType ?? '').toLowerCase();
+    if (ev.contains('financial') ||
+        ev.contains('wallet') ||
+        rel == 'wallet' ||
+        rel.contains('transaction') ||
+        rel.contains('downpayment') ||
+        rel.contains('cost')) {
+      final tab = ev.contains('cost') || rel.contains('cost') ? 4 : 3;
+      return NotificationRouteDecision(
+        kind: NotificationRouteKind.wallet,
+        walletTab: tab,
+      );
+    }
+    if (ev.contains('assignment') ||
+        ev.contains('assignments') ||
+        rel == 'sitevisit' ||
+        rel.contains('site_visit')) {
+      return const NotificationRouteDecision(
+        kind: NotificationRouteKind.main,
+        mainArgs: {'tab': 'site_visits'},
+      );
+    }
+    if (ev.contains('approval') || rel.contains('approval')) {
+      return const NotificationRouteDecision(
+        kind: NotificationRouteKind.main,
+        mainArgs: {'tab': 'approvals'},
+      );
+    }
+
+    // Default: open main (don't just close panel with no navigation)
+    return const NotificationRouteDecision(
+      kind: NotificationRouteKind.main,
+      mainArgs: <String, dynamic>{},
+    );
+  }
+
   static NotificationRouteDecision fromFcmMessage({
     required String type,
     required Map<String, dynamic> data,
@@ -174,6 +260,15 @@ class NotificationRouteResolver {
       return const NotificationRouteDecision(
         kind: NotificationRouteKind.notificationsPanel,
         panelTab: 'broadcasts',
+      );
+    }
+
+    if (normalizedType == 'incoming_call' ||
+        normalizedType == 'call' ||
+        (data['call_id'] != null && data['channel_name'] != null)) {
+      return NotificationRouteDecision(
+        kind: NotificationRouteKind.call,
+        callData: data,
       );
     }
 

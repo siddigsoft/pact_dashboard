@@ -987,9 +987,8 @@ class WalletRepository {
 
   /// Stream all down payment requests assigned to this supervisor (any status) for dashboard stats.
   /// Uses supervisor_id only; for hub-based visibility use [watchSupervisorDownPaymentRequestsForDashboardByHub].
-  Stream<List<DownPaymentRequest>> watchSupervisorDownPaymentRequestsForDashboard(
-    String supervisorId,
-  ) {
+  Stream<List<DownPaymentRequest>>
+  watchSupervisorDownPaymentRequestsForDashboard(String supervisorId) {
     return _supabase
         .from('down_payment_requests')
         .stream(primaryKey: ['id'])
@@ -1005,11 +1004,14 @@ class WalletRepository {
   /// Supervisors see: their own requests OR all requests in their hub.
   /// When [hubId] is null, only requests where requested_by = [userId] are returned.
   /// Stream API does not support .or(), so when hubId is set we stream with RLS and filter in Dart.
-  Stream<List<DownPaymentRequest>> watchSupervisorDownPaymentRequestsForDashboardByHub(
+  Stream<List<DownPaymentRequest>>
+  watchSupervisorDownPaymentRequestsForDashboardByHub(
     String userId,
     String? hubId,
   ) {
-    final base = _supabase.from('down_payment_requests').stream(primaryKey: ['id']);
+    final base = _supabase
+        .from('down_payment_requests')
+        .stream(primaryKey: ['id']);
     if (hubId != null && hubId.isNotEmpty) {
       // Stream all (RLS applies), then filter to requested_by = userId OR hub_id = hubId
       return base

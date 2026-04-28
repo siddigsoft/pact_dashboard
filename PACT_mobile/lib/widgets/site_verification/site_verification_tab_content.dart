@@ -1,4 +1,4 @@
-part of 'site_verification_screen.dart';
+part of '../../screens/site_verification_screen.dart';
 
 extension _SiteVerificationTabContent on _SiteVerificationScreenState {
   Widget _buildNewTabContent() {
@@ -99,9 +99,10 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
                               'State (${sitesNeedingStatePermit.length})',
                               'تصريح الولاية (${sitesNeedingStatePermit.length})',
                             ),
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            softWrap: false,
+                            softWrap: true,
+                            textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w700,
@@ -144,9 +145,10 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
                               'Locality (${sitesNeedingLocalityPermit.length})',
                               'تصريح المحلية (${sitesNeedingLocalityPermit.length})',
                             ),
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            softWrap: false,
+                            softWrap: true,
+                            textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w700,
@@ -250,16 +252,16 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
+                          label: Flexible(
                             child: Text(
                               _bi(
                                 'Manage state permit (${sitesNeedingStatePermit.length})',
                                 'إدارة تصريح الولاية (${sitesNeedingStatePermit.length})',
                               ),
-                              maxLines: 1,
-                              softWrap: false,
+                              maxLines: 2,
+                              softWrap: true,
                               overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
@@ -275,15 +277,93 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
                               ),
                             ),
                             elevation: 0,
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
                           ),
                           onPressed: () => _handleStateCardClick(state, sites),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.undo, size: 16),
+                          label: Flexible(
+                            child: Text(
+                              () {
+                                final selectedSites = _getSelectedReturnSites(
+                                  sites,
+                                );
+                                if (selectedSites.isNotEmpty) {
+                                  return _bi(
+                                    'Return Selected (${selectedSites.length})',
+                                    'إرجاع المحدد (${selectedSites.length})',
+                                  );
+                                }
+                                return _bi(
+                                  'Return All (${sites.length})',
+                                  'إرجاع الكل (${sites.length})',
+                                );
+                              }(),
+                              maxLines: 2,
+                              softWrap: true,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFEF4444),
+                            side: const BorderSide(
+                              color: Color(0xFFEF4444),
+                              width: 1.5,
+                            ),
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final selectedSites = _getSelectedReturnSites(sites);
+                            final targets = selectedSites.isNotEmpty
+                                ? selectedSites
+                                : sites;
+                            await _bulkReturnSitesToFOM(state, targets);
+                            if (!mounted || selectedSites.isEmpty) return;
+                            setState(() {
+                              for (final s in selectedSites) {
+                                _selectedReturnSiteIds.remove(
+                                  s['id']?.toString(),
+                                );
+                              }
+                            });
+                          },
                         ),
                       ),
                     ],
                   ),
                 ),
               ...sites.map(
-                (site) => _buildSiteCard(site, 'new_state_tab_site'),
+                (site) {
+                  final siteId = site['id']?.toString();
+                  return _buildSiteCard(
+                    site,
+                    'new_state_tab_site',
+                    isSelectable: true,
+                    isSelected:
+                        siteId != null && _selectedReturnSiteIds.contains(siteId),
+                    onToggle: () => _toggleReturnSiteSelection(siteId),
+                  );
+                },
               ),
             ],
           ),
@@ -398,16 +478,16 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.upload_file),
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
+                          label: Flexible(
                             child: Text(
                               _bi(
                                 'Upload locality permit (${sitesNeedingLocalityPermit.length})',
                                 'رفع تصريح المحلية (${sitesNeedingLocalityPermit.length})',
                               ),
-                              maxLines: 1,
-                              softWrap: false,
+                              maxLines: 2,
+                              softWrap: true,
                               overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
@@ -426,12 +506,92 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
                               sites,
                             );
                           },
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.undo, size: 16),
+                          label: Flexible(
+                            child: Text(
+                              () {
+                                final selectedSites = _getSelectedReturnSites(
+                                  sites,
+                                );
+                                if (selectedSites.isNotEmpty) {
+                                  return _bi(
+                                    'Return Selected (${selectedSites.length})',
+                                    'إرجاع المحدد (${selectedSites.length})',
+                                  );
+                                }
+                                return _bi(
+                                  'Return All (${sites.length})',
+                                  'إرجاع الكل (${sites.length})',
+                                );
+                              }(),
+                              maxLines: 2,
+                              softWrap: true,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFEF4444),
+                            side: const BorderSide(
+                              color: Color(0xFFEF4444),
+                              width: 1.5,
+                            ),
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final selectedSites = _getSelectedReturnSites(sites);
+                            final targets = selectedSites.isNotEmpty
+                                ? selectedSites
+                                : sites;
+                            await _bulkReturnSitesToFOM(locality, targets);
+                            if (!mounted || selectedSites.isEmpty) return;
+                            setState(() {
+                              for (final s in selectedSites) {
+                                _selectedReturnSiteIds.remove(
+                                  s['id']?.toString(),
+                                );
+                              }
+                            });
+                          },
                         ),
                       ),
                     ],
                   ),
                 ),
-              ...sites.map((site) => _buildSiteCard(site, 'locality_permit')),
+              ...sites.map((site) {
+                final siteId = site['id']?.toString();
+                return _buildSiteCard(
+                  site,
+                  'locality_permit',
+                  isSelectable: true,
+                  isSelected:
+                      siteId != null && _selectedReturnSiteIds.contains(siteId),
+                  onToggle: () => _toggleReturnSiteSelection(siteId),
+                );
+              }),
             ],
           ),
         );
@@ -470,6 +630,113 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
         ],
       ),
     );
+  }
+
+  Widget _buildSelectionBar() {
+    final selectedSites = _getSelectedSitesForBulkVerify();
+    final n = selectedSites.length;
+    if (n == 0) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: AppColors.primaryBlue.withValues(alpha: 0.08),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                await _showBulkVerifyDialog(
+                  'Selected',
+                  '$n sites',
+                  selectedSites,
+                );
+                if (mounted) setState(() => _selectedSiteIds.clear());
+              },
+              icon: const Icon(Icons.verified, size: 20),
+              label: Text(
+                _bi('Verify selected ($n)', 'تأكيد المحدد ($n)'),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton(
+            onPressed: () => setState(() => _selectedSiteIds.clear()),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF6B7280),
+              side: BorderSide(color: Colors.grey[400] ?? Colors.grey),
+            ),
+            child: Text(
+              _bi('Clear', 'مسح'),
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds "Verify All (DM)" and "Verify All (Non-DM)" buttons for bulk verification.
+  /// DM = 3 dates (distribution start, end, expected visit); Non-DM = 1 date.
+  List<Widget> _buildBulkVerifyButtonsByActivity(
+    String stateName,
+    String localityName,
+    List<Map<String, dynamic>> localitySites,
+  ) {
+    final dmSites = localitySites.where((s) => _isDmActivity(s)).toList();
+    final nonDmSites = localitySites.where((s) => !_isDmActivity(s)).toList();
+
+    final buttons = <Widget>[];
+    void addButton(String activityLabel, List<Map<String, dynamic>> sites) {
+      if (sites.isEmpty) return;
+      if (buttons.isNotEmpty) buttons.add(const SizedBox(width: 8));
+      buttons.add(
+        ElevatedButton.icon(
+          onPressed: () =>
+              _showBulkVerifyDialog(stateName, localityName, sites),
+          icon: const Icon(Icons.verified, size: 18),
+          label: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Verify All ($activityLabel)',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                '(${sites.length})',
+                style: GoogleFonts.poppins(fontSize: 10),
+              ),
+            ],
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF10B981),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 6,
+          ),
+        ),
+      );
+    }
+
+    addButton('DM', dmSites);
+    addButton('Non-DM', nonDmSites);
+    return buttons;
   }
 
   Widget _buildSiteList(List<Map<String, dynamic>> sites, String category) {
@@ -569,124 +836,172 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
       return RefreshIndicator(
         color: AppColors.primaryBlue,
         onRefresh: _loadData,
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: grouped.length,
-          itemBuilder: (context, index) {
-            final key = grouped.keys.elementAt(index);
-            final localitySites = grouped[key]!;
-            final parts = key.split(' - ');
-            final stateName = parts.isNotEmpty ? parts[0] : '';
-            final localityName = parts.length > 1 ? parts[1] : '';
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_selectedSiteIds.isNotEmpty) _buildSelectionBar(),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: grouped.length,
+                itemBuilder: (context, index) {
+                  final key = grouped.keys.elementAt(index);
+                  final localitySites = grouped[key]!;
+                  final parts = key.split(' - ');
+                  final stateName = parts.isNotEmpty ? parts[0] : '';
+                  final localityName = parts.length > 1 ? parts[1] : '';
 
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 3,
-              child: Column(
-                children: [
-                  // Header row for group
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
+                    elevation: 3,
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        // Header row for group
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Row(
                             children: [
-                              Text(
-                                stateName,
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                  color: const Color(0xFF111827),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      stateName,
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 15,
+                                        color: const Color(0xFF111827),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      localityName,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: const Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                localityName,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: const Color(0xFF6B7280),
+                              const SizedBox(width: 8),
+                              // Verify All filtered by activity: DM (3 dates), TSFP (1 date), Other (1 date)
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: _buildBulkVerifyButtonsByActivity(
+                                      stateName,
+                                      localityName,
+                                      localitySites,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final selectedSites =
+                                      _getSelectedReturnSites(localitySites);
+                                  final targets = selectedSites.isNotEmpty
+                                      ? selectedSites
+                                      : localitySites;
+                                  await _bulkReturnSitesToFOM(
+                                    '$stateName - $localityName',
+                                    targets,
+                                  );
+                                  if (!mounted || selectedSites.isEmpty) return;
+                                  setState(() {
+                                    for (final s in selectedSites) {
+                                      _selectedReturnSiteIds.remove(
+                                        s['id']?.toString(),
+                                      );
+                                    }
+                                  });
+                                },
+                                icon: const Icon(Icons.undo, size: 16),
+                                label: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _getSelectedReturnSites(
+                                            localitySites,
+                                          ).isNotEmpty
+                                          ? 'Return Selected'
+                                          : 'Return All',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      'إرجاع الكل',
+                                      style: GoogleFonts.poppins(fontSize: 11),
+                                      textDirection: ui.TextDirection.rtl,
+                                    ),
+                                    Text(
+                                      '(${_getSelectedReturnSites(localitySites).isNotEmpty ? _getSelectedReturnSites(localitySites).length : localitySites.length})',
+                                      style: GoogleFonts.poppins(fontSize: 10),
+                                    ),
+                                  ],
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFEF4444),
+                                  side: const BorderSide(
+                                    color: Color(0xFFEF4444),
+                                    width: 1.5,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Builder(
-                          builder: (btnContext) {
-                            return ElevatedButton.icon(
-                              onPressed: () => _showBulkVerifyDialog(
-                                stateName,
-                                localityName,
-                                localitySites,
+
+                        // Divider
+                        const Divider(height: 1),
+
+                        // Site list under group (with selection for bulk verify)
+                        Column(
+                          children: localitySites.map((s) {
+                            final siteId = s['id']?.toString();
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
                               ),
-                              icon: const Icon(Icons.verified, size: 18),
-                              label: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Verify All',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    'تأكيد كل المواقع',
-                                    style: GoogleFonts.poppins(fontSize: 11),
-                                    textDirection: ui.TextDirection.rtl,
-                                  ),
-                                  Text(
-                                    '(${localitySites.length})',
-                                    style: GoogleFonts.poppins(fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF10B981),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 6,
+                              child: _buildSiteCard(
+                                s,
+                                category,
+                                isSelectable: true,
+                                isSelected:
+                                    siteId != null &&
+                                    _selectedSiteIds.contains(siteId),
+                                onToggle: () => _toggleSiteSelection(siteId),
                               ),
                             );
-                          },
+                          }).toList(),
                         ),
                       ],
                     ),
-                  ),
-
-                  // Divider
-                  const Divider(height: 1),
-
-                  // Site list under group
-                  Column(
-                    children: localitySites.map((s) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: _buildSiteCard(s, category),
-                      );
-                    }).toList(),
-                  ),
-                ],
+                  );
+                },
               ),
-            );
-          },
+            ),
+          ],
         ),
       );
     }
@@ -696,9 +1011,9 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
       onRefresh: _loadData,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: sites.length,
+        itemCount: filteredSites.length,
         itemBuilder: (context, index) {
-          final site = sites[index];
+          final site = filteredSites[index];
           return _buildSiteCard(site, category);
         },
       ),
@@ -774,6 +1089,13 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
           .toList();
     }
 
+    // Apply activity filter (DM = 3 dates, Non-DM = 1 date)
+    if (_activityFilter == 'dm') {
+      result = result.where((s) => _isDmActivity(s)).toList();
+    } else if (_activityFilter == 'non_dm') {
+      result = result.where((s) => !_isDmActivity(s)).toList();
+    }
+
     // Apply text search
     if (_searchQuery.isEmpty) return result;
     final query = _searchQuery.toLowerCase();
@@ -789,6 +1111,4 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
           state.contains(query);
     }).toList();
   }
-
-
 }

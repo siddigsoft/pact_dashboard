@@ -130,8 +130,11 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
               ),
               SizedBox(width: 12),
               Expanded(
-                  child: Text('Uploading report & photos...',
-                      style: TextStyle(color: Colors.white))),
+                child: Text(
+                  'Uploading report & photos...',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
             ],
           ),
         ),
@@ -219,25 +222,26 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
         print('💾 Saving report offline...');
         // Save offline for later sync
         reportData['photos'] = _photoUrls
-            .map((url) => {
-                  'photo_url': url,
-                  'storage_path': url,
-                })
+            .map((url) => {'photo_url': url, 'storage_path': url})
             .toList();
 
         final offlineDb = OfflineDb();
         final actionId = 'report_${DateTime.now().millisecondsSinceEpoch}';
-        await offlineDb.addPendingSync(PendingSyncAction(
-          id: actionId,
-          type: 'report',
-          payload: reportData,
-          timestamp: DateTime.now().millisecondsSinceEpoch,
-          status: 'pending',
-        ));
+        await offlineDb.addPendingSync(
+          PendingSyncAction(
+            id: actionId,
+            type: 'report',
+            payload: reportData,
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            status: 'pending',
+          ),
+        );
         await offlineDb.cacheItem(
           OfflineDb.reportsCacheBox,
           'reports_${widget.visit.id}',
-          data: {'reports': [reportData]},
+          data: {
+            'reports': [reportData],
+          },
           ttl: const Duration(hours: 24),
         );
         print('✅ Report saved offline for later sync');
@@ -269,9 +273,11 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(isOnline
-                      ? 'Report submitted successfully!'
-                      : 'Report saved offline. Will sync when online.'),
+                  child: Text(
+                    isOnline
+                        ? 'Report submitted successfully!'
+                        : 'Report saved offline. Will sync when online.',
+                  ),
                 ),
               ],
             ),
@@ -292,9 +298,7 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
@@ -462,47 +466,47 @@ class _ReportFormSheetState extends State<ReportFormSheet> {
                     GridView.builder(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                      ),
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _photoUrls.length,
                       itemBuilder: (context, index) {
                         final photoUrl = _photoUrls[index];
                         return Stack(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                image: DecorationImage(
-                                  image: FileImage(File(photoUrl)),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: InkWell(
-                                onTap: () => _removePhoto(index),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
+                              children: [
+                                Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.5),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 16,
+                                    borderRadius: BorderRadius.circular(8),
+                                    image: DecorationImage(
+                                      image: FileImage(File(photoUrl)),
+                                      fit: BoxFit.cover,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
-                        )
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: InkWell(
+                                    onTap: () => _removePhoto(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.5),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
                             .animate()
                             .fadeIn(duration: 300.ms, delay: 50.ms * index)
                             .slideY(begin: 0.2, end: 0, duration: 300.ms);

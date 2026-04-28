@@ -2,9 +2,13 @@
 // Professional-grade incoming call screen with verification, call context, and enterprise features
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import '../../models/call_state.dart';
 import '../../providers/call_provider.dart';
+import '../../services/ringtone_service.dart';
+import '../../services/analytics_service.dart';
 
 class ProfessionalIncomingCallScreen extends ConsumerStatefulWidget {
   final String callerId;
@@ -43,6 +47,8 @@ class _ProfessionalIncomingCallScreenState
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   bool _isDeciding = false;
+  Timer? _callTimeoutTimer;
+  final RingtoneService _ringtoneService = RingtoneService();
 
   @override
   void initState() {
@@ -55,17 +61,49 @@ class _ProfessionalIncomingCallScreenState
     _pulseAnimation = Tween<double>(begin: 0.95, end: 1.08).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
+    // Start 60-second timeout for auto-rejection
+    _callTimeoutTimer = Timer(const Duration(seconds: 60), () {
+      if (mounted && !_isDeciding) {
+        debugPrint('[Call] Auto-rejecting call due to timeout');
+        _rejectCall();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _callTimeoutTimer?.cancel();
     _pulseController.dispose();
+    // Stop ringtone when leaving screen
+    _ringtoneService.stopRingtone();
     super.dispose();
   }
 
   void _acceptCall() {
     if (_isDeciding) return;
     setState(() => _isDeciding = true);
+
+    // Cancel timeout timer
+    _callTimeoutTimer?.cancel();
+
+    // Stop ringtone immediately
+    _ringtoneService.stopRingtone();
+
+    // Haptic feedback for acceptance
+    HapticFeedback.mediumImpact();
+
+    // Log call acceptance
+    AnalyticsService.logEvent(
+      'call_accepted',
+      parameters: {
+        'caller_id': widget.callerId,
+        'caller_name': widget.callerName,
+        'call_type': widget.callType.toString(),
+        'priority': widget.priority.toString(),
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
 
     ref.read(callStateProvider.notifier).acceptCall();
 
@@ -84,6 +122,27 @@ class _ProfessionalIncomingCallScreenState
   void _rejectCall() {
     if (_isDeciding) return;
     setState(() => _isDeciding = true);
+
+    // Cancel timeout timer
+    _callTimeoutTimer?.cancel();
+
+    // Stop ringtone immediately
+    _ringtoneService.stopRingtone();
+
+    // Strong haptic feedback for rejection
+    HapticFeedback.heavyImpact();
+
+    // Log call rejection
+    AnalyticsService.logEvent(
+      'call_rejected',
+      parameters: {
+        'caller_id': widget.callerId,
+        'caller_name': widget.callerName,
+        'call_type': widget.callType.toString(),
+        'rejection_reason': 'user_declined',
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
 
     ref.read(callStateProvider.notifier).rejectCall();
     Navigator.of(context).pop();

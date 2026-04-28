@@ -274,7 +274,7 @@ class _LoginScreenState extends State<LoginScreen>
           // Show welcome screen then navigate to main
           if (mounted) {
             await _navigateWithWelcome(
-              profile['fullName'] ?? email.split('@').first ?? 'User',
+              profile['fullName'] ?? email.split('@').first,
               profile['avatarUrl'],
             );
           }
@@ -609,544 +609,584 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Get screen dimensions for responsive design
     final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      // Container with gradient background and pattern
-      body: Container(
-        height: screenHeight,
-        width: screenWidth,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.primaryWhite,
-              AppColors.backgroundGray.withOpacity(0.8),
-              AppColors.backgroundGray,
-            ],
-            stops: const [0.0, 0.6, 1.0],
+      backgroundColor: const Color(0xFF0C1A2E),
+      resizeToAvoidBottomInset: true,
+      body: Stack(
+        children: [
+          // Decorative ambient orbs on dark background
+          Positioned(
+            top: -60,
+            right: -60,
+            child: Container(
+              width: 220,
+              height: 220,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primaryOrange.withOpacity(0.07),
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            // Allows scrolling when keyboard appears
-            physics: const BouncingScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30.0),
+          Positioned(
+            top: 130,
+            left: -50,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primaryBlue.withOpacity(0.07),
+              ),
+            ),
+          ),
+
+          // White curved bottom section
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: ClipPath(
+              clipper: _LoginWaveClipper(),
+              child: Container(
+                height: screenHeight * 0.63,
+                color: const Color(0xFFF8F9FB),
+              ),
+            ),
+          ),
+
+          // Main scroll content
+          SafeArea(
+            bottom: false,
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               child: FadeTransition(
                 opacity: _fadeAnimation,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    SizedBox(height: screenHeight * 0.05),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      SizedBox(height: screenHeight * 0.055),
 
-                    // Company Logo/Icon Section
-                    Container(
-                          width: 150,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.white,
-                                AppColors.backgroundGray.withOpacity(0.8),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
+                      // Logo with orange glow halo
+                      Container(
+                        width: 112,
+                        height: 112,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryOrange.withOpacity(0.45),
+                              blurRadius: 48,
+                              spreadRadius: 8,
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primaryOrange.withOpacity(
-                                  0.15,
-                                ),
-                                blurRadius: 30,
-                                offset: const Offset(0, 15),
-                                spreadRadius: -5,
-                              ),
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                                spreadRadius: 0,
-                              ),
-                            ],
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.95),
-                              width: 6,
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.28),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
                             ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/images/pact_consultancy_pact_cover.jpg',
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(duration: 800.ms, delay: 200.ms)
-                        .slideY(
-                          begin: 0.2,
-                          end: 0,
-                          duration: 800.ms,
-                          curve: Curves.easeOutQuint,
-                        )
-                        .shimmer(
-                          duration: 1800.ms,
-                          delay: 400.ms,
-                          color: Colors.white.withOpacity(0.8),
+                          ],
+                          border: Border.all(color: Colors.white, width: 4),
                         ),
-
-                    SizedBox(height: screenHeight * 0.03),
-
-                    // Welcome Text
-                    Text(
-                          AppLocalizations.of(context)!.welcomeBack,
-                          style: GoogleFonts.poppins(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textDark,
-                            letterSpacing: 0.5,
-                            height: 1.1,
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/images/pact_consultancy_pact_cover.jpg',
+                            fit: BoxFit.contain,
                           ),
-                        )
-                        .animate()
-                        .fadeIn(duration: 800.ms, delay: 300.ms)
-                        .slideY(begin: 0.3, end: 0, duration: 600.ms)
-                        .shimmer(
-                          duration: 1200.ms,
-                          delay: 700.ms,
-                          color: AppColors.primaryOrange.withOpacity(0.2),
                         ),
-
-                    SizedBox(height: screenHeight * 0.018),
-
-                    // Subtitle
-                    Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
+                      )
+                          .animate()
+                          .fadeIn(duration: 800.ms, delay: 200.ms)
+                          .scale(
+                            begin: const Offset(0.75, 0.75),
+                            duration: 900.ms,
+                            curve: Curves.easeOutBack,
                           ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryOrange.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            AppLocalizations.of(context)!.signInToAccount,
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textLight,
-                              letterSpacing: 0.2,
+
+                      SizedBox(height: screenHeight * 0.028),
+
+                      // Heading — Playfair Display for editorial elegance
+                      Text(
+                        AppLocalizations.of(context)!.welcomeBack,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 38,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.3,
+                          height: 1.1,
+                        ),
+                      )
+                          .animate()
+                          .fadeIn(duration: 800.ms, delay: 350.ms)
+                          .slideY(begin: 0.2, end: 0, duration: 600.ms),
+
+                      const SizedBox(height: 10),
+
+                      // Subtitle
+                      Text(
+                        AppLocalizations.of(context)!.signInToAccount,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white.withOpacity(0.5),
+                        ),
+                        textAlign: TextAlign.center,
+                      ).animate().fadeIn(duration: 700.ms, delay: 450.ms),
+
+                      SizedBox(height: screenHeight * 0.052),
+
+                      // Form card — floats over the wave boundary
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.12),
+                              blurRadius: 40,
+                              offset: const Offset(0, 15),
+                              spreadRadius: -5,
                             ),
-                          ),
-                        )
-                        .animate()
-                        .fadeIn(duration: 800.ms, delay: 400.ms)
-                        .slideY(begin: 0.3, end: 0, duration: 500.ms),
-
-                    SizedBox(height: screenHeight * 0.04),
-
-                    // Biometric Login Button (if available)
-                    if (_isBiometricAvailable && _isBiometricEnabled)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child:
-                            InkWell(
-                                  onTap: _isLoading
-                                      ? null
-                                      : _attemptBiometricLogin,
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          AppColors.primaryOrange,
-                                          AppColors.primaryOrange.withOpacity(
-                                            0.8,
-                                          ),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.primaryOrange
-                                              .withOpacity(0.3),
-                                          blurRadius: 20,
-                                          offset: const Offset(0, 10),
-                                          spreadRadius: -5,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          _biometricType.toLowerCase().contains(
-                                                'face',
-                                              )
-                                              ? Icons.face
-                                              : Icons.fingerprint,
-                                          color: Colors.white,
-                                          size: 28,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'Login with $_biometricType',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                .animate()
-                                .fadeIn(duration: 600.ms, delay: 300.ms)
-                                .slideY(begin: 0.2, end: 0, duration: 500.ms),
-                      ),
-
-                    // Form Section
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          // Email Input Field
-                          Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.03),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 10),
-                                      spreadRadius: -5,
-                                    ),
-                                  ],
+                          ],
+                        ),
+                        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Biometric button (if available)
+                              if (_isBiometricAvailable && _isBiometricEnabled)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 22),
+                                  child: _buildBiometricSection(),
                                 ),
-                                child: TextFormField(
-                                  controller: _emailController,
-                                  keyboardType: TextInputType.emailAddress,
-                                  validator: _validateEmail,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    color: AppColors.textDark,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  decoration: InputDecoration(
-                                    labelText: 'Email',
-                                    hintText: 'Enter your email',
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 22,
-                                    ),
-                                    prefixIcon: Container(
-                                      margin: const EdgeInsets.only(
-                                        left: 16,
-                                        right: 12,
-                                      ),
-                                      child: const Icon(
-                                        Icons.email_outlined,
-                                        color: AppColors.primaryOrange,
-                                        size: 22,
-                                      ),
-                                    ),
-                                    floatingLabelBehavior:
-                                        FloatingLabelBehavior.auto,
-                                    labelStyle: TextStyle(
-                                      color: AppColors.textLight.withOpacity(
-                                        0.8,
-                                      ),
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 15,
-                                    ),
+
+                              // Email label
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 2,
+                                  bottom: 8,
+                                ),
+                                child: Text(
+                                  'EMAIL ADDRESS',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0C1A2E),
+                                    letterSpacing: 1.2,
                                   ),
                                 ),
-                              )
-                              .animate()
-                              .fadeIn(duration: 600.ms, delay: 500.ms)
-                              .slideY(begin: 0.3, end: 0, duration: 400.ms),
-
-                          SizedBox(height: screenHeight * 0.025),
-
-                          // Password Input Field
-                          Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.03),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 10),
-                                      spreadRadius: -5,
-                                    ),
-                                  ],
-                                ),
-                                child: TextFormField(
-                                  controller: _passwordController,
-                                  obscureText:
-                                      !_isPasswordVisible, // Hide/show password
-                                  validator: _validatePassword,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    color: AppColors.textDark,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  decoration: InputDecoration(
-                                    labelText: 'Password',
-                                    hintText: 'Enter your password',
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 22,
-                                    ),
-                                    prefixIcon: Container(
-                                      margin: const EdgeInsets.only(
-                                        left: 16,
-                                        right: 12,
-                                      ),
-                                      child: const Icon(
-                                        Icons.lock_outline,
-                                        color: AppColors.primaryOrange,
-                                        size: 22,
-                                      ),
-                                    ),
-                                    suffixIcon: Container(
-                                      margin: const EdgeInsets.only(right: 8),
-                                      child: IconButton(
-                                        icon: Icon(
-                                          _isPasswordVisible
-                                              ? Icons.visibility_off
-                                              : Icons.visibility,
-                                          color: AppColors.textLight,
-                                          size: 22,
-                                        ),
-                                        splashRadius: 20,
-                                        onPressed: () {
-                                          setState(() {
-                                            _isPasswordVisible =
-                                                !_isPasswordVisible;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                    labelStyle: TextStyle(
-                                      color: AppColors.textLight.withOpacity(
-                                        0.8,
-                                      ),
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .animate()
-                              .fadeIn(duration: 600.ms, delay: 600.ms)
-                              .slideY(begin: 0.3, end: 0, duration: 400.ms),
-
-                          SizedBox(height: screenHeight * 0.015),
-
-                          // Forgot Password Link
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: () {
-                                HapticFeedback.selectionClick();
-                                Navigator.pushNamed(
-                                  context,
-                                  '/forgot-password',
-                                );
-                              },
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                foregroundColor: AppColors.primaryOrange,
                               ),
-                              child: Text(
-                                AppLocalizations.of(context)!.forgotPassword,
-                                style: GoogleFonts.poppins(
+
+                              // Email field
+                              TextFormField(
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                validator: _validateEmail,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  color: const Color(0xFF0C1A2E),
                                   fontWeight: FontWeight.w500,
-                                  fontSize: 14,
                                 ),
-                              ),
-                            ),
-                          ).animate().fadeIn(duration: 600.ms, delay: 700.ms),
-
-                          SizedBox(height: screenHeight * 0.035),
-
-                          // Login Button
-                          Container(
-                                width: double.infinity,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppColors.primaryOrange,
-                                      AppColors.lightOrange,
-                                    ],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
+                                decoration: InputDecoration(
+                                  hintText: 'Enter your email',
+                                  hintStyle: GoogleFonts.outfit(
+                                    color: const Color(0xFFB0B7C3),
+                                    fontSize: 14,
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primaryOrange
-                                          .withOpacity(0.25),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 10),
-                                      spreadRadius: -5,
-                                    ),
-                                  ],
-                                ),
-                                child: ElevatedButton(
-                                  onPressed: _isLoading ? null : _handleLogin,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    foregroundColor: Colors.white,
-                                    disabledBackgroundColor: Colors.transparent,
-                                    disabledForegroundColor: Colors.white
-                                        .withOpacity(0.8),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    elevation: 0,
-                                    shadowColor: Colors.transparent,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
+                                  filled: true,
+                                  fillColor: const Color(0xFFF5F7FA),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 16,
+                                  ),
+                                  prefixIcon: const Icon(
+                                    Icons.email_outlined,
+                                    color: AppColors.primaryOrange,
+                                    size: 20,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.primaryOrange,
+                                      width: 1.5,
                                     ),
                                   ),
-                                  child: _isLoading
-                                      ? SizedBox(
-                                          width: 24,
-                                          height: 24,
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              AppLocalizations.of(
-                                                context,
-                                              )!.signInCaps,
-                                              style: GoogleFonts.poppins(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 1.2,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            const Icon(
-                                              Icons.arrow_forward_rounded,
-                                              size: 20,
-                                            ),
-                                          ],
-                                        ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.accentRed,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.accentRed,
+                                      width: 1.5,
+                                    ),
+                                  ),
                                 ),
                               )
-                              .animate()
-                              .fadeIn(duration: 600.ms, delay: 800.ms)
-                              .slideY(
-                                begin: 0.3,
-                                end: 0,
-                                duration: 400.ms,
-                                curve: Curves.easeOutQuint,
-                              ),
+                                  .animate()
+                                  .fadeIn(duration: 600.ms, delay: 500.ms)
+                                  .slideY(begin: 0.2, end: 0, duration: 400.ms),
 
-                          SizedBox(height: screenHeight * 0.035),
+                              const SizedBox(height: 20),
 
-                          SizedBox(height: screenHeight * 0.07),
-
-                          // Sign Up Link
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 20),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  AppLocalizations.of(context)!.dontHaveAccount,
-                                  style: GoogleFonts.poppins(
-                                    color: AppColors.textLight,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w400,
+                              // Password label
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 2,
+                                  bottom: 8,
+                                ),
+                                child: Text(
+                                  'PASSWORD',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0C1A2E),
+                                    letterSpacing: 1.2,
                                   ),
                                 ),
-                                TextButton(
+                              ),
+
+                              // Password field
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: !_isPasswordVisible,
+                                validator: _validatePassword,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  color: const Color(0xFF0C1A2E),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Enter your password',
+                                  hintStyle: GoogleFonts.outfit(
+                                    color: const Color(0xFFB0B7C3),
+                                    fontSize: 14,
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color(0xFFF5F7FA),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 16,
+                                  ),
+                                  prefixIcon: const Icon(
+                                    Icons.lock_outline,
+                                    color: AppColors.primaryOrange,
+                                    size: 20,
+                                  ),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _isPasswordVisible
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: const Color(0xFFB0B7C3),
+                                      size: 20,
+                                    ),
+                                    onPressed: () => setState(
+                                      () => _isPasswordVisible =
+                                          !_isPasswordVisible,
+                                    ),
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.primaryOrange,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.accentRed,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.accentRed,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              )
+                                  .animate()
+                                  .fadeIn(duration: 600.ms, delay: 600.ms)
+                                  .slideY(begin: 0.2, end: 0, duration: 400.ms),
+
+                              // Forgot password
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
                                   onPressed: () {
                                     HapticFeedback.selectionClick();
-                                    Navigator.pushNamed(context, '/register');
+                                    Navigator.pushNamed(
+                                      context,
+                                      '/forgot-password',
+                                    );
                                   },
                                   style: TextButton.styleFrom(
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 5,
+                                      horizontal: 4,
+                                      vertical: 2,
                                     ),
                                     foregroundColor: AppColors.primaryOrange,
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
                                   child: Text(
-                                    AppLocalizations.of(context)!.signUp,
-                                    style: GoogleFonts.poppins(
-                                      color: AppColors.primaryOrange,
+                                    AppLocalizations.of(context)!.forgotPassword,
+                                    style: GoogleFonts.outfit(
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 15,
-                                      decoration: TextDecoration.underline,
-                                      decorationThickness: 2,
+                                      fontSize: 13,
+                                      color: AppColors.primaryOrange,
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ).animate().fadeIn(duration: 600.ms, delay: 1100.ms),
+                              ).animate().fadeIn(duration: 600.ms, delay: 700.ms),
 
-                          const SizedBox(height: 16),
+                              const SizedBox(height: 24),
 
-                          // Trouble Signing In Link
-                          TextButton.icon(
-                            onPressed: () => _showLoginHelpDialog(),
-                            icon: Icon(
-                              Icons.help_outline,
-                              color: Colors.grey.shade600,
-                              size: 18,
-                            ),
-                            label: Text(
-                              'Having trouble signing in?',
-                              style: GoogleFonts.poppins(
-                                color: Colors.grey.shade600,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                              // Sign in button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 56,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        AppColors.primaryOrange,
+                                        AppColors.lightOrange,
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.primaryOrange
+                                            .withOpacity(0.35),
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 8),
+                                        spreadRadius: -3,
+                                      ),
+                                    ],
+                                  ),
+                                  child: ElevatedButton(
+                                    onPressed: _isLoading ? null : _handleLogin,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      foregroundColor: Colors.white,
+                                      disabledBackgroundColor:
+                                          Colors.transparent,
+                                      disabledForegroundColor:
+                                          Colors.white.withOpacity(0.8),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      elevation: 0,
+                                      shadowColor: Colors.transparent,
+                                    ),
+                                    child: _isLoading
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                AppLocalizations.of(
+                                                  context,
+                                                )!.signInCaps,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                  letterSpacing: 1.5,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              const Icon(
+                                                Icons.arrow_forward_rounded,
+                                                size: 18,
+                                              ),
+                                            ],
+                                          ),
+                                  ),
+                                ),
+                              )
+                                  .animate()
+                                  .fadeIn(duration: 600.ms, delay: 800.ms)
+                                  .slideY(
+                                    begin: 0.2,
+                                    end: 0,
+                                    duration: 400.ms,
+                                    curve: Curves.easeOutQuint,
+                                  ),
+
+                              const SizedBox(height: 14),
+
+                              // Sign up row
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    AppLocalizations.of(
+                                      context,
+                                    )!.dontHaveAccount,
+                                    style: GoogleFonts.outfit(
+                                      color: AppColors.textLight,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      HapticFeedback.selectionClick();
+                                      Navigator.pushNamed(context, '/register');
+                                    },
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      foregroundColor: AppColors.primaryOrange,
+                                    ),
+                                    child: Text(
+                                      AppLocalizations.of(context)!.signUp,
+                                      style: GoogleFonts.outfit(
+                                        color: AppColors.primaryOrange,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ).animate().fadeIn(
+                                duration: 600.ms,
+                                delay: 1000.ms,
                               ),
-                            ),
-                          ).animate().fadeIn(duration: 600.ms, delay: 1200.ms),
-                        ],
-                      ),
-                    ),
-                  ],
+
+                              // Trouble signing in
+                              Center(
+                                child: TextButton.icon(
+                                  onPressed: () => _showLoginHelpDialog(),
+                                  icon: Icon(
+                                    Icons.help_outline,
+                                    color: Colors.grey.shade500,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    'Having trouble signing in?',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ).animate().fadeIn(
+                                duration: 600.ms,
+                                delay: 1100.ms,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                          .animate()
+                          .fadeIn(duration: 700.ms, delay: 480.ms)
+                          .slideY(begin: 0.12, end: 0, duration: 600.ms),
+
+                      const SizedBox(height: 40),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
+  }
+
+  Widget _buildBiometricSection() {
+    return InkWell(
+      onTap: _isLoading ? null : _attemptBiometricLogin,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF0C1A2E),
+              AppColors.primaryBlue.withOpacity(0.85),
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0C1A2E).withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _biometricType.toLowerCase().contains('face')
+                  ? Icons.face
+                  : Icons.fingerprint,
+              color: Colors.white,
+              size: 24,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Login with $_biometricType',
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(duration: 600.ms, delay: 400.ms);
   }
 
   void _showLoginHelpDialog() {
@@ -1258,4 +1298,20 @@ class _LoginScreenState extends State<LoginScreen>
       ],
     );
   }
+}
+
+class _LoginWaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.moveTo(0, 58);
+    path.quadraticBezierTo(size.width * 0.5, 0, size.width, 58);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(_LoginWaveClipper oldClipper) => false;
 }

@@ -67,7 +67,8 @@ class FundReceiptConfirmation {
     };
   }
 
-  bool get isPendingConfirmation => status == 'approved' && !fundReceiptConfirmed;
+  bool get isPendingConfirmation =>
+      status == 'approved' && !fundReceiptConfirmed;
 }
 
 class ReceiptStats {
@@ -91,32 +92,27 @@ class ConfirmationStatus {
   final String? confirmedAt;
   final String? notes;
 
-  ConfirmationStatus({
-    required this.confirmed,
-    this.confirmedAt,
-    this.notes,
-  });
+  ConfirmationStatus({required this.confirmed, this.confirmedAt, this.notes});
 }
 
 class ConfirmReceiptResult {
   final bool success;
   final String confirmedAt;
 
-  ConfirmReceiptResult({
-    required this.success,
-    required this.confirmedAt,
-  });
+  ConfirmReceiptResult({required this.success, required this.confirmedAt});
 }
 
 class FundReceiptConfirmationService {
   final SupabaseClient _supabase;
 
   FundReceiptConfirmationService({SupabaseClient? supabase})
-      : _supabase = supabase ?? Supabase.instance.client;
+    : _supabase = supabase ?? Supabase.instance.client;
 
   /// Get all approved withdrawals for the user
   /// جلب جميع طلبات السحب المعتمدة للمستخدم
-  Future<List<FundReceiptConfirmation>> getApprovedWithdrawals(String userId) async {
+  Future<List<FundReceiptConfirmation>> getApprovedWithdrawals(
+    String userId,
+  ) async {
     final response = await _supabase
         .from('withdrawal_requests')
         .select()
@@ -125,13 +121,17 @@ class FundReceiptConfirmationService {
         .order('admin_processed_at', ascending: false);
 
     return (response as List)
-        .map((row) => FundReceiptConfirmation.fromMap(row as Map<String, dynamic>))
+        .map(
+          (row) => FundReceiptConfirmation.fromMap(row as Map<String, dynamic>),
+        )
         .toList();
   }
 
   /// Get withdrawals that are approved but not yet confirmed by the enumerator
   /// جلب طلبات السحب المعتمدة التي لم يتم تأكيد استلامها بعد
-  Future<List<FundReceiptConfirmation>> getPendingConfirmations(String userId) async {
+  Future<List<FundReceiptConfirmation>> getPendingConfirmations(
+    String userId,
+  ) async {
     final response = await _supabase
         .from('withdrawal_requests')
         .select()
@@ -141,7 +141,9 @@ class FundReceiptConfirmationService {
         .order('admin_processed_at', ascending: false);
 
     return (response as List)
-        .map((row) => FundReceiptConfirmation.fromMap(row as Map<String, dynamic>))
+        .map(
+          (row) => FundReceiptConfirmation.fromMap(row as Map<String, dynamic>),
+        )
         .toList();
   }
 
@@ -198,7 +200,9 @@ class FundReceiptConfirmationService {
   Future<ConfirmationStatus> getConfirmationStatus(String requestId) async {
     final data = await _supabase
         .from('withdrawal_requests')
-        .select('fund_receipt_confirmed, fund_receipt_confirmed_at, fund_receipt_notes')
+        .select(
+          'fund_receipt_confirmed, fund_receipt_confirmed_at, fund_receipt_notes',
+        )
         .eq('id', requestId)
         .single();
 
@@ -220,8 +224,12 @@ class FundReceiptConfirmationService {
 
     final rows = response as List;
 
-    final confirmed = rows.where((r) => r['fund_receipt_confirmed'] == true).toList();
-    final pending = rows.where((r) => r['fund_receipt_confirmed'] != true).toList();
+    final confirmed = rows
+        .where((r) => r['fund_receipt_confirmed'] == true)
+        .toList();
+    final pending = rows
+        .where((r) => r['fund_receipt_confirmed'] != true)
+        .toList();
 
     double sumAmount(List rows) {
       return rows.fold<double>(

@@ -290,7 +290,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get safetyTipOfTheDay => 'Safety Tip of the Day';
 
   @override
-  String get ladderInspectionTip => 'Always inspect your ladder before use. Check for damage, missing parts, and proper functioning of all components.';
+  String get ladderInspectionTip =>
+      'Always inspect your ladder before use. Check for damage, missing parts, and proper functioning of all components.';
 
   @override
   String get viewMoreTips => 'View More Tips';
@@ -311,22 +312,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pactSupport => 'PACT Support';
 
   @override
-  String get needEquipmentInfo => 'I need information about equipment maintenance.';
+  String get needEquipmentInfo =>
+      'I need information about equipment maintenance.';
 
   @override
-  String get sureWhatEquipment => 'Sure! I can help with that. What specific equipment are you asking about?';
+  String get sureWhatEquipment =>
+      'Sure! I can help with that. What specific equipment are you asking about?';
 
   @override
   String get excavatorSiteB => 'The excavator on site B.';
 
   @override
-  String get maintenanceScheduleResponse => 'I\'ve pulled up the maintenance schedule for that excavator. Its next maintenance is due on September 20. Would you like me to send you the full maintenance details?';
+  String get maintenanceScheduleResponse =>
+      'I\'ve pulled up the maintenance schedule for that excavator. Its next maintenance is due on September 20. Would you like me to send you the full maintenance details?';
 
   @override
   String get safetyAlert => 'Safety Alert';
 
   @override
-  String get weatherWarningSiteA => 'Severe weather warning for Site A. All personnel should follow safety protocols and stay informed of updates.';
+  String get weatherWarningSiteA =>
+      'Severe weather warning for Site A. All personnel should follow safety protocols and stay informed of updates.';
 
   @override
   String get typeAMessage => 'Type a message...';
@@ -999,10 +1004,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get willUploadPermit => 'I will upload the permit document';
 
   @override
-  String get cannotProvideNow => 'The permit is required but I cannot provide it now';
+  String get cannotProvideNow =>
+      'The permit is required but I cannot provide it now';
 
   @override
-  String get noPermitNeeded => 'No locality permit is needed for operations here';
+  String get noPermitNeeded =>
+      'No locality permit is needed for operations here';
 
   @override
   String get continueWithoutPermit => 'Continue without the locality permit';
@@ -1025,7 +1032,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uploadFailed => 'Upload failed';
 
   @override
-  String get databaseUpdateFailed => 'Database update failed. Please try again.';
+  String get databaseUpdateFailed =>
+      'Database update failed. Please try again.';
 
   @override
   String get selectDate => 'Select date';
@@ -1043,10 +1051,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get localitiesSelected => 'localities selected';
 
   @override
-  String get bulkUploadInstructions => 'Select files and dates for each state. Only states with complete information will be uploaded.';
+  String get bulkUploadInstructions =>
+      'Select files and dates for each state. Only states with complete information will be uploaded.';
 
   @override
-  String get bulkLocalityUploadInstructions => 'Select files and dates for each locality. Only localities with complete information will be uploaded.';
+  String get bulkLocalityUploadInstructions =>
+      'Select files and dates for each locality. Only localities with complete information will be uploaded.';
 
   @override
   String get noPermitsReady => 'No permits ready for upload';
@@ -1081,13 +1091,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationUpdateInstalledTitle => 'Update Installed';
 
   @override
-  String get notificationUpdateInstalledBody => 'Your app is now up to date. Restart to apply.';
+  String get notificationUpdateInstalledBody =>
+      'Your app is now up to date. Restart to apply.';
 
   @override
   String get notificationCostApprovedTitle => 'Cost Submission Approved';
 
   @override
-  String notificationCostApprovedBody(String siteId, String amount, String currency) {
+  String notificationCostApprovedBody(
+    String siteId,
+    String amount,
+    String currency,
+  ) {
     return 'Approved for site visit $siteId. Amount: $amount $currency';
   }
 
@@ -1119,7 +1134,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationBudgetAlertTitle => 'Budget Alert';
 
   @override
-  String notificationBudgetAlertBody(String siteId, String amount, String currency) {
+  String notificationBudgetAlertBody(
+    String siteId,
+    String amount,
+    String currency,
+  ) {
     return 'Remaining budget for $siteId: $amount $currency';
   }
 
@@ -1130,13 +1149,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationSignatureVerifiedTitle => 'Signature Verified';
 
   @override
-  String get notificationSignatureVerifiedBody => 'Your signature has been verified by admin.';
+  String get notificationSignatureVerifiedBody =>
+      'Your signature has been verified by admin.';
 
   @override
   String get notificationSignatureRejectedTitle => 'Signature Rejected';
 
   @override
-  String get notificationSignatureRejectedBody => 'Your signature was rejected. Please submit a new one.';
+  String get notificationSignatureRejectedBody =>
+      'Your signature was rejected. Please submit a new one.';
 
   @override
   String get notificationSiteAssignedTitle => 'Site Visit Assigned';
@@ -1244,7 +1265,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visitStartedSuccess => 'Visit started successfully';
 
   @override
-  String get visitCompletedSuccess => 'Visit completed and report submitted successfully';
+  String get visitCompletedSuccess =>
+      'Visit completed and report submitted successfully';
 
   @override
   String get errorOccurred => 'Error occurred';
@@ -1289,7 +1311,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onlyAdminsCanReclaim => 'Only admins can reclaim sites';
 
   @override
-  String get releaseSiteToPool => 'Release this site back to the dispatch pool?';
+  String get releaseSiteToPool =>
+      'Release this site back to the dispatch pool?';
 
   @override
   String get siteDetails => 'Site Details';
@@ -1361,19 +1384,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gotIt => 'Got it!';
 
   @override
-  String get whatsNewFeature1 => '🌍 Complete Bilingual Support (English/Arabic)';
+  String get whatsNewFeature1 =>
+      '🌍 Complete Bilingual Support (English/Arabic)';
 
   @override
-  String get whatsNewFeature2 => '📋 Language Toggle Button - Switch instantly in AppBar';
+  String get whatsNewFeature2 =>
+      '📋 Language Toggle Button - Switch instantly in AppBar';
 
   @override
-  String get whatsNewFeature3 => '🏭 MMP Details Section - Shows main activity & status';
+  String get whatsNewFeature3 =>
+      '🏭 MMP Details Section - Shows main activity & status';
 
   @override
-  String get whatsNewFeature4 => '⚠️ Enumerator Fee Note - Guidance with approval requirements';
+  String get whatsNewFeature4 =>
+      '⚠️ Enumerator Fee Note - Guidance with approval requirements';
 
   @override
-  String get whatsNewFix1 => 'Fixed Complete Visit Screen - Missing activity inputs now appear';
+  String get whatsNewFix1 =>
+      'Fixed Complete Visit Screen - Missing activity inputs now appear';
 
   @override
   String get whatsNewFix2 => 'Fixed language detection in all screens';
@@ -1382,16 +1410,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewFix3 => 'Fixed RTL text field support for Arabic input';
 
   @override
-  String get whatsNewImprovement1 => 'Activity selection now context-aware (GFA/CBT/PDM/MDM/WHM)';
+  String get whatsNewImprovement1 =>
+      'Activity selection now context-aware (GFA/CBT/PDM/MDM/WHM)';
 
   @override
-  String get whatsNewImprovement2 => 'Warehouse input visibility improved (appears after fee summary)';
+  String get whatsNewImprovement2 =>
+      'Warehouse input visibility improved (appears after fee summary)';
 
   @override
-  String get whatsNewImprovement3 => 'Fee note alert now includes WFP AO approval requirements';
+  String get whatsNewImprovement3 =>
+      'Fee note alert now includes WFP AO approval requirements';
 
   @override
-  String get bulkLocalityPermitVerification => 'Bulk Locality Permit Verification';
+  String get bulkLocalityPermitVerification =>
+      'Bulk Locality Permit Verification';
 
   @override
   String verifyLocalityRequirements(String locality, String state) {
@@ -1404,20 +1436,25 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get localityPermitQuestion => 'Do you require a Locality permit in this locality?';
+  String get localityPermitQuestion =>
+      'Do you require a Locality permit in this locality?';
 
   @override
   String get requirePermitHaveIt => 'Yes, it\'s required and I will upload it';
 
   @override
-  String get haveLocalityPermitWillUpload => 'I have the locality permit and will upload it now';
+  String get haveLocalityPermitWillUpload =>
+      'I have the locality permit and will upload it now';
 
   @override
-  String get requirePermitDontHave => 'Yes, it\'s required but I don\'t have it';
+  String get requirePermitDontHave =>
+      'Yes, it\'s required but I don\'t have it';
 
   @override
-  String get permitRequiredNotAvailable => 'The locality permit is required but not available';
+  String get permitRequiredNotAvailable =>
+      'The locality permit is required but not available';
 
   @override
-  String get permitNotRequiredInLocality => 'Locality permit is not required in this locality';
+  String get permitNotRequiredInLocality =>
+      'Locality permit is not required in this locality';
 }

@@ -11,7 +11,9 @@ class ComprehensiveSafetyService {
   /// Save a new comprehensive monitoring checklist
   Future<void> saveChecklist(ComprehensiveSafetyChecklist checklist) async {
     try {
-      await _supabase.from('comprehensive_monitoring_checklists').insert(checklist.toJson());
+      await _supabase
+          .from('comprehensive_monitoring_checklists')
+          .insert(checklist.toJson());
     } catch (e) {
       print('Error saving comprehensive monitoring checklist: $e');
       rethrow;
@@ -71,7 +73,10 @@ class ComprehensiveSafetyService {
   /// Delete a monitoring checklist
   Future<void> deleteChecklist(String id) async {
     try {
-      await _supabase.from('comprehensive_monitoring_checklists').delete().eq('id', id);
+      await _supabase
+          .from('comprehensive_monitoring_checklists')
+          .delete()
+          .eq('id', id);
     } catch (e) {
       print('Error deleting checklist: $e');
       rethrow;

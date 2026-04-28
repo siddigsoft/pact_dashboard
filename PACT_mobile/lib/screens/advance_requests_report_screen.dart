@@ -11,7 +11,15 @@ import 'package:csv/csv.dart';
 
 class AdvanceRequestsReportScreen extends StatefulWidget {
   final bool isArabic;
-  const AdvanceRequestsReportScreen({super.key, this.isArabic = false});
+
+  /// Optional initial tab to show (e.g. "reclaimImpact").
+  final String? initialTab;
+
+  const AdvanceRequestsReportScreen({
+    super.key,
+    this.isArabic = false,
+    this.initialTab,
+  });
 
   @override
   State<AdvanceRequestsReportScreen> createState() =>
@@ -37,8 +45,39 @@ class _AdvanceRequestsReportScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(
+      length: 7,
+      vsync: this,
+      initialIndex: _initialTabIndex(widget.initialTab),
+    );
     _checkAccessAndLoad();
+  }
+
+  int _initialTabIndex(String? initialTab) {
+    final t = (initialTab ?? '').toLowerCase().trim();
+    if (t.isEmpty) return 0;
+    // Keep this mapping stable with the TabBar order in build():
+    // 0 All, 1 Team, 2 Hub, 3 Status, 4 State, 5 Project, 6 Reclaim
+    switch (t) {
+      case 'reclaim':
+      case 'reclaimimpact':
+      case 'reclaim_impact':
+      case 'reclaim-impact':
+        return 6;
+      case 'project':
+        return 5;
+      case 'state':
+        return 4;
+      case 'status':
+        return 3;
+      case 'hub':
+        return 2;
+      case 'team':
+        return 1;
+      case 'all':
+      default:
+        return 0;
+    }
   }
 
   @override

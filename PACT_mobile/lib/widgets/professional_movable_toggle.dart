@@ -11,10 +11,7 @@ enum CornerPosition { topLeft, topRight, bottomLeft, bottomRight }
 class ProfessionalMovableToggle extends ConsumerStatefulWidget {
   final bool showByDefault;
 
-  const ProfessionalMovableToggle({
-    super.key,
-    this.showByDefault = true,
-  });
+  const ProfessionalMovableToggle({super.key, this.showByDefault = true});
 
   @override
   ConsumerState<ProfessionalMovableToggle> createState() =>
@@ -113,7 +110,8 @@ class _ProfessionalMovableToggleState
       }
     } catch (e) {
       debugPrint(
-          '[ProfessionalMovableToggle] Error loading local availability: $e');
+        '[ProfessionalMovableToggle] Error loading local availability: $e',
+      );
     }
   }
 
@@ -134,10 +132,13 @@ class _ProfessionalMovableToggleState
       if (profile == null) return;
 
       final supabase = Supabase.instance.client;
-      await supabase.from('profiles').update({
-        'availability': pendingChange,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', profile.id);
+      await supabase
+          .from('profiles')
+          .update({
+            'availability': pendingChange,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', profile.id);
 
       await prefs.remove(_pendingAvailabilityKey);
       await prefs.remove(_localAvailabilityKey);
@@ -162,7 +163,8 @@ class _ProfessionalMovableToggleState
       final profile = ref.read(currentUserProfileProvider);
       if (profile == null) throw Exception('User profile not found');
 
-      final currentAvailability = _localAvailabilityOverride ??
+      final currentAvailability =
+          _localAvailabilityOverride ??
           UserAvailability.fromString(profile.availability.name);
       final newAvailability = currentAvailability == UserAvailability.online
           ? UserAvailability.offline
@@ -223,8 +225,9 @@ class _ProfessionalMovableToggleState
                 ? const Color(0xFF10B981)
                 : const Color(0xFF6B7280),
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -266,7 +269,10 @@ class _ProfessionalMovableToggleState
   }
 
   Offset _getCornerOffset(
-      CornerPosition corner, Size screenSize, Size widgetSize) {
+    CornerPosition corner,
+    Size screenSize,
+    Size widgetSize,
+  ) {
     const padding = 16.0;
     const bottomNavHeight = 80.0;
     const topSafeArea = 100.0;
@@ -276,10 +282,14 @@ class _ProfessionalMovableToggleState
         return const Offset(padding, topSafeArea);
       case CornerPosition.topRight:
         return Offset(
-            screenSize.width - widgetSize.width - padding, topSafeArea);
+          screenSize.width - widgetSize.width - padding,
+          topSafeArea,
+        );
       case CornerPosition.bottomLeft:
         return Offset(
-            padding, screenSize.height - widgetSize.height - bottomNavHeight);
+          padding,
+          screenSize.height - widgetSize.height - bottomNavHeight,
+        );
       case CornerPosition.bottomRight:
         return Offset(
           screenSize.width - widgetSize.width - padding,
@@ -299,8 +309,10 @@ class _ProfessionalMovableToggleState
             Icon(Icons.visibility_off, color: Colors.white, size: 18),
             SizedBox(width: 8),
             Expanded(
-                child: Text(
-                    'Status toggle hidden. Tap the indicator to show again.')),
+              child: Text(
+                'Status toggle hidden. Tap the indicator to show again.',
+              ),
+            ),
           ],
         ),
         backgroundColor: const Color(0xFF374151),
@@ -339,13 +351,15 @@ class _ProfessionalMovableToggleState
               Icon(Icons.touch_app, color: Colors.white, size: 18),
               SizedBox(width: 8),
               Expanded(
-                  child: Text('Double-tap to expand, long-press for options')),
+                child: Text('Double-tap to expand, long-press for options'),
+              ),
             ],
           ),
           backgroundColor: const Color(0xFF374151),
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 3),
         ),
@@ -406,17 +420,22 @@ class _ProfessionalMovableToggleState
           value: 'move_tl',
           child: Row(
             children: [
-              Icon(Icons.north_west,
-                  size: 18,
+              Icon(
+                Icons.north_west,
+                size: 18,
+                color: _cornerPosition == CornerPosition.topLeft
+                    ? primaryColor
+                    : Colors.grey[700],
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Top Left',
+                style: TextStyle(
                   color: _cornerPosition == CornerPosition.topLeft
                       ? primaryColor
-                      : Colors.grey[700]),
-              const SizedBox(width: 12),
-              Text('Top Left',
-                  style: TextStyle(
-                      color: _cornerPosition == CornerPosition.topLeft
-                          ? primaryColor
-                          : null)),
+                      : null,
+                ),
+              ),
             ],
           ),
         ),
@@ -424,17 +443,22 @@ class _ProfessionalMovableToggleState
           value: 'move_tr',
           child: Row(
             children: [
-              Icon(Icons.north_east,
-                  size: 18,
+              Icon(
+                Icons.north_east,
+                size: 18,
+                color: _cornerPosition == CornerPosition.topRight
+                    ? primaryColor
+                    : Colors.grey[700],
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Top Right',
+                style: TextStyle(
                   color: _cornerPosition == CornerPosition.topRight
                       ? primaryColor
-                      : Colors.grey[700]),
-              const SizedBox(width: 12),
-              Text('Top Right',
-                  style: TextStyle(
-                      color: _cornerPosition == CornerPosition.topRight
-                          ? primaryColor
-                          : null)),
+                      : null,
+                ),
+              ),
             ],
           ),
         ),
@@ -442,17 +466,22 @@ class _ProfessionalMovableToggleState
           value: 'move_bl',
           child: Row(
             children: [
-              Icon(Icons.south_west,
-                  size: 18,
+              Icon(
+                Icons.south_west,
+                size: 18,
+                color: _cornerPosition == CornerPosition.bottomLeft
+                    ? primaryColor
+                    : Colors.grey[700],
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Bottom Left',
+                style: TextStyle(
                   color: _cornerPosition == CornerPosition.bottomLeft
                       ? primaryColor
-                      : Colors.grey[700]),
-              const SizedBox(width: 12),
-              Text('Bottom Left',
-                  style: TextStyle(
-                      color: _cornerPosition == CornerPosition.bottomLeft
-                          ? primaryColor
-                          : null)),
+                      : null,
+                ),
+              ),
             ],
           ),
         ),
@@ -460,17 +489,22 @@ class _ProfessionalMovableToggleState
           value: 'move_br',
           child: Row(
             children: [
-              Icon(Icons.south_east,
-                  size: 18,
+              Icon(
+                Icons.south_east,
+                size: 18,
+                color: _cornerPosition == CornerPosition.bottomRight
+                    ? primaryColor
+                    : Colors.grey[700],
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Bottom Right',
+                style: TextStyle(
                   color: _cornerPosition == CornerPosition.bottomRight
                       ? primaryColor
-                      : Colors.grey[700]),
-              const SizedBox(width: 12),
-              Text('Bottom Right',
-                  style: TextStyle(
-                      color: _cornerPosition == CornerPosition.bottomRight
-                          ? primaryColor
-                          : null)),
+                      : null,
+                ),
+              ),
             ],
           ),
         ),
@@ -520,7 +554,8 @@ class _ProfessionalMovableToggleState
       if (!isDataCollectorOrCoordinator) return const SizedBox.shrink();
     }
 
-    final availability = _localAvailabilityOverride ??
+    final availability =
+        _localAvailabilityOverride ??
         (profile != null
             ? UserAvailability.fromString(profile.availability.name)
             : UserAvailability.offline);
@@ -529,13 +564,18 @@ class _ProfessionalMovableToggleState
     return LayoutBuilder(
       builder: (context, constraints) {
         final screenSize = Size(constraints.maxWidth, constraints.maxHeight);
-        final widgetSize =
-            _isExpanded ? const Size(160, 50) : const Size(50, 50);
+        final widgetSize = _isExpanded
+            ? const Size(160, 50)
+            : const Size(50, 50);
 
-        final baseOffset =
-            _getCornerOffset(_cornerPosition, screenSize, widgetSize);
-        final currentOffset =
-            _isDragging ? baseOffset + _dragOffset : baseOffset;
+        final baseOffset = _getCornerOffset(
+          _cornerPosition,
+          screenSize,
+          widgetSize,
+        );
+        final currentOffset = _isDragging
+            ? baseOffset + _dragOffset
+            : baseOffset;
 
         return Stack(
           children: [
@@ -543,19 +583,23 @@ class _ProfessionalMovableToggleState
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
-                left: _cornerPosition == CornerPosition.topLeft ||
+                left:
+                    _cornerPosition == CornerPosition.topLeft ||
                         _cornerPosition == CornerPosition.bottomLeft
                     ? 8
                     : null,
-                right: _cornerPosition == CornerPosition.topRight ||
+                right:
+                    _cornerPosition == CornerPosition.topRight ||
                         _cornerPosition == CornerPosition.bottomRight
                     ? 8
                     : null,
-                top: _cornerPosition == CornerPosition.topLeft ||
+                top:
+                    _cornerPosition == CornerPosition.topLeft ||
                         _cornerPosition == CornerPosition.topRight
                     ? 100
                     : null,
-                bottom: _cornerPosition == CornerPosition.bottomLeft ||
+                bottom:
+                    _cornerPosition == CornerPosition.bottomLeft ||
                         _cornerPosition == CornerPosition.bottomRight
                     ? 90
                     : null,
@@ -571,10 +615,11 @@ class _ProfessionalMovableToggleState
                           : const Color(0xFF6B7280).withOpacity(0.9),
                       boxShadow: [
                         BoxShadow(
-                          color: (isOnline
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFF6B7280))
-                              .withOpacity(0.4),
+                          color:
+                              (isOnline
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFF6B7280))
+                                  .withOpacity(0.4),
                           blurRadius: 8,
                           spreadRadius: 2,
                         ),
@@ -639,8 +684,9 @@ class _ProfessionalMovableToggleState
   }
 
   Widget _buildToggleWidget(bool isOnline) {
-    final primaryColor =
-        isOnline ? const Color(0xFF10B981) : const Color(0xFF6B7280);
+    final primaryColor = isOnline
+        ? const Color(0xFF10B981)
+        : const Color(0xFF6B7280);
     final backgroundColor = isOnline
         ? const Color(0xFF10B981).withOpacity(0.15)
         : const Color(0xFF6B7280).withOpacity(0.15);
@@ -652,10 +698,7 @@ class _ProfessionalMovableToggleState
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
         color: Colors.white,
-        border: Border.all(
-          color: primaryColor.withOpacity(0.3),
-          width: 1.5,
-        ),
+        border: Border.all(color: primaryColor.withOpacity(0.3), width: 1.5),
         boxShadow: [
           BoxShadow(
             color: primaryColor.withOpacity(0.2),
@@ -693,7 +736,8 @@ class _ProfessionalMovableToggleState
                     color: backgroundColor,
                     borderRadius: _isExpanded
                         ? const BorderRadius.horizontal(
-                            left: Radius.circular(26))
+                            left: Radius.circular(26),
+                          )
                         : BorderRadius.circular(26),
                   ),
                   child: Row(
@@ -722,7 +766,8 @@ class _ProfessionalMovableToggleState
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
+                                      Colors.white,
+                                    ),
                                   ),
                                 )
                               : Icon(
@@ -765,11 +810,7 @@ class _ProfessionalMovableToggleState
                 ),
               ),
               if (_isExpanded) ...[
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: Colors.grey[200],
-                ),
+                Container(width: 1, height: 30, color: Colors.grey[200]),
                 PopupMenuButton<String>(
                   icon: Icon(
                     Icons.more_vert,
@@ -791,22 +832,26 @@ class _ProfessionalMovableToggleState
                         break;
                       case 'move_tl':
                         setState(
-                            () => _cornerPosition = CornerPosition.topLeft);
+                          () => _cornerPosition = CornerPosition.topLeft,
+                        );
                         _savePreferences();
                         break;
                       case 'move_tr':
                         setState(
-                            () => _cornerPosition = CornerPosition.topRight);
+                          () => _cornerPosition = CornerPosition.topRight,
+                        );
                         _savePreferences();
                         break;
                       case 'move_bl':
                         setState(
-                            () => _cornerPosition = CornerPosition.bottomLeft);
+                          () => _cornerPosition = CornerPosition.bottomLeft,
+                        );
                         _savePreferences();
                         break;
                       case 'move_br':
                         setState(
-                            () => _cornerPosition = CornerPosition.bottomRight);
+                          () => _cornerPosition = CornerPosition.bottomRight,
+                        );
                         _savePreferences();
                         break;
                     }
@@ -816,8 +861,11 @@ class _ProfessionalMovableToggleState
                       value: 'minimize',
                       child: Row(
                         children: [
-                          Icon(Icons.minimize,
-                              size: 18, color: Colors.grey[700]),
+                          Icon(
+                            Icons.minimize,
+                            size: 18,
+                            color: Colors.grey[700],
+                          ),
                           const SizedBox(width: 12),
                           const Text('Minimize'),
                         ],
@@ -827,8 +875,11 @@ class _ProfessionalMovableToggleState
                       value: 'hide',
                       child: Row(
                         children: [
-                          Icon(Icons.visibility_off,
-                              size: 18, color: Colors.grey[700]),
+                          Icon(
+                            Icons.visibility_off,
+                            size: 18,
+                            color: Colors.grey[700],
+                          ),
                           const SizedBox(width: 12),
                           const Text('Hide'),
                         ],
@@ -910,8 +961,8 @@ class _ProfessionalMovableToggleState
                             style: TextStyle(
                               color:
                                   _cornerPosition == CornerPosition.bottomLeft
-                                      ? const Color(0xFF10B981)
-                                      : null,
+                                  ? const Color(0xFF10B981)
+                                  : null,
                             ),
                           ),
                         ],
@@ -934,8 +985,8 @@ class _ProfessionalMovableToggleState
                             style: TextStyle(
                               color:
                                   _cornerPosition == CornerPosition.bottomRight
-                                      ? const Color(0xFF10B981)
-                                      : null,
+                                  ? const Color(0xFF10B981)
+                                  : null,
                             ),
                           ),
                         ],

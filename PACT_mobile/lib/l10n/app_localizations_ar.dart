@@ -290,7 +290,8 @@ class AppLocalizationsAr extends AppLocalizations {
   String get safetyTipOfTheDay => 'نصيحة السلامة اليومية';
 
   @override
-  String get ladderInspectionTip => 'افحص دائماً سلمك قبل الاستخدام. تحقق من التلف، الأجزاء المفقودة، ووظيفة جميع المكونات بشكل صحيح.';
+  String get ladderInspectionTip =>
+      'افحص دائماً سلمك قبل الاستخدام. تحقق من التلف، الأجزاء المفقودة، ووظيفة جميع المكونات بشكل صحيح.';
 
   @override
   String get viewMoreTips => 'عرض المزيد من النصائح';
@@ -314,19 +315,22 @@ class AppLocalizationsAr extends AppLocalizations {
   String get needEquipmentInfo => 'أحتاج معلومات حول صيانة المعدات.';
 
   @override
-  String get sureWhatEquipment => 'بالتأكيد! يمكنني مساعدتك في ذلك. ما المعدات المحددة التي تسأل عنها؟';
+  String get sureWhatEquipment =>
+      'بالتأكيد! يمكنني مساعدتك في ذلك. ما المعدات المحددة التي تسأل عنها؟';
 
   @override
   String get excavatorSiteB => 'الحفار في الموقع ب.';
 
   @override
-  String get maintenanceScheduleResponse => 'لقد استخرجت جدول الصيانة لهذا الحفار. الصيانة التالية مستحقة في 20 سبتمبر. هل تريد مني إرسال تفاصيل الصيانة الكاملة؟';
+  String get maintenanceScheduleResponse =>
+      'لقد استخرجت جدول الصيانة لهذا الحفار. الصيانة التالية مستحقة في 20 سبتمبر. هل تريد مني إرسال تفاصيل الصيانة الكاملة؟';
 
   @override
   String get safetyAlert => 'تنبيه السلامة';
 
   @override
-  String get weatherWarningSiteA => 'تحذير طقس شديد للموقع أ. يجب على جميع الموظفين اتباع بروتوكولات السلامة والبقاء على اطلاع بالتحديثات.';
+  String get weatherWarningSiteA =>
+      'تحذير طقس شديد للموقع أ. يجب على جميع الموظفين اتباع بروتوكولات السلامة والبقاء على اطلاع بالتحديثات.';
 
   @override
   String get typeAMessage => 'اكتب رسالة...';
@@ -1025,7 +1029,8 @@ class AppLocalizationsAr extends AppLocalizations {
   String get uploadFailed => 'فشل الرفع';
 
   @override
-  String get databaseUpdateFailed => 'فشل تحديث قاعدة البيانات. يرجى المحاولة مرة أخرى.';
+  String get databaseUpdateFailed =>
+      'فشل تحديث قاعدة البيانات. يرجى المحاولة مرة أخرى.';
 
   @override
   String get selectDate => 'اختر التاريخ';
@@ -1043,10 +1048,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get localitiesSelected => 'محليات محددة';
 
   @override
-  String get bulkUploadInstructions => 'حدد الملفات والتواريخ لكل ولاية. سيتم رفع الولايات ذات المعلومات الكاملة فقط.';
+  String get bulkUploadInstructions =>
+      'حدد الملفات والتواريخ لكل ولاية. سيتم رفع الولايات ذات المعلومات الكاملة فقط.';
 
   @override
-  String get bulkLocalityUploadInstructions => 'حدد الملفات والتواريخ لكل محلية. سيتم رفع المحليات ذات المعلومات الكاملة فقط.';
+  String get bulkLocalityUploadInstructions =>
+      'حدد الملفات والتواريخ لكل محلية. سيتم رفع المحليات ذات المعلومات الكاملة فقط.';
 
   @override
   String get noPermitsReady => 'لا توجد تصاريح جاهزة للرفع';
@@ -1081,13 +1088,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get notificationUpdateInstalledTitle => 'تم تثبيت التحديث';
 
   @override
-  String get notificationUpdateInstalledBody => 'تطبيقك محدث الآن. أعد التشغيل للتطبيق.';
+  String get notificationUpdateInstalledBody =>
+      'تطبيقك محدث الآن. أعد التشغيل للتطبيق.';
 
   @override
   String get notificationCostApprovedTitle => 'تمت الموافقة على التكلفة';
 
   @override
-  String notificationCostApprovedBody(String siteId, String amount, String currency) {
+  String notificationCostApprovedBody(
+    String siteId,
+    String amount,
+    String currency,
+  ) {
     return 'تمت الموافقة لزيارة الموقع $siteId. المبلغ: $amount $currency';
   }
 
@@ -1119,7 +1131,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get notificationBudgetAlertTitle => 'تنبيه الميزانية';
 
   @override
-  String notificationBudgetAlertBody(String siteId, String amount, String currency) {
+  String notificationBudgetAlertBody(
+    String siteId,
+    String amount,
+    String currency,
+  ) {
     return 'الميزانية المتبقية لـ $siteId: $amount $currency';
   }
 
@@ -1130,13 +1146,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get notificationSignatureVerifiedTitle => 'تم التحقق من التوقيع';
 
   @override
-  String get notificationSignatureVerifiedBody => 'تم التحقق من توقيعك من قبل المسؤول.';
+  String get notificationSignatureVerifiedBody =>
+      'تم التحقق من توقيعك من قبل المسؤول.';
 
   @override
   String get notificationSignatureRejectedTitle => 'تم رفض التوقيع';
 
   @override
-  String get notificationSignatureRejectedBody => 'تم رفض توقيعك. يرجى تقديم توقيع جديد.';
+  String get notificationSignatureRejectedBody =>
+      'تم رفض توقيعك. يرجى تقديم توقيع جديد.';
 
   @override
   String get notificationSiteAssignedTitle => 'تم تعيين زيارة موقع';
@@ -1361,19 +1379,24 @@ class AppLocalizationsAr extends AppLocalizations {
   String get gotIt => 'حسناً!';
 
   @override
-  String get whatsNewFeature1 => '🌍 دعم ثنائي اللغة كامل (الإنجليزية والعربية)';
+  String get whatsNewFeature1 =>
+      '🌍 دعم ثنائي اللغة كامل (الإنجليزية والعربية)';
 
   @override
-  String get whatsNewFeature2 => '📋 زر التبديل اللغوي - التبديل فوراً في شريط التطبيق';
+  String get whatsNewFeature2 =>
+      '📋 زر التبديل اللغوي - التبديل فوراً في شريط التطبيق';
 
   @override
-  String get whatsNewFeature3 => '🏭 قسم تفاصيل الخطة - عرض النشاط الرئيسي والحالة';
+  String get whatsNewFeature3 =>
+      '🏭 قسم تفاصيل الخطة - عرض النشاط الرئيسي والحالة';
 
   @override
-  String get whatsNewFeature4 => '⚠️ ملاحظة رسوم الفنيين - إرشادات مع متطلبات الموافقة';
+  String get whatsNewFeature4 =>
+      '⚠️ ملاحظة رسوم الفنيين - إرشادات مع متطلبات الموافقة';
 
   @override
-  String get whatsNewFix1 => 'تم إصلاح شاشة إكمال الزيارة - المدخلات المفقودة تظهر الآن';
+  String get whatsNewFix1 =>
+      'تم إصلاح شاشة إكمال الزيارة - المدخلات المفقودة تظهر الآن';
 
   @override
   String get whatsNewFix2 => 'تم إصلاح كشف اللغة في جميع الشاشات';
@@ -1382,16 +1405,20 @@ class AppLocalizationsAr extends AppLocalizations {
   String get whatsNewFix3 => 'تم إصلاح دعم حقل النص RTL لإدخال اللغة العربية';
 
   @override
-  String get whatsNewImprovement1 => 'اختيار النشاط الآن يدرك السياق (GFA/CBT/PDM/MDM/WHM)';
+  String get whatsNewImprovement1 =>
+      'اختيار النشاط الآن يدرك السياق (GFA/CBT/PDM/MDM/WHM)';
 
   @override
-  String get whatsNewImprovement2 => 'تحسين رؤية مدخل المستودع (يظهر بعد ملخص الرسم)';
+  String get whatsNewImprovement2 =>
+      'تحسين رؤية مدخل المستودع (يظهر بعد ملخص الرسم)';
 
   @override
-  String get whatsNewImprovement3 => 'تنبيه رسالة الرسم الآن يتضمن متطلبات موافقة WFP AO';
+  String get whatsNewImprovement3 =>
+      'تنبيه رسالة الرسم الآن يتضمن متطلبات موافقة WFP AO';
 
   @override
-  String get bulkLocalityPermitVerification => 'التحقق من تصاريح المحليات بالجملة';
+  String get bulkLocalityPermitVerification =>
+      'التحقق من تصاريح المحليات بالجملة';
 
   @override
   String verifyLocalityRequirements(String locality, String state) {
@@ -1404,7 +1431,8 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get localityPermitQuestion => 'هل تحتاج إلى تصريح محلية في هذه المحلية؟';
+  String get localityPermitQuestion =>
+      'هل تحتاج إلى تصريح محلية في هذه المحلية؟';
 
   @override
   String get requirePermitHaveIt => 'نعم، مطلوب وسأرفعه';
@@ -1419,5 +1447,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get permitRequiredNotAvailable => 'التصريح مطلوب لكن غير متاح';
 
   @override
-  String get permitNotRequiredInLocality => 'لا يوجد تصريح محلية مطلوب في هذه المحلية';
+  String get permitNotRequiredInLocality =>
+      'لا يوجد تصريح محلية مطلوب في هذه المحلية';
 }

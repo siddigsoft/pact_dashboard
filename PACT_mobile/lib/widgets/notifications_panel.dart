@@ -1,12 +1,24 @@
 // lib/widgets/notifications_panel.dart
 
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/user_notification_service.dart';
+import '../services/notification_route_resolver.dart';
 import '../models/user_notification.dart';
+import '../screens/advance_requests_report_screen.dart';
+import '../screens/budget_screen.dart';
+import '../screens/communications_screen.dart';
+import '../screens/coordinator_dashboard_screen.dart';
+import '../screens/digital_signatures_screen.dart';
+import '../screens/field_operations_enhanced_screen.dart';
+import '../screens/down_payment_approval_screen.dart';
+import '../screens/settings_screen.dart';
+import '../screens/debug_logs_screen.dart';
+import '../screens/wallet_screen.dart';
 import '../theme/app_colors.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -578,12 +590,22 @@ class _NotificationsPanelContentState
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Notifications / الإشعارات',
-                            style: GoogleFonts.poppins(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onLongPress: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const DebugLogsScreen(),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              'Notifications / الإشعارات',
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                           if (_unreadAll > 0 || _notifications.isNotEmpty)
@@ -685,6 +707,30 @@ class _NotificationsPanelContentState
                                     ),
                             ),
                           ),
+                        if (_notifications.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _clearAllNotifications,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'Clear all',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () => Navigator.pop(context),
@@ -1057,6 +1103,75 @@ class _NotificationsPanelContentState
     );
   }
 
+  void _navigateFromNotification(UserNotification n) {
+    final decision = NotificationRouteResolver.fromLink(
+      n.link,
+      eventType: n.eventType,
+      relatedEntityType: n.relatedEntityType,
+    );
+    final navigator = Navigator.of(context, rootNavigator: true);
+    switch (decision.kind) {
+      case NotificationRouteKind.wallet:
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => WalletScreen(initialTab: decision.walletTab ?? 3),
+          ),
+        );
+        break;
+      case NotificationRouteKind.main:
+        navigator.pushNamed('/main', arguments: decision.mainArgs);
+        break;
+      case NotificationRouteKind.notificationsPanel:
+        break;
+      default:
+        break;
+    }
+  }
+
+  Future<void> _clearAllNotifications() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Clear all notifications?', style: GoogleFonts.poppins()),
+        content: Text(
+          'This will remove all notifications from this device. You cannot undo this.',
+          style: GoogleFonts.poppins(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.poppins()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Clear all',
+              style: GoogleFonts.poppins(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      final count = await widget.notificationService.clearAllNotifications();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              count > 0
+                  ? 'Cleared $count notification${count == 1 ? '' : 's'}'
+                  : 'No notifications to clear',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildNotificationItem(UserNotification n) {
     if (n.isBroadcast) {
       return _BroadcastCard(
@@ -1067,15 +1182,273 @@ class _NotificationsPanelContentState
         },
       );
     }
-    return _UpdateCard(
-      notification: n,
-      onTap: () async {
-        if (!n.isRead) {
-          await widget.notificationService.markAsOpened(n.id);
-          await widget.notificationService.markAsRead(n.id);
+    // return _UpdateCard(
+    //   notification: n,
+    //   onTap: () async {
+    //     if (!n.isRead) {
+    //       await widget.notificationService.markAsOpened(n.id);
+    //       await widget.notificationService.markAsRead(n.id);
+    //     }
+    //     if (context.mounted) {
+    //       _navigateFromNotification(n);
+    //       Navigator.pop(context);
+    //     }
+    //   },
+    //   onDelete: () async {
+    //     await widget.notificationService.deleteNotification(n.id);
+    //   },
+    // );
+    return _SwipeToDeleteUpdateTile(
+      key: ValueKey('notif-${n.id}'),
+      notificationId: n.id,
+      notificationService: widget.notificationService,
+      child: _UpdateCard(
+        notification: n,
+        onTap: () async {
+          if (!n.isRead) {
+            await widget.notificationService.markAsOpened(n.id);
+            await widget.notificationService.markAsRead(n.id);
+          }
+          if (!context.mounted) return;
+
+          // Close the bottom sheet first, then navigate on root navigator.
+          final rootNav = Navigator.of(context, rootNavigator: true);
+          Navigator.pop(context);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Fast-path routing rules based on notification semantics.
+            // - Financial/transaction notifications should go to Wallet.
+            // - Site-related notifications should go to Field Operations.
+            final ev = (n.eventType ?? '').toLowerCase();
+            final rel = (n.relatedEntityType ?? '').toLowerCase();
+            if (ev.contains('financial') ||
+                ev.contains('wallet') ||
+                rel.contains('transaction') ||
+                rel.contains('downpayment') ||
+                rel.contains('cost')) {
+              rootNav.push(
+                MaterialPageRoute<void>(builder: (_) => const WalletScreen()),
+              );
+              return;
+            }
+            if (ev.contains('assignment') ||
+                ev.contains('assignments') ||
+                rel.contains('sitevisit') ||
+                rel.contains('site_visit') ||
+                rel.contains('mmpfile')) {
+              rootNav.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const FieldOperationsEnhancedScreen(),
+                ),
+              );
+              return;
+            }
+
+            // Prefer direct in-app routes for common links that aren't handled by /main args.
+            final link = n.link;
+            final uri = link != null ? Uri.tryParse(link) : null;
+            final path = (uri?.path ?? '').toLowerCase();
+            if (path == '/calls') {
+              rootNav.pushNamed(
+                '/main',
+                arguments: {'tab': 'communications'},
+              );
+              return;
+            }
+            if (path == '/signatures') {
+              rootNav.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DigitalSignaturesScreen(),
+                ),
+              );
+              return;
+            }
+            if (path == '/budget') {
+              rootNav.push(
+                MaterialPageRoute<void>(builder: (_) => const BudgetScreen()),
+              );
+              return;
+            }
+            if (path == '/advance-requests-report') {
+              final tab = uri?.queryParameters['tab'];
+              rootNav.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => AdvanceRequestsReportScreen(initialTab: tab),
+                ),
+              );
+              return;
+            }
+            if (path == '/site-visits') {
+              rootNav.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const FieldOperationsEnhancedScreen(),
+                ),
+              );
+              return;
+            }
+            if (path == '/mmp' || path.startsWith('/mmp/')) {
+              rootNav.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const FieldOperationsEnhancedScreen(),
+                ),
+              );
+              return;
+            }
+            if (path == '/down-payment-approval') {
+              rootNav.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DownPaymentApprovalScreen(),
+                ),
+              );
+              return;
+            }
+            if (path == '/coordinator/sites' || path == '/coordinator') {
+              rootNav.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const CoordinatorDashboardScreen(),
+                ),
+              );
+              return;
+            }
+            if (path == '/settings') {
+              rootNav.push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+              );
+              return;
+            }
+
+            final decision = NotificationRouteResolver.fromLink(
+              n.link,
+              eventType: n.eventType,
+              relatedEntityType: n.relatedEntityType,
+            );
+            switch (decision.kind) {
+              case NotificationRouteKind.wallet:
+                rootNav.push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        WalletScreen(initialTab: decision.walletTab ?? 3),
+                  ),
+                );
+                break;
+              case NotificationRouteKind.main:
+                rootNav.pushNamed('/main', arguments: decision.mainArgs);
+                break;
+              case NotificationRouteKind.notificationsPanel:
+              default:
+                break;
+            }
+          });
+        },
+        onDelete: null, // stop showing the trash button
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Swipe-to-delete wrapper for update notifications.
+// This is intentionally "non-dismissible": it always snaps back, and we only
+// delete after detecting a real swipe + user confirmation. This prevents
+// accidental deletes from taps.
+// ─────────────────────────────────────────────────────────────────────────────
+class _SwipeToDeleteUpdateTile extends StatefulWidget {
+  final String notificationId;
+  final UserNotificationService notificationService;
+  final Widget child;
+
+  const _SwipeToDeleteUpdateTile({
+    super.key,
+    required this.notificationId,
+    required this.notificationService,
+    required this.child,
+  });
+
+  @override
+  State<_SwipeToDeleteUpdateTile> createState() =>
+      _SwipeToDeleteUpdateTileState();
+}
+
+class _SwipeToDeleteUpdateTileState extends State<_SwipeToDeleteUpdateTile> {
+  bool _prompting = false;
+
+  Future<void> _promptAndDelete() async {
+    if (_prompting) return;
+    _prompting = true;
+    final confirm =
+        (await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Delete notification?', style: GoogleFonts.poppins()),
+            content: Text(
+              'This will remove it from this device.',
+              style: GoogleFonts.poppins(fontSize: 13),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('Cancel', style: GoogleFonts.poppins()),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(
+                  'Delete',
+                  style: GoogleFonts.poppins(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        )) ??
+        false;
+    _prompting = false;
+    if (confirm && mounted) {
+      await widget.notificationService.deleteNotification(
+        widget.notificationId,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: ValueKey('swipe-${widget.notificationId}'),
+      direction: DismissDirection.endToStart,
+      dragStartBehavior: DragStartBehavior.down,
+      dismissThresholds: const {DismissDirection.endToStart: 0.65},
+      onUpdate: (details) {
+        if (details.direction == DismissDirection.endToStart &&
+            details.progress > 0.55) {
+          _promptAndDelete();
         }
-        if (context.mounted) Navigator.pop(context);
       },
+      // Never actually dismiss the widget (prevents accidental deletes on tap).
+      confirmDismiss: (_) async => false,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 10), // match card margin
+        decoration: BoxDecoration(
+          color: Colors.red.shade600,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            const Icon(Icons.delete_outline_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(
+              'Delete',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+      child: widget.child,
     );
   }
 }
@@ -1752,8 +2125,13 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
 class _UpdateCard extends StatelessWidget {
   final UserNotification notification;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
-  const _UpdateCard({required this.notification, required this.onTap});
+  const _UpdateCard({
+    required this.notification,
+    required this.onTap,
+    this.onDelete,
+  });
 
   Color _iconColor(String type) {
     switch (type.toLowerCase()) {
@@ -1787,150 +2165,168 @@ class _UpdateCard extends StatelessWidget {
     final isUnread = !n.isRead;
     final color = _iconColor(n.type);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: ScaleTransition(
-        scale: Tween<double>(begin: 0.98, end: 1.0).animate(
-          CurvedAnimation(
-            parent: AlwaysStoppedAnimation<double>(isUnread ? 1.0 : 1.0),
-            curve: Curves.easeOutCubic,
-          ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: isUnread ? color.withValues(alpha: 0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isUnread
+              ? color.withValues(alpha: 0.2)
+              : Colors.grey.withValues(alpha: 0.12),
+          width: isUnread ? 1.5 : 1,
         ),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color: isUnread ? color.withValues(alpha: 0.05) : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isUnread
-                  ? color.withValues(alpha: 0.2)
-                  : Colors.grey.withValues(alpha: 0.12),
-              width: isUnread ? 1.5 : 1,
-            ),
-            boxShadow: isUnread
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  child: Icon(_icon(n.type), color: color, size: 20),
+        boxShadow: isUnread
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: onTap,
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(_icon(n.type), color: color, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              n.title,
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                fontWeight: isUnread
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                          ),
-                          if (isUnread)
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 500),
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: color,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: color.withValues(alpha: 0.5),
-                                    blurRadius: 3,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  n.title,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: isUnread
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: AppColors.textDark,
                                   ),
-                                ],
+                                ),
                               ),
+                              if (isUnread)
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 500),
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: color.withValues(alpha: 0.5),
+                                        blurRadius: 3,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            n.message,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppColors.textLight,
+                              height: 1.4,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.access_time_rounded,
+                                size: 10,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                _formatTime(n.createdAt),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        n.message,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
-                          height: 1.4,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: 10,
-                            color: Colors.grey[400],
+                    ),
+                    if (isUnread)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
-                          const SizedBox(width: 3),
-                          Text(
-                            _formatTime(n.createdAt),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'New',
                             style: GoogleFonts.poppins(
                               fontSize: 10,
-                              color: Colors.grey[500],
+                              fontWeight: FontWeight.w600,
+                              color: color,
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (isUnread)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'New',
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: color,
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
+            if (onDelete != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 20,
+                    color: Colors.grey[600],
+                  ),
+                  onPressed: onDelete,
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                  tooltip: 'Delete notification',
+                ),
+              ),
+          ],
         ),
       ),
     );

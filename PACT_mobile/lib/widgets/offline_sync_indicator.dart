@@ -53,7 +53,9 @@ class _OfflineSyncIndicatorState extends State<OfflineSyncIndicator> {
       }
       debugPrint('[OfflineSyncIndicator] Starting sync...');
       final result = await syncManager.forceSync();
-      debugPrint('[OfflineSyncIndicator] Sync completed: ${result.success}, synced: ${result.synced}, failed: ${result.failed}');
+      debugPrint(
+        '[OfflineSyncIndicator] Sync completed: ${result.success}, synced: ${result.synced}, failed: ${result.failed}',
+      );
 
       if (mounted) {
         if (result.success && result.synced > 0) {
@@ -67,7 +69,9 @@ class _OfflineSyncIndicatorState extends State<OfflineSyncIndicator> {
         } else if (result.failed > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Sync completed with ${result.failed} error${result.failed > 1 ? 's' : ''}'),
+              content: Text(
+                'Sync completed with ${result.failed} error${result.failed > 1 ? 's' : ''}',
+              ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 3),
             ),
@@ -156,8 +160,10 @@ class _OfflineSyncIndicatorState extends State<OfflineSyncIndicator> {
                 onTap: _isSyncing ? null : _syncNow,
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: _isSyncing
                       ? const SizedBox(
                           width: 16,

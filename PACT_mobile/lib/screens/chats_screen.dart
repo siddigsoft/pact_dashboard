@@ -6,6 +6,7 @@ import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../models/chat.dart';
 import '../models/chat_participant.dart';
+import '../models/chat_message.dart';
 import '../services/chat_service.dart';
 import 'user_selection_screen.dart';
 import 'chat_screen.dart';
@@ -23,6 +24,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   List<Chat> _chats = [];
   bool _isLoading = true;
   Map<String, int> _unreadCounts = {};
+  Map<String, ChatMessage?> _lastMessages = {};
 
   String _fallbackLabel(String id) {
     final shortId = id.length > 8 ? id.substring(0, 8) : id;
@@ -54,16 +56,33 @@ class _ChatsScreenState extends State<ChatsScreen> {
     try {
       final chats = await _chatService.getUserChats();
 
-      // Load unread counts for each chat
+      // Load unread counts and last messages for each chat
       final unreadCounts = <String, int>{};
-      for (final chat in chats) {
-        unreadCounts[chat.id] = await _chatService.getUnreadCount(chat.id);
-      }
+      final lastMessages = <String, ChatMessage?>{};
+
+      await Future.wait(
+        chats.map((chat) async {
+          final pair = await Future.wait([
+            _chatService.getUnreadCount(chat.id),
+            _chatService.getLastMessage(chat.id),
+          ]);
+          unreadCounts[chat.id] = pair[0] as int;
+          lastMessages[chat.id] = pair[1] as ChatMessage?;
+        }),
+      );
+
+      // Sort chats by most recent message activity
+      chats.sort((a, b) {
+        final dateA = lastMessages[a.id]?.createdAt ?? a.createdAt;
+        final dateB = lastMessages[b.id]?.createdAt ?? b.createdAt;
+        return dateB.compareTo(dateA); // Descending (newest first)
+      });
 
       if (!mounted) return;
       setState(() {
         _chats = chats;
         _unreadCounts = unreadCounts;
+        _lastMessages = lastMessages;
         _isLoading = false;
       });
     } catch (e) {
@@ -140,219 +159,311 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         ),
                       )
                     : _chats.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _chats.length,
-                            itemBuilder: (context, index) {
-                              final chat = _chats[index];
-                              final unreadCount = _unreadCounts[chat.id] ?? 0;
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(vertical: 0),
+                        itemCount: _chats.length,
+                        itemBuilder: (context, index) {
+                          final chat = _chats[index];
+                          final unreadCount = _unreadCounts[chat.id] ?? 0;
+                          final lastMessage = _lastMessages[chat.id];
 
-                              final participants = chat.participants;
-                              final currentUserId =
-                                  _chatService.getCurrentUserId();
+                          final participants = chat.participants;
+                          final currentUserId = _chatService.getCurrentUserId();
 
-                              String chatTitle = chat.name;
-                              String chatSubtitle = '';
+                          String chatTitle = chat.name;
+                          String chatSubtitle = '';
 
-                              if (chat.chatType == 'private') {
-                                String? displayName = chat.otherParticipantName;
-                                String? counterpartId = chat.otherParticipantId;
+                          if (chat.chatType == 'private') {
+                            String? displayName = chat.otherParticipantName;
+                            String? counterpartId = chat.otherParticipantId;
 
-                                if ((displayName == null ||
-                                        displayName.isEmpty) &&
-                                    counterpartId != null) {
-                                  ChatParticipant? participant;
-                                  for (final item in participants) {
-                                    if (item.userId == counterpartId) {
-                                      participant = item;
-                                      break;
-                                    }
-                                  }
-                                  displayName = participant?.userName;
+                            if ((displayName == null || displayName.isEmpty) &&
+                                counterpartId != null) {
+                              ChatParticipant? participant;
+                              for (final item in participants) {
+                                if (item.userId == counterpartId) {
+                                  participant = item;
+                                  break;
                                 }
-
-                                if ((displayName == null ||
-                                        displayName.isEmpty) &&
-                                    counterpartId == null &&
-                                    participants.isNotEmpty) {
-                                  ChatParticipant? other;
-                                  for (final participant in participants) {
-                                    if (participant.userId != currentUserId) {
-                                      other = participant;
-                                      break;
-                                    }
-                                  }
-                                  other ??= participants.first;
-                                  counterpartId = other.userId;
-                                  displayName = other.userName;
-                                }
-
-                                if ((displayName == null ||
-                                        displayName.isEmpty) &&
-                                    chat.createdByName != null &&
-                                    chat.createdByName!.isNotEmpty &&
-                                    chat.createdBy != currentUserId) {
-                                  displayName = chat.createdByName;
-                                  counterpartId ??= chat.createdBy;
-                                }
-
-                                if ((displayName == null ||
-                                        displayName.isEmpty) &&
-                                    counterpartId != null) {
-                                  displayName = _fallbackLabel(counterpartId);
-                                }
-
-                                chatTitle =
-                                    displayName ?? _fallbackLabel(chat.id);
-                                chatSubtitle = 'Private Chat';
-                              } else if (chat.chatType == 'group') {
-                                chatSubtitle = '${participants.length} members';
-                                if (chatTitle.isEmpty &&
-                                    chat.createdByName != null &&
-                                    chat.createdByName!.isNotEmpty) {
-                                  chatTitle = chat.createdByName!;
-                                }
-                              } else if (chat.createdByName != null &&
-                                  chat.createdByName!.isNotEmpty) {
-                                chatTitle = chat.createdByName!;
                               }
+                              displayName = participant?.userName;
+                            }
 
-                              if (chatTitle.isEmpty) {
-                                chatTitle = _fallbackLabel(chat.id);
+                            if ((displayName == null || displayName.isEmpty) &&
+                                counterpartId == null &&
+                                participants.isNotEmpty) {
+                              ChatParticipant? other;
+                              for (final participant in participants) {
+                                if (participant.userId != currentUserId) {
+                                  other = participant;
+                                  break;
+                                }
                               }
+                              other ??= participants.first;
+                              counterpartId = other.userId;
+                              displayName = other.userName;
+                            }
 
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.grey.shade200,
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                  border: Border.all(
-                                    color: AppColors.primaryOrange.withOpacity(
-                                      0.1,
-                                    ),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: ListTile(
-                                  contentPadding: const EdgeInsets.all(16),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            ChatScreen(chat: chat),
-                                      ),
-                                    ).then((_) => _loadChats());
-                                  },
-                                  leading: Container(
-                                    width: 50,
-                                    height: 50,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          AppColors.primaryOrange,
-                                          AppColors.primaryOrange.withOpacity(
-                                            0.7,
+                            if ((displayName == null || displayName.isEmpty) &&
+                                chat.createdByName != null &&
+                                chat.createdByName!.isNotEmpty &&
+                                chat.createdBy != currentUserId) {
+                              displayName = chat.createdByName;
+                              counterpartId ??= chat.createdBy;
+                            }
+
+                            if ((displayName == null || displayName.isEmpty) &&
+                                counterpartId != null) {
+                              displayName = _fallbackLabel(counterpartId);
+                            }
+
+                            chatTitle = displayName ?? _fallbackLabel(chat.id);
+                            chatSubtitle = 'Private Chat';
+                          } else if (chat.chatType == 'group') {
+                            chatSubtitle = '${participants.length} members';
+                            if (chatTitle.isEmpty &&
+                                chat.createdByName != null &&
+                                chat.createdByName!.isNotEmpty) {
+                              chatTitle = chat.createdByName!;
+                            }
+                          } else if (chat.createdByName != null &&
+                              chat.createdByName!.isNotEmpty) {
+                            chatTitle = chat.createdByName!;
+                          }
+
+                          if (chatTitle.isEmpty) {
+                            chatTitle = _fallbackLabel(chat.id);
+                          }
+
+                          // Create dynamic message preview
+                          String messagePreview =
+                              chatSubtitle; // defaults to 'x members'
+                          if (lastMessage != null) {
+                            if (lastMessage.contentType == 'text') {
+                              messagePreview = lastMessage.content ?? '';
+                            } else if (lastMessage.contentType == 'image') {
+                              messagePreview = '📸 Photo';
+                            } else if (lastMessage.contentType == 'audio') {
+                              messagePreview = '🎵 Voice message';
+                            } else {
+                              messagePreview = '📎 Attachment';
+                            }
+                          }
+
+                          // Format timestamp
+                          String timeString = '';
+                          if (lastMessage != null) {
+                            final now = DateTime.now();
+                            final date = lastMessage.createdAt;
+                            if (date.year == now.year &&
+                                date.month == now.month &&
+                                date.day == now.day) {
+                              timeString =
+                                  '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                            } else if (date.year == now.year &&
+                                date.month == now.month &&
+                                now.day - date.day == 1) {
+                              timeString = 'Yesterday';
+                            } else {
+                              timeString =
+                                  '${date.day}/${date.month}/${date.year}';
+                            }
+                          }
+
+                          return Column(
+                                children: [
+                                  Material(
+                                    color: Colors.white,
+                                    child: InkWell(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                ChatScreen(chat: chat),
                                           ),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        chatTitle.isNotEmpty
-                                            ? chatTitle[0].toUpperCase()
-                                            : '?',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 18,
+                                        ).then((_) => _loadChats());
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            // Avatar
+                                            Container(
+                                              width: 52,
+                                              height: 52,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade300,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  chatTitle.isNotEmpty
+                                                      ? chatTitle[0]
+                                                            .toUpperCase()
+                                                      : '?',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 22,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            // Body
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          chatTitle,
+                                                          style:
+                                                              const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                fontSize: 16,
+                                                                color: Colors
+                                                                    .black87,
+                                                              ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                      if (timeString.isNotEmpty)
+                                                        Text(
+                                                          timeString,
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color:
+                                                                unreadCount > 0
+                                                                ? AppColors
+                                                                      .primaryBlue
+                                                                : Colors
+                                                                      .grey
+                                                                      .shade500,
+                                                            fontWeight:
+                                                                unreadCount > 0
+                                                                ? FontWeight
+                                                                      .w600
+                                                                : FontWeight
+                                                                      .normal,
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Row(
+                                                    children: [
+                                                      if (lastMessage
+                                                              ?.senderId ==
+                                                          currentUserId)
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets.only(
+                                                                right: 4,
+                                                              ),
+                                                          child: Icon(
+                                                            Icons.done_all,
+                                                            size: 16,
+                                                            color: Colors
+                                                                .grey
+                                                                .shade400,
+                                                          ),
+                                                        ),
+                                                      Expanded(
+                                                        child: Text(
+                                                          messagePreview,
+                                                          style: TextStyle(
+                                                            color: Colors
+                                                                .grey
+                                                                .shade600,
+                                                            fontSize: 14,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                      if (unreadCount > 0)
+                                                        Container(
+                                                          margin:
+                                                              const EdgeInsets.only(
+                                                                left: 8,
+                                                              ),
+                                                          padding:
+                                                              const EdgeInsets.all(
+                                                                6,
+                                                              ),
+                                                          decoration:
+                                                              const BoxDecoration(
+                                                                color: AppColors
+                                                                    .primaryBlue,
+                                                                shape: BoxShape
+                                                                    .circle,
+                                                              ),
+                                                          child: Text(
+                                                            unreadCount > 99
+                                                                ? '99+'
+                                                                : unreadCount
+                                                                      .toString(),
+                                                            style:
+                                                                const TextStyle(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize: 10,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
                                   ),
-                                  title: Text(
-                                    chatTitle,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16,
-                                      color: Color(0xFF263238),
+                                  if (index < _chats.length - 1)
+                                    Divider(
+                                      height: 1,
+                                      indent: 84,
+                                      color: Colors.grey.shade200,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  subtitle: chatSubtitle.isNotEmpty
-                                      ? Text(
-                                          chatSubtitle,
-                                          style: TextStyle(
-                                            color: const Color(
-                                              0xFF263238,
-                                            ).withOpacity(0.7),
-                                            fontSize: 14,
-                                          ),
-                                        )
-                                      : null,
-                                  trailing: unreadCount > 0
-                                      ? Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                AppColors.primaryOrange,
-                                                AppColors.primaryOrange
-                                                    .withOpacity(0.8),
-                                              ],
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            unreadCount > 99
-                                                ? '99+'
-                                                : unreadCount.toString(),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        )
-                                      : null,
-                                ),
+                                ],
                               )
-                                  .animate()
-                                  .fadeIn(
-                                      duration: 400.ms, delay: (index * 50).ms)
-                                  .slideX(begin: 0.2, end: 0);
-                            },
-                          ),
+                              .animate()
+                              .fadeIn(duration: 400.ms, delay: (index * 50).ms)
+                              .slideX(begin: 0.2, end: 0);
+                        },
+                      ),
               ),
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: _startNewChat,
-        backgroundColor: AppColors.primaryOrange,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'New Chat',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
+        backgroundColor: AppColors.primaryBlue,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.chat, color: Colors.white),
       ).animate().scale(delay: 500.ms, duration: 400.ms),
     );
   }

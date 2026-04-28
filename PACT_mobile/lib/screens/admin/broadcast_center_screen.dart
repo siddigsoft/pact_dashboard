@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../utils/app_colors.dart';
+import '../../theme/app_colors.dart';
 
 class BroadcastCenterScreen extends StatefulWidget {
   const BroadcastCenterScreen({super.key});
@@ -17,37 +17,37 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
   late TabController _tabController;
 
   // Form fields
-  final _titleEnCtrl    = TextEditingController();
-  final _titleArCtrl    = TextEditingController();
-  final _messageEnCtrl  = TextEditingController();
-  final _messageArCtrl  = TextEditingController();
-  final _actionUrlCtrl  = TextEditingController();
-  String _priority      = 'normal';
+  final _titleEnCtrl = TextEditingController();
+  final _titleArCtrl = TextEditingController();
+  final _messageEnCtrl = TextEditingController();
+  final _messageArCtrl = TextEditingController();
+  final _actionUrlCtrl = TextEditingController();
+  String _priority = 'normal';
   String _recipientMode = 'all'; // all | role | hub
   String? _selectedRole;
   String? _selectedHubId;
 
   // Data
-  List<Map<String, dynamic>> _hubs          = [];
-  int    _recipientCount                     = 0;
-  bool   _loadingCount                       = false;
-  bool   _sending                            = false;
-  List<Map<String, dynamic>> _sentHistory    = [];
-  bool   _loadingHistory                     = true;
+  List<Map<String, dynamic>> _hubs = [];
+  int _recipientCount = 0;
+  bool _loadingCount = false;
+  bool _sending = false;
+  List<Map<String, dynamic>> _sentHistory = [];
+  bool _loadingHistory = true;
 
   final List<Map<String, String>> _roles = [
-    {'value': 'coordinator',   'label': 'Coordinator'},
-    {'value': 'supervisor',    'label': 'Supervisor'},
+    {'value': 'coordinator', 'label': 'Coordinator'},
+    {'value': 'supervisor', 'label': 'Supervisor'},
     {'value': 'hubSupervisor', 'label': 'Hub Supervisor'},
-    {'value': 'fom',           'label': 'FOM'},
-    {'value': 'admin',         'label': 'Admin'},
-    {'value': 'super_admin',   'label': 'Super Admin'},
+    {'value': 'fom', 'label': 'FOM'},
+    {'value': 'admin', 'label': 'Admin'},
+    {'value': 'super_admin', 'label': 'Super Admin'},
   ];
 
   static const _priorityOptions = [
-    {'value': 'normal',  'label': 'Normal',  'color': 0xFF3B82F6},
-    {'value': 'high',    'label': 'High',    'color': 0xFFD97706},
-    {'value': 'urgent',  'label': 'Urgent',  'color': 0xFFDC2626},
+    {'value': 'normal', 'label': 'Normal', 'color': 0xFF3B82F6},
+    {'value': 'high', 'label': 'High', 'color': 0xFFD97706},
+    {'value': 'urgent', 'label': 'Urgent', 'color': 0xFFDC2626},
   ];
 
   @override
@@ -72,8 +72,13 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
 
   Future<void> _loadHubs() async {
     try {
-      final data = await _supabase.from('hubs').select('id, name').order('name');
-      if (mounted) setState(() => _hubs = List<Map<String, dynamic>>.from(data));
+      final data = await _supabase
+          .from('hubs')
+          .select('id, name')
+          .order('name');
+      if (mounted) {
+        setState(() => _hubs = List<Map<String, dynamic>>.from(data));
+      }
     } catch (_) {}
   }
 
@@ -81,14 +86,19 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
     if (!mounted) return;
     setState(() => _loadingCount = true);
     try {
-      var query = _supabase.from('profiles').select('id', const FetchOptions(count: CountOption.exact, head: true));
+      var query = _supabase.from('profiles').select('id');
       if (_recipientMode == 'role' && _selectedRole != null) {
         query = query.eq('role', _selectedRole!);
       } else if (_recipientMode == 'hub' && _selectedHubId != null) {
         query = query.eq('hub_id', _selectedHubId!);
       }
       final res = await query;
-      if (mounted) setState(() { _recipientCount = res.count ?? 0; _loadingCount = false; });
+      if (mounted) {
+        setState(() {
+          _recipientCount = (res as List).length;
+          _loadingCount = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingCount = false);
     }
@@ -106,10 +116,16 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
       final seen = <String>{};
       final deduped = <Map<String, dynamic>>[];
       for (final row in data) {
-        final key = '${row['title_en']}_${(row['created_at'] as String).substring(0, 16)}';
+        final key =
+            '${row['title_en']}_${(row['created_at'] as String).substring(0, 16)}';
         if (seen.add(key)) deduped.add(row);
       }
-      if (mounted) setState(() { _sentHistory = deduped; _loadingHistory = false; });
+      if (mounted) {
+        setState(() {
+          _sentHistory = deduped;
+          _loadingHistory = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingHistory = false);
     }
@@ -125,7 +141,10 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
     setState(() => _sending = true);
     try {
       // 1. Resolve recipient IDs
-      var query = _supabase.from('profiles').select('id').not('role', 'is', null);
+      var query = _supabase
+          .from('profiles')
+          .select('id')
+          .not('role', 'is', null);
       if (_recipientMode == 'role' && _selectedRole != null) {
         query = query.eq('role', _selectedRole!);
       } else if (_recipientMode == 'hub' && _selectedHubId != null) {
@@ -135,43 +154,59 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
       final ids = (profiles as List).map((p) => p['id'] as String).toList();
 
       if (ids.isEmpty) {
-        _showSnack('No recipients found for the selected target.', isError: true);
+        _showSnack(
+          'No recipients found for the selected target.',
+          isError: true,
+        );
         setState(() => _sending = false);
         return;
       }
 
       final now = DateTime.now().toUtc().toIso8601String();
-      final rows = ids.map((uid) => {
-        'recipient_id':  uid,
-        'user_id':       uid,
-        'title_en':      titleEn,
-        'title_ar':      _titleArCtrl.text.trim().isNotEmpty ? _titleArCtrl.text.trim() : titleEn,
-        'message_en':    messageEn,
-        'message_ar':    _messageArCtrl.text.trim().isNotEmpty ? _messageArCtrl.text.trim() : messageEn,
-        'priority':      _priority,
-        'event_type':    'broadcast',
-        'entity_type':   'broadcast_batch',
-        'action_url':    _actionUrlCtrl.text.trim().isNotEmpty ? _actionUrlCtrl.text.trim() : null,
-        'status':        'pending',
-        'email_sent':    false,
-        'created_at':    now,
-      }).toList();
+      final rows = ids
+          .map(
+            (uid) => {
+              'recipient_id': uid,
+              'user_id': uid,
+              'title_en': titleEn,
+              'title_ar': _titleArCtrl.text.trim().isNotEmpty
+                  ? _titleArCtrl.text.trim()
+                  : titleEn,
+              'message_en': messageEn,
+              'message_ar': _messageArCtrl.text.trim().isNotEmpty
+                  ? _messageArCtrl.text.trim()
+                  : messageEn,
+              'priority': _priority,
+              'event_type': 'broadcast',
+              'entity_type': 'broadcast_batch',
+              'action_url': _actionUrlCtrl.text.trim().isNotEmpty
+                  ? _actionUrlCtrl.text.trim()
+                  : null,
+              'status': 'pending',
+              'email_sent': false,
+              'created_at': now,
+            },
+          )
+          .toList();
 
       // 2. Insert notifications
       await _supabase.from('notifications').insert(rows);
 
       // 3. Trigger FCM push
       try {
-        await _supabase.functions.invoke('send-fcm-push', body: {
-          'title':         titleEn,
-          'body':          messageEn,
-          'data': {
-            'notification_type': 'broadcast',
-            'priority':          _priority,
-            'action_url':        _actionUrlCtrl.text.trim(),
+        await _supabase.functions.invoke(
+          'send-fcm-push',
+          body: {
+            'title': titleEn,
+            'body': messageEn,
+            'data': {
+              'notification_type': 'broadcast',
+              'priority': _priority,
+              'action_url': _actionUrlCtrl.text.trim(),
+            },
+            'userIds': ids,
           },
-          'userIds': ids,
-        });
+        );
       } catch (_) {}
 
       if (!mounted) return;
@@ -180,7 +215,12 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
       _messageEnCtrl.clear();
       _messageArCtrl.clear();
       _actionUrlCtrl.clear();
-      setState(() { _priority = 'normal'; _recipientMode = 'all'; _selectedRole = null; _selectedHubId = null; });
+      setState(() {
+        _priority = 'normal';
+        _recipientMode = 'all';
+        _selectedRole = null;
+        _selectedHubId = null;
+      });
       _showSnack('Broadcast sent to ${ids.length} recipients!');
       _tabController.animateTo(1);
       _loadHistory();
@@ -193,11 +233,13 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
-      behavior: SnackBarBehavior.floating,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -207,13 +249,19 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F2041),
         foregroundColor: Colors.white,
-        title: Text('Broadcast Center / مركز البث', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16)),
+        title: Text(
+          'Broadcast Center / مركز البث',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           indicatorColor: Colors.white,
-          tabs: const [Tab(text: 'Compose'), Tab(text: 'History')],
+          tabs: const [
+            Tab(text: 'Compose'),
+            Tab(text: 'History'),
+          ],
         ),
       ),
       body: TabBarView(
@@ -230,15 +278,39 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _sectionCard('Message Content', [
-            _field(_titleEnCtrl,   'Title (English) *',  'e.g. Urgent: Site Visit Reminder'),
+            _field(
+              _titleEnCtrl,
+              'Title (English) *',
+              'e.g. Urgent: Site Visit Reminder',
+            ),
             const SizedBox(height: 10),
-            _field(_titleArCtrl,   'Title (Arabic)',      'مثال: عاجل: تذكير بزيارة الموقع', rtl: true),
+            _field(
+              _titleArCtrl,
+              'Title (Arabic)',
+              'مثال: عاجل: تذكير بزيارة الموقع',
+              rtl: true,
+            ),
             const SizedBox(height: 10),
-            _field(_messageEnCtrl, 'Message (English) *', 'Full message body...', maxLines: 4),
+            _field(
+              _messageEnCtrl,
+              'Message (English) *',
+              'Full message body...',
+              maxLines: 4,
+            ),
             const SizedBox(height: 10),
-            _field(_messageArCtrl, 'Message (Arabic)',    'نص الرسالة...', maxLines: 4, rtl: true),
+            _field(
+              _messageArCtrl,
+              'Message (Arabic)',
+              'نص الرسالة...',
+              maxLines: 4,
+              rtl: true,
+            ),
             const SizedBox(height: 10),
-            _field(_actionUrlCtrl, 'Action Link (optional)', 'e.g. /cost-submission or https://...'),
+            _field(
+              _actionUrlCtrl,
+              'Action Link (optional)',
+              'e.g. /cost-submission or https://...',
+            ),
           ]),
           const SizedBox(height: 14),
           _sectionCard('Priority', [
@@ -248,14 +320,21 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
                 final isSelected = _priority == opt['value'];
                 final color = Color(opt['color'] as int);
                 return GestureDetector(
-                  onTap: () => setState(() => _priority = opt['value'] as String),
+                  onTap: () =>
+                      setState(() => _priority = opt['value'] as String),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isSelected ? color : color.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: color, width: isSelected ? 0 : 1.5),
+                      border: Border.all(
+                        color: color,
+                        width: isSelected ? 0 : 1.5,
+                      ),
                     ),
                     child: Text(
                       opt['label'] as String,
@@ -275,11 +354,11 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
             // Mode selector
             Row(
               children: [
-                _modeChip('all',  'All Users',    Icons.people),
+                _modeChip('all', 'All Users', Icons.people),
                 const SizedBox(width: 8),
-                _modeChip('role', 'By Role',      Icons.badge),
+                _modeChip('role', 'By Role', Icons.badge),
                 const SizedBox(width: 8),
-                _modeChip('hub',  'By Hub',       Icons.hub),
+                _modeChip('hub', 'By Hub', Icons.hub),
               ],
             ),
             const SizedBox(height: 12),
@@ -287,15 +366,35 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
               _dropdownField(
                 label: 'Select Role',
                 value: _selectedRole,
-                items: _roles.map((r) => DropdownMenuItem(value: r['value'], child: Text(r['label']!))).toList(),
-                onChanged: (v) { setState(() => _selectedRole = v); _refreshCount(); },
+                items: _roles
+                    .map(
+                      (r) => DropdownMenuItem(
+                        value: r['value'],
+                        child: Text(r['label']!),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  setState(() => _selectedRole = v);
+                  _refreshCount();
+                },
               ),
             if (_recipientMode == 'hub')
               _dropdownField(
                 label: 'Select Hub',
                 value: _selectedHubId,
-                items: _hubs.map((h) => DropdownMenuItem(value: h['id'] as String, child: Text(h['name'] as String))).toList(),
-                onChanged: (v) { setState(() => _selectedHubId = v); _refreshCount(); },
+                items: _hubs
+                    .map(
+                      (h) => DropdownMenuItem(
+                        value: h['id'] as String,
+                        child: Text(h['name'] as String),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  setState(() => _selectedHubId = v);
+                  _refreshCount();
+                },
               ),
             const SizedBox(height: 10),
             // Recipient count
@@ -307,13 +406,21 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.people_outline, size: 16, color: Color(0xFF0F2041)),
+                  const Icon(
+                    Icons.people_outline,
+                    size: 16,
+                    color: Color(0xFF0F2041),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     _loadingCount
                         ? 'Counting recipients...'
                         : 'Will reach $_recipientCount recipient${_recipientCount != 1 ? 's' : ''}',
-                    style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F2041)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF0F2041),
+                    ),
                   ),
                 ],
               ),
@@ -327,19 +434,31 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
                 backgroundColor: _priority == 'urgent'
                     ? const Color(0xFFDC2626)
                     : _priority == 'high'
-                        ? const Color(0xFFD97706)
-                        : const Color(0xFF0F2041),
+                    ? const Color(0xFFD97706)
+                    : const Color(0xFF0F2041),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               onPressed: _sending ? null : _send,
               icon: _sending
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : const Icon(Icons.send_rounded),
               label: Text(
                 _sending ? 'Sending...' : 'Send Broadcast / إرسال البث',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
               ),
             ),
           ),
@@ -360,7 +479,10 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
           children: [
             Icon(Icons.campaign_outlined, size: 56, color: Colors.grey[300]),
             const SizedBox(height: 12),
-            Text('No broadcasts sent yet', style: GoogleFonts.poppins(color: Colors.grey[500])),
+            Text(
+              'No broadcasts sent yet',
+              style: GoogleFonts.poppins(color: Colors.grey[500]),
+            ),
           ],
         ),
       );
@@ -375,13 +497,13 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
         final priorityColor = priority == 'urgent'
             ? const Color(0xFFDC2626)
             : priority == 'high'
-                ? const Color(0xFFD97706)
-                : const Color(0xFF3B82F6);
+            ? const Color(0xFFD97706)
+            : const Color(0xFF3B82F6);
         final createdAt = item['created_at'] != null
             ? DateTime.tryParse(item['created_at'] as String)
             : null;
         final timeStr = createdAt != null
-            ? '${createdAt.toLocal().toString().substring(0, 16)}'
+            ? createdAt.toLocal().toString().substring(0, 16)
             : '';
         return Container(
           padding: const EdgeInsets.all(14),
@@ -389,7 +511,13 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border(left: BorderSide(color: priorityColor, width: 4)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -399,18 +527,38 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
                   children: [
                     Text(
                       item['title_en'] as String? ?? 'Untitled',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14),
-                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (timeStr.isNotEmpty)
-                      Text(timeStr, style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[500])),
+                      Text(
+                        timeStr,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey[500],
+                        ),
+                      ),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: priorityColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(priority.toUpperCase(), style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, color: priorityColor)),
+                decoration: BoxDecoration(
+                  color: priorityColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  priority.toUpperCase(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: priorityColor,
+                  ),
+                ),
               ),
             ],
           ),
@@ -426,12 +574,25 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13, color: const Color(0xFF0F2041))),
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: const Color(0xFF0F2041),
+            ),
+          ),
           const SizedBox(height: 12),
           ...children,
         ],
@@ -439,7 +600,13 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
     );
   }
 
-  Widget _field(TextEditingController ctrl, String label, String hint, {int maxLines = 1, bool rtl = false}) {
+  Widget _field(
+    TextEditingController ctrl,
+    String label,
+    String hint, {
+    int maxLines = 1,
+    bool rtl = false,
+  }) {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
@@ -450,7 +617,10 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
         hintText: hint,
         labelStyle: GoogleFonts.poppins(fontSize: 12),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }
@@ -458,7 +628,14 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
   Widget _modeChip(String value, String label, IconData icon) {
     final isSelected = _recipientMode == value;
     return GestureDetector(
-      onTap: () { setState(() { _recipientMode = value; _selectedRole = null; _selectedHubId = null; }); _refreshCount(); },
+      onTap: () {
+        setState(() {
+          _recipientMode = value;
+          _selectedRole = null;
+          _selectedHubId = null;
+        });
+        _refreshCount();
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -469,18 +646,34 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: isSelected ? Colors.white : Colors.grey[600]),
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : Colors.grey[600],
+            ),
             const SizedBox(width: 4),
-            Text(label, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? Colors.white : Colors.grey[700])),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : Colors.grey[700],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _dropdownField<T>({required String label, required T? value, required List<DropdownMenuItem<T>> items, required ValueChanged<T?> onChanged}) {
+  Widget _dropdownField<T>({
+    required String label,
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+  }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       items: items,
       onChanged: onChanged,
       style: GoogleFonts.poppins(fontSize: 13, color: Colors.black87),
@@ -488,7 +681,10 @@ class _BroadcastCenterScreenState extends State<BroadcastCenterScreen>
         labelText: label,
         labelStyle: GoogleFonts.poppins(fontSize: 12),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }

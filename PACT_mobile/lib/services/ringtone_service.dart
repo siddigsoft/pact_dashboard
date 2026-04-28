@@ -18,11 +18,17 @@ class RingtoneService {
   static const String MESSAGE_RINGTONE = 'message';
   static const String NOTIFICATION_RINGTONE = 'notification';
 
-  // Sound file paths
-  static const String _CALL_SOUND_PATH = 'assets/sounds/incoming_call.mp3';
-  static const String _MESSAGE_SOUND_PATH = 'assets/sounds/message.mp3';
+  // Sound file paths - using the actual file available in assets
+  // NOTE: For production, consider using higher quality ringtones:
+  // - Call ringtone: Use a clear, attention-grabbing tone
+  // - Message ringtone: Use a subtle, non-intrusive tone
+  // - Add these as assets: assets/sounds/call_ringtone.mp3, assets/sounds/message_ringtone.mp3
+  static const String _CALL_SOUND_PATH =
+      'sounds/Phone Dial Tone - Sound Effect (HD).mp3';
+  static const String _MESSAGE_SOUND_PATH =
+      'sounds/Phone Dial Tone - Sound Effect (HD).mp3';
   static const String _NOTIFICATION_SOUND_PATH =
-      'assets/sounds/notification.mp3';
+      'sounds/Phone Dial Tone - Sound Effect (HD).mp3';
 
   // Preference keys
   static const String _callRingtoneEnabledKey = 'call_ringtone_enabled';
@@ -139,14 +145,26 @@ class RingtoneService {
     }
   }
 
-  /// Stop the currently playing ringtone
-  Future<void> stopRingtone() async {
+  /// Stop the currently playing ringtone with timeout safety
+  Future<void> stopRingtone({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
     try {
-      await _audioPlayer.stop();
+      // Add timeout safety to prevent indefinite hanging
+      await _audioPlayer.stop().timeout(
+        timeout,
+        onTimeout: () {
+          debugPrint(
+            '[Ringtone] Stop operation timed out after ${timeout.inSeconds}s',
+          );
+        },
+      );
       _isPlayingCallRingtone = false;
       debugPrint('[Ringtone] Ringtone stopped');
     } catch (e) {
       debugPrint('[Ringtone] Error stopping ringtone: $e');
+      // Ensure state is cleared even if stop fails
+      _isPlayingCallRingtone = false;
     }
   }
 
@@ -154,6 +172,9 @@ class RingtoneService {
   bool isPlayingRingtone() {
     return _isPlayingCallRingtone;
   }
+
+  /// Get the public state of playing call ringtone (alias for clarity)
+  bool get isPlayingCallRingtone => _isPlayingCallRingtone;
 
   /// Get if call ringtone is enabled
   bool _isCallRingtoneEnabled() {

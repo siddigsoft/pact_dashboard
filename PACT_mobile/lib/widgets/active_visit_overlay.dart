@@ -184,8 +184,11 @@ class _ExpandedOverlay extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.timer,
-                      size: 18, color: AppColors.primaryOrange),
+                  const Icon(
+                    Icons.timer,
+                    size: 18,
+                    color: AppColors.primaryOrange,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     state.formattedElapsedTime,

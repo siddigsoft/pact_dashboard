@@ -65,10 +65,13 @@ class SiteVisitService {
         await _updateCachedVisitStatus(visitId, status);
         return;
       }
-      await _supabase.from('mmp_site_entries').update({
-        'status': status,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', visitId);
+      await _supabase
+          .from('mmp_site_entries')
+          .update({
+            'status': status,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', visitId);
       print('✅ Visit status updated in mmp_site_entries');
       await _updateCachedVisitStatus(visitId, status);
     } catch (e) {
@@ -157,9 +160,9 @@ class SiteVisitService {
         .select()
         .eq('claimed_by', userId)
         .inFilter('status', [
-      'Assigned',
-      'Claimed',
-    ]) // Sites claimed but not yet accepted
+          'Assigned',
+          'Claimed',
+        ]) // Sites claimed but not yet accepted
         .order('created_at', ascending: false);
 
     return response.map((json) => SiteVisit.fromJson(json)).toList();
@@ -171,9 +174,9 @@ class SiteVisitService {
         .select()
         .eq('accepted_by', userId)
         .inFilter('status', [
-      'Accepted',
-      'Accept',
-    ]) // Support both for compatibility
+          'Accepted',
+          'Accept',
+        ]) // Support both for compatibility
         .order('created_at', ascending: false);
 
     return response.map((json) => SiteVisit.fromJson(json)).toList();
@@ -184,8 +187,8 @@ class SiteVisitService {
         .from('mmp_site_entries')
         .select()
         .eq('accepted_by', userId)
-        .inFilter('status', ['Ongoing', 'In Progress']).order('created_at',
-            ascending: false);
+        .inFilter('status', ['Ongoing', 'In Progress'])
+        .order('created_at', ascending: false);
 
     return response.map((json) => SiteVisit.fromJson(json)).toList();
   }
@@ -396,10 +399,13 @@ class SiteVisitService {
             },
           };
 
-          await _supabase.from('mmp_site_entries').update({
-            'additional_data': merged,
-            'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', visitId);
+          await _supabase
+              .from('mmp_site_entries')
+              .update({
+                'additional_data': merged,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', visitId);
 
           print('✅ Acceptance location saved to additional_data');
         } else {
@@ -625,14 +631,17 @@ class SiteVisitService {
           existing['registry_site_id'] != null) {
         try {
           print('📍 Updating sites_registry with GPS coordinates...');
-          await _supabase.from('sites_registry').update({
-            'gps_latitude': completionPosition.latitude,
-            'gps_longitude': completionPosition.longitude,
-            'gps_accuracy': completionPosition.accuracy,
-            'gps_captured_at': DateTime.now().toIso8601String(),
-            'gps_captured_by': _supabase.auth.currentUser?.id,
-            'last_verified_at': DateTime.now().toIso8601String(),
-          }).eq('id', existing['registry_site_id']);
+          await _supabase
+              .from('sites_registry')
+              .update({
+                'gps_latitude': completionPosition.latitude,
+                'gps_longitude': completionPosition.longitude,
+                'gps_accuracy': completionPosition.accuracy,
+                'gps_captured_at': DateTime.now().toIso8601String(),
+                'gps_captured_by': _supabase.auth.currentUser?.id,
+                'last_verified_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', existing['registry_site_id']);
           print('✅ Sites registry updated with GPS data');
         } catch (e) {
           print('⚠️ Could not update sites_registry: $e');
@@ -662,8 +671,11 @@ class SiteVisitService {
   }
 
   Future<SiteVisit?> getSiteVisitById(String id) async {
-    final response =
-        await _supabase.from('mmp_site_entries').select().eq('id', id).single();
+    final response = await _supabase
+        .from('mmp_site_entries')
+        .select()
+        .eq('id', id)
+        .single();
 
     return SiteVisit.fromJson(response);
   }
@@ -671,12 +683,15 @@ class SiteVisitService {
   Future<void> markTaskDeclined(String taskId, String userId) async {
     // This could be implemented as a separate table for declined tasks
     // For now, we'll just log it locally or update a declined status
-    await _supabase.from('mmp_site_entries').update({
-      'status': 'Declined',
-      'rejected_by': userId,
-      'rejected_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', taskId);
+    await _supabase
+        .from('mmp_site_entries')
+        .update({
+          'status': 'Declined',
+          'rejected_by': userId,
+          'rejected_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', taskId);
   }
 
   // ===== LOCAL STORAGE METHODS =====
@@ -739,8 +754,9 @@ class SiteVisitService {
       final remoteData = await getAssignedSiteVisits(userId);
 
       // Cache the data locally
-      final visits =
-          remoteData.map((json) => SiteVisit.fromJson(json)).toList();
+      final visits = remoteData
+          .map((json) => SiteVisit.fromJson(json))
+          .toList();
       await cacheVisitsLocally(visits, 'assigned_$userId');
 
       return remoteData;
@@ -953,7 +969,7 @@ class SiteVisitService {
   // ===== ADDITIONAL METHODS FROM SITE VISITS SERVICE =====
 
   Future<List<Map<String, dynamic>>>
-      getAssignedSiteVisitsForCurrentUser() async {
+  getAssignedSiteVisitsForCurrentUser() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
@@ -1010,14 +1026,17 @@ class SiteVisitService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('arrival_$visitId', gpsData.toString());
 
-      await _supabase.from('mmp_site_entries').update({
-        'status': 'Arrived',
-        'additional_data': {
-          'arrival_recorded': true,
-          'arrival_timestamp': DateTime.now().toIso8601String(),
-        },
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', visitId);
+      await _supabase
+          .from('mmp_site_entries')
+          .update({
+            'status': 'Arrived',
+            'additional_data': {
+              'arrival_recorded': true,
+              'arrival_timestamp': DateTime.now().toIso8601String(),
+            },
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', visitId);
       return;
     }
 
@@ -1027,16 +1046,19 @@ class SiteVisitService {
       );
 
       // Update visit with arrival data
-      await _supabase.from('mmp_site_entries').update({
-        'status': 'Arrived',
-        'additional_data': {
-          'arrival_recorded': true,
-          'arrival_latitude': position.latitude,
-          'arrival_longitude': position.longitude,
-          'arrival_timestamp': DateTime.now().toIso8601String(),
-        },
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', visitId);
+      await _supabase
+          .from('mmp_site_entries')
+          .update({
+            'status': 'Arrived',
+            'additional_data': {
+              'arrival_recorded': true,
+              'arrival_latitude': position.latitude,
+              'arrival_longitude': position.longitude,
+              'arrival_timestamp': DateTime.now().toIso8601String(),
+            },
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', visitId);
       // Store locally for backup
       final prefs = await SharedPreferences.getInstance();
       final gpsData = {
@@ -1223,8 +1245,10 @@ class SiteVisitService {
   /// Get all sites from registry
   Future<List<Map<String, dynamic>>> getAllSitesRegistry() async {
     try {
-      final response =
-          await _supabase.from('sites_registry').select().order('site_name');
+      final response = await _supabase
+          .from('sites_registry')
+          .select()
+          .order('site_name');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       print('❌ Error fetching sites registry: $e');

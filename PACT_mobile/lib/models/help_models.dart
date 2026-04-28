@@ -18,8 +18,10 @@ class HelpCategory {
     required this.articles,
   });
 
-  String getTitle(String locale) => locale == 'ar' && titleAr.isNotEmpty ? titleAr : title;
-  String getDescription(String locale) => locale == 'ar' && descriptionAr.isNotEmpty ? descriptionAr : description;
+  String getTitle(String locale) =>
+      locale == 'ar' && titleAr.isNotEmpty ? titleAr : title;
+  String getDescription(String locale) =>
+      locale == 'ar' && descriptionAr.isNotEmpty ? descriptionAr : description;
 }
 
 /// Help article model with bilingual support
@@ -46,8 +48,10 @@ class HelpArticle {
     this.tags = const [],
   });
 
-  String getTitle(String locale) => locale == 'ar' && titleAr.isNotEmpty ? titleAr : title;
-  String getContent(String locale) => locale == 'ar' && contentAr.isNotEmpty ? contentAr : content;
+  String getTitle(String locale) =>
+      locale == 'ar' && titleAr.isNotEmpty ? titleAr : title;
+  String getContent(String locale) =>
+      locale == 'ar' && contentAr.isNotEmpty ? contentAr : content;
   String? getSolution(String locale) {
     if (locale == 'ar' && solutionAr != null && solutionAr!.isNotEmpty) {
       return solutionAr;
@@ -74,9 +78,12 @@ class ErrorMessage {
     this.solutionAr = '',
   });
 
-  String getError(String locale) => locale == 'ar' && errorAr.isNotEmpty ? errorAr : error;
-  String getMeaning(String locale) => locale == 'ar' && meaningAr.isNotEmpty ? meaningAr : meaning;
-  String getSolution(String locale) => locale == 'ar' && solutionAr.isNotEmpty ? solutionAr : solution;
+  String getError(String locale) =>
+      locale == 'ar' && errorAr.isNotEmpty ? errorAr : error;
+  String getMeaning(String locale) =>
+      locale == 'ar' && meaningAr.isNotEmpty ? meaningAr : meaning;
+  String getSolution(String locale) =>
+      locale == 'ar' && solutionAr.isNotEmpty ? solutionAr : solution;
 }
 
 /// Bug report model
@@ -134,8 +141,10 @@ class SupportContact {
     this.isActive = true,
   });
 
-  String getName(String locale) => locale == 'ar' && nameAr.isNotEmpty ? nameAr : name;
-  String getRole(String locale) => locale == 'ar' && roleAr.isNotEmpty ? roleAr : role;
+  String getName(String locale) =>
+      locale == 'ar' && nameAr.isNotEmpty ? nameAr : name;
+  String getRole(String locale) =>
+      locale == 'ar' && roleAr.isNotEmpty ? roleAr : role;
 
   factory SupportContact.fromJson(Map<String, dynamic> json) {
     return SupportContact(
@@ -190,8 +199,10 @@ class FAQItem {
     this.sortOrder = 0,
   });
 
-  String getQuestion(String locale) => locale == 'ar' && questionAr.isNotEmpty ? questionAr : question;
-  String getAnswer(String locale) => locale == 'ar' && answerAr.isNotEmpty ? answerAr : answer;
+  String getQuestion(String locale) =>
+      locale == 'ar' && questionAr.isNotEmpty ? questionAr : question;
+  String getAnswer(String locale) =>
+      locale == 'ar' && answerAr.isNotEmpty ? answerAr : answer;
 
   factory FAQItem.fromJson(Map<String, dynamic> json) {
     return FAQItem(

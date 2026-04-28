@@ -41,10 +41,7 @@ class AppConfigService {
       await locationService.initialize();
 
       // Initialize Sync Service
-      final syncService = SyncService(
-        DatabaseService(),
-        SupabaseService(),
-      );
+      final syncService = SyncService(DatabaseService(), SupabaseService());
       await syncService.initialize();
 
       _initialized = true;
@@ -61,15 +58,12 @@ void callbackDispatcher() {
 
   Workmanager().executeTask((taskName, inputData) async {
     switch (taskName) {
-      case 'locationTracking':  // Match the constant from LocationTrackingService
+      case 'locationTracking': // Match the constant from LocationTrackingService
         final locationService = LocationTrackingService();
         await locationService.initialize();
         break;
       case SyncService.syncTaskKey:
-        final syncService = SyncService(
-          DatabaseService(),
-          SupabaseService(),
-        );
+        final syncService = SyncService(DatabaseService(), SupabaseService());
         await syncService.syncData();
         break;
     }

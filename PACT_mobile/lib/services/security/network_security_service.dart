@@ -4,7 +4,8 @@ import 'package:dio_smart_retry/dio_smart_retry.dart';
 import 'logger_service.dart';
 
 class NetworkSecurityService {
-  static final NetworkSecurityService _instance = NetworkSecurityService._internal();
+  static final NetworkSecurityService _instance =
+      NetworkSecurityService._internal();
   late Dio _dio;
   final Duration _timeout = const Duration(seconds: 30);
 
@@ -17,42 +18,45 @@ class NetworkSecurityService {
   }
 
   void _initializeDio() {
-    _dio = Dio(BaseOptions(
-      connectTimeout: _timeout,
-      receiveTimeout: _timeout,
-      sendTimeout: _timeout,
-    ));
+    _dio = Dio(
+      BaseOptions(
+        connectTimeout: _timeout,
+        receiveTimeout: _timeout,
+        sendTimeout: _timeout,
+      ),
+    );
 
     // Add retry interceptor
-    _dio.interceptors.add(RetryInterceptor(
-      dio: _dio,
-      logPrint: (message) => LoggerService.log(message),
-      retries: 3,
-      retryDelays: const [
-        Duration(seconds: 1),
-        Duration(seconds: 2),
-        Duration(seconds: 3),
-      ],
-    ));
+    _dio.interceptors.add(
+      RetryInterceptor(
+        dio: _dio,
+        logPrint: (message) => LoggerService.log(message),
+        retries: 3,
+        retryDelays: const [
+          Duration(seconds: 1),
+          Duration(seconds: 2),
+          Duration(seconds: 3),
+        ],
+      ),
+    );
 
     // Add logging interceptor
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
-        LoggerService.log('🌐 Request: ${options.method} ${options.uri}');
-        return handler.next(options);
-      },
-      onResponse: (response, handler) {
-        LoggerService.log('✅ Response: ${response.statusCode}');
-        return handler.next(response);
-      },
-      onError: (error, handler) {
-        LoggerService.log(
-          '❌ Error: ${error.message}',
-          level: LogLevel.error,
-        );
-        return handler.next(error);
-      },
-    ));
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          LoggerService.log('🌐 Request: ${options.method} ${options.uri}');
+          return handler.next(options);
+        },
+        onResponse: (response, handler) {
+          LoggerService.log('✅ Response: ${response.statusCode}');
+          return handler.next(response);
+        },
+        onError: (error, handler) {
+          LoggerService.log('❌ Error: ${error.message}', level: LogLevel.error);
+          return handler.next(error);
+        },
+      ),
+    );
   }
 
   Future<Response<T>> request<T>(

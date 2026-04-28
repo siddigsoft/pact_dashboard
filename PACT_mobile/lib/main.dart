@@ -17,12 +17,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/background_notification_handler.dart';
 import 'services/notification_routing_service.dart';
+import 'services/debug_log_service.dart';
 import 'authentication/login_screen.dart';
 import 'authentication/improved_register_screen.dart';
 import 'authentication/forgot_password_screen.dart';
 import 'authentication/biometric_prompt_screen.dart';
-import 'screens/main_screen.dart';
 import 'screens/wallet_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/communications_screen.dart';
 import 'screens/field_operations_enhanced_screen.dart';
 import 'screens/comprehensive_monitoring_form_screen.dart';
 import 'screens/approval_dashboard_screen.dart';
@@ -47,17 +49,34 @@ import 'services/user_notification_service.dart';
 import 'services/permission_handler_service.dart';
 import 'services/map_tile_cache_service.dart'
     if (dart.library.html) 'services/map_tile_cache_service_web.dart';
+import 'services/notification_permission_cache_service.dart';
 import 'services/offline/hive_adapters.dart';
-import 'services/offline_sync_service.dart';
 import 'services/offline/offline_db.dart';
+import 'services/user_preferences_service.dart';
+import 'services/chat_metadata_service.dart';
+import 'services/last_call_service.dart';
+import 'services/push_notification_service.dart';
+import 'services/background_call_handler.dart';
+import 'services/firebase_messaging_setup_service.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/compliance_check_screen.dart';
 import 'widgets/global_fund_confirmation_panel.dart';
+import 'widgets/main_layout.dart';
+import 'package:flutter/gestures.dart';
 
 // Conditionally import web plugins only when needed
 // This prevents errors on non-web platforms
 import 'utils/web_config.dart'
     if (dart.library.html) 'utils/web_config_web.dart';
+
+class MyCustomScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+  };
+}
 
 // Global navigator key to use for navigation from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -65,6 +84,54 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // Global instance of notification routing service
 final NotificationRoutingService _notificationRoutingService =
     NotificationRoutingService();
+
+Widget _buildMainShell(Object? args) {
+  int index = 0;
+  Widget child = const DashboardScreen();
+  int walletInitialTab = 0;
+
+  if (args is Map) {
+    final walletTabArg = args['walletTab'];
+    if (walletTabArg is int) {
+      walletInitialTab = walletTabArg;
+    }
+
+    final tabValue = args['tab']?.toString().toLowerCase().trim();
+    if (tabValue == 'site_visits' || tabValue == 'site-visits' || tabValue == 'mmp') {
+      index = 2;
+      child = const FieldOperationsEnhancedScreen();
+    } else if (tabValue == 'communications' || tabValue == 'chat') {
+      index = 3;
+      child = const CommunicationsScreen();
+    } else if (tabValue == 'wallet') {
+      index = 4;
+      child = WalletScreen(initialTab: walletInitialTab);
+    } else {
+      final legacyTab = args['tab'];
+      if (legacyTab is int) {
+        switch (legacyTab) {
+          case 1:
+            index = 2;
+            child = const FieldOperationsEnhancedScreen();
+            break;
+          case 2:
+            index = 3;
+            child = const CommunicationsScreen();
+            break;
+          case 3:
+            index = 4;
+            child = WalletScreen(initialTab: walletInitialTab);
+            break;
+          default:
+            index = 0;
+            child = const DashboardScreen();
+        }
+      }
+    }
+  }
+
+  return MainLayout(currentIndex: index, child: child);
+}
 
 Future<void> _requestAllPermissionsOnStartup() async {
   if (!kIsWeb) {
@@ -91,12 +158,41 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     debugPrint(
       '[FCM Background] Received message: ${message.notification?.title}',
     );
+    debugLog(
+      'FCM_BG',
+      'Received messageId=${message.messageId} title=${message.notification?.title} '
+          'sentTime=${message.sentTime} data=${message.data}',
+    );
 
     // Initialize services for background context
     try {
       await Firebase.initializeApp();
     } catch (e) {
       debugPrint('[FCM Background] Firebase already initialized');
+      debugLog('FCM_BG', 'Firebase already initialized');
+    }
+
+    // Initialize Hive for background isolate (needed by BilingualNotificationService)
+    try {
+      await Hive.initFlutter();
+    } catch (e) {
+      debugPrint('[FCM Background] Hive already initialized: $e');
+    }
+
+    // Initialize Supabase for background isolate (required for FCM background events)
+    try {
+      await Supabase.initialize(
+        url: 'https://abznugnirnlrqnnfkein.supabase.co',
+        anonKey:
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiem51Z25pcm5scnFubmZrZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxMzU2OTEsImV4cCI6MjA3NDcxMTY5MX0.eAX9yrtgr05OVjAn_Wr2Koi92rMaV32EFj70DFfIgdM',
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+          autoRefreshToken: true,
+        ),
+      );
+      debugPrint('[FCM Background] Supabase initialized');
+    } catch (e) {
+      debugPrint('[FCM Background] Supabase already initialized or failed: $e');
     }
 
     // Create handler instance and process message
@@ -105,78 +201,184 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await handler.handleMessage(message, isBackground: true);
 
     debugPrint('[FCM Background] Message processing complete');
+    debugLog('FCM_BG', 'Message processing complete');
   } catch (e) {
     debugPrint('[FCM Background] Error handling message: $e');
+    debugLog('FCM_BG', 'Error handling message: $e');
   }
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase (if present) and register background message handler
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Firebase.initializeApp() failed or not configured: $e');
+  // Load persisted debug logs written by background isolate so they appear in
+  // the debug logs screen even after the background isolate exited.
+  if (!kIsWeb) {
+    unawaited(DebugLogService().loadFromDisk());
   }
 
-  // Register the background message handler (mobile only)
+  // Initialize Hive for local storage (needed by BilingualNotificationService, PersistentMessageStateService, etc.)
+  if (!kIsWeb) {
+    try {
+      await Hive.initFlutter();
+    } catch (e) {
+      debugPrint('[Main] Hive already initialized: $e');
+    }
+  }
+
+  // Register the top-level FCM background message handler (mobile only)
   if (!kIsWeb) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // Initialize background notification handler (manages all notifications)
-    final backgroundHandler = BackgroundNotificationHandler();
-    try {
-      await backgroundHandler.initialize();
-      debugPrint('✅ Background notification handler initialized');
-    } catch (e) {
-      debugPrint('❌ Background notification handler error: $e');
-    }
-  } else {
-    debugPrint('🌐 Running on web - background notification handler skipped');
   }
 
-  // Request all permissions on startup (location, camera, microphone, storage, notifications, etc.)
-  await _requestAllPermissionsOnStartup();
+  // Initialize Supabase BEFORE FCM setup (FCM token save needs Supabase)
+  try {
+    await Supabase.initialize(
+      url: 'https://abznugnirnlrqnnfkein.supabase.co',
+      anonKey:
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiem51Z25pcm5scnFubmZrZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxMzU2OTEsImV4cCI6MjA3NDcxMTY5MX0.eAX9yrtgr05OVjAn_Wr2Koi92rMaV32EFj70DFfIgdM',
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+        autoRefreshToken: true,
+      ),
+    );
+    debugPrint('✅ Supabase initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Supabase initialization error: $e');
+    // App can continue in offline mode
+  }
 
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: 'https://abznugnirnlrqnnfkein.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiem51Z25pcm5scnFubmZrZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxMzU2OTEsImV4cCI6MjA3NDcxMTY5MX0.eAX9yrtgr05OVjAn_Wr2Koi92rMaV32EFj70DFfIgdM',
-    authOptions: const FlutterAuthClientOptions(
-      authFlowType: AuthFlowType.pkce,
-      autoRefreshToken: true,
-    ),
-  );
+  // Initialize comprehensive Firebase Messaging setup (mobile only)
+  // This handles: Firebase init, FCM token, permissions, and all message handlers
+  if (!kIsWeb) {
+    try {
+      final fcmSetup = FirebaseMessagingSetupService();
+      await fcmSetup.initialize();
+
+      // Print diagnostic info
+      debugPrint(await fcmSetup.getDiagnosticInfo());
+    } catch (e) {
+      debugPrint('❌ Firebase Messaging setup error: $e');
+    }
+  } else {
+    debugPrint('🌐 Running on web - Firebase Messaging skipped');
+  }
+
+  // Register navigator key for notification routing (so taps on notifications navigate correctly)
+  _notificationRoutingService.setNavigatorKey(navigatorKey);
+
+  // Request all permissions on startup (location, camera, microphone, storage, notifications, etc.)
+  // Do this in background - don't block UI startup
+  unawaited(_requestAllPermissionsOnStartup());
 
   // Initialize AuthenticationService so we can observe auth state changes
-  await AuthenticationService().initialize();
+  try {
+    await AuthenticationService().initialize();
+    debugPrint('✅ AuthenticationService initialized');
+  } catch (e) {
+    debugPrint('❌ AuthenticationService initialization error: $e');
+  }
 
-  // Initialize Hive for local storage
-  await Hive.initFlutter();
-
+  // Initialize Hive for local storage (already called earlier for FCM background handler,
+  // but try again for safety - Hive silently handles duplicate inits)
   // Register Hive type adapters for offline data models
   // CRITICAL: Must be done BEFORE opening typed boxes
-  registerHiveAdapters();
+  try {
+    registerHiveAdapters();
+    debugPrint('✅ Hive adapters registered');
+  } catch (e) {
+    debugPrint('⚠️ Error registering Hive adapters: $e');
+  }
 
-  // Open boxes for offline data storage
-  await Hive.openBox('tasks');
-  await Hive.openBox('equipments');
-  await Hive.openBox('incidentReports');
-  await Hive.openBox('safetyChecklists');
-  await Hive.openBox('userProfiles');
-  await Hive.openBox('appSettings');
-  await Hive.openBox('mapData');
-  // Open sync status boxes
-  await Hive.openBox('tasks_sync');
-  await Hive.openBox('equipments_sync');
-  await Hive.openBox('incidentReports_sync');
-  await Hive.openBox('safetyChecklists_sync');
-  await Hive.openBox('userProfiles_sync');
+  // Open boxes for offline data storage with error handling
+  final boxNames = [
+    'tasks',
+    'equipments',
+    'incidentReports',
+    'safetyChecklists',
+    'userProfiles',
+    'appSettings',
+    'mapData',
+    'tasks_sync',
+    'equipments_sync',
+    'incidentReports_sync',
+    'safetyChecklists_sync',
+    'userProfiles_sync',
+    'pact_call_history',
+    'user_profile_cache', // Ensure this box is always opened at startup
+  ];
+
+  for (final boxName in boxNames) {
+    try {
+      if (!Hive.isBoxOpen(boxName)) {
+        await Hive.openBox(boxName);
+        debugPrint('✅ Opened Hive box: $boxName');
+      } else {
+        debugPrint('ℹ️ Hive box already open: $boxName');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Warning opening Hive box $boxName: $e');
+      // Try to recover by deleting corrupted box
+      try {
+        await Hive.deleteBoxFromDisk(boxName);
+        if (!Hive.isBoxOpen(boxName)) {
+          await Hive.openBox(boxName);
+          debugPrint('✅ Recovered Hive box: $boxName');
+        }
+      } catch (e2) {
+        debugPrint('❌ Failed to recover Hive box $boxName: $e2');
+      }
+    }
+  }
 
   // Initialize OfflineDb which opens typed Hive boxes used by offline services
-  await OfflineDb().init();
+  try {
+    await OfflineDb().init();
+    debugPrint('✅ OfflineDb initialized');
+  } catch (e) {
+    debugPrint('⚠️ OfflineDb initialization error (app can continue): $e');
+    // Don't crash the app if OfflineDb fails - offline features will just not work
+  }
+
+  // Ensure all critical boxes are opened before running app
+  try {
+    // Double-check that essential boxes exist
+    final essentialBoxes = ['appSettings', 'userProfiles', 'pact_call_history'];
+    for (final boxName in essentialBoxes) {
+      if (!Hive.isBoxOpen(boxName)) {
+        try {
+          await Hive.openBox(boxName);
+          debugPrint('✅ Re-opened essential box: $boxName');
+        } catch (e) {
+          debugPrint('⚠️ Could not re-open box $boxName: $e');
+        }
+      }
+    }
+  } catch (e) {
+    debugPrint('⚠️ Error checking boxes: $e');
+  }
+
+  // Initialize communication feature services (Hive boxes for preferences, metadata, voice, etc.)
+  try {
+    await UserPreferencesService.initializeBoxes();
+    debugPrint('✅ UserPreferencesService boxes initialized');
+  } catch (e) {
+    debugPrint('⚠️ UserPreferencesService initialization error: $e');
+  }
+
+  try {
+    await ChatMetadataService.initializeBoxes();
+    debugPrint('✅ ChatMetadataService boxes initialized');
+  } catch (e) {
+    debugPrint('⚠️ ChatMetadataService initialization error: $e');
+  }
+
+  try {
+    await LastCallService.initializeBoxes();
+    debugPrint('✅ LastCallService boxes initialized');
+  } catch (e) {
+    debugPrint('⚠️ LastCallService initialization error: $e');
+  }
 
   // Initialize web-specific configuration and URL strategy
   configureApp();
@@ -209,148 +411,220 @@ void main() async {
     FlutterError.presentError(details);
   };
 
-  // Initialize services
+  // Initialize services (lazy-loaded in background)
   final localStorageService = LocalStorageService();
   final appPreferencesProvider = AppPreferencesProvider(localStorageService);
-  await appPreferencesProvider.load();
-  final connectivityService = ConnectivityService(Connectivity());
-  await connectivityService.initialize();
 
-  // Initialize offline sync service for mobile-first operations
-  if (!kIsWeb) {
-    final offlineSyncService = OfflineSyncService();
-    await offlineSyncService.initialize();
-    debugPrint('✅ Offline sync service initialized');
-
-    // Listen to connectivity changes and trigger sync when online
-    connectivityService.connectionStatusStream.listen((isOnline) {
-      if (isOnline) {
-        debugPrint('🔄 Device online - triggering sync...');
-        offlineSyncService.syncPendingOperations();
-      }
-    });
+  // Load app preferences without blocking UI
+  try {
+    await appPreferencesProvider.load();
+    debugPrint('✅ App preferences loaded');
+  } catch (e) {
+    debugPrint('⚠️ App preferences load error: $e');
   }
+
+  final connectivityService = ConnectivityService(Connectivity());
+
+  // Initialize connectivity service in background (non-blocking)
+  unawaited(
+    connectivityService
+        .initialize()
+        .then((_) {
+          debugPrint('✅ Connectivity service initialized');
+        })
+        .onError((e, stack) {
+          debugPrint('⚠️ Connectivity service error: $e');
+          return null;
+        }),
+  );
 
   // Initialize map tile cache service (mobile only, not supported on web)
   if (!kIsWeb) {
-    await MapTileCacheService.initialize();
+    unawaited(
+      MapTileCacheService.initialize()
+          .then((_) {
+            debugPrint('✅ Map tile cache initialized');
+          })
+          .onError((e, stack) {
+            debugPrint('⚠️ Map tile cache error: $e');
+            return null;
+          }),
+    );
   }
 
-  // Migrate data from SharedPreferences to Hive
-  final migrationService = DataMigrationService(localStorageService);
-  await migrationService.migrateAllData();
-
-  // Initialize notification service
-  await NotificationService.initialize(
-    onNotificationTap: (response) {
-      // Handle notification tap based on payload
-      final payload = response.payload;
-      if (payload != null) {
-        final decision = NotificationRouteResolver.fromPayload(payload);
-        NotificationRouteResolver.logDecision('main_payload', decision);
-
-        switch (decision.kind) {
-          case NotificationRouteKind.chat:
-            navigatorKey.currentState?.pushNamed(
-              '/chat',
-              arguments: decision.chatId,
-            );
-            break;
-          case NotificationRouteKind.call:
-            navigatorKey.currentState?.pushNamedAndRemoveUntil(
-              '/main',
-              (route) => false,
-              arguments: {'activeCall': true},
-            );
-            break;
-          case NotificationRouteKind.main:
-            final notificationId = decision.mainArgs?['notificationId'];
-            if (notificationId is String && notificationId.isNotEmpty) {
-              unawaited(UserNotificationService().markAsOpened(notificationId));
-            }
-            navigatorKey.currentState?.pushNamed(
-              '/main',
-              arguments: decision.mainArgs,
-            );
-            break;
-          case NotificationRouteKind.wallet:
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (_) =>
-                    WalletScreen(initialTab: decision.walletTab ?? 3),
-              ),
-            );
-            break;
-          case NotificationRouteKind.notificationsPanel:
-            final ctx = navigatorKey.currentContext;
-            if (ctx != null) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                NotificationsPanel.show(
-                  ctx,
-                  initialTab: decision.panelTab ?? 'broadcasts',
-                );
-              });
-            }
-            break;
-          case NotificationRouteKind.updateDownload:
-            UpdateService().downloadAndInstallUpdate();
-            break;
-          case NotificationRouteKind.sync:
-          case NotificationRouteKind.none:
-            break;
-        }
-      }
-    },
+  // Initialize notification permission cache service (for offline notification fallback)
+  unawaited(
+    NotificationPermissionCacheService()
+        .initialize()
+        .then((_) {
+          debugPrint('✅ Notification permission cache initialized');
+        })
+        .onError((e, stack) {
+          debugPrint('⚠️ Notification permission cache error: $e');
+          return null;
+        }),
   );
 
-  // Initialize update service and check for updates
+  // Migrate data from SharedPreferences to Hive (background)
+  final migrationService = DataMigrationService(localStorageService);
+  unawaited(
+    migrationService
+        .migrateAllData()
+        .then((_) {
+          debugPrint('✅ Data migration complete');
+        })
+        .onError((e, stack) {
+          debugPrint('⚠️ Data migration error: $e');
+          return null;
+        }),
+  );
+
+  // Initialize notification service (background)
+  unawaited(
+    NotificationService.initialize(
+          onNotificationTap: (response) {
+            // Handle notification tap based on payload
+            final payload = response.payload;
+            if (payload != null) {
+              final decision = NotificationRouteResolver.fromPayload(payload);
+              NotificationRouteResolver.logDecision('main_payload', decision);
+
+              switch (decision.kind) {
+                case NotificationRouteKind.chat:
+                  navigatorKey.currentState?.pushNamed(
+                    '/chat',
+                    arguments: decision.chatId,
+                  );
+                  break;
+                case NotificationRouteKind.call:
+                  navigatorKey.currentState?.pushNamedAndRemoveUntil(
+                    '/main',
+                    (route) => false,
+                    arguments: {'activeCall': true},
+                  );
+                  break;
+                case NotificationRouteKind.main:
+                  final notificationId = decision.mainArgs?['notificationId'];
+                  if (notificationId is String && notificationId.isNotEmpty) {
+                    unawaited(
+                      UserNotificationService().markAsOpened(notificationId),
+                    );
+                  }
+                  navigatorKey.currentState?.pushNamed(
+                    '/main',
+                    arguments: decision.mainArgs,
+                  );
+                  break;
+                case NotificationRouteKind.wallet:
+                  navigatorKey.currentState?.push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          WalletScreen(initialTab: decision.walletTab ?? 3),
+                    ),
+                  );
+                  break;
+                case NotificationRouteKind.notificationsPanel:
+                  final ctx = navigatorKey.currentContext;
+                  if (ctx != null) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      NotificationsPanel.show(
+                        ctx,
+                        initialTab: decision.panelTab ?? 'broadcasts',
+                      );
+                    });
+                  }
+                  break;
+                case NotificationRouteKind.updateDownload:
+                  UpdateService().downloadAndInstallUpdate();
+                  break;
+                case NotificationRouteKind.sync:
+                case NotificationRouteKind.none:
+                  break;
+              }
+            }
+          },
+        )
+        .then((_) {
+          debugPrint('✅ Notification service initialized');
+        })
+        .onError((e, stack) {
+          debugPrint('⚠️ Notification service error: $e');
+          return null;
+        }),
+  );
+
+  // Initialize update service (background)
   final updateService = UpdateService();
-  await updateService.checkForUpdatesOnStartup();
-  updateService.startPeriodicUpdateCheck(); // Check every 30 minutes
+  unawaited(
+    updateService
+        .checkForUpdatesOnStartup()
+        .then((_) {
+          debugPrint('✅ Update check complete');
+          updateService.startPeriodicUpdateCheck();
+        })
+        .onError((e, stack) {
+          debugPrint('⚠️ Update check error: $e');
+          return null;
+        }),
+  );
 
-  // Initialize notification routing service with navigation callback
-  await _notificationRoutingService.initialize(
-    onNotificationTap: (route, params) {
-      debugPrint(
-        '[AppStartup] Notification routing: $route with params: $params',
-      );
+  // Initialize notification routing service with navigation callback (background)
+  unawaited(
+    _notificationRoutingService
+        .initialize(
+          onNotificationTap: (route, params) {
+            debugPrint(
+              '[AppStartup] Notification routing: $route with params: $params',
+            );
 
-      // Use the navigator key to navigate based on route
-      switch (route) {
-        case 'chat':
-          navigatorKey.currentState?.pushNamed(
-            '/chat',
-            arguments: params['userId'],
-          );
-          break;
-        case 'call':
-          navigatorKey.currentState?.pushNamedAndRemoveUntil(
-            '/main',
-            (route) => false,
-            arguments: {'activeCall': true, 'callId': params['callId']},
-          );
-          break;
-        case 'communications':
-          navigatorKey.currentState?.pushNamed('/main', arguments: {'tab': 0});
-          break;
-        case 'wallet':
-          final tab = params['tab'] == 'advances' ? 3 : 4;
-          navigatorKey.currentState?.push(
-            MaterialPageRoute(builder: (_) => WalletScreen(initialTab: tab)),
-          );
-          break;
-        case 'notifications':
-          final ctx = navigatorKey.currentContext;
-          if (ctx != null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              NotificationsPanel.show(ctx, initialTab: 'broadcasts');
-            });
-          }
-          break;
-        default:
-          navigatorKey.currentState?.pushNamed('/main');
-      }
-    },
+            // Use the navigator key to navigate based on route
+            switch (route) {
+              case 'chat':
+                navigatorKey.currentState?.pushNamed(
+                  '/chat',
+                  arguments: params['userId'],
+                );
+                break;
+              case 'call':
+                navigatorKey.currentState?.pushNamedAndRemoveUntil(
+                  '/main',
+                  (route) => false,
+                  arguments: {'activeCall': true, 'callId': params['callId']},
+                );
+                break;
+              case 'communications':
+                navigatorKey.currentState?.pushNamed(
+                  '/main',
+                  arguments: {'tab': 'communications'},
+                );
+                break;
+              case 'wallet':
+                final tab = params['tab'] == 'advances' ? 3 : 4;
+                navigatorKey.currentState?.pushNamed(
+                  '/main',
+                  arguments: {'tab': 'wallet', 'walletTab': tab},
+                );
+                break;
+              case 'notifications':
+                final ctx = navigatorKey.currentContext;
+                if (ctx != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    NotificationsPanel.show(ctx, initialTab: 'broadcasts');
+                  });
+                }
+                break;
+              default:
+                navigatorKey.currentState?.pushNamed('/main');
+            }
+          },
+        )
+        .then((_) {
+          debugPrint('✅ Notification routing service initialized');
+        })
+        .onError((e, stack) {
+          debugPrint('⚠️ Notification routing error: $e');
+          return null;
+        }),
   );
 
   // Initialize realtime notification service for chat and MMP files
@@ -439,6 +713,82 @@ class _MyAppState extends State<MyApp> {
     _globalBroadcastSub = UserNotificationService().broadcastStream.listen(
       _onBroadcastReceived,
     );
+
+    // Initialize push notifications and background handlers
+    _initializePushNotifications();
+  }
+
+  Future<void> _initializePushNotifications() async {
+    try {
+      // Initialize push notification service
+      await PushNotificationService.instance.initialize();
+      debugPrint('✅ Push Notification Service initialized');
+
+      // Listen for incoming notifications
+      PushNotificationService.instance.notificationStream.stream.listen((
+        payload,
+      ) {
+        _handleIncomingNotification(payload);
+      });
+
+      // Initialize background call handler
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        await BackgroundCallHandler().initialize(
+          userId: userId,
+          userName:
+              Supabase
+                  .instance
+                  .client
+                  .auth
+                  .currentUser
+                  ?.userMetadata?['name'] ??
+              'User',
+        );
+        debugPrint('✅ Background Call Handler initialized');
+      }
+    } catch (e) {
+      debugPrint('❌ Error initializing push notifications: $e');
+    }
+  }
+
+  void _handleIncomingNotification(NotificationPayload payload) {
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+
+    switch (payload.type) {
+      case 'call':
+        _handleIncomingCall(payload);
+        break;
+      case 'message':
+        _handleIncomingMessage(payload);
+        break;
+      case 'broadcast':
+        _handleBroadcast(payload);
+        break;
+      default:
+        debugPrint('Unknown notification type: ${payload.type}');
+    }
+  }
+
+  void _handleIncomingCall(NotificationPayload payload) {
+    debugPrint('Incoming call from: ${payload.senderId}');
+    // Show full-screen call notification
+    // This will be handled by call screen
+  }
+
+  void _handleIncomingMessage(NotificationPayload payload) {
+    debugPrint('Incoming message from: ${payload.senderId}');
+    ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+      SnackBar(
+        content: Text(payload.title),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  void _handleBroadcast(NotificationPayload payload) {
+    debugPrint('Broadcast: ${payload.title}');
   }
 
   @override
@@ -629,6 +979,7 @@ class _MyAppState extends State<MyApp> {
     return Consumer2<LocaleProvider, AppPreferencesProvider>(
       builder: (context, localeProvider, appPreferences, child) {
         return MaterialApp(
+          scrollBehavior: MyCustomScrollBehavior(),
           // App title shown in task switcher
           title: 'Pact Consultancy',
 
@@ -704,7 +1055,8 @@ class _MyAppState extends State<MyApp> {
             '/biometric-prompt': (_) => BiometricPromptScreen(),
             '/register': (_) => ImprovedRegisterScreen(),
             '/forgot-password': (_) => ForgotPasswordScreen(),
-            '/main': (_) => MainScreen(),
+            '/main': (context) =>
+                _buildMainShell(ModalRoute.of(context)?.settings.arguments),
             '/field-operations': (_) => FieldOperationsEnhancedScreen(),
             '/comprehensive-monitoring': (_) =>
                 ComprehensiveMonitoringFormScreen(),
@@ -727,6 +1079,30 @@ class _MyAppState extends State<MyApp> {
                   settings: settings,
                   builder: (context) => ChatScreen(chat: args),
                 );
+              }
+              // If args is a Map (from notification with chatId and senderId)
+              if (args is Map<String, dynamic>) {
+                final chatId = args['chatId'] as String?;
+                final senderId = args['senderId'] as String?;
+                if (chatId != null) {
+                  debugPrint(
+                    '📱 Chat route with chatId: $chatId, senderId: $senderId',
+                  );
+                  // Create Chat object with sender info
+                  final chat = Chat(
+                    id: chatId,
+                    isGroup: false,
+                    name: 'Chat',
+                    type: 'private',
+                    createdAt: DateTime.now(),
+                    updatedAt: DateTime.now(),
+                    otherParticipantId: senderId,
+                  );
+                  return MaterialPageRoute(
+                    settings: settings,
+                    builder: (context) => ChatScreen(chat: chat),
+                  );
+                }
               }
               // If args is a string (chatId from notification), create a minimal Chat object
               if (args is String) {
@@ -756,13 +1132,6 @@ class _MyAppState extends State<MyApp> {
             }
 
             // Only for routes not defined in routes map
-            // Project list and detail routes (dynamic path: /projects/<id>)
-            final _routeName = settings.name ?? '';
-            if (_routeName == RouteNames.projectsList ||
-                _routeName.startsWith('/projects/')) {
-              return RouteGenerator.generateRoute(settings);
-            }
-
             switch (settings.name) {
               // Professional call screen routes
               case '/incoming-call-professional':
@@ -783,7 +1152,7 @@ class _MyAppState extends State<MyApp> {
                   '/biometric-prompt': (_) => BiometricPromptScreen(),
                   '/register': (_) => ImprovedRegisterScreen(),
                   '/forgot-password': (_) => ForgotPasswordScreen(),
-                  '/main': (_) => MainScreen(),
+                  '/main': (_) => _buildMainShell(settings.arguments),
                 };
 
                 final builder = routeBuilders[settings.name];
@@ -838,7 +1207,13 @@ class _MyAppState extends State<MyApp> {
               children: [
                 scaledChild,
                 const GlobalFundConfirmationPanel(),
-                const GlobalSosOverlay(),
+                Overlay(
+                  initialEntries: [
+                    OverlayEntry(
+                      builder: (context) => const GlobalSosOverlay(),
+                    ),
+                  ],
+                ),
               ],
             );
           },

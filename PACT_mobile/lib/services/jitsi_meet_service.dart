@@ -52,7 +52,10 @@ class JitsiMeetService {
     String? userEmail,
     String? customServerUrl,
   }) async {
-    _jitsiLog('initialize() ENTER', 'userId=$userId userName=$userName customServerUrl=$customServerUrl');
+    _jitsiLog(
+      'initialize() ENTER',
+      'userId=$userId userName=$userName customServerUrl=$customServerUrl',
+    );
     _userId = userId;
     _userName = userName;
     _userAvatar = userAvatar;
@@ -89,7 +92,10 @@ class JitsiMeetService {
         .onBroadcast(
           event: 'jitsi-signal',
           callback: (payload) {
-            _jitsiLog('_setupSignalingChannel() RAW broadcast received', payload);
+            _jitsiLog(
+              '_setupSignalingChannel() RAW broadcast received',
+              payload,
+            );
             _handleSignal(payload);
           },
         )
@@ -103,15 +109,24 @@ class JitsiMeetService {
     _jitsiLog('_handleSignal() ENTER', 'payload=$payload');
     try {
       final signal = CallSignal.fromJson(payload);
-      _jitsiLog('_handleSignal() parsed', 'type=${signal.type.name} from=${signal.from} to=${signal.to} callId=${signal.callId} jitsiRoom=${signal.jitsiRoom}');
+      _jitsiLog(
+        '_handleSignal() parsed',
+        'type=${signal.type.name} from=${signal.from} to=${signal.to} callId=${signal.callId} jitsiRoom=${signal.jitsiRoom}',
+      );
 
       // Ignore signals not meant for us
       if (signal.to != _userId) {
-        _jitsiLog('_handleSignal() IGNORE not for us', 'to=${signal.to} _userId=$_userId');
+        _jitsiLog(
+          '_handleSignal() IGNORE not for us',
+          'to=${signal.to} _userId=$_userId',
+        );
         return;
       }
 
-      _jitsiLog('_handleSignal() received', '${signal.type.name} from ${signal.fromName}');
+      _jitsiLog(
+        '_handleSignal() received',
+        '${signal.type.name} from ${signal.fromName}',
+      );
 
       switch (signal.type) {
         case CallSignalType.jitsiInvite:
@@ -138,7 +153,10 @@ class JitsiMeetService {
 
   /// Handle incoming Jitsi call invite
   void _handleIncomingCall(CallSignal signal) {
-    _jitsiLog('_handleIncomingCall() ENTER', 'callId=${signal.callId} room=${signal.jitsiRoom} _isInCall=$_isInCall');
+    _jitsiLog(
+      '_handleIncomingCall() ENTER',
+      'callId=${signal.callId} room=${signal.jitsiRoom} _isInCall=$_isInCall',
+    );
     if (_isInCall) {
       _jitsiLog('_handleIncomingCall() BUSY sending callBusy to', signal.from);
       _sendSignal(signal.from, CallSignalType.callBusy);
@@ -148,7 +166,10 @@ class JitsiMeetService {
     final roomName = signal.jitsiRoom ?? '';
     final callId = signal.callId ?? '';
     if (roomName.isEmpty || callId.isEmpty) {
-      _jitsiLog('_handleIncomingCall() INVALID invite', 'empty roomName or callId');
+      _jitsiLog(
+        '_handleIncomingCall() INVALID invite',
+        'empty roomName or callId',
+      );
     }
 
     final incomingCall = JitsiIncomingCall(
@@ -159,15 +180,24 @@ class JitsiMeetService {
       callerAvatar: signal.fromAvatar,
       isAudioOnly: signal.isAudioOnly ?? false,
     );
-    _jitsiLog('_handleIncomingCall() pushing to incomingCallStream', 'callId=$callId roomName=$roomName');
+    _jitsiLog(
+      '_handleIncomingCall() pushing to incomingCallStream',
+      'callId=$callId roomName=$roomName',
+    );
     _incomingCallController.add(incomingCall);
   }
 
   /// Handle call accepted by remote user
   void _handleCallAccepted(CallSignal signal) {
-    _jitsiLog('_handleCallAccepted()', 'signal.callId=${signal.callId} _currentCallId=$_currentCallId');
+    _jitsiLog(
+      '_handleCallAccepted()',
+      'signal.callId=${signal.callId} _currentCallId=$_currentCallId',
+    );
     if (signal.callId == _currentCallId) {
-      _jitsiLog('_handleCallAccepted() emitting accepted', 'room=$_currentRoomName');
+      _jitsiLog(
+        '_handleCallAccepted() emitting accepted',
+        'room=$_currentRoomName',
+      );
       _callStateController.add(
         JitsiCallState(
           status: JitsiCallStatus.accepted,
@@ -182,7 +212,10 @@ class JitsiMeetService {
 
   /// Handle call rejected by remote user
   void _handleCallRejected(CallSignal signal) {
-    _jitsiLog('_handleCallRejected()', 'signal.callId=${signal.callId} _currentCallId=$_currentCallId');
+    _jitsiLog(
+      '_handleCallRejected()',
+      'signal.callId=${signal.callId} _currentCallId=$_currentCallId',
+    );
     if (signal.callId == _currentCallId) {
       _isInCall = false;
       _currentCallId = null;
@@ -199,7 +232,10 @@ class JitsiMeetService {
 
   /// Handle call ended
   void _handleCallEnded(CallSignal signal) {
-    _jitsiLog('_handleCallEnded()', 'signal.callId=${signal.callId} from=${signal.from} _currentCallId=$_currentCallId _remoteUserId=$_remoteUserId');
+    _jitsiLog(
+      '_handleCallEnded()',
+      'signal.callId=${signal.callId} from=${signal.from} _currentCallId=$_currentCallId _remoteUserId=$_remoteUserId',
+    );
     if (signal.callId == _currentCallId || signal.from == _remoteUserId) {
       _jitsiLog('_handleCallEnded() calling endCall()');
       endCall();
@@ -222,7 +258,10 @@ class JitsiMeetService {
     String? remoteUserAvatar,
     bool audioOnly = false,
   }) async {
-    _jitsiLog('startCall() ENTER', 'remoteUserId=$remoteUserId remoteUserName=$remoteUserName audioOnly=$audioOnly _isInCall=$_isInCall');
+    _jitsiLog(
+      'startCall() ENTER',
+      'remoteUserId=$remoteUserId remoteUserName=$remoteUserName audioOnly=$audioOnly _isInCall=$_isInCall',
+    );
     if (_isInCall) {
       _jitsiLog('startCall() REJECT', 'Already in a call');
       return JitsiCallResult(success: false, error: 'Already in a call');
@@ -236,10 +275,16 @@ class JitsiMeetService {
       _remoteUserAvatar = remoteUserAvatar;
       _currentCallId = const Uuid().v4();
       _currentRoomName = _generateRoomName();
-      _jitsiLog('startCall() state set', 'callId=$_currentCallId room=$_currentRoomName');
+      _jitsiLog(
+        'startCall() state set',
+        'callId=$_currentCallId room=$_currentRoomName',
+      );
 
       // Send call invite to remote user
-      _jitsiLog('startCall() sending jitsiInvite', 'to=$remoteUserId room=$_currentRoomName');
+      _jitsiLog(
+        'startCall() sending jitsiInvite',
+        'to=$remoteUserId room=$_currentRoomName',
+      );
       await _sendSignal(
         remoteUserId,
         CallSignalType.jitsiInvite,
@@ -254,7 +299,10 @@ class JitsiMeetService {
           remoteUserName: remoteUserName,
         ),
       );
-      _jitsiLog('startCall() DONE success', 'roomName=$_currentRoomName serverUrl=$_serverUrl');
+      _jitsiLog(
+        'startCall() DONE success',
+        'roomName=$_currentRoomName serverUrl=$_serverUrl',
+      );
 
       return JitsiCallResult(
         success: true,
@@ -274,7 +322,10 @@ class JitsiMeetService {
 
   /// Accept an incoming Jitsi call
   Future<JitsiCallResult> acceptCall(JitsiIncomingCall incomingCall) async {
-    _jitsiLog('acceptCall() ENTER', 'callId=${incomingCall.callId} room=${incomingCall.roomName} callerId=${incomingCall.callerId}');
+    _jitsiLog(
+      'acceptCall() ENTER',
+      'callId=${incomingCall.callId} room=${incomingCall.roomName} callerId=${incomingCall.callerId}',
+    );
     try {
       _isInCall = true;
       _isAudioOnly = incomingCall.isAudioOnly;
@@ -285,7 +336,10 @@ class JitsiMeetService {
       _remoteUserAvatar = incomingCall.callerAvatar;
       _jitsiLog('acceptCall() state set', 'room=$_currentRoomName');
 
-      _jitsiLog('acceptCall() sending jitsiAccept', 'to=${incomingCall.callerId} room=${incomingCall.roomName}');
+      _jitsiLog(
+        'acceptCall() sending jitsiAccept',
+        'to=${incomingCall.callerId} room=${incomingCall.roomName}',
+      );
       await _sendSignal(
         incomingCall.callerId,
         CallSignalType.jitsiAccept,
@@ -299,7 +353,10 @@ class JitsiMeetService {
           remoteUserName: incomingCall.callerName,
         ),
       );
-      _jitsiLog('acceptCall() DONE success', 'roomName=${incomingCall.roomName}');
+      _jitsiLog(
+        'acceptCall() DONE success',
+        'roomName=${incomingCall.roomName}',
+      );
 
       return JitsiCallResult(
         success: true,
@@ -315,13 +372,19 @@ class JitsiMeetService {
 
   /// Reject an incoming Jitsi call
   Future<void> rejectCall(JitsiIncomingCall incomingCall) async {
-    _jitsiLog('rejectCall()', 'callerId=${incomingCall.callerId} callId=${incomingCall.callId}');
+    _jitsiLog(
+      'rejectCall()',
+      'callerId=${incomingCall.callerId} callId=${incomingCall.callId}',
+    );
     await _sendSignal(incomingCall.callerId, CallSignalType.jitsiReject);
   }
 
   /// End the current call
   Future<void> endCall() async {
-    _jitsiLog('endCall() ENTER', '_remoteUserId=$_remoteUserId _currentCallId=$_currentCallId');
+    _jitsiLog(
+      'endCall() ENTER',
+      '_remoteUserId=$_remoteUserId _currentCallId=$_currentCallId',
+    );
     if (_remoteUserId != null) {
       _jitsiLog('endCall() sending callEnd to', _remoteUserId);
       await _sendSignal(_remoteUserId!, CallSignalType.callEnd);
@@ -345,7 +408,10 @@ class JitsiMeetService {
     String? jitsiRoom,
     bool? isAudioOnly,
   }) async {
-    _jitsiLog('_sendSignal() ENTER', 'to=$toUserId type=${type.name} jitsiRoom=$jitsiRoom isAudioOnly=$isAudioOnly _userId=$_userId');
+    _jitsiLog(
+      '_sendSignal() ENTER',
+      'to=$toUserId type=${type.name} jitsiRoom=$jitsiRoom isAudioOnly=$isAudioOnly _userId=$_userId',
+    );
     if (_userId == null) {
       _jitsiLog('_sendSignal() SKIP', 'no _userId');
       return;
@@ -369,10 +435,7 @@ class JitsiMeetService {
 
     await channel.subscribe();
     _jitsiLog('_sendSignal() channel subscribed', channelName);
-    await channel.sendBroadcastMessage(
-      event: 'jitsi-signal',
-      payload: payload,
-    );
+    await channel.sendBroadcastMessage(event: 'jitsi-signal', payload: payload);
 
     _jitsiLog('_sendSignal() DONE', '${type.name} to $toUserId');
   }

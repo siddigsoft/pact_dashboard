@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../models/visit_report_data.dart';
 import '../services/location_service.dart';
 import '../services/offline/offline_db.dart';
+import '../utils/user_identity_resolver.dart';
 
 class VisitReportDialog extends StatefulWidget {
   final Map<String, dynamic> site;
@@ -38,6 +39,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
   bool _showDispatchMmpDetails = false;
   bool _mmpSectionExpansionInitialized = false;
   Map<String, dynamic>? _latestMmpEntry;
+  final Map<String, String> _userDisplayNamesById = {};
 
   DateTime? _visitStartTime;
   StreamSubscription<Position>? _positionStream;
@@ -51,6 +53,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
   bool _hasMarketDiversion = false;
   bool _hasWarehouseMonitoring = false;
+
+  // Prevent multiple PostFrameCallback triggers
+  bool _autoSelectionProcessed = false;
+  // Track if warning was shown on first load
+  bool _restrictionWarningShown = false;
 
   static const int _pdmQPerVisit = 7;
 
@@ -199,6 +206,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     _startVisitTimer();
     _startLocationMonitoring();
     _refreshMmpEntryFromServer();
+    _preloadUserNamesFromSiteData();
   }
 
   @override
@@ -225,6 +233,41 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       return Map<String, dynamic>.from(data);
     }
     return null;
+  }
+
+  bool _isLikelyUuid(String value) => UserIdentityResolver.isLikelyUuid(value);
+
+  bool _labelExpectsUserIdentity(String label) {
+    return UserIdentityResolver.labelExpectsUserIdentity(label);
+  }
+
+  Future<void> _preloadUserNamesFromSiteData() async {
+    final data = _mergedSiteDataForMmp();
+    final ids = UserIdentityResolver.collectPotentialUserIdsFromData(data);
+
+    if (ids.isEmpty) return;
+
+    final unresolved = ids
+        .where((id) => !_userDisplayNamesById.containsKey(id))
+        .toList();
+    if (unresolved.isEmpty) return;
+
+    try {
+      final resolvedNames = await UserIdentityResolver.resolveUserDisplayNames(
+        client: Supabase.instance.client,
+        userIds: unresolved,
+      );
+
+      for (final id in unresolved) {
+        _userDisplayNamesById[id] = resolvedNames[id] ?? id;
+      }
+
+      if (mounted && resolvedNames.isNotEmpty) {
+        setState(() {});
+      }
+    } catch (error) {
+      debugPrint('[VisitReportDialog] Failed to resolve user names: $error');
+    }
   }
 
   Map<String, dynamic> _mergedSiteDataForMmp() {
@@ -262,6 +305,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       setState(() {
         _latestMmpEntry = map;
       });
+      unawaited(_preloadUserNamesFromSiteData());
     } catch (error) {
       debugPrint(
         '[VisitReportDialog] Failed to refresh mmp_site_entries row: $error',
@@ -280,17 +324,33 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
       return _isArabic ? (value ? 'نعم' : 'لا') : (value ? 'Yes' : 'No');
     }
 
-    if (value is List || value is Map) {
-      try {
-        return jsonEncode(value);
-      } catch (_) {
-        final fallback = value.toString().trim();
-        return fallback.toLowerCase() == 'null' ? '' : fallback;
+    // Handle Map objects with special formatting
+    if (value is Map) {
+      return _formatComplexObject(value);
+    }
+
+    if (value is List) {
+      // Handle list of objects
+      if (value.isEmpty) return '';
+      if (value.every((item) => item is! Map)) {
+        // Simple list - just stringify with commas
+        try {
+          return value
+              .map((v) => _stringifyMmpValue(v))
+              .where((s) => s.isNotEmpty)
+              .join(', ');
+        } catch (_) {}
       }
+      // Complex list - format nicely
+      return _formatComplexObject(value);
     }
 
     final text = value.toString().trim();
     if (text.isEmpty) return '';
+
+    if (_isLikelyUuid(text) && _userDisplayNamesById.containsKey(text)) {
+      return _userDisplayNamesById[text]!;
+    }
 
     final lowered = text.toLowerCase();
     if (lowered == 'null' || lowered == 'n/a' || lowered == 'na') {
@@ -298,6 +358,71 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     }
 
     return text;
+  }
+
+  String _formatComplexObject(dynamic obj) {
+    try {
+      if (obj is Map) {
+        final map = Map<String, dynamic>.from(obj);
+
+        // Special handling for cp_verification
+        if (map.containsKey('status') &&
+            (map.containsKey('verified_at') ||
+                map.containsKey('verified_by'))) {
+          final status = map['status'] ?? 'unknown';
+          final verifiedAt = map['verified_at'] as String?;
+          final verifiedBy = map['verified_by'] as String?;
+
+          if (verifiedAt != null && verifiedAt.isNotEmpty) {
+            try {
+              final dt = DateTime.parse(verifiedAt);
+              final formatted =
+                  '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+              return _isArabic
+                  ? 'الحالة: $status | التاريخ: $formatted${verifiedBy != null ? ' | التحقق من قبل: $verifiedBy' : ''}'
+                  : 'Status: $status | Date: $formatted${verifiedBy != null ? ' | Verified By: $verifiedBy' : ''}';
+            } catch (_) {}
+          }
+
+          return _isArabic
+              ? 'الحالة: $status${verifiedBy != null ? ' | التحقق من قبل: $verifiedBy' : ''}'
+              : 'Status: $status${verifiedBy != null ? ' | Verified By: $verifiedBy' : ''}';
+        }
+
+        // Format as readable key-value pairs
+        final pairs = <String>[];
+        map.forEach((key, value) {
+          if (value != null && value.toString().isNotEmpty) {
+            final formattedKey = _formatMmpKeyLabel(key);
+            final formattedValue = _stringifyMmpValue(value);
+            if (formattedValue.isNotEmpty) {
+              pairs.add('$formattedKey: $formattedValue');
+            }
+          }
+        });
+
+        if (pairs.isNotEmpty) {
+          return pairs.join(' | ');
+        }
+      } else if (obj is List) {
+        final items = <String>[];
+        for (int i = 0; i < obj.length; i++) {
+          final item = obj[i];
+          if (item is Map) {
+            items.add(_formatComplexObject(item));
+          } else {
+            final str = _stringifyMmpValue(item);
+            if (str.isNotEmpty) items.add(str);
+          }
+        }
+        return items.join(' | ');
+      }
+
+      return jsonEncode(obj);
+    } catch (_) {
+      final fallback = obj.toString().trim();
+      return fallback.toLowerCase() == 'null' ? '' : fallback;
+    }
   }
 
   String _resolveMmpValue({
@@ -427,6 +552,17 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     if (value.isEmpty) return value;
 
     final normalizedLabel = _normalizeLabelKey(label);
+    if (_labelExpectsUserIdentity(label) && _isLikelyUuid(value)) {
+      return _userDisplayNamesById[value] ?? value;
+    }
+
+    // Don't format already formatted complex values
+    if (value.contains(' | ') ||
+        value.contains('Status:') ||
+        value.contains('الحالة:')) {
+      return value;
+    }
+
     final shouldFormatAmount =
         normalizedLabel.contains('payout') ||
         normalizedLabel.contains('cost') ||
@@ -701,6 +837,88 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         }
       }
 
+      // Handle CP Verification
+      if (normalizedKey == 'cpverification') {
+        final mapValue = _toMapValue(rawValue);
+        if (mapValue != null) {
+          final status = mapValue['status'] ?? 'unverified';
+          final verifiedAt = mapValue['verified_at'] as String?;
+          final verifiedBy = mapValue['verified_by'] as String?;
+
+          addLabeledEntry(
+            _bi('CP Verification Status', 'حالة التحقق من CP'),
+            _stringifyMmpValue(status),
+          );
+          if (verifiedAt != null && verifiedAt.isNotEmpty) {
+            try {
+              final dt = DateTime.parse(verifiedAt);
+              final formatted = _isArabic
+                  ? '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}'
+                  : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+              addLabeledEntry(_bi('CP Verified At', 'تم التحقق في'), formatted);
+            } catch (_) {}
+          }
+          if (verifiedBy != null && verifiedBy.isNotEmpty) {
+            addLabeledEntry(
+              _bi('CP Verified By', 'تم التحقق من قبل'),
+              _userDisplayNamesById[verifiedBy] ?? verifiedBy,
+            );
+          }
+          return;
+        }
+      }
+
+      // Handle Expected Visit (Down Payment related)
+      if (normalizedKey == 'expectedvisit') {
+        final listValue = rawValue is List ? rawValue : null;
+        if (listValue != null && listValue.isNotEmpty) {
+          final mapValue = _toMapValue(listValue.first);
+          if (mapValue != null) {
+            final visitType = mapValue['type'] ?? 'range';
+            final endDate =
+                mapValue['end_date'] ?? mapValue['endDate'] as String?;
+            final expectedDate =
+                mapValue['expected_date'] ??
+                mapValue['expectedDate'] as String?;
+            final startDate =
+                mapValue['start_date'] ?? mapValue['startDate'] as String?;
+
+            try {
+              if (visitType == 'range' &&
+                  startDate != null &&
+                  endDate != null) {
+                final start = DateTime.parse(startDate);
+                final end = DateTime.parse(endDate);
+                final startFormatted = _isArabic
+                    ? '${start.day}/${start.month}/${start.year}'
+                    : '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+                final endFormatted = _isArabic
+                    ? '${end.day}/${end.month}/${end.year}'
+                    : '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+
+                addLabeledEntry(
+                  _bi('Expected Visit Period', 'فترة الزيارة المتوقعة'),
+                  _isArabic
+                      ? '$startFormatted إلى $endFormatted'
+                      : '$startFormatted to $endFormatted',
+                );
+              } else if (expectedDate != null) {
+                final dt = DateTime.parse(expectedDate);
+                final formatted = _isArabic
+                    ? '${dt.day}/${dt.month}/${dt.year}'
+                    : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+                addLabeledEntry(
+                  _bi('Expected Visit Date', 'تاريخ الزيارة المتوقع'),
+                  formatted,
+                );
+              }
+            } catch (_) {}
+          }
+          return;
+        }
+      }
+
       final value = _stringifyMmpValue(rawValue);
       if (value.isEmpty) return;
 
@@ -820,6 +1038,10 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
     _hasMarketDiversion = _isYesValue(marketDiversionRaw);
     _hasWarehouseMonitoring = _isYesValue(warehouseMonitoringRaw);
+
+    // Reset auto-selection flag to allow re-processing restrictions on draft load
+    _autoSelectionProcessed = false;
+    _restrictionWarningShown = false;
 
     if (additionalData != null && additionalData.isNotEmpty) {
       _hasMarketDiversion =
@@ -1003,8 +1225,21 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
         }
       }
 
+      // Add base activity first if nothing is selected
       if (_selectedActivityTypes.isEmpty) {
         _selectedActivityTypes.add(availableActivities.first);
+      }
+
+      // Then auto-select additional required activities
+      if (_hasMarketDiversion &&
+          availableActivities.contains('MDM') &&
+          !_selectedActivityTypes.contains('MDM')) {
+        _selectedActivityTypes.add('MDM');
+      }
+      if (_hasWarehouseMonitoring &&
+          availableActivities.contains('WHM') &&
+          !_selectedActivityTypes.contains('WHM')) {
+        _selectedActivityTypes.add('WHM');
       }
 
       if (_selectedActivityType == null ||
@@ -1537,13 +1772,14 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                         ),
                         child: Text(
                           _bi('Cancel', 'إلغاء'),
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                          softWrap: true,
+                          textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
-                            fontSize: 11.5,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: const Color(0xFF333333),
+                            height: 1.2,
                           ),
                         ),
                       ),
@@ -1553,17 +1789,15 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       child: OutlinedButton.icon(
                         onPressed: _isSubmitting ? null : _saveDraft,
                         icon: const Icon(Icons.save_outlined, size: 18),
-                        label: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            _bi('Draft', 'مسودة'),
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        label: Text(
+                          _bi('Draft', 'مسودة'),
+                          maxLines: 2,
+                          softWrap: true,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -1598,17 +1832,15 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                                   ),
                                 ),
                               )
-                            : FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  _bi('Complete Visit', 'إكمال الزيارة'),
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                            : Text(
+                                _bi('Complete Visit', 'إكمال الزيارة'),
+                                maxLines: 2,
+                                softWrap: true,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.2,
                                 ),
                               ),
                         style: ElevatedButton.styleFrom(
@@ -1637,6 +1869,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
     final hasPDMSelected = _isActivitySelected('PDM');
     final hasMDMSelected = _isActivitySelected('MDM');
     final hasWHMSelected = _isActivitySelected('WHM');
+
     if (availableActivities.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1661,16 +1894,40 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            _isArabic
-                ? 'يمكنك اختيار نشاط واحد أو أكثر'
-                : 'You can select one or multiple activities',
-            style: GoogleFonts.poppins(
-              fontSize: 10,
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.w500,
+          // Only show restriction message if MDM/WHM are actually selected
+          if (_hasMarketDiversion && hasMDMSelected)
+            Text(
+              _isArabic
+                  ? 'تم قفل النشاط الأساسي و MDM - لا يمكن تغييرهما'
+                  : 'Base activity and MDM are locked - cannot be changed',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.deepOrange.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            )
+          else if (_hasWarehouseMonitoring && hasWHMSelected)
+            Text(
+              _isArabic
+                  ? 'تم قفل النشاط الأساسي و WHM - لا يمكن تغييرهما'
+                  : 'Base activity and WHM are locked - cannot be changed',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.deepOrange.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            )
+          else
+            Text(
+              _isArabic
+                  ? 'يمكنك اختيار نشاط واحد أو أكثر'
+                  : 'You can select one or multiple activities',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 2,
@@ -1684,6 +1941,7 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
               final isPDM = key == 'PDM';
               final isGFA = key == 'GFA';
               final isWHM = key == 'WHM';
+              final isBaseActivity = key == _baseActivityCode;
 
               Color chipColor = const Color(0xFFFF9800); // Orange default
               if (isMDM) chipColor = const Color(0xFF1976D2); // Blue for MDM
@@ -1693,34 +1951,271 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
 
               final enText = _activityTypesEn[key] ?? '';
               final arText = _activityTypesAr[key] ?? '';
-
               return GestureDetector(
-                onTap: () => setState(() {
+                onTap: () async {
                   final wasSelected = _selectedActivityTypes.contains(key);
+                  final isTSFP = _normalizedMainActivity == 'TSFP';
+                  final hasMarketDiversionRestriction = _hasMarketDiversion;
+                  final hasWarehouseMonitoringRestriction =
+                      _hasWarehouseMonitoring;
 
-                  if (wasSelected) {
-                    _selectedActivityTypes.remove(key);
-                    if (key == 'PDM') {
-                      _pdmQuestionnaires = 0;
-                      _pdmQController.clear();
-                    }
-                    if (key == 'MDM') {
-                      _marketNameController.clear();
-                    }
-                    if (key == 'WHM') {
-                      _warehouseName = '';
-                    }
+                  // CONFIRMATION DIALOG: When selecting MDM in TSFP with Market Diversion enabled
+                  if (!wasSelected &&
+                      key == 'MDM' &&
+                      isTSFP &&
+                      hasMarketDiversionRestriction) {
+                    final confirmed =
+                        await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) => AlertDialog(
+                            title: Text(
+                              _isArabic
+                                  ? 'تأكيد رصد انحراف السوق'
+                                  : 'Confirm Market Diversion Monitoring',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            content: Text(
+                              _isArabic
+                                  ? 'هل أنت متأكد أنك تريد تغطية رصد انحراف السوق (MDM) في زيارة موقع TSFP؟\n\nسيؤدي هذا إلى قفل النشاط الأساسي و MDM.'
+                                  : 'Are you sure you want to cover Market Diversion Monitoring (MDM) in TSFP site visit?\n\nThis will lock the base activity and MDM.',
+                              style: GoogleFonts.poppins(fontSize: 14),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: Text(
+                                  _isArabic ? 'لا' : 'No',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.deepOrange.shade600,
+                                ),
+                                child: Text(
+                                  _isArabic ? 'أيضاً' : 'Yes',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ) ??
+                        false;
 
-                    if (_selectedActivityType == key) {
-                      _selectedActivityType = _selectedActivityTypes.isNotEmpty
-                          ? _selectedActivityTypes.first
-                          : null;
+                    if (!confirmed) {
+                      return;
                     }
-                  } else {
-                    _selectedActivityTypes.add(key);
-                    _selectedActivityType = key;
                   }
-                }),
+
+                  // CONFIRMATION DIALOG: When selecting WHM in TSFP with Warehouse Monitoring enabled
+                  if (!wasSelected &&
+                      key == 'WHM' &&
+                      isTSFP &&
+                      hasWarehouseMonitoringRestriction) {
+                    final confirmed =
+                        await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) => AlertDialog(
+                            title: Text(
+                              _isArabic
+                                  ? 'تأكيد رصد المستودع'
+                                  : 'Confirm Warehouse Monitoring',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            content: Text(
+                              _isArabic
+                                  ? 'هل أنت متأكد أنك تريد تغطية رصد المستودع (WHM) في زيارة موقع TSFP؟\n\nسيؤدي هذا إلى قفل النشاط الأساسي و WHM.'
+                                  : 'Are you sure you want to cover Warehouse Monitoring (WHM) in TSFP site visit?\n\nThis will lock the base activity and WHM.',
+                              style: GoogleFonts.poppins(fontSize: 14),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: Text(
+                                  _isArabic ? 'لا' : 'No',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.deepOrange.shade600,
+                                ),
+                                child: Text(
+                                  _isArabic ? 'أيضاً' : 'Yes',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ) ??
+                        false;
+
+                    if (!confirmed) {
+                      return;
+                    }
+                  }
+
+                  // MARKET DIVERSION RESTRICTIONS: Lock both base activity and MDM (only after selection)
+                  if (hasMarketDiversionRestriction &&
+                      _selectedActivityTypes.contains('MDM')) {
+                    // Prevent selecting other activities
+                    if (key != 'MDM' && !isBaseActivity) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _isArabic
+                                ? '❌ انحراف السوق مطلوب - يمكن تحديد النشاط الأساسي و MDM فقط'
+                                : '❌ Market Diversion required - Only base activity and MDM are allowed',
+                          ),
+                          duration: const Duration(seconds: 3),
+                          backgroundColor: Colors.deepOrange.shade700,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                        ),
+                      );
+                      return;
+                    }
+                    // Prevent deselecting base activity when market diversion is required
+                    if (isBaseActivity &&
+                        _selectedActivityTypes.contains(key)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _isArabic
+                                ? '🔒 لا يمكن إلغاء تحديد النشاط الأساسي - انحراف السوق مطلوب'
+                                : '🔒 Cannot deselect base activity - Market Diversion is required',
+                          ),
+                          duration: const Duration(seconds: 3),
+                          backgroundColor: Colors.deepOrange.shade700,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                        ),
+                      );
+                      return;
+                    }
+                    // Prevent deselecting MDM when market diversion is required
+                    if (key == 'MDM' &&
+                        _selectedActivityTypes.contains('MDM')) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _isArabic
+                                ? '🔒 لا يمكن إلغاء تحديد MDM - انحراف السوق مطلوب'
+                                : '🔒 Cannot deselect MDM - Market Diversion is required',
+                          ),
+                          duration: const Duration(seconds: 3),
+                          backgroundColor: Colors.deepOrange.shade700,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                        ),
+                      );
+                      return;
+                    }
+                  }
+
+                  // WAREHOUSE MONITORING RESTRICTIONS: Lock both base activity and WHM (only after selection)
+                  if (hasWarehouseMonitoringRestriction &&
+                      _selectedActivityTypes.contains('WHM')) {
+                    // Prevent selecting other activities
+                    if (key != 'WHM' && !isBaseActivity) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _isArabic
+                                ? '❌ مراقبة المستودع مطلوبة - يمكن تحديد النشاط الأساسي و WHM فقط'
+                                : '❌ Warehouse Monitoring required - Only base activity and WHM are allowed',
+                          ),
+                          duration: const Duration(seconds: 3),
+                          backgroundColor: Colors.deepOrange.shade700,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                        ),
+                      );
+                      return;
+                    }
+                    // Prevent deselecting base activity when warehouse monitoring is required
+                    if (isBaseActivity &&
+                        _selectedActivityTypes.contains(key)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _isArabic
+                                ? '🔒 لا يمكن إلغاء تحديد النشاط الأساسي - مراقبة المستودع مطلوبة'
+                                : '🔒 Cannot deselect base activity - Warehouse Monitoring is required',
+                          ),
+                          duration: const Duration(seconds: 3),
+                          backgroundColor: Colors.deepOrange.shade700,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                        ),
+                      );
+                      return;
+                    }
+                    // Prevent deselecting WHM when warehouse monitoring is required
+                    if (key == 'WHM' &&
+                        _selectedActivityTypes.contains('WHM')) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _isArabic
+                                ? '🔒 لا يمكن إلغاء تحديد WHM - مراقبة المستودع مطلوبة'
+                                : '🔒 Cannot deselect WHM - Warehouse Monitoring is required',
+                          ),
+                          duration: const Duration(seconds: 3),
+                          backgroundColor: Colors.deepOrange.shade700,
+                          behavior: SnackBarBehavior.floating,
+                          margin: const EdgeInsets.all(16),
+                        ),
+                      );
+                      return;
+                    }
+                  }
+
+                  // Normal activity selection/deselection
+                  setState(() {
+                    if (wasSelected) {
+                      _selectedActivityTypes.remove(key);
+                      if (key == 'PDM') {
+                        _pdmQuestionnaires = 0;
+                        _pdmQController.clear();
+                      }
+                      if (key == 'MDM') {
+                        _marketNameController.clear();
+                      }
+                      if (key == 'WHM') {
+                        _warehouseName = '';
+                      }
+
+                      if (_selectedActivityType == key) {
+                        _selectedActivityType =
+                            _selectedActivityTypes.isNotEmpty
+                            ? _selectedActivityTypes.first
+                            : null;
+                      }
+                    } else {
+                      _selectedActivityTypes.add(key);
+                      _selectedActivityType = key;
+                    }
+                  });
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(
@@ -1728,13 +2223,48 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     horizontal: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: isSelected ? chipColor : Colors.white,
+                    color:
+                        (_hasMarketDiversion &&
+                                (key == 'MDM' || isBaseActivity)) ||
+                            (_hasWarehouseMonitoring &&
+                                (key == 'WHM' || isBaseActivity))
+                        ? (isSelected ? chipColor : Colors.blueGrey.shade50)
+                        : (_hasMarketDiversion &&
+                                  key != 'MDM' &&
+                                  !isBaseActivity) ||
+                              (_hasWarehouseMonitoring &&
+                                  key != 'WHM' &&
+                                  !isBaseActivity)
+                        ? Colors.grey.shade200
+                        : isSelected
+                        ? chipColor
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected ? chipColor : Colors.grey.shade300,
+                      color:
+                          (_hasMarketDiversion &&
+                                  (key == 'MDM' || isBaseActivity)) ||
+                              (_hasWarehouseMonitoring &&
+                                  (key == 'WHM' || isBaseActivity))
+                          ? (isSelected ? chipColor : Colors.blueGrey.shade300)
+                          : (_hasMarketDiversion &&
+                                    key != 'MDM' &&
+                                    !isBaseActivity) ||
+                                (_hasWarehouseMonitoring &&
+                                    key != 'WHM' &&
+                                    !isBaseActivity)
+                          ? Colors.grey.shade400
+                          : isSelected
+                          ? chipColor
+                          : Colors.grey.shade300,
                       width: isSelected ? 2 : 1.5,
                     ),
-                    boxShadow: isSelected
+                    boxShadow:
+                        isSelected &&
+                            !((_hasMarketDiversion &&
+                                    (key == 'MDM' || isBaseActivity)) ||
+                                (_hasWarehouseMonitoring &&
+                                    (key == 'WHM' || isBaseActivity)))
                         ? [
                             BoxShadow(
                               color: chipColor.withOpacity(0.2),
@@ -1744,58 +2274,179 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                           ]
                         : [],
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Stack(
                     children: [
-                      Icon(
-                        isMDM
-                            ? Icons.store_outlined
-                            : isPDM
-                            ? Icons.fact_check_outlined
-                            : isWHM
-                            ? Icons.warehouse_outlined
-                            : Icons.shopping_bag_outlined,
-                        size: 24,
-                        color: isSelected ? Colors.white : chipColor,
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            isMDM
+                                ? Icons.store_outlined
+                                : isPDM
+                                ? Icons.fact_check_outlined
+                                : isWHM
+                                ? Icons.warehouse_outlined
+                                : Icons.shopping_bag_outlined,
+                            size: 24,
+                            color:
+                                (_hasMarketDiversion &&
+                                        (key == 'MDM' || isBaseActivity)) ||
+                                    (_hasWarehouseMonitoring &&
+                                        (key == 'WHM' || isBaseActivity))
+                                ? (isSelected
+                                      ? Colors.white
+                                      : chipColor.withOpacity(0.7))
+                                : (_hasMarketDiversion &&
+                                          key != 'MDM' &&
+                                          !isBaseActivity) ||
+                                      (_hasWarehouseMonitoring &&
+                                          key != 'WHM' &&
+                                          !isBaseActivity)
+                                ? Colors.grey.shade600
+                                : isSelected
+                                ? Colors.white
+                                : chipColor,
+                          ),
+                          const SizedBox(height: 6),
+                          // Activity code (GFA, CBT, etc.)
+                          Text(
+                            key,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color:
+                                  (_hasMarketDiversion &&
+                                          (key == 'MDM' || isBaseActivity)) ||
+                                      (_hasWarehouseMonitoring &&
+                                          (key == 'WHM' || isBaseActivity))
+                                  ? (isSelected
+                                        ? Colors.white
+                                        : chipColor.withOpacity(0.7))
+                                  : (_hasMarketDiversion &&
+                                            key != 'MDM' &&
+                                            !isBaseActivity) ||
+                                        (_hasWarehouseMonitoring &&
+                                            key != 'WHM' &&
+                                            !isBaseActivity)
+                                  ? Colors.grey.shade600
+                                  : isSelected
+                                  ? Colors.white
+                                  : chipColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          // English Description
+                          Text(
+                            enText,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 8,
+                              height: 1.1,
+                              fontWeight: FontWeight.w500,
+                              color:
+                                  (_hasMarketDiversion &&
+                                          (key == 'MDM' || isBaseActivity)) ||
+                                      (_hasWarehouseMonitoring &&
+                                          (key == 'WHM' || isBaseActivity))
+                                  ? (isSelected
+                                        ? Colors.white.withValues(alpha: 0.9)
+                                        : Colors.grey.shade600)
+                                  : (_hasMarketDiversion &&
+                                            key != 'MDM' &&
+                                            !isBaseActivity) ||
+                                        (_hasWarehouseMonitoring &&
+                                            key != 'WHM' &&
+                                            !isBaseActivity)
+                                  ? Colors.grey.shade500
+                                  : isSelected
+                                  ? Colors.white.withValues(alpha: 0.9)
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          // Arabic Description
+                          Text(
+                            arText,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 7.5,
+                              height: 1.1,
+                              fontWeight: FontWeight.w400,
+                              color:
+                                  (_hasMarketDiversion &&
+                                          (key == 'MDM' || isBaseActivity)) ||
+                                      (_hasWarehouseMonitoring &&
+                                          (key == 'WHM' || isBaseActivity))
+                                  ? (isSelected
+                                        ? Colors.white.withValues(alpha: 0.8)
+                                        : Colors.grey.shade600)
+                                  : (_hasMarketDiversion &&
+                                            key != 'MDM' &&
+                                            !isBaseActivity) ||
+                                        (_hasWarehouseMonitoring &&
+                                            key != 'WHM' &&
+                                            !isBaseActivity)
+                                  ? Colors.grey.shade500
+                                  : isSelected
+                                  ? Colors.white.withValues(alpha: 0.8)
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      // Activity code (GFA, CBT, etc.)
-                      Text(
-                        key,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: isSelected ? Colors.white : chipColor,
+                      // Lock icon overlay for restricted activities (base activity + MDM/WHM when required)
+                      if ((_hasMarketDiversion &&
+                              (key == 'MDM' || isBaseActivity)) ||
+                          (_hasWarehouseMonitoring &&
+                              (key == 'WHM' || isBaseActivity)))
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.deepOrange.shade600,
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.deepOrange.shade600.withOpacity(
+                                    0.3,
+                                  ),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.lock_rounded,
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      // English Description
-                      Text(
-                        enText,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
-                          fontSize: 8,
-                          height: 1.1,
-                          fontWeight: FontWeight.w500,
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.9)
-                              : Colors.grey.shade700,
+                      // Disabled icon for other activities when restrictions apply
+                      if ((_hasMarketDiversion &&
+                              key != 'MDM' &&
+                              !isBaseActivity) ||
+                          (_hasWarehouseMonitoring &&
+                              key != 'WHM' &&
+                              !isBaseActivity))
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Icon(
+                              Icons.lock,
+                              size: 12,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 1),
-                      // Arabic Description
-                      Text(
-                        arText,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
-                          fontSize: 7.5,
-                          height: 1.1,
-                          fontWeight: FontWeight.w400,
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.8)
-                              : Colors.grey.shade600,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -1950,6 +2601,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       hintText: _bi('Enter count', 'أدخل العدد'),
+                      hintStyle: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF8C8C8C),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2077,6 +2733,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                         'Enter market name...',
                         'أدخل اسم السوق...',
                       ),
+                      hintStyle: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF8C8C8C),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2173,6 +2834,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
                       hintText: _bi(
                         'Enter warehouse name...',
                         'أدخل اسم المستودع...',
+                      ),
+                      hintStyle: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF8C8C8C),
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -2738,6 +3404,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             hintText: _isArabic
                 ? 'وصف الأنشطة التي تمت خلال الزيارة...'
                 : 'Describe the activities performed during the visit...',
+            hintStyle: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: const Color(0xFF8C8C8C),
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -2771,6 +3442,11 @@ class _VisitReportDialogState extends State<VisitReportDialog> {
             hintText: _isArabic
                 ? 'أي ملاحظات أو مشكلات أو توصيات إضافية...'
                 : 'Any additional observations, issues, or recommendations...',
+            hintStyle: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: const Color(0xFF8C8C8C),
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,

@@ -38,7 +38,7 @@ class DownPaymentNotifier extends StateNotifier<DownPaymentState> {
   final String _userId;
 
   DownPaymentNotifier(this._repository, this._userId)
-      : super(const DownPaymentState()) {
+    : super(const DownPaymentState()) {
     _loadRequests();
   }
 
@@ -120,55 +120,59 @@ class DownPaymentNotifier extends StateNotifier<DownPaymentState> {
 }
 
 /// Provider for user's down payment requests
-final downPaymentProvider = StateNotifierProvider.family<DownPaymentNotifier, DownPaymentState, String>(
-  (ref, userId) {
-    final repository = ref.watch(walletRepositoryProvider);
-    return DownPaymentNotifier(repository, userId);
-  },
-);
+final downPaymentProvider =
+    StateNotifierProvider.family<DownPaymentNotifier, DownPaymentState, String>(
+      (ref, userId) {
+        final repository = ref.watch(walletRepositoryProvider);
+        return DownPaymentNotifier(repository, userId);
+      },
+    );
 
 /// Provider for supervisor's pending requests
-final supervisorDownPaymentProvider = StreamProvider.family<List<DownPaymentRequest>, String>(
-  (ref, supervisorId) {
-    final repository = ref.watch(walletRepositoryProvider);
-    return repository.watchSupervisorDownPaymentRequests(supervisorId);
-  },
-);
+final supervisorDownPaymentProvider =
+    StreamProvider.family<List<DownPaymentRequest>, String>((
+      ref,
+      supervisorId,
+    ) {
+      final repository = ref.watch(walletRepositoryProvider);
+      return repository.watchSupervisorDownPaymentRequests(supervisorId);
+    });
 
 /// Provider for admin's pending requests
-final adminDownPaymentProvider = StreamProvider<List<DownPaymentRequest>>(
-  (ref) {
-    final repository = ref.watch(walletRepositoryProvider);
-    return repository.watchAdminDownPaymentRequests();
-  },
-);
+final adminDownPaymentProvider = StreamProvider<List<DownPaymentRequest>>((
+  ref,
+) {
+  final repository = ref.watch(walletRepositoryProvider);
+  return repository.watchAdminDownPaymentRequests();
+});
 
 /// Provider for real-time user requests stream
-final userDownPaymentStreamProvider = StreamProvider.family<List<DownPaymentRequest>, String>(
-  (ref, userId) {
-    final repository = ref.watch(walletRepositoryProvider);
-    return repository.watchUserDownPaymentRequests(userId);
-  },
-);
+final userDownPaymentStreamProvider =
+    StreamProvider.family<List<DownPaymentRequest>, String>((ref, userId) {
+      final repository = ref.watch(walletRepositoryProvider);
+      return repository.watchUserDownPaymentRequests(userId);
+    });
 
 /// Dashboard: all requests visible to a supervisor for stats (hub-based, matches web).
 /// Key: (userId, hubId). When hubId is set, supervisor sees own requests + all in that hub.
 final supervisorDownPaymentDashboardProvider =
-    StreamProvider.family<List<DownPaymentRequest>, (String, String?)>(
-  (ref, key) {
-    final repository = ref.watch(walletRepositoryProvider);
-    return repository.watchSupervisorDownPaymentRequestsForDashboardByHub(key.$1, key.$2);
-  },
-);
+    StreamProvider.family<List<DownPaymentRequest>, (String, String?)>((
+      ref,
+      key,
+    ) {
+      final repository = ref.watch(walletRepositoryProvider);
+      return repository.watchSupervisorDownPaymentRequestsForDashboardByHub(
+        key.$1,
+        key.$2,
+      );
+    });
 
 /// Dashboard: all requests for admin (for stats; RLS applies)
 final adminDownPaymentDashboardProvider =
-    StreamProvider<List<DownPaymentRequest>>(
-  (ref) {
-    final repository = ref.watch(walletRepositoryProvider);
-    return repository.watchAdminDownPaymentRequestsForDashboard();
-  },
-);
+    StreamProvider<List<DownPaymentRequest>>((ref) {
+      final repository = ref.watch(walletRepositoryProvider);
+      return repository.watchAdminDownPaymentRequestsForDashboard();
+    });
 
 /// Stats derived from a list of down payment requests (Total, Pending, Total Paid SDG, Remaining SDG)
 class DownPaymentStats {
@@ -190,8 +194,14 @@ class DownPaymentStats {
   }) {
     final status = pendingStatus ?? 'pending_supervisor';
     final pending = requests.where((r) => r.status == status).length;
-    final totalPaid = requests.fold<double>(0, (s, r) => s + (r.totalPaidAmount));
-    final remaining = requests.fold<double>(0, (s, r) => s + ((r.remainingAmount ?? 0)));
+    final totalPaid = requests.fold<double>(
+      0,
+      (s, r) => s + (r.totalPaidAmount),
+    );
+    final remaining = requests.fold<double>(
+      0,
+      (s, r) => s + ((r.remainingAmount ?? 0)),
+    );
     return DownPaymentStats(
       totalRequests: requests.length,
       pendingCount: pending,

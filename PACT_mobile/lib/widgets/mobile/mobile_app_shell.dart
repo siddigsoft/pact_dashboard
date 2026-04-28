@@ -10,6 +10,7 @@ import '../../services/offline/offline_db.dart';
 import '../../services/offline/models.dart';
 import '../../screens/wallet_screen.dart';
 import '../../providers/offline_provider.dart';
+import '../../services/agora_call_service.dart';
 import '../../services/notification_route_resolver.dart';
 import '../../services/user_notification_service.dart';
 import '../notifications_panel.dart';
@@ -289,7 +290,10 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
       case NotificationRouteKind.notificationsPanel:
         if (mounted) {
-          NotificationsPanel.show(context, initialTab: decision.panelTab);
+          NotificationsPanel.show(
+            context,
+            initialTab: decision.panelTab ?? 'all',
+          );
         }
         return;
 
@@ -301,6 +305,9 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
         navigator.pushNamed('/chat', arguments: decision.chatId);
         return;
       case NotificationRouteKind.call:
+        if (decision.callData != null) {
+          AgoraCallService().setPendingFcmCall(decision.callData);
+        }
         navigator.pushNamedAndRemoveUntil(
           '/main',
           (route) => false,
@@ -309,7 +316,6 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
         return;
       case NotificationRouteKind.updateDownload:
       case NotificationRouteKind.none:
-      default:
         if (mounted) {
           NotificationsPanel.show(context, initialTab: 'all');
         }
@@ -534,24 +540,6 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
   }
 
   /// Show local notification as snackbar when app is in foreground
-  void _showLocalNotification({required String title, required String body}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 5),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(body),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {

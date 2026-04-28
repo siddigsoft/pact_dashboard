@@ -180,7 +180,7 @@ class SosEmergencyService {
       final position = await LocationService.getCurrentLocation();
       final locationCaptured = position != null;
       final locationText = locationCaptured
-          ? '${position!.latitude.toStringAsFixed(6)}, '
+          ? '${position.latitude.toStringAsFixed(6)}, '
                 '${position.longitude.toStringAsFixed(6)} '
                 '(±${position.accuracy.toStringAsFixed(0)}m)'
           : 'Location unavailable';

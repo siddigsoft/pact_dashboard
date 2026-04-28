@@ -48,21 +48,15 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   /// Load current user's profile
   Future<void> loadProfile() async {
     state = state.copyWith(isLoading: true, error: null);
-    
+
     try {
       final profile = await _repository.getCurrentUserProfile();
-      state = state.copyWith(
-        profile: profile,
-        isLoading: false,
-      );
+      state = state.copyWith(profile: profile, isLoading: false);
 
       // Set up real-time subscription
       _setupRealtimeSubscription(profile.id);
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
@@ -83,7 +77,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     }
 
     state = state.copyWith(isLoading: true, error: null);
-    
+
     try {
       final updatedProfile = await _repository.updateProfile(
         userId: state.profile!.id,
@@ -97,15 +91,9 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         bankAccount: bankAccount,
       );
 
-      state = state.copyWith(
-        profile: updatedProfile,
-        isLoading: false,
-      );
+      state = state.copyWith(profile: updatedProfile, isLoading: false);
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: e.toString());
       rethrow;
     }
   }
@@ -117,7 +105,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     }
 
     state = state.copyWith(isLoading: true, error: null);
-    
+
     try {
       // Delete old avatar if exists
       if (state.profile!.avatarUrl != null) {
@@ -140,10 +128,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       state = state.copyWith(isLoading: false);
       return avatarUrl;
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: e.toString());
       rethrow;
     }
   }
@@ -237,7 +222,9 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 }
 
 /// Provider for ProfileNotifier
-final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>((ref) {
+final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>((
+  ref,
+) {
   final repository = ref.watch(profileRepositoryProvider);
   return ProfileNotifier(repository);
 });

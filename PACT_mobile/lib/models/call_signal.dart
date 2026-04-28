@@ -19,7 +19,7 @@ enum CallSignalType {
 
 /// Normalize signal type from web (kebab-case) to mobile (camelCase) format
 /// Handles cross-platform compatibility between web and mobile apps
-CallSignalType normalizeSignalType(String type) {
+CallSignalType? normalizeSignalType(String type) {
   // Map web format (kebab-case) to mobile format (camelCase)
   const typeMap = <String, CallSignalType>{
     // Web format -> Mobile format
@@ -46,7 +46,9 @@ CallSignalType normalizeSignalType(String type) {
     'jitsiReject': CallSignalType.jitsiReject,
   };
 
-  return typeMap[type] ?? CallSignalType.callRequest;
+  // Do NOT default unknown types (e.g. Supabase 'broadcast' wrapper) to
+  // callRequest — that causes echo messages to be treated as incoming calls.
+  return typeMap[type];
 }
 
 /// Call signal message for WebRTC signaling
@@ -80,6 +82,9 @@ class CallSignal {
   Map<String, dynamic> toJson() {
     return {
       'type': type.name,
+      // 'signalType' is a stable copy of the type that Supabase cannot
+      // overwrite (Supabase only overwrites 'type' with 'broadcast').
+      'signalType': type.name,
       'from': from,
       'to': to,
       'fromName': fromName,
@@ -93,17 +98,57 @@ class CallSignal {
     };
   }
 
+  /// Returns null when the signal type is unrecognised, so callers can discard
+  /// it without misrouting.
+  ///
+  /// Supabase overwrites the signal's 'type' field with 'broadcast' before
+  /// delivery, so we:
+  ///  1. Check 'signalType' (a stable field we add to every outgoing message).
+  ///  2. Fall back to the regular 'type' field for any client that doesn't yet
+  ///     send 'signalType'.
+  ///  3. As a last resort, infer callRequest from the nested payload when it
+  ///     contains a 'channelName' — that field is unique to callRequest.
+  static CallSignal? tryFromJson(Map<String, dynamic> json) {
+    final rawType =
+        json['signalType'] as String? ?? json['type'] as String? ?? '';
+    CallSignalType? normalizedType = normalizeSignalType(rawType);
+
+    if (normalizedType == null) {
+      // Infer callRequest from nested payload structure (backward compat with
+      // clients that don't send 'signalType' and whose 'type' was overwritten).
+      final nested = json['payload'];
+      if (nested is Map && nested.containsKey('channelName')) {
+        normalizedType = CallSignalType.callRequest;
+      } else {
+        return null;
+      }
+    }
+
+    return CallSignal._fromJsonWithType(json, normalizedType);
+  }
+
   factory CallSignal.fromJson(Map<String, dynamic> json) {
     // Use normalizer for cross-platform compatibility (web uses kebab-case, mobile uses camelCase)
     final rawType = json['type'] as String? ?? 'callRequest';
-    final normalizedType = normalizeSignalType(rawType);
+    // Fall back to callRequest only when the type field is absent/empty.
+    final normalizedType =
+        normalizeSignalType(rawType) ?? CallSignalType.callRequest;
     // Log Jitsi-related signals for call debugging
     if (normalizedType == CallSignalType.jitsiInvite ||
         normalizedType == CallSignalType.jitsiAccept ||
         normalizedType == CallSignalType.jitsiReject) {
-      debugPrint('[JitsiCall] CallSignal.fromJson rawType=$rawType normalizedType=${normalizedType.name} from=${json['from']} to=${json['to']} callId=${json['callId']} jitsiRoom=${json['jitsiRoom']}');
+      debugPrint(
+        '[JitsiCall] CallSignal.fromJson rawType=$rawType normalizedType=${normalizedType.name} from=${json['from']} to=${json['to']} callId=${json['callId']} jitsiRoom=${json['jitsiRoom']}',
+      );
     }
 
+    return CallSignal._fromJsonWithType(json, normalizedType);
+  }
+
+  factory CallSignal._fromJsonWithType(
+    Map<String, dynamic> json,
+    CallSignalType normalizedType,
+  ) {
     // Tolerate nulls from web/Supabase (required fields get safe defaults)
     return CallSignal(
       type: normalizedType,
@@ -113,7 +158,9 @@ class CallSignal {
       fromAvatar: json['fromAvatar'] as String?,
       callId: json['callId'] as String?,
       callToken: json['callToken'] as String?,
-      payload: json['payload'] is Map<String, Object?> ? (json['payload'] as Map<String, Object?>).cast<String, dynamic>() : null,
+      payload: json['payload'] is Map<String, Object?>
+          ? (json['payload'] as Map<String, Object?>).cast<String, dynamic>()
+          : null,
       timestamp: json['timestamp'] != null
           ? DateTime.tryParse(json['timestamp'] as String) ?? DateTime.now()
           : DateTime.now(),

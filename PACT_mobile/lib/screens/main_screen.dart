@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'dashboard_screen.dart';
+import 'agora_call_screen.dart';
 import 'field_operations_enhanced_screen.dart';
 
 import 'wallet_screen.dart';
@@ -45,13 +47,25 @@ import 'tracker_preparation_plan_screen.dart';
 import 'admin/broadcast_center_screen.dart';
 import 'admin/permissions_management_screen.dart';
 import 'admin/role_perspective_screen.dart';
+import 'communications_screen.dart';
 import '../widgets/network_status_indicator.dart';
 import '../widgets/agora_incoming_call_dialog.dart';
+import '../widgets/custom_drawer_menu.dart';
+import '../widgets/notification_permission_banner.dart';
 import '../services/webrtc_service.dart';
 import '../services/agora_call_service.dart';
+import '../models/agora_incoming_call.dart';
+import '../services/bilingual_notification_service.dart';
 import '../services/presence_service.dart';
+import '../services/user_notification_service.dart';
+import '../services/realtime_notification_service.dart';
+import '../services/call_diagnostics_store.dart';
+import '../services/debug_log_service.dart';
+import '../services/background_call_router.dart';
+import '../services/background_message_router.dart';
 import '../widgets/whats_new_dialog.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -65,14 +79,19 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _currentIndex = 0;
-  StreamSubscription? _agoraIncomingCallSubscription;
+  bool _handledInitialRouteArgs = false;
   StreamSubscription? _connectivitySubscription;
   bool _isCoordinator = false;
-  bool _isLoadingRole = true;
   String _userRole = '';
   bool _servicesInitialized = false;
+  bool _initializingServices = false;
   Timer? _activityHeartbeatTimer;
+  StreamSubscription<AgoraIncomingCall>? _incomingCallSubscription;
+  bool _isIncomingCallDialogOpen = false;
+  bool _didConsumePendingCall = false;
+  int _activeCallRestoreWaitAttempts = 0;
 
   @override
   void initState() {
@@ -83,10 +102,40 @@ class _MainScreenState extends State<MainScreen> {
     _setupConnectivityListener();
     _startGlobalActivityHeartbeat();
 
-    // Check for active call from notification tap after a short delay
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkForActiveCall();
-    });
+    // Ensure notifications are loaded when opening app with existing session
+    // (initialize is only called after login/biometric; session restore skips those)
+    if (Supabase.instance.client.auth.currentUser != null) {
+      RealtimeNotificationService().initialize();
+      UserNotificationService().initialize();
+    }
+
+    // Check for pending receipt confirmations and show blocking modal if needed
+    _checkAndShowPendingConfirmations();
+
+    // Check for stored incoming call from notification tap (app was killed)
+    _checkForStoredIncomingCall();
+
+    // Check for stored messages from background notification (app was killed)
+    _checkForStoredMessages();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_handledInitialRouteArgs) return;
+    _handledInitialRouteArgs = true;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      final tab = (args['tab']?.toString() ?? '').toLowerCase().trim();
+      if (tab == 'site_visits' || tab == 'site-visits' || tab == 'mmp') {
+        // Field Ops / Site Visits tab.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _currentIndex = 1);
+        });
+      }
+    }
   }
 
   /// Listen for connectivity changes to initialize presence when internet becomes available
@@ -97,7 +146,7 @@ class _MainScreenState extends State<MainScreen> {
     ) async {
       final hasInternet = !results.contains(ConnectivityResult.none);
 
-      if (hasInternet && !_servicesInitialized) {
+      if (hasInternet && !_servicesInitialized && !_initializingServices) {
         debugPrint(
           '🌐 Internet connection restored - initializing WebRTC/Presence',
         );
@@ -106,8 +155,288 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
-  void _checkForActiveCall() {
-    // Agora incoming calls are handled via incomingCallStream in _initializeWebRTC
+  Future<void> _checkForActiveCall() async {
+    if (!mounted || _didConsumePendingCall) return;
+
+    final agora = AgoraCallService();
+    // IMPORTANT: Wait until Agora engine is initialized before consuming
+    // the pending call. Otherwise acceptCall() fails and the restored
+    // pending call can be lost (because there is no incomingCallStream
+    // listener attached yet).
+    if (!kIsWeb && !agora.isReady) {
+      if (_activeCallRestoreWaitAttempts < 20) {
+        _activeCallRestoreWaitAttempts++;
+        await Future.delayed(const Duration(milliseconds: 250));
+        return _checkForActiveCall();
+      }
+      debugLog(
+        'CALL_DIAG',
+        'MainScreen _checkForActiveCall abort: Agora engine not ready',
+      );
+      return;
+    }
+
+    _didConsumePendingCall = true;
+    debugLog('CALL_DIAG', 'MainScreen _checkForActiveCall ENTER');
+    Map<String, dynamic>? pending = agora.getAndClearPendingFcmCall();
+    if (pending != null) {
+      debugLog(
+        'CALL_DIAG',
+        'Found pending in Agora service callId=${pending['call_id'] ?? pending['callId']}',
+      );
+    }
+
+    // Fallback to route args if navigation carried call payload.
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (pending == null && args is Map) {
+      final map = Map<String, dynamic>.from(args.cast<dynamic, dynamic>());
+      final argCallData = map['callData'];
+      if (argCallData is Map) {
+        pending = Map<String, dynamic>.from(
+          argCallData.cast<dynamic, dynamic>(),
+        );
+        debugLog(
+          'CALL_DIAG',
+          'Found pending in route args callId=${pending['call_id'] ?? pending['callId']}',
+        );
+      }
+    }
+
+    // Final fallback: app launched directly from local notification.
+    if (pending == null) {
+      try {
+        final launchDetails = await FlutterLocalNotificationsPlugin()
+            .getNotificationAppLaunchDetails();
+        if (launchDetails?.didNotificationLaunchApp == true) {
+          final response = launchDetails?.notificationResponse;
+          final payload = response?.payload;
+          final actionId = response?.actionId;
+          if (payload != null && payload.isNotEmpty) {
+            final decoded = jsonDecode(payload);
+            if (decoded is Map<String, dynamic>) {
+              final hasChannel =
+                  decoded['channel_name'] != null ||
+                  decoded['channelName'] != null;
+              final hasCallId =
+                  decoded['call_id'] != null || decoded['callId'] != null;
+              if (hasChannel && hasCallId) {
+                // Some Android launch paths lose actionId; for incoming call notifications,
+                // treat app-launch as accept intent so user is not dropped on dashboard.
+                if (actionId == null ||
+                    actionId == BilingualNotificationService.acceptActionId) {
+                  decoded['auto_accept'] = true;
+                }
+                pending = decoded;
+                debugLog(
+                  'CALL_DIAG',
+                  'Found pending in launch details actionId=$actionId '
+                      'callId=${decoded['call_id'] ?? decoded['callId']}',
+                );
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[MainScreen] Error checking launch call payload: $e');
+        debugLog('CALL_DIAG', 'Launch details parse error: $e');
+      }
+    }
+
+    // Cross-isolate fallback: action payload persisted from notification callback.
+    if (pending == null) {
+      try {
+        final pendingAction =
+            await CallDiagnosticsStore.loadAndClearPendingCallAction();
+        if (pendingAction != null) {
+          final actionId = (pendingAction['actionId'] ?? '').toString();
+          final callData = pendingAction['callData'];
+          if (callData is Map<String, dynamic>) {
+            if (actionId == BilingualNotificationService.acceptActionId) {
+              callData['auto_accept'] = true;
+            }
+            pending = callData;
+            debugLog(
+              'CALL_DIAG',
+              'Found pending in persisted action actionId=$actionId '
+                  'callId=${callData['call_id'] ?? callData['callId']}',
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[MainScreen] Error restoring pending call action: $e');
+        debugLog('CALL_DIAG', 'Pending action restore error: $e');
+      }
+    }
+
+    // Last-resort recovery: if launch payload is "call:<id>" or missing details,
+    // recover callData from last incoming invite captured by BackgroundHandler.
+    // Only recover if the app was actually launched from a notification AND
+    // the invite is recent (< 60 seconds old) to prevent stale calls.
+    if (pending == null) {
+      try {
+        final launchDetails = await FlutterLocalNotificationsPlugin()
+            .getNotificationAppLaunchDetails();
+        // Only attempt recovery if a notification actually launched the app
+        if (launchDetails?.didNotificationLaunchApp == true) {
+          final actionId = launchDetails?.notificationResponse?.actionId;
+          final payload = launchDetails?.notificationResponse?.payload;
+          String? launchCallId;
+          if (payload != null && payload.startsWith('call:')) {
+            launchCallId = payload.replaceFirst('call:', '').trim();
+          }
+          final rawLast =
+              await CallDiagnosticsStore.loadLastIncomingInviteRaw();
+          if (rawLast != null) {
+            final decoded = jsonDecode(rawLast);
+            if (decoded is Map<String, dynamic>) {
+              // Check timestamp — only recover invites less than 60 seconds old
+              final tsStr = decoded['ts'] as String?;
+              final inviteTime = tsStr != null
+                  ? DateTime.tryParse(tsStr)
+                  : null;
+              final isRecent =
+                  inviteTime != null &&
+                  DateTime.now().difference(inviteTime).inSeconds < 60;
+              if (isRecent) {
+                final data = decoded['data'];
+                if (data is Map<String, dynamic>) {
+                  final sourceData = data['data'];
+                  if (sourceData is Map<String, dynamic>) {
+                    final lastCallId =
+                        (sourceData['call_id'] ?? sourceData['callId'] ?? '')
+                            .toString();
+                    if (lastCallId.isNotEmpty &&
+                        (launchCallId == null || launchCallId == lastCallId)) {
+                      pending = Map<String, dynamic>.from(
+                        sourceData.cast<dynamic, dynamic>(),
+                      );
+                      if (actionId == null ||
+                          actionId ==
+                              BilingualNotificationService.acceptActionId) {
+                        pending['auto_accept'] = true;
+                      }
+                      debugLog(
+                        'CALL_DIAG',
+                        'Recovered pending from last invite callId=$lastCallId (age=${DateTime.now().difference(inviteTime).inSeconds}s)',
+                      );
+                    }
+                  }
+                }
+              } else {
+                debugLog(
+                  'CALL_DIAG',
+                  'Skipped stale last invite (ts=$tsStr, age=${inviteTime != null ? DateTime.now().difference(inviteTime).inSeconds : "unknown"}s)',
+                );
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugLog('CALL_DIAG', 'Last invite recovery error: $e');
+      }
+    }
+
+    if (pending != null && mounted) {
+      debugPrint(
+        '[MainScreen] Restoring pending call from notification: '
+        '${pending['call_id'] ?? pending['callId']}',
+      );
+      // Clear the stored invite now that it's been consumed
+      CallDiagnosticsStore.clearLastIncomingInvite();
+      final rawAutoAccept =
+          pending['auto_accept'] ?? pending['autoAccept'] ?? false;
+      final shouldAutoAccept =
+          rawAutoAccept == true ||
+          rawAutoAccept.toString().toLowerCase() == 'true' ||
+          rawAutoAccept.toString() == '1';
+
+      if (shouldAutoAccept) {
+        final callId = (pending['call_id'] ?? pending['callId'] ?? '')
+            .toString();
+        final channelName =
+            (pending['channel_name'] ?? pending['channelName'] ?? '')
+                .toString();
+        final callerId =
+            (pending['from'] ??
+                    pending['caller_id'] ??
+                    pending['callerId'] ??
+                    '')
+                .toString();
+        final callerName =
+            (pending['caller_name'] ?? pending['fromName'] ?? 'Unknown')
+                .toString();
+        final callerAvatar = pending['caller_avatar']?.toString();
+        final rawAudioOnly =
+            pending['is_audio_only'] ?? pending['isAudioOnly'] ?? true;
+        final isAudioOnly =
+            rawAudioOnly == true ||
+            rawAudioOnly.toString().toLowerCase() == 'true' ||
+            rawAudioOnly.toString() == '1';
+
+        if (callId.isNotEmpty &&
+            channelName.isNotEmpty &&
+            callerId.isNotEmpty) {
+          debugLog('CALL_DIAG', 'Auto-accepting restored callId=$callId');
+          final incoming = AgoraIncomingCall(
+            callId: callId,
+            channelName: channelName,
+            callerId: callerId,
+            callerName: callerName,
+            callerAvatar: callerAvatar,
+            isAudioOnly: isAudioOnly,
+            autoAccept: true,
+          );
+          final result = await agora.acceptCall(incoming);
+          if (result.success && result.channelName != null && mounted) {
+            debugLog('CALL_DIAG', 'Auto-accept success callId=$callId');
+            Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => AgoraCallScreen(
+                  channelName: result.channelName!,
+                  remoteUserId: incoming.callerId,
+                  remoteUserName: incoming.callerName,
+                  remoteUserAvatar: incoming.callerAvatar,
+                  isAudioOnly: incoming.isAudioOnly,
+                  isOutgoing: false,
+                ),
+              ),
+            );
+            return;
+          }
+          debugLog(
+            'CALL_DIAG',
+            'Auto-accept failed callId=$callId error=${result.error}',
+          );
+        }
+      }
+
+      debugLog(
+        'CALL_DIAG',
+        'Pushing restored incoming dialog callId=${pending['call_id'] ?? pending['callId']}',
+      );
+      agora.pushIncomingCallFromFcm(pending);
+    } else {
+      debugLog('CALL_DIAG', 'No pending call to restore');
+    }
+  }
+
+  void _attachIncomingCallListener() {
+    if (_incomingCallSubscription != null) return;
+    _incomingCallSubscription = AgoraCallService().incomingCallStream.listen(
+      (incomingCall) {
+        if (!mounted || _isIncomingCallDialogOpen) return;
+        _isIncomingCallDialogOpen = true;
+        showAgoraIncomingCallDialog(
+          context,
+          incomingCall: incomingCall,
+        ).whenComplete(() {
+          _isIncomingCallDialogOpen = false;
+        });
+      },
+      onError: (e, st) {
+        debugPrint('[MainScreen] incomingCallStream error: $e');
+      },
+    );
   }
 
   Future<void> _showWhatsNewIfNeeded() async {
@@ -120,10 +449,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     debugPrint('[MainScreen] dispose() called');
-    if (_agoraIncomingCallSubscription != null) {
-      debugPrint('[MainScreen] Cancelling incoming call subscription');
-      _agoraIncomingCallSubscription?.cancel();
-    }
+    _incomingCallSubscription?.cancel();
     _connectivitySubscription?.cancel();
     _activityHeartbeatTimer?.cancel();
     super.dispose();
@@ -207,7 +533,7 @@ class _MainScreenState extends State<MainScreen> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
-        setState(() => _isLoadingRole = false);
+        setState(() {});
         return;
       }
 
@@ -220,7 +546,7 @@ class _MainScreenState extends State<MainScreen> {
 
       if (!isOnline) {
         debugPrint('📴 Offline mode - using cached role');
-        setState(() => _isLoadingRole = false);
+        setState(() {});
         return;
       }
 
@@ -238,19 +564,20 @@ class _MainScreenState extends State<MainScreen> {
               role == 'coordinator' ||
               role == 'field_coordinator' ||
               role == 'state_coordinator';
-          _isLoadingRole = false;
         });
         // Cache role for offline use
         await _cacheRole(role);
         debugPrint('✅ User role: $role, isCoordinator: $_isCoordinator');
-      } else {
-        setState(() => _isLoadingRole = false);
+      } else if (mounted) {
+        setState(() {});
       }
     } catch (e) {
       debugPrint('❌ Error checking user role: $e');
       // Fall back to cached role if network fails
       await _loadCachedRole();
-      setState(() => _isLoadingRole = false);
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -284,7 +611,83 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  /// Check for pending receipt confirmations and show blocking modal if needed
+  /// This runs on MainScreen init to ensure modal appears immediately on app startup
+  Future<void> _checkAndShowPendingConfirmations() async {
+    try {
+      await Future.delayed(
+        const Duration(milliseconds: 500),
+      ); // Allow UI to settle
+
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null || !mounted) return;
+
+      // Check connectivity
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOnline = !connectivity.contains(ConnectivityResult.none);
+      if (!isOnline) return; // Skip if offline
+
+      final userId = user.id;
+
+      // Load advances and check for pending confirmations
+      final advancesResponse = await Supabase.instance.client
+          .from('down_payment_requests')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      int pendingAdvancesCount = 0;
+      {
+        pendingAdvancesCount = advancesResponse.where((a) {
+          final s = (a['status'] as String? ?? '').toLowerCase();
+          final meta = (a['metadata'] as Map?)?.cast<String, dynamic>() ?? {};
+          final confirmed = meta['receipt_confirmation']?['confirmed'] == true;
+          return (s == 'partially_paid' || s == 'fully_paid' || s == 'paid') &&
+              !confirmed;
+        }).length;
+      }
+
+      // Load costs and check for pending confirmations
+      final costsResponse = await Supabase.instance.client
+          .from('operational_cost_submissions')
+          .select()
+          .eq('user_id', userId)
+          .eq('fund_receipt_confirmed', false)
+          .order('created_at', ascending: false);
+
+      int pendingCostsCount = 0;
+      {
+        pendingCostsCount = costsResponse.where((cost) {
+          final declinedAt = cost['receipt_declined_at'];
+          return declinedAt == null; // Only count if not declined
+        }).length;
+      }
+
+      final totalPending = pendingAdvancesCount + pendingCostsCount;
+
+      debugPrint(
+        '[MainScreen] Pending confirmations check: $pendingAdvancesCount advances, $pendingCostsCount costs (total: $totalPending)',
+      );
+
+      // If there are pending confirmations, navigate to Wallet screen
+      // The Wallet screen's initState will handle showing the modal
+      if (totalPending > 0 && mounted) {
+        debugPrint(
+          '[MainScreen] ⚠️ Found $totalPending pending confirmations - navigating to Wallet',
+        );
+        setState(() {
+          _currentIndex = 3; // Switch to Wallet tab (index 3)
+        });
+        // Note: WalletScreen will show blocking modal in its initState
+      }
+    } catch (e) {
+      debugPrint('[MainScreen] Error checking pending confirmations: $e');
+    }
+  }
+
   Future<void> _initializeWebRTC() async {
+    if (_servicesInitialized || _initializingServices) return;
+    _initializingServices = true;
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
@@ -351,65 +754,16 @@ class _MainScreenState extends State<MainScreen> {
 
       debugPrint('✅ WebRTC service initialized for user: $userName');
 
-      // Initialize Agora call service for native video/audio calls
-      try {
-        await AgoraCallService().initialize(
-          userId: user.id,
-          userName: userName,
-          userAvatar: userAvatar,
-          userEmail: user.email,
-        );
-        debugPrint('✅ Agora call service initialized for user: $userName');
-
-        // Listen for Agora incoming calls
-        debugPrint('[MainScreen] Setting up incoming call subscription...');
-        debugPrint(
-          '[MainScreen] Stream instance: ${AgoraCallService().incomingCallStream.hashCode}',
-        );
-        _agoraIncomingCallSubscription = AgoraCallService().incomingCallStream.listen(
-          (incomingCall) {
-            debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
-            debugPrint('[MainScreen] Incoming call event received!');
-            debugPrint('[MainScreen] From: ${incomingCall.callerName}');
-            debugPrint('[MainScreen] CallId: ${incomingCall.callId}');
-            debugPrint(
-              '[MainScreen] mounted: $mounted, context.mounted: ${context.mounted}',
-            );
-            debugPrint('[MainScreen] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
-            if (mounted && context.mounted) {
-              try {
-                debugPrint('[MainScreen] About to show dialog...');
-                showAgoraIncomingCallDialog(
-                  context,
-                  incomingCall: incomingCall,
-                );
-                debugPrint('[MainScreen] Dialog show called successfully');
-              } catch (e, st) {
-                debugPrint(
-                  '[MainScreen] ERROR showing incoming call dialog: $e',
-                );
-                debugPrint('[MainScreen] StackTrace: $st');
-              }
-            } else {
-              debugPrint(
-                '[MainScreen] Cannot show dialog - not mounted (mounted=$mounted, context.mounted=${context.mounted})',
-              );
-            }
-          },
-          onError: (e, st) {
-            debugPrint('[MainScreen] Incoming call stream ERROR: $e');
-            debugPrint('[MainScreen] StackTrace: $st');
-          },
-          onDone: () {
-            debugPrint('[MainScreen] Incoming call stream DONE (closed)');
-          },
-        );
-        debugPrint(
-          '[MainScreen] Subscription created: ${_agoraIncomingCallSubscription.hashCode}',
-        );
-      } catch (e) {
-        debugPrint('⚠️ Agora init failed (calls may use WebRTC): $e');
-      }
+      // Initialize Agora call service here because /main -> MainScreen is the
+      // real app entry on notification launches.
+      await AgoraCallService().initialize(
+        userId: user.id,
+        userName: userName,
+        userAvatar: userAvatar,
+        userEmail: user.email,
+      );
+      _attachIncomingCallListener();
+      await _checkForActiveCall();
 
       // Initialize Presence service for online status tracking
       await PresenceService().initialize(
@@ -425,13 +779,131 @@ class _MainScreenState extends State<MainScreen> {
       _servicesInitialized = true;
     } catch (e) {
       debugPrint('❌ Error initializing WebRTC: $e');
+    } finally {
+      _initializingServices = false;
     }
   }
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+  /// Check for stored incoming call (from notification tap when app was killed)
+  Future<void> _checkForStoredIncomingCall() async {
+    if (!mounted) return;
+
+    debugPrint('[MainScreen] Checking for stored incoming call...');
+
+    try {
+      final router = BackgroundCallRouter();
+      await router.initialize();
+
+      final storedCall = await router.getStoredCall();
+      if (storedCall != null) {
+        debugPrint(
+          '[MainScreen] Found stored call: ${storedCall.callId} from ${storedCall.callerName}',
+        );
+
+        // Clear the stored call
+        await router.clearStoredCall();
+
+        // Navigate to call screen with the stored call data
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AgoraCallScreen(
+                  channelName: storedCall.channelName,
+                  remoteUserId: storedCall.callerId,
+                  remoteUserName: storedCall.callerName,
+                  remoteUserAvatar: storedCall.callerAvatar,
+                  isAudioOnly: storedCall.isAudioOnly,
+                  isOutgoing: false,
+                ),
+              ),
+            );
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[MainScreen] Error checking stored call: $e');
+    }
+  }
+
+  Future<void> _checkForStoredMessages() async {
+    if (!mounted) return;
+
+    debugPrint('[MainScreen] Checking for stored unread messages...');
+
+    try {
+      // Small delay to let UI fully initialize
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final messageRouter = BackgroundMessageRouter();
+      await messageRouter.initialize();
+
+      final storedMessages = await messageRouter.getStoredMessages();
+
+      if (storedMessages.isNotEmpty) {
+        debugPrint(
+          '[MainScreen] Found ${storedMessages.length} stored messages',
+        );
+
+        if (mounted) {
+          for (final message in storedMessages) {
+            _showMessagePopUp(message);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[MainScreen] Error checking stored messages: $e');
+    }
+  }
+
+  void _showMessagePopUp(Map<String, dynamic> message) {
+    if (!mounted) return;
+
+    final senderName = message['senderName'] as String? ?? 'Unknown';
+    final messagePreview = message['messagePreview'] as String? ?? '';
+    final chatId = message['chatId'] as String? ?? '';
+    final senderId = message['senderId'] as String? ?? '';
+    // messageId available in message['messageId'] if needed for tracking
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'New Message from $senderName',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(messagePreview),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('Dismiss'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Navigate to chat screen
+              _navigateToChatScreen(chatId, senderId, senderName);
+            },
+            child: const Text('Open Chat'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToChatScreen(
+    String chatId,
+    String senderId,
+    String senderName,
+  ) {
+    // Navigate to chat list screen
+    // Note: Deep-linking to specific chat not supported in ChatListScreen constructor
+    // User can select the chat from the list
+    _navigateToScreen(const ChatListScreen());
   }
 
   void _navigateToScreen(Widget screen) {
@@ -475,6 +947,11 @@ class _MainScreenState extends State<MainScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: CustomDrawerMenu(
+          currentUser: Supabase.instance.client.auth.currentUser,
+          onClose: () => _scaffoldKey.currentState?.closeDrawer(),
+        ),
         body: SafeArea(
           top: false, // Allow content to extend behind status bar
           bottom: false, // Allow bottom navigation to handle its own safe area
@@ -490,24 +967,42 @@ class _MainScreenState extends State<MainScreen> {
                 right: 0,
                 child: const OfflineModeBanner(),
               ),
+              // Notification permission banner
+              Positioned(
+                top: topPadding + 112, // Below offline banner
+                left: 0,
+                right: 0,
+                child: const NotificationPermissionBanner(),
+              ),
               // Movable Online/Offline toggle moved to MainLayout
             ],
           ),
         ),
         bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex > 4 ? 4 : _currentIndex,
-          onTap: _onItemTapped,
+          currentIndex: _currentIndex,
           type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFF1D3461),
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF007AFF),
           unselectedItemColor: Colors.grey,
-          selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-          unselectedLabelStyle: const TextStyle(fontSize: 10),
+          onTap: (index) => setState(() => _currentIndex = index),
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.map_outlined), activeIcon: Icon(Icons.map), label: 'Field Ops'),
-            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), activeIcon: Icon(Icons.chat_bubble), label: 'Chat'),
-            BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), activeIcon: Icon(Icons.account_balance_wallet), label: 'Wallet'),
-            BottomNavigationBarItem(icon: Icon(Icons.grid_view_outlined), activeIcon: Icon(Icons.grid_view), label: 'More'),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.location_on),
+              label: 'Sites',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble),
+              label: 'Communications',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.wallet_membership),
+              label: 'Wallet',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.more_horiz),
+              label: 'More',
+            ),
           ],
         ),
       ),
@@ -521,7 +1016,7 @@ class _MainScreenState extends State<MainScreen> {
       case 1:
         return FieldOperationsEnhancedScreen(key: const ValueKey('sites'));
       case 2:
-        return const ChatListScreen(key: ValueKey('chat'));
+        return const CommunicationsScreen(key: ValueKey('communications'));
       case 3:
         return const WalletScreen(key: ValueKey('wallet'));
       case 4:
@@ -531,9 +1026,20 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  bool _canSeeAdminFeatures() => _userRole == 'super_admin' || _userRole == 'admin' || _userRole == 'fom';
-  bool _canSeeReports() => _canSeeAdminFeatures() || _userRole == 'coordinator' || _userRole == 'field_coordinator' || _userRole == 'state_coordinator' || _userRole == 'supervisor';
-  bool _canSeeFinance() => _canSeeAdminFeatures() || _userRole == 'coordinator' || _userRole == 'field_coordinator' || _userRole == 'state_coordinator' || _userRole == 'supervisor';
+  bool _canSeeAdminFeatures() =>
+      _userRole == 'super_admin' || _userRole == 'admin' || _userRole == 'fom';
+  bool _canSeeReports() =>
+      _canSeeAdminFeatures() ||
+      _userRole == 'coordinator' ||
+      _userRole == 'field_coordinator' ||
+      _userRole == 'state_coordinator' ||
+      _userRole == 'supervisor';
+  bool _canSeeFinance() =>
+      _canSeeAdminFeatures() ||
+      _userRole == 'coordinator' ||
+      _userRole == 'field_coordinator' ||
+      _userRole == 'state_coordinator' ||
+      _userRole == 'supervisor';
 
   Widget _buildMoreScreen() {
     return _MoreScreenContent(
@@ -571,82 +1077,236 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
   @override
   Widget build(BuildContext context) {
     final fieldOps = <_MoreItem>[
-      _MoreItem(Icons.fact_check, 'Monitoring Form', () => widget.onNavigate(const ComprehensiveMonitoringFormScreen())),
-      _MoreItem(Icons.safety_check, 'Safety Hub', () => widget.onNavigate(const SafetyHubScreen())),
-      _MoreItem(Icons.warning_amber, 'Incidents', () => widget.onNavigate(const IncidentReportScreen())),
-      _MoreItem(Icons.construction, 'Equipment', () => widget.onNavigate(const EquipmentScreen())),
-      _MoreItem(Icons.verified_user, 'Verification', () => widget.onNavigate(const SiteVerificationScreen())),
-      _MoreItem(Icons.folder_copy, 'Documents', () => widget.onNavigate(const DocumentsScreen())),
-      _MoreItem(Icons.phone, 'Helpline', () => widget.onNavigate(const HelplineScreen())),
-      _MoreItem(Icons.description, 'MMP Management', () => widget.onNavigate(const MmpManagementScreen())),
-      _MoreItem(Icons.assignment, 'Monitoring Plan', () => widget.onNavigate(const MonitoringPlanScreen())),
-      _MoreItem(Icons.lock_clock, 'Cycle Close', () => widget.onNavigate(const MmpCycleCloseScreen())),
-      _MoreItem(Icons.track_changes, 'Tracker Plan', () => widget.onNavigate(const TrackerPreparationPlanScreen())),
-      _MoreItem(Icons.folder_special, 'Projects', () => widget.onNavigate(const ProjectsScreen())),
+      _MoreItem(
+        Icons.fact_check,
+        'Monitoring Form',
+        () => widget.onNavigate(const ComprehensiveMonitoringFormScreen()),
+      ),
+      _MoreItem(
+        Icons.safety_check,
+        'Safety Hub',
+        () => widget.onNavigate(const SafetyHubScreen()),
+      ),
+      _MoreItem(
+        Icons.warning_amber,
+        'Incidents',
+        () => widget.onNavigate(const IncidentReportScreen()),
+      ),
+      _MoreItem(
+        Icons.construction,
+        'Equipment',
+        () => widget.onNavigate(const EquipmentScreen()),
+      ),
+      _MoreItem(
+        Icons.verified_user,
+        'Verification',
+        () => widget.onNavigate(const SiteVerificationScreen()),
+      ),
+      _MoreItem(
+        Icons.folder_copy,
+        'Documents',
+        () => widget.onNavigate(const DocumentsScreen()),
+      ),
+      _MoreItem(
+        Icons.phone,
+        'Helpline',
+        () => widget.onNavigate(HelplineScreen()),
+      ),
+      _MoreItem(
+        Icons.description,
+        'MMP Management',
+        () => widget.onNavigate(const MmpManagementScreen()),
+      ),
+      _MoreItem(
+        Icons.assignment,
+        'Monitoring Plan',
+        () => widget.onNavigate(const MonitoringPlanScreen()),
+      ),
+      _MoreItem(
+        Icons.lock_clock,
+        'Cycle Close',
+        () => widget.onNavigate(const MmpCycleCloseScreen()),
+      ),
+      _MoreItem(
+        Icons.track_changes,
+        'Tracker Plan',
+        () => widget.onNavigate(const TrackerPreparationPlanScreen()),
+      ),
     ];
 
     final financeItems = <_MoreItem>[
-      _MoreItem(Icons.attach_money, 'Cost Submission', () => widget.onNavigate(const CostSubmissionScreen())),
+      _MoreItem(
+        Icons.attach_money,
+        'Cost Submission',
+        () => widget.onNavigate(const CostSubmissionScreen()),
+      ),
       if (widget.canSeeFinance) ...[
-        _MoreItem(Icons.payment, 'Down Payment', () => widget.onNavigate(const DownPaymentApprovalScreen())),
-        _MoreItem(Icons.approval, 'Approvals', () => widget.onNavigate(const ApprovalDashboardScreen())),
-        _MoreItem(Icons.receipt_long, 'Retainers', () => widget.onNavigate(const RetainerManagementScreen())),
-        _MoreItem(Icons.currency_exchange, 'Exchange Rates', () => widget.onNavigate(const ExchangeRatesScreen())),
-        _MoreItem(Icons.account_balance, 'Budget', () => widget.onNavigate(const BudgetScreen())),
-        _MoreItem(Icons.draw, 'Signatures', () => widget.onNavigate(const DigitalSignaturesScreen())),
-        _MoreItem(Icons.document_scanner, 'Scanner', () => widget.onNavigate(const TransactionScannerScreen())),
+        _MoreItem(
+          Icons.payment,
+          'Down Payment',
+          () => widget.onNavigate(const DownPaymentApprovalScreen()),
+        ),
+        _MoreItem(
+          Icons.approval,
+          'Approvals',
+          () => widget.onNavigate(const ApprovalDashboardScreen()),
+        ),
+        _MoreItem(
+          Icons.receipt_long,
+          'Retainers',
+          () => widget.onNavigate(const RetainerManagementScreen()),
+        ),
+        _MoreItem(
+          Icons.currency_exchange,
+          'Exchange Rates',
+          () => widget.onNavigate(const ExchangeRatesScreen()),
+        ),
+        _MoreItem(
+          Icons.account_balance,
+          'Budget',
+          () => widget.onNavigate(const BudgetScreen()),
+        ),
+        _MoreItem(
+          Icons.folder_special,
+          'Projects',
+          () => widget.onNavigate(const ProjectsScreen()),
+        ),
+        _MoreItem(
+          Icons.draw,
+          'Signatures',
+          () => widget.onNavigate(const DigitalSignaturesScreen()),
+        ),
+        _MoreItem(
+          Icons.document_scanner,
+          'Scanner',
+          () => widget.onNavigate(const TransactionScannerScreen()),
+        ),
       ],
     ];
 
     final reportsItems = <_MoreItem>[
       if (widget.canSeeReports) ...[
-        _MoreItem(Icons.bar_chart, 'Reports', () => widget.onNavigate(const ReportsScreen())),
-        _MoreItem(Icons.request_quote, 'Advance Reports', () => widget.onNavigate(const AdvanceRequestsReportScreen())),
-        _MoreItem(Icons.download, 'Data Export', () => widget.onNavigate(const DataExportScreen())),
-        _MoreItem(Icons.archive, 'Archive', () => widget.onNavigate(const ArchiveScreen())),
-        _MoreItem(Icons.quiz, 'Questionnaire Analytics', () => widget.onNavigate(const QuestionnaireAnalyticsScreen())),
+        _MoreItem(
+          Icons.bar_chart,
+          'Reports',
+          () => widget.onNavigate(const ReportsScreen()),
+        ),
+        _MoreItem(
+          Icons.request_quote,
+          'Advance Reports',
+          () => widget.onNavigate(const AdvanceRequestsReportScreen()),
+        ),
+        _MoreItem(
+          Icons.download,
+          'Data Export',
+          () => widget.onNavigate(const DataExportScreen()),
+        ),
+        _MoreItem(
+          Icons.archive,
+          'Archive',
+          () => widget.onNavigate(const ArchiveScreen()),
+        ),
+        _MoreItem(
+          Icons.quiz,
+          'Questionnaire Analytics',
+          () => widget.onNavigate(const QuestionnaireAnalyticsScreen()),
+        ),
       ],
     ];
 
     final adminItems = <_MoreItem>[
       if (widget.canSeeAdminFeatures) ...[
-        _MoreItem(Icons.hub, 'Hub Management', () => widget.onNavigate(const HubManagementScreen())),
-        _MoreItem(Icons.people, 'Staff Directory', () => widget.onNavigate(const StaffDirectoryScreen())),
-        _MoreItem(Icons.account_tree, 'Reconciliation', () => widget.onNavigate(const ReconciliationDashboardScreen())),
-        _MoreItem(Icons.manage_accounts, 'Coordinator', () => widget.onNavigate(const CoordinatorDashboardScreen())),
-        _MoreItem(Icons.search, 'Global Search', () => widget.onNavigate(const GlobalSearchScreen())),
-        _MoreItem(Icons.campaign, 'Broadcast Center', () => widget.onNavigate(const BroadcastCenterScreen())),
-        _MoreItem(Icons.shield, 'Permissions', () => widget.onNavigate(const PermissionsManagementScreen())),
-        _MoreItem(Icons.visibility, 'Role Perspective', () => widget.onNavigate(const RolePerspectiveScreen())),
+        _MoreItem(
+          Icons.hub,
+          'Hub Management',
+          () => widget.onNavigate(const HubManagementScreen()),
+        ),
+        _MoreItem(
+          Icons.people,
+          'Staff Directory',
+          () => widget.onNavigate(const StaffDirectoryScreen()),
+        ),
+        _MoreItem(
+          Icons.account_tree,
+          'Reconciliation',
+          () => widget.onNavigate(const ReconciliationDashboardScreen()),
+        ),
+        _MoreItem(
+          Icons.manage_accounts,
+          'Coordinator',
+          () => widget.onNavigate(const CoordinatorDashboardScreen()),
+        ),
+        _MoreItem(
+          Icons.search,
+          'Global Search',
+          () => widget.onNavigate(const GlobalSearchScreen()),
+        ),
+        _MoreItem(
+          Icons.campaign,
+          'Broadcast Center',
+          () => widget.onNavigate(const BroadcastCenterScreen()),
+        ),
+        _MoreItem(
+          Icons.shield,
+          'Permissions',
+          () => widget.onNavigate(const PermissionsManagementScreen()),
+        ),
+        _MoreItem(
+          Icons.visibility,
+          'Role Perspective',
+          () => widget.onNavigate(const RolePerspectiveScreen()),
+        ),
       ],
     ];
 
     final accountItems = <_MoreItem>[
-      _MoreItem(Icons.person, 'Profile', () => widget.onNavigate(const ProfileScreen())),
-      _MoreItem(Icons.settings, 'Settings', () => widget.onNavigate(const SettingsScreen())),
-      _MoreItem(Icons.help_outline, 'Help & Support', () => widget.onNavigate(const HelpSupportScreen())),
+      _MoreItem(
+        Icons.person,
+        'Profile',
+        () => widget.onNavigate(const ProfileScreen()),
+      ),
+      _MoreItem(
+        Icons.settings,
+        'Settings',
+        () => widget.onNavigate(const SettingsScreen()),
+      ),
+      _MoreItem(
+        Icons.help_outline,
+        'Help & Support',
+        () => widget.onNavigate(const HelpSupportScreen()),
+      ),
     ];
 
     final categories = <_MoreCategory>[
       _MoreCategory('Field Operations', Icons.map, fieldOps),
       _MoreCategory('Finance', Icons.account_balance_wallet, financeItems),
-      if (reportsItems.isNotEmpty) _MoreCategory('Reports & Data', Icons.bar_chart, reportsItems),
-      if (adminItems.isNotEmpty) _MoreCategory('Administration', Icons.admin_panel_settings, adminItems),
+      if (reportsItems.isNotEmpty)
+        _MoreCategory('Reports & Data', Icons.bar_chart, reportsItems),
+      if (adminItems.isNotEmpty)
+        _MoreCategory('Administration', Icons.admin_panel_settings, adminItems),
       _MoreCategory('Account', Icons.person_outline, accountItems),
     ];
 
     final query = _search.toLowerCase().trim();
     final filteredCategories = query.isEmpty
         ? categories
-        : categories.map((c) {
-            final filtered = c.items.where((i) => i.label.toLowerCase().contains(query)).toList();
-            return _MoreCategory(c.title, c.icon, filtered);
-          }).where((c) => c.items.isNotEmpty).toList();
+        : categories
+              .map((c) {
+                final filtered = c.items
+                    .where((i) => i.label.toLowerCase().contains(query))
+                    .toList();
+                return _MoreCategory(c.title, c.icon, filtered);
+              })
+              .where((c) => c.items.isNotEmpty)
+              .toList();
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F2041),
-        title: const Text('All Features', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'All Features',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
       body: Column(
         children: [
@@ -657,7 +1317,9 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
               decoration: InputDecoration(
                 hintText: 'Search features…',
                 prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 filled: true,
                 fillColor: Colors.grey.shade50,
@@ -667,62 +1329,123 @@ class _MoreScreenContentState extends State<_MoreScreenContent> {
           ),
           Expanded(
             child: filteredCategories.isEmpty
-                ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Icon(Icons.search_off, size: 48, color: Colors.grey),
-                    const SizedBox(height: 8),
-                    Text('No features match "$_search"', style: const TextStyle(color: Colors.grey)),
-                  ]))
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No features match "$_search"',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  )
                 : ListView.builder(
                     padding: const EdgeInsets.only(bottom: 24),
                     itemCount: filteredCategories.length,
                     itemBuilder: (ctx, ci) {
                       final cat = filteredCategories[ci];
-                      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          child: Row(children: [
-                            Icon(cat.icon, size: 16, color: const Color(0xFF1D3461)),
-                            const SizedBox(width: 6),
-                            Text(cat.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1D3461), letterSpacing: 0.5)),
-                          ]),
-                        ),
-                        GridView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                            childAspectRatio: 0.9,
-                          ),
-                          itemCount: cat.items.length,
-                          itemBuilder: (ctx, i) {
-                            final item = cat.items[i];
-                            return InkWell(
-                              onTap: item.onTap,
-                              borderRadius: BorderRadius.circular(10),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: Colors.grey.shade200),
-                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 3, offset: const Offset(0, 1))],
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  cat.icon,
+                                  size: 16,
+                                  color: const Color(0xFF1D3461),
                                 ),
-                                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                  Icon(item.icon, size: 24, color: const Color(0xFF1D3461)),
-                                  const SizedBox(height: 5),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    child: Text(item.label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                                const SizedBox(width: 6),
+                                Text(
+                                  cat.title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Color(0xFF1D3461),
+                                    letterSpacing: 0.5,
                                   ),
-                                ]),
-                              ),
-                            );
-                          },
-                        ),
-                        Divider(color: Colors.grey.shade100, height: 1, indent: 12, endIndent: 12),
-                      ]);
+                                ),
+                              ],
+                            ),
+                          ),
+                          GridView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 4,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                  childAspectRatio: 0.9,
+                                ),
+                            itemCount: cat.items.length,
+                            itemBuilder: (ctx, i) {
+                              final item = cat.items[i];
+                              return InkWell(
+                                onTap: item.onTap,
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.grey.shade200,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.04),
+                                        blurRadius: 3,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        item.icon,
+                                        size: 24,
+                                        color: const Color(0xFF1D3461),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                        ),
+                                        child: Text(
+                                          item.label,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          Divider(
+                            color: Colors.grey.shade100,
+                            height: 1,
+                            indent: 12,
+                            endIndent: 12,
+                          ),
+                        ],
+                      );
                     },
                   ),
           ),

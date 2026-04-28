@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/responsive_text_helper.dart';
+import 'reusable_app_bar.dart';
 
 /// Base responsive screen for consistent UI/UX across all screens
 class ResponsiveBaseScreen extends StatelessWidget {
@@ -52,10 +53,9 @@ class ResponsiveBaseScreen extends StatelessWidget {
       appBar:
           customAppBar ??
           (hasAppBar
-              ? AppBar(
-                  title: Text(title),
+              ? ReusableAppBar(
+                  title: title,
                   actions: appBarActions,
-                  elevation: 0,
                   centerTitle: false,
                 )
               : null),
@@ -101,7 +101,10 @@ class ResponsiveScaffold extends StatelessWidget {
       backgroundColor: backgroundColor ?? Colors.white,
       extendBodyBehindAppBar: extendBodyBehindAppBar,
       appBar: title != null
-          ? AppBar(title: Text(title!), actions: actions, elevation: 0)
+          ? ReusableAppBar(
+              title: title!,
+              actions: actions,
+            )
           : null,
       body: SafeArea(
         left: safeAreaLeft,

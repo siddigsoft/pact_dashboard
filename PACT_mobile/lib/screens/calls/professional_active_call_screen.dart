@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/call_state.dart';
 
@@ -67,26 +68,31 @@ class _ProfessionalActiveCallScreenState
   }
 
   void _toggleMute() {
+    HapticFeedback.lightImpact();
     setState(() => _isMuted = !_isMuted);
     // Call service to toggle mute
   }
 
   void _toggleVideo() {
+    HapticFeedback.lightImpact();
     setState(() => _isVideoEnabled = !_isVideoEnabled);
     // Call service to toggle video
   }
 
   void _toggleSpeaker() {
+    HapticFeedback.lightImpact();
     setState(() => _isSpeakerOn = !_isSpeakerOn);
     // Call service to toggle speaker
   }
 
   void _toggleHold() {
+    HapticFeedback.mediumImpact();
     setState(() => _isOnHold = !_isOnHold);
     // Call service to toggle hold
   }
 
   void _addParticipant() {
+    HapticFeedback.lightImpact();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -127,6 +133,7 @@ class _ProfessionalActiveCallScreenState
           ),
           ElevatedButton(
             onPressed: () {
+              HapticFeedback.heavyImpact();
               Navigator.pop(context);
               Navigator.pop(context);
               // Log call to history

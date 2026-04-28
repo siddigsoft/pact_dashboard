@@ -6,6 +6,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 
+/// PACT Command Strip — the unified app header.
+///
+/// Design language: clean white surface with a 3-px orange gradient
+/// underline as the brand anchor. Deep-navy typography. Pill-shaped
+/// leading and action buttons with a soft navy tint.
 class ModernAppHeader extends StatelessWidget {
   final String title;
   final IconData? leadingIcon;
@@ -28,182 +33,157 @@ class ModernAppHeader extends StatelessWidget {
     this.textColor,
   });
 
+  // ── colours ────────────────────────────────────────────────────────────
+  static const _navy = Color(0xFF0C1A2E);
+  static const _navyTint = Color(0x120C1A2E); // 7 % opacity navy pill bg
+
+  bool get _hasLeading => showBackButton || leadingIcon != null;
+  bool get _hasActions => actions != null && actions!.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    
-    // Responsive font size based on screen width
-    final titleFontSize = screenWidth < 360 ? 18.0 : 
-                        screenWidth < 480 ? 20.0 : 22.0;
-    
-    // Responsive padding based on screen size
-    final horizontalPadding = screenWidth < 360 ? 12.0 : 
-                             screenWidth < 480 ? 16.0 : 20.0;
-    final verticalPadding = screenHeight < 600 ? 12.0 : 16.0;
+    final bg = backgroundColor ?? Colors.white;
+    final fg = textColor ?? _navy;
+    final isLight = ThemeData.estimateBrightnessForColor(bg) == Brightness.light;
+    final pillBg = isLight ? _navyTint : Colors.white.withOpacity(0.12);
 
-    final titleWidget = Text(
-      title,
-      textAlign: centerTitle ? TextAlign.center : TextAlign.left,
-      style: GoogleFonts.poppins(
-        fontSize: titleFontSize,
-        fontWeight: FontWeight.w600,
-        color: textColor ?? AppColors.textDark,
-        letterSpacing: 0.2,
-        height: 1.2,
-      ),
-      overflow: TextOverflow.ellipsis,
-      maxLines: 1,
-    ).animate().fadeIn(duration: 400.ms).slideY(
-          begin: 0.2,
-          end: 0,
-          duration: 400.ms,
-          curve: Curves.easeOutQuad,
-        );
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: verticalPadding),
-      decoration: BoxDecoration(
-        color: backgroundColor ?? Colors.white,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor.withOpacity(0.1),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final availableWidth = constraints.maxWidth;
-            final hasLeading = showBackButton || leadingIcon != null;
-            final hasActions = actions != null && actions!.isNotEmpty;
-            
-            // Calculate flexible layout based on available space
-            if (availableWidth < 320) {
-              // Very small screens - stack vertically or minimize
-              return Column(
-                mainAxisSize: MainAxisSize.min,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ── main bar ───────────────────────────────────────────────────
+        Container(
+          width: double.infinity,
+          color: bg,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (hasLeading) _buildLeadingButton(context),
-                  const SizedBox(height: 8),
-                  titleWidget,
-                  if (hasActions) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: actions!.map((action) {
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: action,
-                        );
-                      }).toList(),
+                  // Leading — back / menu button
+                  if (_hasLeading) ...[
+                    _PillButton(
+                      icon: leadingIcon ?? Icons.arrow_back_ios_rounded,
+                      color: fg,
+                      background: pillBg,
+                      size: 20,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        if (onLeadingIconPressed != null) {
+                          onLeadingIconPressed!();
+                        } else if (showBackButton) {
+                          Navigator.pop(context);
+                        }
+                      },
+                    )
+                        .animate()
+                        .fadeIn(duration: 350.ms)
+                        .slideX(
+                          begin: -0.25,
+                          end: 0,
+                          duration: 350.ms,
+                          curve: Curves.easeOutCubic,
+                        ),
+                    const SizedBox(width: 12),
+                  ],
+
+                  // Title
+                  Expanded(
+                    child: Text(
+                      title,
+                      textAlign: centerTitle ? TextAlign.center : TextAlign.start,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: fg,
+                        letterSpacing: 0.1,
+                        height: 1.2,
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(duration: 400.ms, delay: 50.ms)
+                        .slideY(
+                          begin: 0.15,
+                          end: 0,
+                          duration: 350.ms,
+                          curve: Curves.easeOutCubic,
+                        ),
+                  ),
+
+                  // Actions
+                  if (_hasActions) ...[
+                    const SizedBox(width: 8),
+                    ...actions!.map(
+                      (a) => a
+                          .animate()
+                          .fadeIn(duration: 350.ms, delay: 100.ms)
+                          .scale(
+                            begin: const Offset(0.85, 0.85),
+                            duration: 350.ms,
+                            curve: Curves.easeOutBack,
+                          ),
                     ),
                   ],
                 ],
-              );
-            } else {
-              // Normal layout with responsive flex
-              final titleFlex = hasLeading && hasActions ? 3 : 
-                               hasLeading || hasActions ? 4 : 1;
-              
-              return Row(
-                mainAxisAlignment: centerTitle 
-                    ? MainAxisAlignment.center 
-                    : MainAxisAlignment.spaceBetween,
-                children: <Widget>[
-                  if (hasLeading)
-                    _buildLeadingButton(context)
-                  else if (centerTitle)
-                    const Spacer(flex: 1),
-                  Expanded(
-                    flex: titleFlex,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: titleWidget,
-                    ),
-                  ),
-                  if (hasActions)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: actions!.map((action) {
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: action,
-                        );
-                      }).toList(),
-                    )
-                  else if (centerTitle)
-                    const Spacer(flex: 1)
-                ],
-              );
-            }
-          },
+              ),
+            ),
+          ),
+        ),
+
+        // ── orange brand underline ─────────────────────────────────────
+        Container(
+          height: 3,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.primaryOrange, AppColors.lightOrange],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Pill-shaped icon button ─────────────────────────────────────────────────
+class _PillButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+  final Color background;
+  final double size;
+
+  const _PillButton({
+    required this.icon,
+    required this.onTap,
+    required this.color,
+    required this.background,
+    this.size = 20,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(9),
+          child: Icon(icon, color: color, size: size),
         ),
       ),
     );
   }
-
-  Widget _buildLeadingButton(BuildContext context) {
-    return Container(
-          margin: const EdgeInsets.only(right: 16),
-          decoration: BoxDecoration(
-            color: (backgroundColor == Colors.white || backgroundColor == null)
-                ? AppColors.backgroundGray
-                : Colors.white.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.shadowColor.withOpacity(0.08),
-                blurRadius: 8,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () {
-                HapticFeedback.lightImpact();
-                if (onLeadingIconPressed != null) {
-                  onLeadingIconPressed!();
-                } else if (showBackButton) {
-                  Navigator.pop(context);
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Icon(
-                  leadingIcon ?? Icons.arrow_back_ios_rounded,
-                  color: textColor ?? AppColors.textDark,
-                  size: 22,
-                ),
-              ),
-            ),
-          ),
-        )
-        .animate()
-        .fadeIn(duration: 400.ms)
-        .slideX(
-          begin: -0.2,
-          end: 0,
-          duration: 400.ms,
-          curve: Curves.easeOutQuad,
-        );
-  }
 }
 
-// Action button builder for consistent styling
+// ── Public action-button helper ─────────────────────────────────────────────
+/// Drop-in action button for [ModernAppHeader] and [ReusableAppBar].
 class HeaderActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
@@ -222,58 +202,29 @@ class HeaderActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    
-    // Responsive sizing for action buttons
-    final buttonSize = screenWidth < 360 ? 36.0 : 44.0;
-    final iconSize = screenWidth < 360 ? 18.0 : 22.0;
-    final padding = screenWidth < 360 ? 6.0 : 10.0;
+    const pillBg = Color(0x120C1A2E);
 
-    return Container(
-          width: buttonSize,
-          height: buttonSize,
-          decoration: BoxDecoration(
-            color: backgroundColor ?? AppColors.backgroundGray,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.shadowColor.withOpacity(0.08),
-                blurRadius: 8,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () {
-                HapticFeedback.lightImpact();
-                onPressed();
-              },
-              child: Tooltip(
-                message: tooltip ?? '',
-                child: Padding(
-                  padding: EdgeInsets.all(padding),
-                  child: Icon(
-                    icon,
-                    color: color ?? AppColors.textDark,
-                    size: iconSize,
-                  ),
-                ),
-              ),
+    return Tooltip(
+      message: tooltip ?? '',
+      child: Material(
+        color: backgroundColor ?? pillBg,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onPressed();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(9),
+            child: Icon(
+              icon,
+              color: color ?? const Color(0xFF0C1A2E),
+              size: 22,
             ),
           ),
-        )
-        .animate()
-        .fadeIn(duration: 400.ms)
-        .scale(
-          begin: const Offset(0.9, 0.9),
-          end: const Offset(1, 1),
-          duration: 400.ms,
-          curve: Curves.easeOutQuad,
-        );
+        ),
+      ),
+    );
   }
 }

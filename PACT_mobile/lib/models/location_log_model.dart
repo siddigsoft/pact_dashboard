@@ -26,8 +26,8 @@ class LocationLog {
     this.heading,
     this.altitude,
     this.isSynced = false,
-  })  : id = id ?? const Uuid().v4(),
-        timestamp = timestamp ?? DateTime.now();
+  }) : id = id ?? const Uuid().v4(),
+       timestamp = timestamp ?? DateTime.now();
 
   // Convert LocationLog to a Map
   Map<String, dynamic> toMap() {

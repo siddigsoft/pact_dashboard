@@ -202,8 +202,9 @@ class RegionalHelplines {
   static List<Map<String, String>> searchByName(String query) {
     final lowercaseQuery = query.toLowerCase();
     return contacts
-        .where((contact) =>
-            contact['name']!.toLowerCase().contains(lowercaseQuery))
+        .where(
+          (contact) => contact['name']!.toLowerCase().contains(lowercaseQuery),
+        )
         .toList();
   }
 
@@ -242,7 +243,8 @@ class RegionalHelplines {
   /// Update a contact
   static Future<void> updateContact(Map<String, String> updatedContact) async {
     final index = contacts.indexWhere(
-        (contact) => contact['phoneNumber'] == updatedContact['phoneNumber']);
+      (contact) => contact['phoneNumber'] == updatedContact['phoneNumber'],
+    );
     if (index != -1) {
       contacts[index] = updatedContact;
       await saveContacts();

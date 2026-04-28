@@ -10,7 +10,10 @@ class LoggerService {
 
   static String _maskSensitiveData(String text) {
     return text
-        .replaceAllMapped(_uuidPattern, (match) => '********-****-****-****-************')
+        .replaceAllMapped(
+          _uuidPattern,
+          (match) => '********-****-****-****-************',
+        )
         .replaceAllMapped(_emailPattern, (match) => '****@****.***');
   }
 
@@ -19,7 +22,7 @@ class LoggerService {
       // In the future, we can add Sentry or other production logging here
       return;
     }
-    
+
     final maskedMessage = _maskSensitiveData(message);
     switch (level) {
       case LogLevel.info:

@@ -1,18 +1,21 @@
-// lib/screens/chat_screen.dart
-
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:any_link_preview/any_link_preview.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
@@ -22,10 +25,14 @@ import '../models/chat_participant.dart';
 import '../models/chat_contact.dart';
 import '../services/chat_service.dart';
 import '../services/chat_contact_service.dart';
+import '../services/chat_metadata_service.dart';
 import '../services/agora_call_service.dart';
+import '../services/analytics_service.dart';
 import '../screens/agora_call_screen.dart';
+import '../screens/contact_info_screen.dart';
 import '../theme/app_colors.dart';
 import '../utils/error_handler.dart';
+import '../widgets/standard_back_button.dart';
 
 class ChatScreen extends StatefulWidget {
   final Chat chat;
@@ -40,6 +47,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ChatService _chatService = ChatService();
   final ChatContactService _contactService = ChatContactService();
   final TextEditingController _messageController = TextEditingController();
+  final FocusNode _messageFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -49,6 +57,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSending = false;
   bool _isRecording = false;
   bool _isUploadingFile = false;
+  bool _isKeyboardVisible = false;
   String? _recordingPath;
   Duration _recordingDuration = Duration.zero;
   Timer? _recordingTimer;
@@ -58,30 +67,158 @@ class _ChatScreenState extends State<ChatScreen> {
   ChatContact? _chatContact;
   String? _contactUserId;
   RealtimeChannel? _messageChannel;
+  ChatMessage? _replyingTo;
+  Color _currentWallpaper = const Color(0xFFEAE2D8);
+  String? _wallpaperImagePath; // Store path to wallpaper image
+  bool _isOtherUserTyping = false;
+  bool _amITyping = false;
+  Timer? _typingDebounceTimer;
+  final Set<String> _selectedMessageIds = {};
 
   @override
   void initState() {
     super.initState();
     _currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    _loadWallpaperColor();
     _loadMessages();
     _loadParticipants();
     _loadContactInfo();
     _markMessagesAsRead();
     _subscribeToMessages();
     _messageController.addListener(_onMessageTextChanged);
+
+    // Listen to keyboard visibility
+    _messageFocusNode.addListener(_onFocusChange);
+
+    // Auto-dismiss keyboard on scroll
+    _scrollController.addListener(_onScrollActivity);
   }
 
   void _onMessageTextChanged() {
     if (mounted) {
       setState(() {});
     }
+
+    final isCurrentlyTyping = _messageController.text.trim().isNotEmpty;
+    if (_amITyping != isCurrentlyTyping) {
+      _amITyping = isCurrentlyTyping;
+      _messageChannel?.sendBroadcastMessage(
+        event: 'typing',
+        payload: {'user_id': _currentUserId, 'is_typing': _amITyping},
+      );
+    }
+
+    _typingDebounceTimer?.cancel();
+    if (_amITyping) {
+      _typingDebounceTimer = Timer(const Duration(seconds: 3), () {
+        if (!mounted) return;
+        _amITyping = false;
+        _messageChannel?.sendBroadcastMessage(
+          event: 'typing',
+          payload: {'user_id': _currentUserId, 'is_typing': false},
+        );
+      });
+    }
+  }
+
+  /// Handle focus node changes to detect keyboard visibility
+  void _onFocusChange() {
+    if (mounted) {
+      setState(() {
+        _isKeyboardVisible = _messageFocusNode.hasFocus;
+      });
+
+      // Scroll to bottom when keyboard shows
+      if (_isKeyboardVisible) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
+    }
+  }
+
+  /// Auto-dismiss keyboard when scrolling
+  void _onScrollActivity() {
+    if (_messageFocusNode.hasFocus) {
+      // Only unfocus if user is actively scrolling
+      if (_scrollController.position.isScrollingNotifier.value) {
+        FocusScope.of(context).unfocus();
+      }
+    }
+  }
+
+  Future<void> _loadWallpaperColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Load image wallpaper if exists
+    final imagePath = prefs.getString('chat_wallpaper_image_${widget.chat.id}');
+    if (imagePath != null &&
+        imagePath.isNotEmpty &&
+        File(imagePath).existsSync()) {
+      if (mounted) setState(() => _wallpaperImagePath = imagePath);
+      return;
+    }
+    // Load color wallpaper
+    final colorVal = prefs.getInt('chat_wallpaper_${widget.chat.id}');
+    if (colorVal != null) {
+      if (mounted) setState(() => _currentWallpaper = Color(colorVal));
+    }
+  }
+
+  Future<void> _pickWallpaperImage() async {
+    try {
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (pickedFile != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'chat_wallpaper_image_${widget.chat.id}',
+          pickedFile.path,
+        );
+        if (mounted) {
+          setState(() => _wallpaperImagePath = pickedFile.path);
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error picking wallpaper image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to pick image: $e')));
+      }
+    }
+  }
+
+  Future<void> _clearWallpaperImage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('chat_wallpaper_image_${widget.chat.id}');
+      if (mounted) {
+        setState(() => _wallpaperImagePath = null);
+      }
+    } catch (e) {
+      debugPrint('Error clearing wallpaper image: $e');
+    }
   }
 
   @override
+  @override
   void dispose() {
+    _typingDebounceTimer?.cancel();
     _messageChannel?.unsubscribe();
     _messageController.removeListener(_onMessageTextChanged);
     _messageController.dispose();
+    _messageFocusNode.removeListener(_onFocusChange);
+    _messageFocusNode.dispose();
+    _scrollController.removeListener(_onScrollActivity);
     _scrollController.dispose();
     _recordingTimer?.cancel();
     _audioPlayer.dispose();
@@ -90,6 +227,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadMessages() async {
+    if (widget.chat.disappearingTimer != null &&
+        widget.chat.disappearingTimer! > 0) {
+      await _chatService.pruneExpiredMessages(
+        widget.chat.id,
+        widget.chat.disappearingTimer!,
+      );
+    }
     final messages = await _chatService.getChatMessages(widget.chat.id);
 
     setState(() {
@@ -108,8 +252,18 @@ class _ChatScreenState extends State<ChatScreen> {
   void _subscribeToMessages() {
     _messageChannel = Supabase.instance.client
         .channel('chat_messages:${widget.chat.id}')
+        .onBroadcast(
+          event: 'typing',
+          callback: (payload) {
+            final userId = payload['user_id'];
+            final isTyping = payload['is_typing'] == true;
+            if (userId != _currentUserId && mounted) {
+              setState(() => _isOtherUserTyping = isTyping);
+            }
+          },
+        )
         .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
+          event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'chat_messages',
           filter: PostgresChangeFilter(
@@ -118,19 +272,24 @@ class _ChatScreenState extends State<ChatScreen> {
             value: widget.chat.id,
           ),
           callback: (payload) {
-            final newMessage = ChatMessage.fromJson(payload.newRecord);
-            // Only add if not already in list (avoid duplicates from own sent messages)
-            if (!_messages.any((m) => m.id == newMessage.id)) {
-              setState(() {
-                _messages.add(newMessage);
-              });
-              // Scroll to bottom when new message arrives
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _scrollToBottom();
-              });
-              // Mark as read if from other user
-              if (newMessage.senderId != _currentUserId) {
-                _markMessagesAsRead();
+            if (payload.eventType == PostgresChangeEvent.insert) {
+              final newMessage = ChatMessage.fromJson(payload.newRecord);
+              if (!_messages.any((m) => m.id == newMessage.id)) {
+                setState(() => _messages.add(newMessage));
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _scrollToBottom(),
+                );
+                if (newMessage.senderId != _currentUserId) {
+                  _markMessagesAsRead();
+                }
+              }
+            } else if (payload.eventType == PostgresChangeEvent.update) {
+              final updatedMessage = ChatMessage.fromJson(payload.newRecord);
+              final index = _messages.indexWhere(
+                (m) => m.id == updatedMessage.id,
+              );
+              if (index != -1 && mounted) {
+                setState(() => _messages[index] = updatedMessage);
               }
             }
           },
@@ -262,6 +421,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _markMessagesAsRead() async {
     await _chatService.markMessagesAsRead(widget.chat.id);
+
+    // Clear unread count via ChatMetadataService
+    try {
+      await ChatMetadataService.clearUnreadCount(widget.chat.id);
+    } catch (e) {
+      debugPrint('Error clearing unread count: $e');
+    }
+
+    // Update local messages to reflect read status
+    setState(() {
+      for (var message in _messages) {
+        if (message.senderId != _currentUserId && message.status != 'read') {
+          message.status = 'read';
+        }
+      }
+    });
   }
 
   Future<void> _sendMessage() async {
@@ -270,12 +445,38 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() => _isSending = true);
 
+    Map<String, dynamic>? metadata;
+    if (_replyingTo != null) {
+      metadata = {
+        'reply_to': {
+          'id': _replyingTo!.id,
+          'senderId': _replyingTo!.senderId,
+          'senderName': _getSenderName(_replyingTo!.senderId),
+          'content': _replyingTo!.content,
+          'contentType': _replyingTo!.contentType,
+        },
+      };
+    }
+
     try {
-      final message = await _chatService.sendMessage(widget.chat.id, content);
+      final message = await _chatService.sendMessage(
+        widget.chat.id,
+        content,
+        metadata: metadata,
+      );
       if (message != null) {
         setState(() {
           _messages.add(message);
+          _replyingTo = null; // Clear reply state
         });
+
+        // Track message in ChatMetadataService
+        try {
+          await ChatMetadataService.setLastMessage(widget.chat.id, content);
+        } catch (e) {
+          debugPrint('Error tracking message: $e');
+        }
+
         _messageController.clear();
         _scrollToBottom();
       }
@@ -284,7 +485,7 @@ class _ChatScreenState extends State<ChatScreen> {
         context.showError(e, onRetry: _sendMessage);
       }
     } finally {
-      setState(() => _isSending = false);
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -484,6 +685,17 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages.add(message);
         });
         _scrollToBottom();
+        // Log media sharing event
+        AnalyticsService.logEvent(
+          'media_shared',
+          parameters: {
+            'chat_id': widget.chat.id,
+            'message_type': fileType,
+            'file_name': fileName,
+            'file_size_bytes': bytes.length,
+            'timestamp': message.createdAt.toIso8601String(),
+          },
+        );
       }
     } catch (e) {
       debugPrint('Error uploading file: $e');
@@ -491,6 +703,15 @@ class _ChatScreenState extends State<ChatScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to upload file: $e')));
+        // Log media share failure
+        AnalyticsService.logEvent(
+          'media_share_failed',
+          parameters: {
+            'chat_id': widget.chat.id,
+            'message_type': fileType,
+            'error': e.toString(),
+          },
+        );
       }
     } finally {
       setState(() => _isUploadingFile = false);
@@ -529,10 +750,27 @@ class _ChatScreenState extends State<ChatScreen> {
         return;
       }
 
-      // Get temp directory for recording
+      // Web doesn't support reliable voice recording due to blob URL limitations
+      if (kIsWeb) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Voice messages work best on mobile. Use the native app or send text/files instead.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // On native platforms, prepare file path
       final directory = await getTemporaryDirectory();
       final fileName = 'voice_${const Uuid().v4()}.m4a';
-      _recordingPath = '${directory.path}/$fileName';
+      final recordingPath = '${directory.path}/$fileName';
+      _recordingPath = recordingPath;
 
       // Start recording with AAC encoder
       await _audioRecorder.start(
@@ -541,7 +779,7 @@ class _ChatScreenState extends State<ChatScreen> {
           bitRate: 128000,
           sampleRate: 44100,
         ),
-        path: _recordingPath!,
+        path: recordingPath,
       );
 
       setState(() {
@@ -576,6 +814,18 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       _recordingTimer?.cancel();
 
+      // Never upload on web - web recording not supported
+      if (kIsWeb) {
+        if (mounted) {
+          setState(() {
+            _isRecording = false;
+            _recordingPath = null;
+            _recordingDuration = Duration.zero;
+          });
+        }
+        return;
+      }
+
       if (!_isRecording || _recordingPath == null) {
         if (mounted) setState(() => _isRecording = false);
         return;
@@ -584,17 +834,17 @@ class _ChatScreenState extends State<ChatScreen> {
       // Capture duration before resetting
       final recordedDuration = _recordingDuration;
 
-      // Stop recording and get the path
-      final path = await _audioRecorder.stop();
+      // Stop recording and get the path/data
+      final recordedData = await _audioRecorder.stop();
 
-      if (path != null && path.isNotEmpty) {
-        debugPrint('[ChatScreen] Recording stopped, uploading: $path');
+      if (recordedData != null) {
+        debugPrint('[ChatScreen] Recording stopped, uploading...');
 
         // Store duration temporarily for upload
         _recordingDuration = recordedDuration;
 
-        // Upload the voice message
-        await _uploadVoiceMessage(path);
+        // Upload the voice message with the actual recorded data
+        await _uploadVoiceMessage(recordedData);
       }
 
       if (mounted) {
@@ -618,16 +868,74 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _uploadVoiceMessage(String filePath) async {
+  Future<void> _uploadVoiceMessage(dynamic recordedData) async {
     try {
-      setState(() => _isSending = true);
+      Uint8List bytes = Uint8List(0);
+      String nativeFilePath = '';
 
-      final file = File(filePath);
-      if (!await file.exists()) {
-        throw Exception('Recording file not found');
+      // Never upload on web - not supported
+      if (kIsWeb) {
+        // On web, recordedData can be a blob URL, base64 string, or bytes
+        if (recordedData is Uint8List) {
+          bytes = recordedData;
+        } else if (recordedData is String) {
+          String dataString = recordedData;
+
+          // Check if it's a blob URL (blob:...)
+          if (dataString.startsWith('blob:')) {
+            // For blob URLs, we cannot directly access the data from Dart
+            // Use the blob URL directly as a placeholder or skip web recording
+            throw Exception(
+              'Web blob recording requires browser integration. Please use native recording.',
+            );
+          }
+
+          // Check if it's a data URL with base64
+          if (dataString.contains('base64,')) {
+            dataString = dataString.replaceAll(
+              RegExp(r'^data:audio/[^;]*;base64,'),
+              '',
+            );
+            try {
+              bytes = base64Decode(dataString);
+            } catch (e) {
+              throw Exception('Invalid base64 audio data: $e');
+            }
+          } else {
+            // Try to treat as base64 anyway
+            try {
+              bytes = base64Decode(dataString);
+            } catch (e) {
+              throw Exception(
+                'Invalid audio data format. Expected base64 or data URL: $e',
+              );
+            }
+          }
+        } else if (recordedData is List) {
+          bytes = Uint8List.fromList(List<int>.from(recordedData));
+        } else {
+          throw Exception(
+            'Unexpected recorded data type: ${recordedData.runtimeType}',
+          );
+        }
+      } else {
+        // On native platforms, recordedData is the file path
+        nativeFilePath = recordedData as String;
+        if (nativeFilePath.isEmpty) {
+          throw Exception('Failed to get recorded audio data');
+        }
+        final file = File(nativeFilePath);
+        if (!await file.exists()) {
+          throw Exception('Recording file not found at: $nativeFilePath');
+        }
+        bytes = await file.readAsBytes();
       }
 
-      final bytes = await file.readAsBytes();
+      // Validate we have audio data
+      if (bytes.isEmpty) {
+        throw Exception('No audio data recorded');
+      }
+
       final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
       final storagePath = 'chat_audio/${widget.chat.id}/$fileName';
 
@@ -659,11 +967,27 @@ class _ChatScreenState extends State<ChatScreen> {
         contentType: 'audio',
       );
 
-      // Delete temp file
+      // Track voice message in ChatMetadataService
       try {
-        await file.delete();
+        await ChatMetadataService.setLastMessage(
+          widget.chat.id,
+          '🎙️ Voice message',
+        );
       } catch (e) {
-        debugPrint('[ChatScreen] Failed to delete temp file: $e');
+        debugPrint('Error tracking voice message: $e');
+      }
+
+      // Delete temp file
+      if (nativeFilePath.isNotEmpty) {
+        try {
+          final file = File(nativeFilePath);
+          if (await file.exists()) {
+            await file.delete();
+            debugPrint('[ChatScreen] Temp file deleted: $nativeFilePath');
+          }
+        } catch (e) {
+          debugPrint('[ChatScreen] Failed to delete temp file: $e');
+        }
       }
 
       debugPrint('[ChatScreen] Voice message uploaded successfully');
@@ -684,6 +1008,7 @@ class _ChatScreenState extends State<ChatScreen> {
           SnackBar(
             content: Text('Failed to send voice message: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -698,7 +1023,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       _recordingTimer?.cancel();
 
-      if (_recordingPath != null) {
+      if (_recordingPath != null && !kIsWeb) {
         final file = File(_recordingPath!);
         if (await file.exists()) {
           await file.delete();
@@ -795,13 +1120,17 @@ class _ChatScreenState extends State<ChatScreen> {
       return fallbackFromId(candidateId);
     } else {
       // For group chats, show the chat name
-      return widget.chat.name ?? 'Group Chat';
+      return widget.chat.name;
     }
   }
 
   // Initiate audio or video call
   Future<void> _initiateCall({required bool isAudioOnly}) async {
+    debugPrint('[ChatScreen Call] ═══ CALL INITIATION START ═══');
+    debugPrint('[ChatScreen Call] isAudioOnly=$isAudioOnly');
+
     if (widget.chat.otherParticipantId == null) {
+      debugPrint('[ChatScreen Call] ✗ BLOCKED: No participant');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -812,16 +1141,19 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       return;
     }
+    debugPrint(
+      '[ChatScreen Call] ✓ Participant: ${widget.chat.otherParticipantId}',
+    );
 
     try {
       final targetUserId = widget.chat.otherParticipantId!;
       final targetUserName = _getChatTitle();
       final agoraService = AgoraCallService();
 
-      debugPrint('[ChatScreen] Attempting Agora call to $targetUserName');
-      debugPrint('[ChatScreen] Call type: ${isAudioOnly ? "Audio" : "Video"}');
+      debugPrint('[ChatScreen Call] Target: $targetUserName ($targetUserId)');
 
       if (!agoraService.isReady) {
+        debugPrint('[ChatScreen Call] ✗ BLOCKED: Service not ready');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -834,8 +1166,10 @@ class _ChatScreenState extends State<ChatScreen> {
         }
         return;
       }
+      debugPrint('[ChatScreen Call] ✓ Service ready');
 
       if (agoraService.isInCall) {
+        debugPrint('[ChatScreen Call] ✗ BLOCKED: Already in call');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -846,6 +1180,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
         return;
       }
+      debugPrint('[ChatScreen Call] ✓ Not in call');
 
       // Show loading indicator
       if (mounted) {
@@ -862,7 +1197,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Text('Calling $targetUserName...'),
+                Text(
+                  '${isAudioOnly ? 'Calling' : 'Video calling'} $targetUserName...',
+                ),
               ],
             ),
             duration: const Duration(seconds: 45),
@@ -870,15 +1207,21 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
 
+      debugPrint('[ChatScreen Call] → Calling agoraService.startCall()...');
       final result = await agoraService.startCall(
         remoteUserId: targetUserId,
         remoteUserName: targetUserName,
         audioOnly: isAudioOnly,
       );
 
-      debugPrint('[ChatScreen] Call initiation result: ${result.success}');
+      debugPrint(
+        '[ChatScreen Call] ← Result: success=${result.success}, channel=${result.channelName}, error=${result.error}',
+      );
 
       if (result.success && result.channelName != null && mounted) {
+        debugPrint(
+          '[ChatScreen Call] ✓ SUCCESS - Navigating to AgoraCallScreen',
+        );
         ScaffoldMessenger.of(context).clearSnackBars();
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -892,15 +1235,20 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
       } else if (!result.success && mounted) {
+        debugPrint('[ChatScreen Call] ✗ FAILED: ${result.error}');
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.error ?? 'User is busy or unavailable'),
-            backgroundColor: Colors.orange,
+            backgroundColor: Colors.red,
           ),
         );
+      } else {
+        debugPrint('[ChatScreen Call] ✗ FAILED: Not mounted or no channel');
       }
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[ChatScreen Call] ✗ EXCEPTION: $e');
+      debugPrint('[ChatScreen Call] Stack: $st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1066,6 +1414,139 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _showWallpaperPicker() {
+    final List<Map<String, dynamic>> predefinedWallpapers = [
+      {'name': 'Default (Beige)', 'color': const Color(0xFFEAE2D8)},
+      {'name': 'Dark Mode', 'color': const Color(0xFF0D1418)},
+      {'name': 'Soft Blue', 'color': const Color(0xFFD9EEFB)},
+      {'name': 'WhatsApp Green', 'color': const Color(0xFFD3EBCD)},
+      {'name': 'Evening Purple', 'color': const Color(0xFFE3DCF1)},
+      {'name': 'Solid Grey', 'color': const Color(0xFFE5E5E5)},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          height: _wallpaperImagePath != null ? 420 : 380,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Select Background',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (_wallpaperImagePath != null)
+                    TextButton.icon(
+                      onPressed: _clearWallpaperImage,
+                      icon: const Icon(Icons.close),
+                      label: const Text('Clear'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Upload photo button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _pickWallpaperImage,
+                  icon: const Icon(Icons.image),
+                  label: const Text('Upload Photo from Phone'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Or choose a color:',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: predefinedWallpapers.length,
+                  itemBuilder: (context, index) {
+                    final wallpaper = predefinedWallpapers[index];
+                    final color = wallpaper['color'] as Color;
+                    final isSelected =
+                        _wallpaperImagePath == null &&
+                        _currentWallpaper.value == color.value;
+
+                    return GestureDetector(
+                      onTap: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        // Clear image wallpaper if selecting color
+                        await prefs.remove(
+                          'chat_wallpaper_image_${widget.chat.id}',
+                        );
+                        await prefs.setInt(
+                          'chat_wallpaper_${widget.chat.id}',
+                          color.value,
+                        );
+                        if (mounted) {
+                          setState(() {
+                            _currentWallpaper = color;
+                            _wallpaperImagePath = null;
+                          });
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(12),
+                          border: isSelected
+                              ? Border.all(
+                                  color: AppColors.primaryBlue,
+                                  width: 3,
+                                )
+                              : Border.all(
+                                  color: Colors.grey.shade300,
+                                  width: 1,
+                                ),
+                        ),
+                        child: isSelected
+                            ? const Center(
+                                child: Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.primaryBlue,
+                                ),
+                              )
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatTitle = _getChatTitle();
@@ -1073,248 +1554,381 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: const Color(0xFF1976D2),
-        foregroundColor: Colors.white,
-        systemOverlayStyle: const SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-        ),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1565C0), Color(0xFF1976D2), Color(0xFF2196F3)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new,
-            color: Colors.white,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [Colors.orange.shade400, Colors.deepOrange.shade400],
-                ),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 2,
-                ),
+      appBar: _selectedMessageIds.isNotEmpty
+          ? AppBar(
+              backgroundColor: AppColors.primaryBlue,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => setState(() => _selectedMessageIds.clear()),
               ),
-              child: Center(
-                child: Text(
-                  initial,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    chatTitle,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    widget.chat.chatType == 'private'
-                        ? 'Tap for contact info'
-                        : 'Group Chat',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (widget.chat.chatType == 'private' &&
-              widget.chat.otherParticipantId != null) ...[
-            IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.videocam_rounded,
+              title: Text(
+                '${_selectedMessageIds.length}',
+                style: const TextStyle(
                   color: Colors.white,
-                  size: 20,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              onPressed: () => _initiateCall(isAudioOnly: false),
-              tooltip: 'Video call',
-            ),
-            IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  shape: BoxShape.circle,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.reply, color: Colors.white),
+                  onPressed: _selectedMessageIds.length == 1
+                      ? () {
+                          final msg = _messages.firstWhere(
+                            (m) => m.id == _selectedMessageIds.first,
+                          );
+                          setState(() => _selectedMessageIds.clear());
+                          _handleSwipeToReply(msg);
+                        }
+                      : null,
                 ),
-                child: const Icon(
-                  Icons.call_rounded,
-                  color: Colors.white,
-                  size: 20,
+                IconButton(
+                  icon: const Icon(Icons.copy, color: Colors.white),
+                  onPressed: () {
+                    final text = _messages
+                        .where((m) => _selectedMessageIds.contains(m.id))
+                        .map((m) => m.content ?? '')
+                        .where((c) => c.isNotEmpty)
+                        .join('\n\n');
+                    if (text.isNotEmpty) {
+                      Clipboard.setData(ClipboardData(text: text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Copied to clipboard')),
+                      );
+                    }
+                    setState(() => _selectedMessageIds.clear());
+                  },
                 ),
-              ),
-              onPressed: () => _initiateCall(isAudioOnly: true),
-              tooltip: 'Audio call',
-            ),
-          ],
-          PopupMenuButton<String>(
-            icon: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
-            ),
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            onSelected: (value) {
-              switch (value) {
-                case 'edit':
-                  _editContactName();
-                  break;
-                case 'delete':
-                  _confirmDeleteChat();
-                  break;
-                case 'search':
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Search in chat coming soon')),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.white),
+                  onPressed: () => _confirmBulkDeleteMessages(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.forward, color: Colors.white),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Forwarding incoming soon')),
+                    );
+                    setState(() => _selectedMessageIds.clear());
+                  },
+                ),
+              ],
+            )
+          : AppBar(
+              backgroundColor: AppColors.primaryBlue,
+              iconTheme: const IconThemeData(color: Colors.white),
+              leading: const StandardBackButton(),
+              titleSpacing: 0,
+              title: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          ContactInfoScreen(chat: widget.chat),
+                    ),
                   );
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              if (widget.chat.chatType == 'private')
-                PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.edit_rounded,
-                        color: Colors.grey[700],
+                },
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.orange.shade400,
+                            Colors.deepOrange.shade400,
+                          ],
+                        ),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initial,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            chatTitle,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            widget.chat.chatType == 'private'
+                                ? 'Tap for contact info'
+                                : 'Group Chat',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                if (widget.chat.chatType == 'private' &&
+                    widget.chat.otherParticipantId != null) ...[
+                  IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.videocam_rounded,
+                        color: Colors.white,
                         size: 20,
                       ),
-                      const SizedBox(width: 12),
-                      const Text('Edit contact name'),
-                    ],
+                    ),
+                    onPressed: () => _initiateCall(isAudioOnly: false),
+                    tooltip: 'Video call',
                   ),
-                ),
-              PopupMenuItem(
-                value: 'search',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.search_rounded,
-                      color: Colors.grey[700],
+                  IconButton(
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.call_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    onPressed: () => _initiateCall(isAudioOnly: true),
+                    tooltip: 'Audio call',
+                  ),
+                ],
+                PopupMenuButton<String>(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.more_vert,
+                      color: Colors.white,
                       size: 20,
                     ),
-                    const SizedBox(width: 12),
-                    const Text('Search in chat'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.red,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Delete chat',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Messages list
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _messages.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      final isCurrentUser = message.senderId == _currentUserId;
-
-                      return _buildMessageBubble(message, isCurrentUser);
-                    },
                   ),
-          ),
-
-          // Message input
-          _isUploadingFile
-              ? Container(
-                  padding: const EdgeInsets.all(16),
                   color: Colors.white,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'edit':
+                        _editContactName();
+                        break;
+                      case 'delete':
+                        _confirmDeleteChat();
+                        break;
+                      case 'search':
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Search in chat coming soon'),
+                          ),
+                        );
+                        break;
+                      case 'wallpaper':
+                        _showWallpaperPicker();
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (widget.chat.chatType == 'private')
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.edit_rounded,
+                              color: Colors.grey[700],
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text('Edit contact name'),
+                          ],
+                        ),
+                      ),
+                    PopupMenuItem(
+                      value: 'search',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.search_rounded,
+                            color: Colors.grey[700],
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('Search in chat'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'wallpaper',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.wallpaper_rounded,
+                            color: Colors.grey[700],
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('Wallpaper'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.delete_outline_rounded,
+                            color: Colors.red,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Delete chat',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+      body: Container(
+        decoration:
+            _wallpaperImagePath != null &&
+                File(_wallpaperImagePath!).existsSync()
+            ? BoxDecoration(
+                image: DecorationImage(
+                  image: FileImage(File(_wallpaperImagePath!)),
+                  fit: BoxFit.cover,
+                ),
+              )
+            : BoxDecoration(color: _currentWallpaper),
+        child: Column(
+          children: [
+            // Messages list
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _messages.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        final isCurrentUser =
+                            message.senderId == _currentUserId;
+
+                        return _buildMessageBubble(message, isCurrentUser);
+                      },
+                    ),
+            ),
+
+            // Message input
+            _isUploadingFile
+                ? Container(
+                    padding: const EdgeInsets.all(16),
+                    color: Colors.white,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Uploading file...',
+                          style: GoogleFonts.poppins(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  )
+                : _isRecording
+                ? _buildRecordingUI()
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Uploading file...',
-                        style: GoogleFonts.poppins(color: Colors.grey[600]),
-                      ),
+                      _buildTypingIndicator(),
+                      _buildReplyPreview(),
+                      _buildMessageInputUI(),
                     ],
                   ),
-                )
-              : _isRecording
-              ? _buildRecordingUI()
-              : _buildMessageInputUI(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    if (!_isOtherUserTyping) return const SizedBox.shrink();
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryBlue,
+                  shape: BoxShape.circle,
+                ),
+              )
+              .animate(onPlay: (c) => c.repeat())
+              .fadeIn(duration: 400.ms)
+              .fadeOut(duration: 400.ms),
+          Text(
+            '${widget.chat.chatType == 'private' ? _getChatTitle() : 'Someone'} is typing...',
+            style: GoogleFonts.poppins(
+              color: Colors.grey.shade600,
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
         ],
       ),
     );
@@ -1394,98 +2008,189 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageInputUI() {
+  void _handleSwipeToReply(ChatMessage message) {
+    setState(() {
+      _replyingTo = message;
+    });
+  }
+
+  Widget _buildReplyPreview() {
+    if (_replyingTo == null) return const SizedBox.shrink();
+    final senderName = _getSenderName(_replyingTo!.senderId);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: const Border(
-          top: BorderSide(color: Color(0xFFE0E0E0), width: 1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 4,
-            offset: const Offset(0, -2),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.transparent,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(12),
+                border: const Border(
+                  left: BorderSide(color: AppColors.primaryBlue, width: 4),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    senderName,
+                    style: const TextStyle(
+                      color: AppColors.primaryBlue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _replyingTo!.content ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.grey),
+            onPressed: () => setState(() => _replyingTo = null),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMessageInputUI() {
+    return Container(
+      color: Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: SafeArea(
+        bottom: true,
+        top: false,
+        left: false,
+        right: false,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            IconButton(
-              icon: const Icon(Icons.attach_file, color: Color(0xFFFF9800)),
-              onPressed: _showAttachmentOptions,
-              tooltip: 'Attach file',
-            ),
             Expanded(
-              child: TextField(
-                controller: _messageController,
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFF8F9FA),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                maxLines: null,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.emoji_emotions_outlined,
+                        color: Colors.grey,
+                      ),
+                      onPressed: _showEmojiPicker,
+                      padding: const EdgeInsets.all(12),
+                      constraints: const BoxConstraints(),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        focusNode: _messageFocusNode,
+                        autofocus: false,
+                        enabled: true,
+                        keyboardType: TextInputType.multiline,
+                        keyboardAppearance: Brightness.light,
+                        showCursor: true,
+                        onTap: () {
+                          debugPrint(
+                            '[ChatScreen] TextField tapped - showing keyboard',
+                          );
+                          FocusScope.of(
+                            context,
+                          ).requestFocus(_messageFocusNode);
+                        },
+                        decoration: const InputDecoration(
+                          hintText: 'Message',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                          isCollapsed: true,
+                        ),
+                        minLines: 1,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.send,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.attach_file, color: Colors.grey),
+                      onPressed: _showAttachmentOptions,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 12,
+                      ),
+                      constraints: const BoxConstraints(),
+                    ),
+                    if (_messageController.text.trim().isEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.camera_alt, color: Colors.grey),
+                        onPressed: _pickImageFromCamera,
+                        padding: const EdgeInsets.only(
+                          right: 12,
+                          top: 12,
+                          bottom: 12,
+                        ),
+                        constraints: const BoxConstraints(),
+                      ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(width: 4),
-            _messageController.text.trim().isEmpty
-                ? GestureDetector(
-                    onLongPressStart: (_) => _startRecording(),
-                    onLongPressEnd: (_) => _stopRecording(),
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Hold to record voice message'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFF9800), Color(0xFFFFB74D)],
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFF9800).withOpacity(0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
+            const SizedBox(width: 8),
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: _messageController.text.trim().isEmpty && !kIsWeb
+                  ? GestureDetector(
+                      onLongPressStart: (_) => _startRecording(),
+                      onLongPressEnd: (_) => _stopRecording(),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Hold to record voice message'),
+                            duration: Duration(seconds: 2),
                           ),
-                        ],
+                        );
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: Icon(Icons.mic, color: Colors.white, size: 24),
                       ),
-                      child: const Icon(Icons.mic, color: Colors.white),
-                    ),
-                  )
-                : Container(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFF9800), Color(0xFFFFB74D)],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFFF9800).withOpacity(0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
+                    )
+                  : IconButton(
                       icon: _isSending
                           ? const SizedBox(
                               width: 20,
@@ -1497,19 +2202,149 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                               ),
                             )
-                          : const Icon(Icons.send, color: Colors.white),
+                          : const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                      padding: const EdgeInsets.all(12),
+                      constraints: const BoxConstraints(),
                       onPressed: _isSending ? null : _sendMessage,
                     ),
-                  ),
+            ),
           ],
         ),
       ),
     );
   }
 
+  void _insertEmoji(String emoji) {
+    final currentText = _messageController.text;
+    final selection = _messageController.selection;
+    final hasValidSelection =
+        selection.start >= 0 &&
+        selection.end >= 0 &&
+        selection.start <= selection.end &&
+        selection.end <= currentText.length;
+
+    if (!hasValidSelection) {
+      final updated = '$currentText$emoji';
+      _messageController.value = TextEditingValue(
+        text: updated,
+        selection: TextSelection.collapsed(offset: updated.length),
+      );
+      return;
+    }
+
+    final start = selection.start;
+    final end = selection.end;
+    final updated = currentText.replaceRange(start, end, emoji);
+    final newOffset = start + emoji.length;
+
+    _messageController.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: newOffset),
+    );
+  }
+
+  void _showEmojiPicker() {
+    final emojis = <String>[
+      '😀',
+      '😁',
+      '😂',
+      '🤣',
+      '😊',
+      '😍',
+      '😘',
+      '😉',
+      '😎',
+      '🤔',
+      '😢',
+      '😭',
+      '😡',
+      '👍',
+      '👏',
+      '🙏',
+      '🔥',
+      '❤️',
+      '💔',
+      '🎉',
+      '✅',
+      '👌',
+      '🤝',
+      '💪',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Select Emoji',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 220,
+                  child: GridView.builder(
+                    itemCount: emojis.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 6,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                        ),
+                    itemBuilder: (context, index) {
+                      final emoji = emojis[index];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () {
+                          _insertEmoji(emoji);
+                          Navigator.pop(sheetContext);
+                          FocusScope.of(context).requestFocus(_messageFocusNode);
+                        },
+                        child: Center(
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 26),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildMessageContent(ChatMessage message, bool isCurrentUser) {
     final content = message.content ?? '';
-    final textColor = isCurrentUser ? Colors.white : const Color(0xFF263238);
+    final textColor = Colors.black87;
 
     // Check contentType first for proper message type detection
     if (message.contentType == 'audio') {
@@ -1609,6 +2444,65 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
+    final urlRegex = RegExp(r"(https?:\/\/[^\s]+)", caseSensitive: false);
+    final hasUrl = urlRegex.hasMatch(content);
+    String? firstUrl;
+    if (hasUrl) {
+      firstUrl = urlRegex.firstMatch(content)?.group(0);
+    }
+
+    if (hasUrl && firstUrl != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (content != firstUrl)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6.0),
+              child: Text(
+                content,
+                style: TextStyle(color: textColor, fontSize: 16),
+              ),
+            ),
+          AnyLinkPreview(
+            link: firstUrl,
+            displayDirection: UIDirection.uiDirectionVertical,
+            bodyMaxLines: 3,
+            bodyTextOverflow: TextOverflow.ellipsis,
+            titleStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+            bodyStyle: const TextStyle(color: Colors.black54, fontSize: 12),
+            errorWidget: Container(
+              color: Colors.grey.shade200,
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  const Icon(Icons.link),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      firstUrl,
+                      style: const TextStyle(color: Colors.blue),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            errorImage: "https://via.placeholder.com/150",
+            backgroundColor: isCurrentUser
+                ? const Color(0xFFC7F1C1)
+                : Colors.grey.shade100,
+            borderRadius: 8,
+            boxShadow: [
+              BoxShadow(blurRadius: 2, color: Colors.black.withOpacity(0.05)),
+            ],
+          ),
+        ],
+      );
+    }
+
     return Text(content, style: TextStyle(color: textColor, fontSize: 16));
   }
 
@@ -1680,87 +2574,386 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildMessageBubble(ChatMessage message, bool isCurrentUser) {
     final senderName = _getSenderName(message.senderId);
+    final isSelected = _selectedMessageIds.contains(message.id);
 
-    return Align(
+    // WhatsApp bubble colors (Modern Web/iOS)
+    final bubbleColor = isSelected
+        ? const Color(0xFFE1F5FE)
+        : (isCurrentUser ? const Color(0xFFD9FDD3) : Colors.white);
+
+    Widget bubbleWidget = Align(
       alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
-        onLongPress: () => _confirmDeleteMessage(message),
+        onLongPress: () {
+          if (_selectedMessageIds.isEmpty) {
+            setState(() => _selectedMessageIds.add(message.id));
+          } else {
+            _showMessageOptions(message, isCurrentUser);
+          }
+        },
+        onTap: () {
+          if (_selectedMessageIds.isNotEmpty) {
+            setState(() {
+              if (_selectedMessageIds.contains(message.id)) {
+                _selectedMessageIds.remove(message.id);
+              } else {
+                _selectedMessageIds.add(message.id);
+              }
+            });
+          }
+        },
         child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: EdgeInsets.only(
+            bottom: 4,
+            top: 2,
+            left: isCurrentUser ? 0 : 8,
+            right: isCurrentUser ? 8 : 0,
+          ),
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.75,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.only(
+            left: message.contentType == 'audio' ? 4 : 10,
+            right: message.contentType == 'audio' ? 4 : 10,
+            top: 6,
+            bottom: message.contentType == 'audio' ? 4 : 8,
+          ),
           decoration: BoxDecoration(
-            gradient: isCurrentUser
-                ? const LinearGradient(
-                    colors: [
-                      Color(0xFFFF9800), // Orange
-                      Color(0xFFFFB74D), // Light orange
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : null,
-            color: isCurrentUser ? null : Colors.white,
+            color: bubbleColor,
             borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: isCurrentUser
-                  ? const Radius.circular(16)
-                  : const Radius.circular(4),
-              bottomRight: isCurrentUser
-                  ? const Radius.circular(4)
-                  : const Radius.circular(16),
+              topLeft: isCurrentUser
+                  ? const Radius.circular(12)
+                  : const Radius.circular(0),
+              topRight: isCurrentUser
+                  ? const Radius.circular(0)
+                  : const Radius.circular(12),
+              bottomLeft: const Radius.circular(12),
+              bottomRight: const Radius.circular(12),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.grey.shade200,
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 1,
+                offset: const Offset(0, 1),
               ),
             ],
-            border: isCurrentUser
-                ? null
-                : Border.all(
-                    color: const Color(0xFFFF9800).withOpacity(0.1),
-                    width: 1,
-                  ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Show sender name for group chats or non-current user
-              if (!isCurrentUser || widget.chat.chatType == 'group')
+              if (!isCurrentUser && widget.chat.chatType == 'group')
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.only(bottom: 2),
                   child: Text(
                     senderName,
                     style: TextStyle(
-                      color: isCurrentUser
-                          ? Colors.white.withOpacity(0.9)
-                          : const Color(0xFF1976D2), // Deep blue
-                      fontSize: 12,
+                      color: Colors.blue.shade700,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-              _buildMessageContent(message, isCurrentUser),
-              const SizedBox(height: 4),
-              Text(
-                _formatMessageTime(message.createdAt),
-                style: TextStyle(
-                  color: isCurrentUser
-                      ? Colors.white.withOpacity(0.7)
-                      : const Color(0xFF263238).withOpacity(0.6),
-                  fontSize: 12,
+              if (message.metadata != null &&
+                  message.metadata!['reply_to'] != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isCurrentUser
+                        ? Colors.white.withOpacity(0.5)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: const Border(
+                      left: BorderSide(color: AppColors.primaryBlue, width: 4),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.metadata!['reply_to']['senderName'] ?? '',
+                        style: const TextStyle(
+                          color: AppColors.primaryBlue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        message.metadata!['reply_to']['content'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.end,
+                children: [
+                  _buildMessageContent(message, isCurrentUser),
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: 8.0,
+                      top: message.contentType == 'audio' ? 0 : 4.0,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatMessageTime(message.createdAt),
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (isCurrentUser)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: Tooltip(
+                              message: message.status == 'read'
+                                  ? 'Read'
+                                  : message.status == 'delivered'
+                                  ? 'Delivered'
+                                  : 'Sent',
+                              child: Icon(
+                                message.status == 'read' ||
+                                        message.status == 'delivered'
+                                    ? Icons.done_all
+                                    : Icons.done,
+                                size: 18,
+                                weight: 600,
+                                color: message.status == 'read'
+                                    ? const Color(0xFF007AFF) // Blue - read
+                                    : message.status == 'delivered'
+                                    ? Colors
+                                          .grey
+                                          .shade500 // Light gray - delivered
+                                    : Colors
+                                          .grey
+                                          .shade400, // Lighter gray - sent
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+              _buildReactions(message),
             ],
           ),
         ),
       ).animate().fadeIn(duration: 300.ms),
     );
+
+    return Dismissible(
+      key: Key('reply_${message.id}'),
+      direction: DismissDirection.startToEnd,
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        child: const Icon(Icons.reply, color: Colors.grey),
+      ),
+      confirmDismiss: (direction) async {
+        _handleSwipeToReply(message);
+        return false; // False snaps it back visually
+      },
+      child: bubbleWidget,
+    );
+  }
+
+  Widget _buildReactions(ChatMessage message) {
+    if (message.metadata == null || message.metadata!['reactions'] == null) {
+      return const SizedBox.shrink();
+    }
+
+    final reactions = Map<String, dynamic>.from(message.metadata!['reactions']);
+    if (reactions.isEmpty) return const SizedBox.shrink();
+
+    final counts = <String, int>{};
+    for (final emoji in reactions.values) {
+      counts[emoji.toString()] = (counts[emoji.toString()] ?? 0) + 1;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: counts.entries.map((e) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(
+              '${e.key} ${e.value > 1 ? e.value : ""}'.trim(),
+              style: const TextStyle(fontSize: 12),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Future<void> _toggleReaction(ChatMessage message, String emoji) async {
+    final currentUserId = _currentUserId;
+    if (currentUserId == null) return;
+
+    final metadata = Map<String, dynamic>.from(message.metadata ?? {});
+    final reactions = Map<String, dynamic>.from(metadata['reactions'] ?? {});
+
+    if (reactions[currentUserId] == emoji) {
+      reactions.remove(currentUserId);
+    } else {
+      reactions[currentUserId] = emoji;
+    }
+    metadata['reactions'] = reactions;
+
+    setState(() => message.metadata = metadata);
+    await _chatService.updateMessageMetadata(message.id, metadata);
+  }
+
+  void _showMessageOptions(ChatMessage message, bool isCurrentUser) {
+    final List<String> emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade200),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: emojis.map((emoji) {
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                        _toggleReaction(message, emoji);
+                      },
+                      child: Text(emoji, style: const TextStyle(fontSize: 28)),
+                    );
+                  }).toList(),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.reply, color: Colors.blue),
+                title: Text('Reply', style: GoogleFonts.poppins()),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleSwipeToReply(message);
+                },
+              ),
+              if (message.content != null && message.content!.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.copy, color: Colors.grey),
+                  title: Text('Copy', style: GoogleFonts.poppins()),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: message.content!));
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied to clipboard')),
+                    );
+                  },
+                ),
+              if (isCurrentUser)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: Text(
+                    'Delete',
+                    style: GoogleFonts.poppins(color: Colors.red),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmDeleteMessage(message);
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Confirm and delete multiple messages
+  Future<void> _confirmBulkDeleteMessages() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Delete Messages',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          'Delete ${_selectedMessageIds.length} messages?',
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: GoogleFonts.poppins()),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final idsToDelete = _selectedMessageIds.toList();
+      setState(() => _selectedMessageIds.clear());
+
+      // Update UI optimistically
+      setState(() {
+        _messages.removeWhere((m) => idsToDelete.contains(m.id));
+      });
+
+      for (var id in idsToDelete) {
+        try {
+          await _chatService.deleteMessage(id);
+        } catch (e) {
+          /* ignore individual fails broadly */
+        }
+      }
+    }
   }
 
   // Confirm and delete a single message
@@ -1923,12 +3116,24 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<PlayerState>? _stateSub;
+  late List<double> _dummyAmplitudes;
 
   @override
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
     _setupListeners();
+    _generateDummyWaveform();
+  }
+
+  void _generateDummyWaveform() {
+    final random = math.Random(widget.url.hashCode);
+    _dummyAmplitudes = List.generate(40, (index) {
+      final normalized = index / 40;
+      final bell = math.sin(normalized * math.pi);
+      final noise = random.nextDouble() * 0.5 + 0.5;
+      return (bell * noise * 0.8 + 0.2).clamp(0.1, 1.0);
+    });
   }
 
   void _setupListeners() {
@@ -1974,70 +3179,64 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
         ? _position.inMilliseconds / _duration.inMilliseconds
         : 0.0;
 
+    // WhatsApp voice message UI
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      width: 240, // Fixed comfortable width for voice notes
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
             onTap: _togglePlay,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: widget.isCurrentUser
-                    ? Colors.white.withOpacity(0.3)
-                    : const Color(0xFFFF9800),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.white,
-                size: 20,
-              ),
+            child: Icon(
+              _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
+              color: widget.isCurrentUser
+                  ? const Color(0xFF5BA794)
+                  : Colors.grey.shade400,
+              size: 42,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: progress.clamp(0.0, 1.0),
-                    backgroundColor: widget.isCurrentUser
-                        ? Colors.white.withOpacity(0.3)
-                        : Colors.grey[300],
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      widget.isCurrentUser
-                          ? Colors.white
-                          : const Color(0xFFFF9800),
+                SizedBox(
+                  height: 24,
+                  width: double.infinity,
+                  child: CustomPaint(
+                    painter: _WaveformPainter(
+                      amplitudes: _dummyAmplitudes,
+                      progress: progress.clamp(0.0, 1.0),
+                      playedColor: widget.isCurrentUser
+                          ? const Color(0xFF5BA794)
+                          : Colors.grey.shade400,
+                      unplayedColor: widget.isCurrentUser
+                          ? const Color(0xFF90C1A3).withOpacity(0.5)
+                          : Colors.grey.shade300,
                     ),
-                    minHeight: 4,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_formatDur(_position)} / ${_formatDur(_duration)}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: widget.isCurrentUser
-                        ? Colors.white.withOpacity(0.7)
-                        : Colors.grey[500],
-                  ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _isPlaying
+                          ? _formatDur(_position)
+                          : _formatDur(_duration),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Icon(
-            Icons.mic,
-            size: 16,
-            color: widget.isCurrentUser
-                ? Colors.white.withOpacity(0.7)
-                : Colors.grey[500],
           ),
         ],
       ),
@@ -2048,5 +3247,62 @@ class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';
+  }
+}
+
+class _WaveformPainter extends CustomPainter {
+  final List<double> amplitudes;
+  final double progress;
+  final Color playedColor;
+  final Color unplayedColor;
+
+  _WaveformPainter({
+    required this.amplitudes,
+    required this.progress,
+    required this.playedColor,
+    required this.unplayedColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (amplitudes.isEmpty) return;
+
+    final paint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.fill;
+
+    final totalBars = amplitudes.length;
+    final spacing = 2.0;
+
+    // Calculate dynamic bar width based on available space
+    final availableWidth = size.width - (spacing * (totalBars - 1));
+    final barWidth = availableWidth / totalBars;
+    paint.strokeWidth = barWidth > 3.0
+        ? 3.0
+        : (barWidth < 1.0 ? 1.0 : barWidth);
+
+    for (int i = 0; i < totalBars; i++) {
+      final x = i * (paint.strokeWidth + spacing);
+      final isPlayed = (i / totalBars) <= progress;
+
+      paint.color = isPlayed ? playedColor : unplayedColor;
+
+      final barHeight = (amplitudes[i] * size.height).clamp(2.0, size.height);
+      final yOffset = (size.height - barHeight) / 2;
+
+      canvas.drawLine(
+        Offset(x, yOffset),
+        Offset(x, yOffset + barHeight),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WaveformPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.amplitudes != amplitudes ||
+        oldDelegate.playedColor != playedColor ||
+        oldDelegate.unplayedColor != unplayedColor;
   }
 }

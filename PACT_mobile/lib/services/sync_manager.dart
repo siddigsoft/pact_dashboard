@@ -44,7 +44,8 @@ class SyncManager {
     // Skip database initialization on web platform
     if (kIsWeb) {
       debugPrint(
-          'SyncManager: Skipping database initialization on web platform');
+        'SyncManager: Skipping database initialization on web platform',
+      );
       return;
     }
 
@@ -113,7 +114,8 @@ class SyncManager {
     // Skip queuing on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping queue operation on web platform or when database unavailable');
+        'SyncManager: Skipping queue operation on web platform or when database unavailable',
+      );
       return;
     }
 
@@ -136,7 +138,8 @@ class SyncManager {
     // Return empty list on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Returning empty sync operations on web platform or when database unavailable');
+        'SyncManager: Returning empty sync operations on web platform or when database unavailable',
+      );
       return [];
     }
 
@@ -157,7 +160,8 @@ class SyncManager {
     // Skip on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping mark operation completed on web platform or when database unavailable');
+        'SyncManager: Skipping mark operation completed on web platform or when database unavailable',
+      );
       return;
     }
 
@@ -176,7 +180,8 @@ class SyncManager {
     // Skip on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping mark operation failed on web platform or when database unavailable');
+        'SyncManager: Skipping mark operation failed on web platform or when database unavailable',
+      );
       return;
     }
 
@@ -199,7 +204,8 @@ class SyncManager {
     // Skip on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping retry failed operations on web platform or when database unavailable');
+        'SyncManager: Skipping retry failed operations on web platform or when database unavailable',
+      );
       return;
     }
 
@@ -214,10 +220,7 @@ class SyncManager {
       final currentRetryCount = (op['retry_count'] as int?) ?? 0;
       await _database!.update(
         'sync_queue',
-        {
-          'status': 'pending',
-          'retry_count': currentRetryCount + 1,
-        },
+        {'status': 'pending', 'retry_count': currentRetryCount + 1},
         where: 'id = ?',
         whereArgs: [op['id']],
       );
@@ -277,7 +280,9 @@ class SyncManager {
 
   /// Execute visit operation
   Future<bool> _executeVisitOperation(
-      String operationType, Map<String, dynamic> data) async {
+    String operationType,
+    Map<String, dynamic> data,
+  ) async {
     switch (operationType) {
       case 'create':
       case 'update':
@@ -301,7 +306,9 @@ class SyncManager {
 
   /// Execute location log operation
   Future<bool> _executeLocationLogOperation(
-      String operationType, Map<String, dynamic> data) async {
+    String operationType,
+    Map<String, dynamic> data,
+  ) async {
     if (operationType == 'create' || operationType == 'update') {
       final response = await http.post(
         Uri.parse('$_apiBaseUrl$_locationLogsSyncEndpoint'),
@@ -315,7 +322,9 @@ class SyncManager {
 
   /// Execute report operation
   Future<bool> _executeReportOperation(
-      String operationType, Map<String, dynamic> data) async {
+    String operationType,
+    Map<String, dynamic> data,
+  ) async {
     if (operationType == 'create' || operationType == 'update') {
       final response = await http.post(
         Uri.parse('$_apiBaseUrl$_reportsSyncEndpoint'),
@@ -340,7 +349,8 @@ class SyncManager {
     // Skip on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping handle sync conflict on web platform or when database unavailable');
+        'SyncManager: Skipping handle sync conflict on web platform or when database unavailable',
+      );
       return;
     }
 
@@ -364,7 +374,8 @@ class SyncManager {
     // Return empty list on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Returning empty conflicts on web platform or when database unavailable');
+        'SyncManager: Returning empty conflicts on web platform or when database unavailable',
+      );
       return [];
     }
 
@@ -386,7 +397,8 @@ class SyncManager {
     // Skip on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping resolve conflict on web platform or when database unavailable');
+        'SyncManager: Skipping resolve conflict on web platform or when database unavailable',
+      );
       return;
     }
 
@@ -409,12 +421,14 @@ class SyncManager {
     // Skip on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping cleanup old operations on web platform or when database unavailable');
+        'SyncManager: Skipping cleanup old operations on web platform or when database unavailable',
+      );
       return;
     }
 
-    final cutoffDate =
-        DateTime.now().subtract(const Duration(days: 7)).toIso8601String();
+    final cutoffDate = DateTime.now()
+        .subtract(const Duration(days: 7))
+        .toIso8601String();
 
     await _database!.delete(
       'sync_queue',
@@ -430,7 +444,8 @@ class SyncManager {
     // Return empty stats on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Returning empty sync stats on web platform or when database unavailable');
+        'SyncManager: Returning empty sync stats on web platform or when database unavailable',
+      );
       return {
         'queue_stats': {},
         'conflict_stats': {},
@@ -477,19 +492,16 @@ class SyncManager {
     // Skip on web platform (no offline sync)
     if (kIsWeb || _database == null) {
       debugPrint(
-          'SyncManager: Skipping update sync metadata on web platform or when database unavailable');
+        'SyncManager: Skipping update sync metadata on web platform or when database unavailable',
+      );
       return;
     }
 
-    await _database!.insert(
-      'sync_metadata',
-      {
-        'key': key,
-        'value': value,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _database!.insert('sync_metadata', {
+      'key': key,
+      'value': value,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // Initialize the sync manager
@@ -520,7 +532,8 @@ class SyncManager {
 
   // Handle connectivity changes
   void _handleConnectivityChange(List<ConnectivityResult> results) {
-    final hasConnectivity = results.contains(ConnectivityResult.mobile) ||
+    final hasConnectivity =
+        results.contains(ConnectivityResult.mobile) ||
         results.contains(ConnectivityResult.wifi) ||
         results.contains(ConnectivityResult.ethernet);
 
@@ -575,7 +588,9 @@ class SyncManager {
 
       // Update sync metadata
       await updateSyncMetadata(
-          'last_sync_time', DateTime.now().toIso8601String());
+        'last_sync_time',
+        DateTime.now().toIso8601String(),
+      );
 
       _isSyncing = false;
       return visitsSuccess && logsSuccess && reportsSuccess;

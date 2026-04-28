@@ -7,7 +7,10 @@ class BudgetCacheService {
   static const String _lastFetchKey = 'budget_last_fetch';
   static const Duration _cacheDuration = Duration(hours: 1); // Cache for 1 hour
 
-  static Future<void> cacheBudgetData(String siteVisitId, Map<String, dynamic> budgetData) async {
+  static Future<void> cacheBudgetData(
+    String siteVisitId,
+    Map<String, dynamic> budgetData,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final cacheKey = '${_budgetKey}_$siteVisitId';
 
@@ -19,7 +22,9 @@ class BudgetCacheService {
     await prefs.setString(cacheKey, jsonEncode(cacheEntry));
   }
 
-  static Future<Map<String, dynamic>?> getCachedBudgetData(String siteVisitId) async {
+  static Future<Map<String, dynamic>?> getCachedBudgetData(
+    String siteVisitId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final cacheKey = '${_budgetKey}_$siteVisitId';
 
@@ -47,7 +52,10 @@ class BudgetCacheService {
 
   static Future<void> clearBudgetCache() async {
     final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys().where((key) => key.startsWith(_budgetKey)).toList();
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith(_budgetKey))
+        .toList();
     for (final key in keys) {
       await prefs.remove(key);
     }
@@ -55,7 +63,10 @@ class BudgetCacheService {
 
   static Future<void> clearExpiredCache() async {
     final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys().where((key) => key.startsWith(_budgetKey)).toList();
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith(_budgetKey))
+        .toList();
 
     for (final key in keys) {
       final cachedString = prefs.getString(key);
@@ -80,7 +91,9 @@ class SubmissionCacheService {
   static const String _submissionsKey = 'cached_submissions';
   static const String _pendingUploadsKey = 'pending_uploads';
 
-  static Future<void> cacheSubmissionForOffline(Map<String, dynamic> submissionData) async {
+  static Future<void> cacheSubmissionForOffline(
+    Map<String, dynamic> submissionData,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final cached = await getCachedSubmissions();
 

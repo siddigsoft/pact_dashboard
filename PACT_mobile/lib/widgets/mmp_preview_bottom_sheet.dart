@@ -21,10 +21,7 @@ class MMPPreviewBottomSheet {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => _MMPPreviewContent(
-        file: file,
-        localPath: localPath,
-      ),
+      builder: (ctx) => _MMPPreviewContent(file: file, localPath: localPath),
     );
   }
 }
@@ -33,10 +30,7 @@ class _MMPPreviewContent extends StatefulWidget {
   final MMPFile file;
   final String localPath;
 
-  const _MMPPreviewContent({
-    required this.file,
-    required this.localPath,
-  });
+  const _MMPPreviewContent({required this.file, required this.localPath});
 
   @override
   State<_MMPPreviewContent> createState() => _MMPPreviewContentState();
@@ -65,15 +59,20 @@ class _MMPPreviewContentState extends State<_MMPPreviewContent> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent);
 
-    controller.loadFile(widget.localPath).then((_) {
-      if (mounted) {
-        setState(() => _webViewController = controller);
-      }
-    }).catchError((error) {
-      if (mounted) {
-        setState(() => _webViewError = 'Unable to preview document: $error');
-      }
-    });
+    controller
+        .loadFile(widget.localPath)
+        .then((_) {
+          if (mounted) {
+            setState(() => _webViewController = controller);
+          }
+        })
+        .catchError((error) {
+          if (mounted) {
+            setState(
+              () => _webViewError = 'Unable to preview document: $error',
+            );
+          }
+        });
   }
 
   Future<void> _openExternally() async {
@@ -103,14 +102,17 @@ class _MMPPreviewContentState extends State<_MMPPreviewContent> {
   Future<void> _shareFile() async {
     // On web, if localPath is a URL, share the URL directly
     if (kIsWeb && widget.localPath.startsWith('http')) {
-      await Share.share('Check out this file: ${widget.localPath}',
-          subject: _fileName);
+      await Share.share(
+        'Check out this file: ${widget.localPath}',
+        subject: _fileName,
+      );
       return;
     }
 
     try {
-      await Share.shareXFiles([XFile(widget.localPath)],
-          text: 'Sharing $_fileName');
+      await Share.shareXFiles([
+        XFile(widget.localPath),
+      ], text: 'Sharing $_fileName');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

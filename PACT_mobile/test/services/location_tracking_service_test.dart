@@ -21,13 +21,21 @@ void main() {
 
       // Mock basic database operations
       when(() => mockDatabase.execute(any())).thenAnswer((_) async {});
-      when(() => mockDatabase.insert(any(), any(),
-              conflictAlgorithm: any(named: 'conflictAlgorithm')))
-          .thenAnswer((_) async => 1);
-      when(() => mockDatabase.query(any(),
+      when(
+        () => mockDatabase.insert(
+          any(),
+          any(),
+          conflictAlgorithm: any(named: 'conflictAlgorithm'),
+        ),
+      ).thenAnswer((_) async => 1);
+      when(
+        () => mockDatabase.query(
+          any(),
           where: any(named: 'where'),
           limit: any(named: 'limit'),
-          orderBy: any(named: 'orderBy'))).thenAnswer((_) async => []);
+          orderBy: any(named: 'orderBy'),
+        ),
+      ).thenAnswer((_) async => []);
     });
 
     test('startTracking should initialize location tracking', () async {

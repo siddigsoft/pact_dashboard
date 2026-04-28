@@ -11,11 +11,7 @@ class PermitUploadResult {
   final String? fileUrl;
   final String? error;
 
-  PermitUploadResult({
-    required this.success,
-    this.fileUrl,
-    this.error,
-  });
+  PermitUploadResult({required this.success, this.fileUrl, this.error});
 
   factory PermitUploadResult.error(String message) =>
       PermitUploadResult(success: false, error: message);
@@ -54,15 +50,17 @@ class PermitUploadService {
       final filePath = 'permits/$mmpFileId/state/$stateSegment/$fileName';
 
       final bytes = await file.readAsBytes();
-      
-      await _supabase.storage.from(_bucket).uploadBinary(
-        filePath,
-        bytes,
-        fileOptions: FileOptions(
-          contentType: _getContentType(file),
-          upsert: true,
-        ),
-      );
+
+      await _supabase.storage
+          .from(_bucket)
+          .uploadBinary(
+            filePath,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: _getContentType(file),
+              upsert: true,
+            ),
+          );
 
       final publicUrl = _supabase.storage.from(_bucket).getPublicUrl(filePath);
 
@@ -88,18 +86,21 @@ class PermitUploadService {
       final stateSegment = _sanitizeSegment(state);
       final localitySegment = _sanitizeSegment(locality);
       final fileName = _generateFileName(file);
-      final filePath = 'permits/$mmpFileId/local/$stateSegment/$localitySegment/$fileName';
+      final filePath =
+          'permits/$mmpFileId/local/$stateSegment/$localitySegment/$fileName';
 
       final bytes = await file.readAsBytes();
-      
-      await _supabase.storage.from(_bucket).uploadBinary(
-        filePath,
-        bytes,
-        fileOptions: FileOptions(
-          contentType: _getContentType(file),
-          upsert: true,
-        ),
-      );
+
+      await _supabase.storage
+          .from(_bucket)
+          .uploadBinary(
+            filePath,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: _getContentType(file),
+              upsert: true,
+            ),
+          );
 
       final publicUrl = _supabase.storage.from(_bucket).getPublicUrl(filePath);
 
@@ -193,16 +194,22 @@ class PermitUploadService {
       );
       additionalData['locality_permit_attached'] = true;
 
-      await _supabase.from('mmp_site_entries').update({
-        'status': 'permits_attached',
-        'additional_data': additionalData,
-      }).eq('id', siteId);
+      await _supabase
+          .from('mmp_site_entries')
+          .update({
+            'status': 'permits_attached',
+            'additional_data': additionalData,
+          })
+          .eq('id', siteId);
     }
   }
 
   String? _validateFile(File file) {
-    final extension = path.extension(file.path).toLowerCase().replaceAll('.', '');
-    
+    final extension = path
+        .extension(file.path)
+        .toLowerCase()
+        .replaceAll('.', '');
+
     if (!_allowedExtensions.contains(extension)) {
       return 'Invalid file type. Please select a PDF or image file (JPG, PNG).';
     }

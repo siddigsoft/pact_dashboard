@@ -30,8 +30,28 @@ enum ExpenseCategory {
 
   String getLabel(bool isArabic) => isArabic ? labelAr : labelEn;
 
+  /// Canonical value accepted by DB constraints.
+  /// Keep UI enum values stable while normalizing payloads for persistence.
+  String get dbValue {
+    switch (this) {
+      case ExpenseCategory.transport:
+        return 'general_transport';
+      case ExpenseCategory.officeAdmin:
+        return 'other';
+      default:
+        return value;
+    }
+  }
+
   static ExpenseCategory? fromValue(String? value) {
     if (value == null) return null;
+    // Backward/forward compatibility with DB aliases and legacy payloads.
+    if (value == 'general_transport' || value == 'transportation') {
+      return ExpenseCategory.transport;
+    }
+    if (value == 'office_admin') {
+      return ExpenseCategory.officeAdmin;
+    }
     try {
       return ExpenseCategory.values.firstWhere((e) => e.value == value);
     } catch (_) {
@@ -481,7 +501,7 @@ class OperationalCostSubmission {
     'user_id': userId,
     'project_id': projectId,
     'hub_id': hubId,
-    'expense_category': expenseCategory.value,
+    'expense_category': expenseCategory.dbValue,
     'funding_type': fundingType.value,
     'amount_cents': amountCents,
     'currency': currency,

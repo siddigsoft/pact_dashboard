@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/standard_back_button.dart';
 
 class RoleManagementScreen extends StatefulWidget {
   final bool isArabic;
@@ -170,10 +171,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         appBar: AppBar(
           backgroundColor: AppColors.primaryBlue,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
+          leading: const StandardBackButton(),
           title: Text(
             widget.isArabic ? 'إدارة الأدوار' : 'Role Management',
             style: GoogleFonts.poppins(

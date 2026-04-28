@@ -11,16 +11,17 @@ class SiteAssignmentService {
     double lon2,
   ) {
     const double earthRadius = 6371000; // Earth's radius in meters
-    
+
     final double dLat = _toRadians(lat2 - lat1);
     final double dLon = _toRadians(lon2 - lon1);
-    
-    final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+
+    final double a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_toRadians(lat1)) *
             math.cos(_toRadians(lat2)) *
             math.sin(dLon / 2) *
             math.sin(dLon / 2);
-            
+
     final double c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
     return earthRadius * c;
   }
@@ -32,7 +33,7 @@ class SiteAssignmentService {
   Future<List<SiteVisit>> rankSiteVisits(List<SiteVisit> siteVisits) async {
     try {
       final position = await Geolocator.getCurrentPosition();
-      
+
       // Calculate distances and sort
       final rankedVisits = siteVisits.map((visit) {
         final distance = _calculateDistance(
@@ -41,12 +42,12 @@ class SiteAssignmentService {
           visit.latitude ?? 0.0,
           visit.longitude ?? 0.0,
         );
-        
+
         return _RankedSiteVisit(visit: visit, distance: distance);
       }).toList();
-      
+
       rankedVisits.sort((a, b) => a.distance.compareTo(b.distance));
-      
+
       return rankedVisits.map((ranked) => ranked.visit).toList();
     } catch (e) {
       // If location is not available, return original order
@@ -58,9 +59,6 @@ class SiteAssignmentService {
 class _RankedSiteVisit {
   final SiteVisit visit;
   final double distance;
-  
-  _RankedSiteVisit({
-    required this.visit,
-    required this.distance,
-  });
+
+  _RankedSiteVisit({required this.visit, required this.distance});
 }

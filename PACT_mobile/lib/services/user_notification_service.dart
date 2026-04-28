@@ -150,6 +150,40 @@ class UserNotificationService {
     _emit();
   }
 
+  /// Delete a single notification (DB + local list).
+  Future<bool> deleteNotification(String id) async {
+    try {
+      await _supabase.from('notifications').delete().eq('id', id);
+      _notifications.removeWhere((n) => n.id == id);
+      if (_cacheBox != null) await _cacheBox!.delete(id);
+      _emit();
+      return true;
+    } catch (e) {
+      debugPrint('UserNotificationService deleteNotification error: $e');
+      return false;
+    }
+  }
+
+  /// Clear all notifications for the current user (DB + local list).
+  Future<int> clearAllNotifications() async {
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser == null) return 0;
+    try {
+      await _supabase
+          .from('notifications')
+          .delete()
+          .or('recipient_id.eq.${currentUser.id},user_id.eq.${currentUser.id}');
+      final count = _notifications.length;
+      _notifications.clear();
+      if (_cacheBox != null) await _cacheBox!.clear();
+      _emit();
+      return count;
+    } catch (e) {
+      debugPrint('UserNotificationService clearAllNotifications error: $e');
+      return 0;
+    }
+  }
+
   Future<void> _fetchLatest(String userId) async {
     try {
       final response = await _supabase
@@ -159,14 +193,26 @@ class UserNotificationService {
           .order('created_at', ascending: false)
           .limit(_maxCachedNotifications);
 
+      final list = response;
       debugPrint(
-        'UserNotificationService: Fetched ${response.length} notifications for user $userId',
+        'UserNotificationService: Fetched ${list.length} notifications for user $userId',
       );
 
-      for (final item in response) {
-        _upsertNotification(UserNotification.fromJson(item));
+      int added = 0;
+      for (final item in list) {
+        try {
+          final map = item is Map<String, dynamic>
+              ? item
+              : Map<String, dynamic>.from(item as Map);
+          final notification = UserNotification.fromJson(map);
+          if (notification.id.isEmpty) continue;
+          _upsertNotification(notification);
+          added++;
+        } catch (e) {
+          debugPrint('UserNotificationService: Skipped malformed row: $e');
+        }
       }
-      await _writeCache();
+      if (added > 0) await _writeCache();
     } catch (e) {
       debugPrint('UserNotificationService fetch error: $e');
     }

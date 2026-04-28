@@ -15,10 +15,7 @@ class SupabaseService {
     required String supabaseUrl,
     required String supabaseAnonKey,
   }) async {
-    await Supabase.initialize(
-      url: supabaseUrl,
-      anonKey: supabaseAnonKey,
-    );
+    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
     _client = Supabase.instance.client;
   }
 
@@ -48,10 +45,7 @@ class SupabaseService {
       final session = _client.auth.currentSession;
       if (session == null) throw const AuthException('No session established');
 
-      return AuthResponse(
-        session: session,
-        user: session.user,
-      );
+      return AuthResponse(session: session, user: session.user);
     } catch (e) {
       throw AuthException(e.toString());
     }

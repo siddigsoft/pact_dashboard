@@ -41,11 +41,7 @@ class MapTileCacheService {
 
   /// Get cache statistics (returns zeros on web)
   static Future<Map<String, dynamic>> getCacheStats() async {
-    return {
-      'tileCount': 0,
-      'sizeInBytes': 0,
-      'sizeInMB': '0.00',
-    };
+    return {'tileCount': 0, 'sizeInBytes': 0, 'sizeInMB': '0.00'};
   }
 
   /// Clear all cached tiles (no-op on web)

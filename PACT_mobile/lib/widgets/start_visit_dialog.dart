@@ -2,12 +2,44 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/user_identity_resolver.dart';
 
-class StartVisitDialog extends StatelessWidget {
+class StartVisitDialog extends StatefulWidget {
   final Map<String, dynamic> site;
   const StartVisitDialog({super.key, required this.site});
+
+  @override
+  State<StartVisitDialog> createState() => _StartVisitDialogState();
+}
+
+class _StartVisitDialogState extends State<StartVisitDialog> {
+  late final Future<Map<String, String>> _userDisplayNamesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _userDisplayNamesFuture = _resolveUserDisplayNames();
+  }
+
+  Future<Map<String, String>> _resolveUserDisplayNames() async {
+    final additionalData =
+        _safeAdditionalData(widget.site['additional_data']) ??
+        <String, dynamic>{};
+    final merged = <String, dynamic>{...widget.site, ...additionalData};
+    final ids = UserIdentityResolver.collectPotentialUserIdsFromData(merged);
+    if (ids.isEmpty) return {};
+    try {
+      return await UserIdentityResolver.resolveUserDisplayNames(
+        client: Supabase.instance.client,
+        userIds: ids,
+      );
+    } catch (_) {
+      return {};
+    }
+  }
 
   static Map<String, dynamic>? _safeAdditionalData(dynamic data) {
     if (data == null) return null;
@@ -85,7 +117,11 @@ class StartVisitDialog extends StatelessWidget {
     return null;
   }
 
-  static String _stringifyMmpValue(dynamic value, bool isArabic) {
+  static String _stringifyMmpValue(
+    dynamic value,
+    bool isArabic, {
+    Map<String, String> userDisplayNames = const {},
+  }) {
     if (value == null) return '';
     if (value is bool) {
       return isArabic ? (value ? 'نعم' : 'لا') : (value ? 'Yes' : 'No');
@@ -102,6 +138,9 @@ class StartVisitDialog extends StatelessWidget {
     if (text.isEmpty) return '';
     final lowered = text.toLowerCase();
     if (lowered == 'null' || lowered == 'n/a' || lowered == 'na') return '';
+    if (UserIdentityResolver.isLikelyUuid(text)) {
+      return userDisplayNames[text] ?? text;
+    }
     return text;
   }
 
@@ -119,8 +158,16 @@ class StartVisitDialog extends StatelessWidget {
     return buffer.toString();
   }
 
-  static String _enhanceMmpDetailValue(String label, String value) {
+  static String _enhanceMmpDetailValue(
+    String label,
+    String value, {
+    Map<String, String> userDisplayNames = const {},
+  }) {
     if (value.isEmpty) return value;
+    if (UserIdentityResolver.labelExpectsUserIdentity(label) &&
+        UserIdentityResolver.isLikelyUuid(value)) {
+      return userDisplayNames[value] ?? value;
+    }
     final normalizedLabel = _normalizeLabelKey(label);
     final shouldFormatAmount =
         normalizedLabel.contains('payout') ||
@@ -134,13 +181,13 @@ class StartVisitDialog extends StatelessWidget {
     final cleaned = value.replaceAll(',', '').trim();
     final parsed = num.tryParse(cleaned);
     if (parsed == null) return value;
-    final normalizedNumber =
-        parsed % 1 == 0 ? parsed.toInt().toString() : parsed.toStringAsFixed(2);
+    final normalizedNumber = parsed % 1 == 0
+        ? parsed.toInt().toString()
+        : parsed.toStringAsFixed(2);
     return '${_formatNumberWithCommas(normalizedNumber)} SDG';
   }
 
-  static String _bi(bool isArabic, String en, String ar) =>
-      isArabic ? ar : en;
+  static String _bi(bool isArabic, String en, String ar) => isArabic ? ar : en;
 
   static List<Widget> _buildUploadedMmpDetailSections(
     bool isArabic,
@@ -290,15 +337,27 @@ class StartVisitDialog extends StatelessWidget {
     Map<String, dynamic> siteData,
     Map<String, dynamic> additionalData,
     bool isArabic,
+    Map<String, String> userDisplayNames,
   ) {
     final details = <MapEntry<String, String>>[];
     final seen = <String>{};
 
     void addLabeledEntry(String label, String value) {
       final normalized = _normalizeLabelKey(label);
-      if (normalized.isEmpty || seen.contains(normalized) || value.isEmpty) return;
+      if (normalized.isEmpty || seen.contains(normalized) || value.isEmpty) {
+        return;
+      }
       seen.add(normalized);
-      details.add(MapEntry(label, _enhanceMmpDetailValue(label, value)));
+      details.add(
+        MapEntry(
+          label,
+          _enhanceMmpDetailValue(
+            label,
+            value,
+            userDisplayNames: userDisplayNames,
+          ),
+        ),
+      );
     }
 
     void addEntry(String key, dynamic rawValue) {
@@ -309,23 +368,47 @@ class StartVisitDialog extends StatelessWidget {
         if (mapValue != null) {
           addLabeledEntry(
             _bi(isArabic, 'Claim Calculation Source', 'حساب المطالبة - المصدر'),
-            _stringifyMmpValue(mapValue['fee_source'], isArabic),
+            _stringifyMmpValue(
+              mapValue['fee_source'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           addLabeledEntry(
             _bi(isArabic, 'Claim Calculation Scope', 'حساب المطالبة - النطاق'),
-            _stringifyMmpValue(mapValue['role_scope'], isArabic),
+            _stringifyMmpValue(
+              mapValue['role_scope'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           addLabeledEntry(
             _bi(isArabic, 'Claim Total Payout', 'حساب المطالبة - إجمالي الدفع'),
-            _stringifyMmpValue(mapValue['total_payout'], isArabic),
+            _stringifyMmpValue(
+              mapValue['total_payout'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           addLabeledEntry(
-            _bi(isArabic, 'Claim Transport Cost', 'حساب المطالبة - تكلفة النقل'),
-            _stringifyMmpValue(mapValue['calculated_transport_cost'], isArabic),
+            _bi(
+              isArabic,
+              'Claim Transport Cost',
+              'حساب المطالبة - تكلفة النقل',
+            ),
+            _stringifyMmpValue(
+              mapValue['calculated_transport_cost'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           addLabeledEntry(
             _bi(isArabic, 'Claim Enumerator Fee', 'حساب المطالبة - أجر الباحث'),
-            _stringifyMmpValue(mapValue['enumerator_fee'], isArabic),
+            _stringifyMmpValue(
+              mapValue['enumerator_fee'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           return;
         }
@@ -336,19 +419,43 @@ class StartVisitDialog extends StatelessWidget {
         if (mapValue != null) {
           addLabeledEntry(
             _bi(isArabic, 'Dispatch Cost Status', 'تكاليف الإرسال - الحالة'),
-            _stringifyMmpValue(mapValue['cost_status'], isArabic),
+            _stringifyMmpValue(
+              mapValue['cost_status'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           addLabeledEntry(
-            _bi(isArabic, 'Dispatch Cost Calculated By', 'تكاليف الإرسال - حسب'),
-            _stringifyMmpValue(mapValue['calculated_by'], isArabic),
+            _bi(
+              isArabic,
+              'Dispatch Cost Calculated By',
+              'تكاليف الإرسال - حسب',
+            ),
+            _stringifyMmpValue(
+              mapValue['calculated_by'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           addLabeledEntry(
             _bi(isArabic, 'Dispatch Transport Cost', 'تكاليف الإرسال - نقل'),
-            _stringifyMmpValue(mapValue['transportation_cost'], isArabic),
+            _stringifyMmpValue(
+              mapValue['transportation_cost'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           addLabeledEntry(
-            _bi(isArabic, 'Dispatch Transport Budget', 'تكاليف الإرسال - ميزانية النقل'),
-            _stringifyMmpValue(mapValue['transport_budget_total'], isArabic),
+            _bi(
+              isArabic,
+              'Dispatch Transport Budget',
+              'تكاليف الإرسال - ميزانية النقل',
+            ),
+            _stringifyMmpValue(
+              mapValue['transport_budget_total'],
+              isArabic,
+              userDisplayNames: userDisplayNames,
+            ),
           );
           return;
         }
@@ -356,14 +463,24 @@ class StartVisitDialog extends StatelessWidget {
 
       if (rawValue is Map || rawValue is List) return;
 
-      final value = _stringifyMmpValue(rawValue, isArabic);
+      final value = _stringifyMmpValue(
+        rawValue,
+        isArabic,
+        userDisplayNames: userDisplayNames,
+      );
       if (value.isEmpty) return;
       if (normalizedKey.isEmpty || seen.contains(normalizedKey)) return;
       seen.add(normalizedKey);
-      details.add(MapEntry(
-        _formatMmpKeyLabel(key),
-        _enhanceMmpDetailValue(_formatMmpKeyLabel(key), value),
-      ));
+      details.add(
+        MapEntry(
+          _formatMmpKeyLabel(key),
+          _enhanceMmpDetailValue(
+            _formatMmpKeyLabel(key),
+            value,
+            userDisplayNames: userDisplayNames,
+          ),
+        ),
+      );
     }
 
     const preferredKeys = [
@@ -390,8 +507,27 @@ class StartVisitDialog extends StatelessWidget {
       addEntry(key, additionalData[key]);
     }
 
-    const excludedPrefixes = ['draft_', 'visit_', 'start_', 'final_', 'permit_', 'state_permit_', 'locality_permit_', 'registry_', '_'];
-    const excludedExact = {'assigned_to', 'assigned_at', 'accepted_at', 'accepted_by', 'claimed_at', 'claimed_by', 'updated_at', 'created_at'};
+    const excludedPrefixes = [
+      'draft_',
+      'visit_',
+      'start_',
+      'final_',
+      'permit_',
+      'state_permit_',
+      'locality_permit_',
+      'registry_',
+      '_',
+    ];
+    const excludedExact = {
+      'assigned_to',
+      'assigned_at',
+      'accepted_at',
+      'accepted_by',
+      'claimed_at',
+      'claimed_by',
+      'updated_at',
+      'created_at',
+    };
     final sortedKeys = additionalData.keys.toList()..sort();
     for (final key in sortedKeys) {
       if (excludedExact.contains(key)) continue;
@@ -404,56 +540,57 @@ class StartVisitDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final additionalData = _safeAdditionalData(site['additional_data']) ?? {};
+    final additionalData =
+        _safeAdditionalData(widget.site['additional_data']) ?? {};
     final siteName =
-        site['site_name'] ??
-        site['siteName'] ??
+        widget.site['site_name'] ??
+        widget.site['siteName'] ??
         (isArabic ? 'موقع غير معروف' : 'Unknown Site');
     final siteCode =
-        site['site_code'] ??
-        site['siteCode'] ??
-        site['id']?.toString().substring(0, 8) ??
+        widget.site['site_code'] ??
+        widget.site['siteCode'] ??
+        widget.site['id']?.toString().substring(0, 8) ??
         '';
-    final state = site['state'] ?? '';
-    final locality = site['locality'] ?? '';
-    final status = site['status'] ?? (isArabic ? 'معلق' : 'Pending');
+    final state = widget.site['state'] ?? '';
+    final locality = widget.site['locality'] ?? '';
+    final status = widget.site['status'] ?? (isArabic ? 'معلق' : 'Pending');
 
-    final toolsToBeUsed = _resolveFromSite(
-      site,
-      additionalData,
-      const [
-        'tool_to_be_used',
-        'tool_to_be_use',
-        'tools_to_be_used',
-        'tools_to_be_use',
-        'survey_tool',
-        'tool_used',
-        'tool',
-      ],
-    );
-    final mainActivity = _resolveFromSite(
-      site,
-      additionalData,
-      const [
-        'main_activity',
-        'activity_at_site',
-        'activity_type',
-        'activity',
-      ],
-    ).toUpperCase();
-    final mmpStatus = _resolveFromSite(
-      site,
-      additionalData,
-      const ['mmp_status', 'status'],
-    );
+    final toolsToBeUsed = _resolveFromSite(widget.site, additionalData, const [
+      'tool_to_be_used',
+      'tool_to_be_use',
+      'tools_to_be_used',
+      'tools_to_be_use',
+      'survey_tool',
+      'tool_used',
+      'tool',
+    ]);
+    final mainActivity = _resolveFromSite(widget.site, additionalData, const [
+      'main_activity',
+      'activity_at_site',
+      'activity_type',
+      'activity',
+    ]).toUpperCase();
+    final mmpStatus = _resolveFromSite(widget.site, additionalData, const [
+      'mmp_status',
+      'status',
+    ]);
     final toolsDisplay = toolsToBeUsed.isNotEmpty
         ? toolsToBeUsed
         : (mainActivity.isNotEmpty ? mainActivity : '');
     final mainActivityDisplay = mainActivity.isNotEmpty ? mainActivity : '';
     final mmpStatusDisplay = mmpStatus.isNotEmpty ? mmpStatus : status;
-    final uploadedDetails = _collectUploadedDetails(site, additionalData, isArabic);
+    return FutureBuilder<Map<String, String>>(
+      future: _userDisplayNamesFuture,
+      builder: (context, snapshot) {
+        final userDisplayNames = snapshot.data ?? const <String, String>{};
+        final uploadedDetails = _collectUploadedDetails(
+          widget.site,
+          additionalData,
+          isArabic,
+          userDisplayNames,
+        );
 
-    return Dialog(
+        return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -581,7 +718,9 @@ class StartVisitDialog extends StatelessWidget {
                                     ),
                                     Text(
                                       siteCode,
-                                      textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                      textAlign: isArabic
+                                          ? TextAlign.start
+                                          : TextAlign.end,
                                       textDirection: isArabic
                                           ? TextDirection.rtl
                                           : TextDirection.ltr,
@@ -608,7 +747,9 @@ class StartVisitDialog extends StatelessWidget {
                                       locality.isNotEmpty
                                           ? locality
                                           : (state.isNotEmpty ? state : 'N/A'),
-                                      textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                      textAlign: isArabic
+                                          ? TextAlign.start
+                                          : TextAlign.end,
                                       textDirection: isArabic
                                           ? TextDirection.rtl
                                           : TextDirection.ltr,
@@ -668,7 +809,9 @@ class StartVisitDialog extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isArabic ? 'الأدوات المستخدمة' : 'Tools to be Used',
+                                isArabic
+                                    ? 'الأدوات المستخدمة'
+                                    : 'Tools to be Used',
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   color: Colors.grey[600],
@@ -678,7 +821,9 @@ class StartVisitDialog extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 toolsDisplay.isEmpty ? 'N/A' : toolsDisplay,
-                                textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                textAlign: isArabic
+                                    ? TextAlign.start
+                                    : TextAlign.end,
                                 textDirection: isArabic
                                     ? TextDirection.rtl
                                     : TextDirection.ltr,
@@ -698,7 +843,9 @@ class StartVisitDialog extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      isArabic ? 'النشاط الرئيسي' : 'Main Activity',
+                                      isArabic
+                                          ? 'النشاط الرئيسي'
+                                          : 'Main Activity',
                                       style: GoogleFonts.poppins(
                                         fontSize: 12,
                                         color: Colors.grey[600],
@@ -707,8 +854,12 @@ class StartVisitDialog extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      mainActivityDisplay.isEmpty ? 'N/A' : mainActivityDisplay,
-                                      textAlign: isArabic ? TextAlign.start : TextAlign.end,
+                                      mainActivityDisplay.isEmpty
+                                          ? 'N/A'
+                                          : mainActivityDisplay,
+                                      textAlign: isArabic
+                                          ? TextAlign.start
+                                          : TextAlign.end,
                                       textDirection: isArabic
                                           ? TextDirection.rtl
                                           : TextDirection.ltr,
@@ -740,7 +891,9 @@ class StartVisitDialog extends StatelessWidget {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: AppColors.accentGreen.withValues(alpha: 0.15),
+                                        color: AppColors.accentGreen.withValues(
+                                          alpha: 0.15,
+                                        ),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
@@ -760,7 +913,9 @@ class StartVisitDialog extends StatelessWidget {
                           if (uploadedDetails.isNotEmpty) ...[
                             const SizedBox(height: 14),
                             Text(
-                              isArabic ? 'بيانات MMP المرفوعة' : 'Uploaded MMP Data',
+                              isArabic
+                                  ? 'بيانات MMP المرفوعة'
+                                  : 'Uploaded MMP Data',
                               style: GoogleFonts.poppins(
                                 fontSize: 12,
                                 color: Colors.grey[700],
@@ -769,7 +924,10 @@ class StartVisitDialog extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            ..._buildUploadedMmpDetailSections(isArabic, uploadedDetails),
+                            ..._buildUploadedMmpDetailSections(
+                              isArabic,
+                              uploadedDetails,
+                            ),
                           ],
                         ],
                       ),
@@ -906,6 +1064,8 @@ class StartVisitDialog extends StatelessWidget {
           ],
         ),
       ),
+        );
+      },
     );
   }
 

@@ -114,16 +114,15 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
 
       final response = await Supabase.instance.client
           .from('profiles')
-          .select('hub_id, state_id, locality_id, hub, state, locality')
+          .select('hub_id, state_id, locality_id')
           .eq('id', currentUser.id)
           .maybeSingle();
 
       if (response != null && mounted) {
         setState(() {
-          _currentUserHubId = response['hub_id'] ?? response['hub'];
-          _currentUserStateId = response['state_id'] ?? response['state'];
-          _currentUserLocalityId =
-              response['locality_id'] ?? response['locality'];
+          _currentUserHubId = response['hub_id'] as String?;
+          _currentUserStateId = response['state_id'] as String?;
+          _currentUserLocalityId = response['locality_id'] as String?;
         });
         // Load field supervisors after getting current user's location
         _loadFieldSupervisors();
@@ -145,7 +144,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       var query = Supabase.instance.client
           .from('profiles')
           .select(
-            'id, full_name, email, role, phone, avatar_url, availability, hub_id, state_id, hub, state',
+            'id, full_name, email, role, phone, avatar_url, availability, hub_id, state_id',
           )
           .inFilter('role', [
             'supervisor',
@@ -159,8 +158,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
 
       // Filter to same hub or state
       final filteredList = (response as List).where((user) {
-        final userHubId = user['hub_id'] ?? user['hub'];
-        final userStateId = user['state_id'] ?? user['state'];
+        final userHubId = user['hub_id'] as String?;
+        final userStateId = user['state_id'] as String?;
 
         // Match by hub first, then by state
         if (_currentUserHubId != null && userHubId == _currentUserHubId) {
@@ -1137,9 +1136,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
 
   Future<void> _openMessaging(String userId, String userName) async {
     // Navigate to communications screen to send message
-    Navigator.push(
+    Navigator.pushNamed(
       context,
-      MaterialPageRoute(builder: (context) => const CommunicationsScreen()),
+      '/main',
+      arguments: {'tab': 'communications'},
     );
 
     // Show hint about who to message
@@ -1864,9 +1864,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       _openMessaging(admin['id'] as String, userName);
     } else {
       // Just navigate to communications
-      Navigator.push(
+      Navigator.pushNamed(
         context,
-        MaterialPageRoute(builder: (context) => const CommunicationsScreen()),
+        '/main',
+        arguments: {'tab': 'communications'},
       );
     }
   }

@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:intl/intl.dart';
 import '../services/webrtc_service.dart';
 import '../services/call_quality_monitor_service.dart';
+import '../services/analytics_service.dart';
 import '../models/call_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/call_quality_indicator.dart';
@@ -54,6 +55,16 @@ class _EnhancedCallScreenState extends State<EnhancedCallScreen>
   @override
   void initState() {
     super.initState();
+    // Log screen view for analytics
+    AnalyticsService.logScreenView('EnhancedCallScreen');
+    AnalyticsService.logEvent(
+      'webrtc_call_started',
+      parameters: {
+        'remote_user': widget.remoteUserName ?? 'Unknown',
+        'call_type': 'WebRTC',
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
     WidgetsBinding.instance.addObserver(this);
     _initRenderers();
     _subscribeToStreams();

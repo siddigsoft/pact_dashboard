@@ -14,8 +14,10 @@ class SiteVisitWithDistance {
   final SiteVisit visit;
   final double distanceMeters;
 
-  const SiteVisitWithDistance(
-      {required this.visit, required this.distanceMeters});
+  const SiteVisitWithDistance({
+    required this.visit,
+    required this.distanceMeters,
+  });
 
   /// Distance in kilometers (legacy compatibility).
   double get distance => distanceMeters / 1000;
@@ -26,11 +28,11 @@ class SiteVisitWithDistance {
       : '${distanceMeters.toStringAsFixed(0)} m';
 
   Map<String, dynamic> toJson() => {
-        'visit': visit.toJson(),
-        'distanceMeters': distanceMeters,
-        'distance': distance, // kept for backward compatibility
-        'distanceText': distanceText,
-      };
+    'visit': visit.toJson(),
+    'distanceMeters': distanceMeters,
+    'distance': distance, // kept for backward compatibility
+    'distanceText': distanceText,
+  };
 }
 
 class NearestSiteVisits {
@@ -53,18 +55,21 @@ class NearestSiteVisits {
           lng != null;
     });
 
-    final withDistances = filtered.map((visit) {
-      final distance = DistanceHelper.haversine(
-        userLocation.latitude,
-        userLocation.longitude,
-        visit.latitude!,
-        visit.longitude!,
-      );
-      return SiteVisitWithDistance(visit: visit, distanceMeters: distance);
-    }).where((entry) {
-      if (maxRadiusMeters == null) return true;
-      return entry.distanceMeters <= maxRadiusMeters;
-    }).toList();
+    final withDistances = filtered
+        .map((visit) {
+          final distance = DistanceHelper.haversine(
+            userLocation.latitude,
+            userLocation.longitude,
+            visit.latitude!,
+            visit.longitude!,
+          );
+          return SiteVisitWithDistance(visit: visit, distanceMeters: distance);
+        })
+        .where((entry) {
+          if (maxRadiusMeters == null) return true;
+          return entry.distanceMeters <= maxRadiusMeters;
+        })
+        .toList();
 
     withDistances.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
     if (withDistances.length <= k) return withDistances;

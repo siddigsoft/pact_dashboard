@@ -428,7 +428,9 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
 
     // Match web ClaimSiteButton: send full params (fee + normalized role_scope) so backend
     // uses our values and does not SELECT from user_classifications (avoids enum error when DB has "enumerator").
-    final roleScope = ClaimFeeService.normalizeRoleScopeForEnum(breakdown.roleScope);
+    final roleScope = ClaimFeeService.normalizeRoleScopeForEnum(
+      breakdown.roleScope,
+    );
     final params = {
       'p_site_id': widget.siteEntryId,
       'p_user_id': userId,
@@ -438,11 +440,10 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
       'p_role_scope': roleScope,
       'p_fee_source': breakdown.feeSource,
     };
-    debugPrint('[ClaimSiteButton] Calling claim_site_visit with params: $params');
-    final response = await supabase.rpc(
-      'claim_site_visit',
-      params: params,
+    debugPrint(
+      '[ClaimSiteButton] Calling claim_site_visit with params: $params',
     );
+    final response = await supabase.rpc('claim_site_visit', params: params);
 
     debugPrint('[ClaimSiteButton] RPC raw response: $response');
 
@@ -463,8 +464,12 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
     await _setConfirmationDeadlines();
 
     // Use fee from RPC result when present; fallback to breakdown for notifications
-    final enumeratorFee = (result['enumerator_fee'] as num?)?.toDouble() ?? breakdown.enumeratorFee;
-    final transportFee = (result['transport_fee'] as num?)?.toDouble() ?? breakdown.transportBudget;
+    final enumeratorFee =
+        (result['enumerator_fee'] as num?)?.toDouble() ??
+        breakdown.enumeratorFee;
+    final transportFee =
+        (result['transport_fee'] as num?)?.toDouble() ??
+        breakdown.transportBudget;
 
     final notificationService = NotificationTriggerService();
 
@@ -487,6 +492,13 @@ class _ClaimSiteButtonState extends ConsumerState<ClaimSiteButton> {
         null, // projectId
       );
     }
+
+    // Notify the claimer (e.g. "You have claimed site A")
+    await notificationService.siteClaimedBySelf(
+      userId,
+      widget.siteName,
+      widget.siteEntryId,
+    );
 
     debugPrint('Site claimed successfully: ${result['site_name']}');
     debugPrint(

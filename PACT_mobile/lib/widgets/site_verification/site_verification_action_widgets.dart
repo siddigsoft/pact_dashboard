@@ -1,4 +1,4 @@
-part of 'site_verification_screen.dart';
+part of '../../screens/site_verification_screen.dart';
 
 extension _SiteVerificationActionWidgets on _SiteVerificationScreenState {
   Widget _buildActionButtons(Map<String, dynamic> site, String category) {
@@ -55,11 +55,16 @@ extension _SiteVerificationActionWidgets on _SiteVerificationScreenState {
                     : !hasLocalityPermit
                     ? 'Upload Locality Permit'
                     : 'Permits Complete',
+                maxLines: 2,
+                softWrap: true,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryBlue,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
+                minimumSize: const Size(0, 44),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -96,11 +101,18 @@ extension _SiteVerificationActionWidgets on _SiteVerificationScreenState {
             child: ElevatedButton.icon(
               onPressed: () => _showLocalityPermitDialog(site),
               icon: const Icon(Icons.location_on, size: 18),
-              label: const Text('Permit Status'),
+              label: const Text(
+                'Permit Status',
+                maxLines: 2,
+                softWrap: true,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryBlue,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
+                minimumSize: const Size(0, 44),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1192,6 +1204,239 @@ extension _SiteVerificationActionWidgets on _SiteVerificationScreenState {
     }
   }
 
+  /// Bulk return multiple sites to FOM with a shared reason dialog.
+  /// Called from group-header buttons in the State Permit, Locality Permit,
+  /// and CP Verification tabs.
+  Future<void> _bulkReturnSitesToFOM(
+    String scopeLabel,
+    List<Map<String, dynamic>> sites,
+  ) async {
+    final TextEditingController reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bulk Return to FOM'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Return ${sites.length} site(s) in "$scopeLabel" to Field Operations Manager?',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Reason for returning',
+                hintText: 'Enter reason...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text(
+              'Return All',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final reason = reasonController.text.trim();
+    if (reason.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter a reason for returning'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      setState(() => _isLoading = true);
+
+      // Only return sites in eligible (pre-completion) statuses
+      const eligibleStatuses = [
+        'pending',
+        'new',
+        'dispatched',
+        'forwarded',
+        'forwarded_to_coordinator',
+        'forwarded_to_coordinators',
+        'assigned',
+        'inprogress',
+        'in_progress',
+      ];
+
+      final targetSites = sites.where((s) {
+        final status = (s['status']?.toString() ?? '')
+            .toLowerCase()
+            .trim()
+            .replaceAll(RegExp(r'\s+'), '_');
+        return eligibleStatuses.contains(status);
+      }).toList();
+
+      if (targetSites.isEmpty) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No eligible sites to return. Only pending/in-progress sites can be returned.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      int updated = 0;
+      for (final site in targetSites) {
+        final siteId = site['id'].toString();
+        final additionalData = Map<String, dynamic>.from(
+          site['additional_data'] as Map<String, dynamic>? ?? {},
+        );
+        additionalData['sent_back_to_fom'] = true;
+        additionalData['sent_back_reason'] = reason;
+        additionalData['sent_back_at'] = DateTime.now().toIso8601String();
+        additionalData['sent_back_by'] = _userId;
+
+        try {
+          await _supabase
+              .from('mmp_site_entries')
+              .update({
+                'status': 'returned_to_fom',
+                'verification_notes': reason,
+                'additional_data': additionalData,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', siteId);
+          updated++;
+        } catch (e) {
+          debugPrint('Failed to update site $siteId: $e');
+        }
+      }
+
+      // --- Notify FOM (MMP uploader) for each unique MMP file ---
+      final uniqueMmpIds = targetSites
+          .map((s) => s['mmp_file_id']?.toString())
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet();
+
+      for (final mmpFileId in uniqueMmpIds) {
+        try {
+          final mmpRow = await _supabase
+              .from('mmp_files')
+              .select('uploaded_by')
+              .eq('id', mmpFileId)
+              .maybeSingle();
+          final uploadedBy = mmpRow?['uploaded_by']?.toString();
+          if (uploadedBy != null && uploadedBy.isNotEmpty) {
+            await _supabase.from('notifications').insert({
+              'user_id': uploadedBy,
+              'title': 'Sites Returned by Coordinator',
+              'title_ar': 'تم إرجاع المواقع من المنسق',
+              'message':
+                  '$updated site(s) in "$scopeLabel" have been returned to FOM. Reason: $reason',
+              'type': 'approvals',
+              'priority': 'high',
+              'is_read': false,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          }
+        } catch (notifErr) {
+          debugPrint('Failed to notify FOM for MMP $mmpFileId: $notifErr');
+        }
+      }
+
+      // --- Notify Hub Supervisors for each unique hub office ---
+      final hubsNotified = <String>{};
+      for (final site in targetSites) {
+        final hubOffice = site['hub_office']?.toString() ?? '';
+        if (hubOffice.isNotEmpty && !hubsNotified.contains(hubOffice)) {
+          hubsNotified.add(hubOffice);
+          try {
+            final hubRow = await _supabase
+                .from('hubs')
+                .select('id')
+                .eq('name', hubOffice)
+                .maybeSingle();
+            final hubId = hubRow?['id']?.toString();
+            if (hubId != null && hubId.isNotEmpty) {
+              // Find the hub supervisor user
+              final supervisorRows = await _supabase
+                  .from('users')
+                  .select('id')
+                  .eq('hub_id', hubId)
+                  .eq('role', 'hub_supervisor')
+                  .limit(5);
+              for (final sup in (supervisorRows as List)) {
+                final supId = sup['id']?.toString();
+                if (supId != null && supId.isNotEmpty) {
+                  await _supabase.from('notifications').insert({
+                    'user_id': supId,
+                    'title': 'Sites Returned to FOM',
+                    'title_ar': 'تم إرجاع المواقع للمسؤول',
+                    'message':
+                        '$updated site(s) in "$scopeLabel" have been sent back to FOM. Reason: $reason',
+                    'type': 'approvals',
+                    'priority': 'high',
+                    'is_read': false,
+                    'created_at': DateTime.now().toIso8601String(),
+                  });
+                }
+              }
+            }
+          } catch (hubErr) {
+            debugPrint(
+              'Failed to notify hub supervisor for $hubOffice: $hubErr',
+            );
+          }
+        }
+      }
+
+      setState(() => _isLoading = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Returned $updated site(s) in "$scopeLabel" to FOM'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      await _loadData();
+    } catch (e) {
+      debugPrint('Error in bulk return to FOM: $e');
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   // Single site versions for individual locality verification
   Future<void> _markLocalityPermitNotRequiredSingle(
     Map<String, dynamic> site,
@@ -2178,5 +2423,4 @@ extension _SiteVerificationActionWidgets on _SiteVerificationScreenState {
       setState(() => _isLoading = false);
     }
   }
-
 }

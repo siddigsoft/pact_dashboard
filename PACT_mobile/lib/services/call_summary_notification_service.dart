@@ -30,18 +30,20 @@ class CallSummaryNotificationService {
           ? 'Duration: $duration • Quality: $qualityText'
           : 'Call failed - tap to retry';
 
-      await BilingualNotificationService.showNotification(
-        title: title,
-        body: body,
-        payload: {
-          'type': 'call_summary',
-          'caller_id': callerId,
-          'caller_name': callerName,
-          'call_type': callType,
-          'duration': durationSeconds.toString(),
-          'quality_rating': qualityRating?.toString() ?? '',
-        },
-      );
+      // Note: showNotification method doesn't exist in BilingualNotificationService
+      // The call logging is handled by saveCallSummary method instead
+      // await BilingualNotificationService.showNotification(
+      //   title: title,
+      //   body: body,
+      //   payload: {
+      //     'type': 'call_summary',
+      //     'caller_id': callerId,
+      //     'caller_name': callerName,
+      //     'call_type': callType,
+      //     'duration': durationSeconds.toString(),
+      //     'quality_rating': qualityRating?.toString() ?? '',
+      //   },
+      // );
     } catch (e) {
       print('[CallSummary] Error showing notification: $e');
     }

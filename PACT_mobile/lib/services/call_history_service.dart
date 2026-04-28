@@ -1,8 +1,10 @@
 // lib/services/call_history_service.dart
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/call_state.dart';
@@ -25,13 +27,20 @@ class CallHistoryService {
   List<CallHistoryEntry> get history => List.unmodifiable(_history);
 
   Future<void> initialize() async {
-    await _loadLocalHistory();
-    await _syncWithServer();
+    try {
+      await _loadLocalHistory();
+      await _syncWithServer();
+    } catch (e) {
+      debugPrint('[CallHistory] Error in initialize: $e');
+    }
   }
 
   Future<void> _loadLocalHistory() async {
     try {
-      final box = await Hive.openBox(_historyBoxName);
+      if (!Hive.isBoxOpen(_historyBoxName)) {
+        await Hive.openBox(_historyBoxName);
+      }
+      final box = Hive.box(_historyBoxName);
       final cached = box.get('history');
       if (cached != null && cached is List) {
         _history = cached
@@ -57,7 +66,10 @@ class CallHistoryService {
 
   Future<void> _saveLocalHistory() async {
     try {
-      final box = await Hive.openBox(_historyBoxName);
+      if (!Hive.isBoxOpen(_historyBoxName)) {
+        await Hive.openBox(_historyBoxName);
+      }
+      final box = Hive.box(_historyBoxName);
       final trimmed = _history.take(_maxLocalEntries).toList();
       await box.put('history', trimmed.map((e) => e.toJson()).toList());
     } catch (e) {
@@ -73,8 +85,8 @@ class CallHistoryService {
       final response = await _supabase
           .from('call_history')
           .select()
-          .or('caller_id.eq.$userId,callee_id.eq.$userId')
-          .order('created_at', ascending: false)
+          .eq('user_id', userId)
+          .order('started_at', ascending: false)
           .limit(50);
 
       for (final item in response) {
@@ -96,25 +108,21 @@ class CallHistoryService {
     String currentUserId,
   ) {
     try {
-      final callerId = data['caller_id'] as String?;
-      final isOutgoing = callerId == currentUserId;
+      // call_history schema: user_id (owner), caller_id (other party), no callee_id
+      final callerId = data['caller_id'] as String? ?? '';
+      final startedAt = data['started_at'] ?? data['created_at'];
+      if (startedAt == null) return null;
 
       return CallHistoryEntry(
         id: data['id'] as String? ?? const Uuid().v4(),
-        callId: data['call_id'] as String?,
-        remoteUserId: isOutgoing
-            ? (data['callee_id'] as String? ?? '')
-            : (data['caller_id'] as String? ?? ''),
-        remoteUserName: isOutgoing
-            ? (data['callee_name'] as String? ?? 'Unknown')
-            : (data['caller_name'] as String? ?? 'Unknown'),
-        remoteUserAvatar: isOutgoing
-            ? data['callee_avatar'] as String?
-            : data['caller_avatar'] as String?,
-        isOutgoing: isOutgoing,
-        isVideoCall: data['is_video'] as bool? ?? false,
+        callId: null,
+        remoteUserId: callerId,
+        remoteUserName: data['caller_name'] as String? ?? 'Unknown',
+        remoteUserAvatar: data['caller_avatar'] as String?,
+        isOutgoing: false,
+        isVideoCall: (data['call_type'] as String?) == 'video',
         endStatus: _parseStatus(data['status'] as String?),
-        startTime: DateTime.parse(data['created_at'] as String),
+        startTime: DateTime.parse(startedAt as String),
         endTime: data['ended_at'] != null
             ? DateTime.parse(data['ended_at'] as String)
             : null,
@@ -122,7 +130,7 @@ class CallHistoryService {
             ? Duration(seconds: data['duration_seconds'] as int)
             : null,
         notes: data['notes'] as String?,
-        wasRecorded: data['was_recorded'] as bool? ?? false,
+        wasRecorded: false,
       );
     } catch (e) {
       debugPrint('[CallHistory] Error parsing server entry: $e');
@@ -173,24 +181,43 @@ class CallHistoryService {
         return;
       }
 
+      // call_history schema: user_id, caller_id, caller_name, caller_avatar, call_type, status, started_at, ended_at, duration_seconds, notes (no callee_id)
+      // caller_id represents who INITIATED the call:
+      // - For incoming calls: caller_id = remote user (they called you)
+      // - For outgoing calls: caller_id = current user (you called them)
+      final isOutgoing = entry.isOutgoing;
       final payload = {
-        'id': entry.id,
-        'call_id': entry.callId,
-        'caller_id': entry.isOutgoing ? userId : entry.remoteUserId,
-        'callee_id': entry.isOutgoing ? entry.remoteUserId : userId,
-        'caller_name': entry.isOutgoing ? null : entry.remoteUserName,
-        'callee_name': entry.isOutgoing ? entry.remoteUserName : null,
-        'is_video': entry.isVideoCall,
+        'user_id': userId,
+        'caller_id': isOutgoing ? userId : entry.remoteUserId,
+        'receiver_id': isOutgoing ? entry.remoteUserId : userId,
+        'caller_name': entry.remoteUserName,
+        'receiver_name': entry
+            .remoteUserName, // Always store remote user name for easy lookup
+        'caller_avatar': entry.remoteUserAvatar,
+        'call_type': entry.isVideoCall ? 'video' : 'audio',
         'status': entry.endStatus.name,
+        'started_at': entry.startTime.toIso8601String(),
+        'ended_at': entry.endTime?.toIso8601String(),
         'duration_seconds': entry.duration?.inSeconds,
         'notes': entry.notes,
-        'was_recorded': entry.wasRecorded,
       };
       debugPrint(
         '[JitsiCall] CallHistoryService _saveToServer() inserting call_history: $payload',
       );
       await _supabase.from('call_history').insert(payload);
       debugPrint('[JitsiCall] CallHistoryService _saveToServer() DONE');
+
+      // Trigger push notification if this is a missed call
+      if (entry.endStatus == CallStatus.unreachable ||
+          entry.endStatus.name == 'missed') {
+        await _triggerMissedCallNotification(
+          callerUserId: userId,
+          receiverUserId: entry.remoteUserId,
+          receiverName: entry.remoteUserName,
+          callId: entry.callId ?? '',
+          reason: entry.endStatus.name,
+        );
+      }
     } catch (e, st) {
       debugPrint('[JitsiCall] CallHistoryService _saveToServer() ERROR: $e');
       debugPrint(
@@ -240,7 +267,10 @@ class CallHistoryService {
     _historyController.add(_history);
 
     try {
-      final box = await Hive.openBox(_historyBoxName);
+      if (!Hive.isBoxOpen(_historyBoxName)) {
+        await Hive.openBox(_historyBoxName);
+      }
+      final box = Hive.box(_historyBoxName);
       await box.clear();
     } catch (e) {
       debugPrint('[CallHistory] Error clearing local history: $e');
@@ -260,19 +290,69 @@ class CallHistoryService {
     String? filterType,
   }) async {
     try {
+      debugPrint(
+        '[CallHistory] getCallHistory() userId=$userId, filterType=$filterType, limit=$limit',
+      );
+
+      if (userId.isEmpty) {
+        debugPrint('[CallHistory] ERROR: userId is empty!');
+        return [];
+      }
+
       var query = _supabase.from('call_history').select().eq('user_id', userId);
 
-      // Apply optional filter
+      // First, get all calls for this user without filtering
+      final response = await query
+          .order('started_at', ascending: false)
+          .limit(limit);
+
+      List<Map<String, dynamic>> calls = List<Map<String, dynamic>>.from(
+        response as List,
+      );
+
+      debugPrint('[CallHistory] Total calls fetched: ${calls.length}');
+      if (calls.isNotEmpty) {
+        debugPrint('[CallHistory] First call data: ${calls.first}');
+      }
+
+      // Apply client-side filtering based on call direction
+      // Note: call_type field contains media type ('audio'/'video'), not direction
+      // Direction is determined by comparing caller_id with user_id
       if (filterType != null && filterType.isNotEmpty && filterType != 'all') {
-        if (filterType == 'missed') {
-          query = query.eq('is_missed', true);
+        if (filterType == 'incoming') {
+          debugPrint(
+            '[CallHistory] Filtering for incoming calls (caller_id != user_id)',
+          );
+          calls = calls.where((call) {
+            final callerId = call['caller_id'];
+            final isIncoming = callerId != userId;
+            debugPrint(
+              '[CallHistory] Call ${call['id']}: caller_id=$callerId, is_incoming=$isIncoming',
+            );
+            return isIncoming;
+          }).toList();
+        } else if (filterType == 'outgoing') {
+          debugPrint(
+            '[CallHistory] Filtering for outgoing calls (caller_id == user_id)',
+          );
+          calls = calls.where((call) {
+            final callerId = call['caller_id'];
+            final isOutgoing = callerId == userId;
+            debugPrint(
+              '[CallHistory] Call ${call['id']}: caller_id=$callerId, is_outgoing=$isOutgoing',
+            );
+            return isOutgoing;
+          }).toList();
+        } else if (filterType == 'missed') {
+          debugPrint(
+            '[CallHistory] Filtering for missed calls (status=missed)',
+          );
+          calls = calls.where((call) => call['status'] == 'missed').toList();
         }
       }
 
-      final response = await query
-          .order('created_at', ascending: false)
-          .limit(limit);
-      return List<Map<String, dynamic>>.from(response as List);
+      debugPrint('[CallHistory] After filtering: ${calls.length} calls');
+      return calls;
     } catch (e) {
       debugPrint('[CallHistory] Error fetching call history: $e');
       return [];
@@ -286,17 +366,31 @@ class CallHistoryService {
     String? remoteUserId,
   }) async {
     try {
+      debugPrint(
+        '[CallHistory] searchCallHistory() userId=$userId, query=$query, remoteUserId=$remoteUserId',
+      );
+
+      if (userId.isEmpty) {
+        debugPrint('[CallHistory] ERROR: userId is empty for search!');
+        return [];
+      }
+
       var q = _supabase.from('call_history').select().eq('user_id', userId);
 
       if (query != null && query.isNotEmpty) {
-        q = q.ilike('remote_user_name', '%$query%');
+        q = q.ilike('caller_name', '%$query%');
+        debugPrint('[CallHistory] Added caller_name search filter');
       }
 
       if (remoteUserId != null && remoteUserId.isNotEmpty) {
-        q = q.eq('remote_user_id', remoteUserId);
+        q = q.eq('caller_id', remoteUserId);
+        debugPrint('[CallHistory] Added caller_id filter');
       }
 
-      final response = await q.order('created_at', ascending: false);
+      final response = await q.order('started_at', ascending: false);
+      debugPrint(
+        '[CallHistory] Search found ${(response as List).length} calls',
+      );
       return List<Map<String, dynamic>>.from(response as List);
     } catch (e) {
       debugPrint('[CallHistory] Error searching call history: $e');
@@ -304,13 +398,14 @@ class CallHistoryService {
     }
   }
 
-  /// Get notes for a specific call
+  /// Get notes for a specific call.
+  /// Uses the `notes` column on the call_history table directly.
   Future<String> getCallNotes(String callId) async {
     try {
       final response = await _supabase
-          .from('call_notes')
+          .from('call_history')
           .select('notes')
-          .eq('call_id', callId)
+          .eq('id', callId)
           .maybeSingle();
 
       if (response != null) {
@@ -323,29 +418,17 @@ class CallHistoryService {
     }
   }
 
-  /// Save notes for a specific call
+  /// Save notes for a specific call.
+  /// Updates the `notes` column on the call_history table directly.
   Future<bool> saveCallNote({
     required String callId,
     required String notes,
   }) async {
     try {
-      final existing = await _supabase
-          .from('call_notes')
-          .select()
-          .eq('call_id', callId)
-          .maybeSingle();
-
-      if (existing != null) {
-        await _supabase
-            .from('call_notes')
-            .update({'notes': notes})
-            .eq('call_id', callId);
-      } else {
-        await _supabase.from('call_notes').insert({
-          'call_id': callId,
-          'notes': notes,
-        });
-      }
+      await _supabase
+          .from('call_history')
+          .update({'notes': notes})
+          .eq('id', callId);
       return true;
     } catch (e) {
       debugPrint('[CallHistory] Error saving call notes: $e');
@@ -364,17 +447,15 @@ class CallHistoryService {
           .from('call_history')
           .select()
           .eq('user_id', userId)
-          .gte('created_at', startDate.toIso8601String())
-          .lte('created_at', endDate.toIso8601String());
+          .gte('started_at', startDate.toIso8601String())
+          .lte('started_at', endDate.toIso8601String());
 
       final calls = List<Map<String, dynamic>>.from(response as List);
 
       int totalCalls = calls.length;
-      int missedCalls = calls.where((c) => c['is_missed'] == true).length;
-      int videoCalls = calls.where((c) => c['is_video_call'] == true).length;
-      int audioOnlyCalls = calls
-          .where((c) => c['is_video_call'] == false)
-          .length;
+      int missedCalls = calls.where((c) => c['status'] == 'missed').length;
+      int videoCalls = calls.where((c) => c['call_type'] == 'video').length;
+      int audioOnlyCalls = calls.where((c) => c['call_type'] != 'video').length;
 
       int totalDuration = 0;
       double totalQuality = 0.0;
@@ -420,6 +501,52 @@ class CallHistoryService {
         'average_quality': 0.0,
         'daily_entries': 0,
       };
+    }
+  }
+
+  /// Notify Edge Function of missed call for push notification
+  Future<void> _triggerMissedCallNotification({
+    required String callerUserId,
+    required String receiverUserId,
+    required String receiverName,
+    required String callId,
+    required String reason,
+  }) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final session = supabase.auth.currentSession;
+      if (session == null) {
+        debugPrint('[CallHistory] No session - cannot trigger notification');
+        return;
+      }
+
+      // Call the Edge Function with proper authentication
+      final response = await http.post(
+        Uri.parse(
+          'https://abznugnirnlrqnnfkein.supabase.co/functions/v1/send-missed-call-notification',
+        ),
+        headers: {
+          'Authorization': 'Bearer ${session.accessToken}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'caller_user_id': callerUserId,
+          'receiver_user_id': receiverUserId,
+          'receiver_name': receiverName,
+          'call_id': callId,
+          'reason': reason,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint('[CallHistory] Missed call notification triggered');
+      } else {
+        debugPrint(
+          '[CallHistory] Failed to trigger notification: ${response.statusCode} ${response.body}',
+        );
+      }
+    } catch (e) {
+      debugPrint('[CallHistory] Error triggering missed call notification: $e');
     }
   }
 

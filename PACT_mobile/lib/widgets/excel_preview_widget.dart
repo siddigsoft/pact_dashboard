@@ -76,7 +76,9 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
       final file = File(filePath);
       return await file.readAsBytes();
     } catch (e) {
-      throw Exception('Web file reading not supported. Please use external viewer.');
+      throw Exception(
+        'Web file reading not supported. Please use external viewer.',
+      );
     }
   }
 
@@ -108,8 +110,10 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
     final start = currentPageOnly ? _page * _rowsPerPage : 0;
     final endExclusive = currentPageOnly ? start + _rowsPerPage : rows.length;
     final safeEnd = math.min(endExclusive, rows.length);
-    final slice =
-        rows.sublist(start >= rows.length ? rows.length : start, safeEnd);
+    final slice = rows.sublist(
+      start >= rows.length ? rows.length : start,
+      safeEnd,
+    );
 
     final buffer = StringBuffer();
     for (final row in slice) {
@@ -141,11 +145,13 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
             .join(',');
         csvBuffer.writeln(values);
       }
-      archive.addFile(ArchiveFile(
-        '$sheetName.csv',
-        csvBuffer.length,
-        csvBuffer.toString().codeUnits,
-      ));
+      archive.addFile(
+        ArchiveFile(
+          '$sheetName.csv',
+          csvBuffer.length,
+          csvBuffer.toString().codeUnits,
+        ),
+      );
     }
 
     final encoder = ZipEncoder();
@@ -159,8 +165,10 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
     await Share.shareXFiles([XFile(zipPath)], text: 'Exported all sheets');
   }
 
-  List<List<xls.Data?>> _filteredRows(List<List<xls.Data?>> rows,
-      {bool applySearch = true}) {
+  List<List<xls.Data?>> _filteredRows(
+    List<List<xls.Data?>> rows, {
+    bool applySearch = true,
+  }) {
     if (!applySearch || _searchQuery.isEmpty) return rows;
     final term = _searchQuery.toLowerCase();
     return rows.where((row) {
@@ -204,10 +212,7 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
 
     if (_error != null) {
       return Center(
-        child: Text(
-          _error!,
-          style: const TextStyle(color: Colors.redAccent),
-        ),
+        child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
       );
     }
 
@@ -224,8 +229,10 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
     final endIndex = math.min(startIndex + _rowsPerPage, allRows.length);
     final visibleRows = allRows.sublist(startIndex, endIndex);
 
-    final colCount =
-        visibleRows.fold<int>(0, (prev, row) => row.length > prev ? row.length : prev);
+    final colCount = visibleRows.fold<int>(
+      0,
+      (prev, row) => row.length > prev ? row.length : prev,
+    );
     final effectiveCols = math.min(colCount, _maxCols);
 
     return Column(
@@ -247,8 +254,10 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
                           .map(
                             (sheetName) => DropdownMenuItem(
                               value: sheetName,
-                              child:
-                                  Text(sheetName, overflow: TextOverflow.ellipsis),
+                              child: Text(
+                                sheetName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           )
                           .toList(),
@@ -257,7 +266,8 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
                   const SizedBox(width: 8),
                   DropdownButton<int>(
                     value: _rowsPerPage,
-                    onChanged: (value) => value != null ? _updatePageSize(value) : null,
+                    onChanged: (value) =>
+                        value != null ? _updatePageSize(value) : null,
                     items: const [50, 100, 200, 500]
                         .map(
                           (count) => DropdownMenuItem(
@@ -276,7 +286,9 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
                   Text('${currentPage + 1}/$totalPages'),
                   IconButton(
                     tooltip: 'Next page',
-                    onPressed: (currentPage + 1) >= totalPages ? null : _nextPage,
+                    onPressed: (currentPage + 1) >= totalPages
+                        ? null
+                        : _nextPage,
                     icon: const Icon(Icons.chevron_right),
                   ),
                   const SizedBox(width: 8),
@@ -315,7 +327,9 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search),
                   hintText: 'Search cells in sheet...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   isDense: true,
                 ),
                 onChanged: _onSearchChanged,
@@ -360,7 +374,9 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: Colors.blueGrey.shade50,
-        border: const Border(bottom: BorderSide(color: Colors.grey, width: 0.5)),
+        border: const Border(
+          bottom: BorderSide(color: Colors.grey, width: 0.5),
+        ),
       ),
       child: Row(
         children: List.generate(
@@ -368,8 +384,10 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
           (index) => Container(
             width: 120,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Text('Col ${index + 1}',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(
+              'Col ${index + 1}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ),
       ),
@@ -390,7 +408,9 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
           final bgHex = style?.backgroundColor.colorHex;
 
           Color? bgColor;
-          if (bgHex != null && bgHex.isNotEmpty && bgHex.toLowerCase() != 'none') {
+          if (bgHex != null &&
+              bgHex.isNotEmpty &&
+              bgHex.toLowerCase() != 'none') {
             final sanitized = bgHex.replaceAll('#', '');
             final sixChar = sanitized.length >= 6
                 ? sanitized.substring(sanitized.length - 6)
@@ -411,7 +431,9 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-                color: bgColor != null ? _idealTextColor(bgColor) : Colors.black87,
+                color: bgColor != null
+                    ? _idealTextColor(bgColor)
+                    : Colors.black87,
               ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -424,8 +446,10 @@ class _ExcelPreviewWidgetState extends State<ExcelPreviewWidget> {
 
   Color _idealTextColor(Color background) {
     final luminance =
-        (0.299 * background.red + 0.587 * background.green + 0.114 * background.blue) /
-            255;
+        (0.299 * background.red +
+            0.587 * background.green +
+            0.114 * background.blue) /
+        255;
     return luminance > 0.6 ? Colors.black : Colors.white;
   }
 }

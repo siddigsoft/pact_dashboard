@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'connectivity_service.dart';
@@ -10,12 +11,7 @@ import '../models/incident_report.dart';
 import '../models/safety_checklist.dart';
 import '../models/user_profile.dart';
 
-enum SyncStatus {
-  idle,
-  syncing,
-  success,
-  error,
-}
+enum SyncStatus { idle, syncing, success, error }
 
 class SyncResult {
   final bool success;
@@ -236,8 +232,9 @@ class OfflineSyncService {
     try {
       print('⬇️ Downloading equipment from Supabase...');
       final response = await _supabase.from('equipment').select('*');
-      final serverEquipment =
-          (response as List).map((json) => Equipment.fromJson(json)).toList();
+      final serverEquipment = (response as List)
+          .map((json) => Equipment.fromJson(json))
+          .toList();
 
       await _localStorage.saveMultipleEquipments(serverEquipment);
       downloaded = serverEquipment.length;
@@ -248,7 +245,8 @@ class OfflineSyncService {
     }
 
     print(
-        '🎉 Equipment sync complete: $uploaded uploaded, $downloaded downloaded');
+      '🎉 Equipment sync complete: $uploaded uploaded, $downloaded downloaded',
+    );
     return _SyncCounts(uploaded: uploaded, downloaded: downloaded);
   }
 
@@ -259,7 +257,8 @@ class OfflineSyncService {
     final localReports = _localStorage.getAllIncidentReports();
     final unsyncedReports = localReports
         .where(
-            (report) => !_localStorage.isSynced('incidentReports', report.id))
+          (report) => !_localStorage.isSynced('incidentReports', report.id),
+        )
         .toList();
 
     int uploaded = 0;
@@ -268,7 +267,15 @@ class OfflineSyncService {
     // Upload unsynced reports
     for (final report in unsyncedReports) {
       try {
-        await _supabase.from('incident_reports').upsert(report.toJson());
+        final evidenceUrls = await _uploadIncidentEvidence(report);
+        final payload = _buildIncidentUploadPayload(report, evidenceUrls);
+
+        await _supabase.from('incident_reports').upsert(payload);
+
+        if (report.severity.toLowerCase() == 'critical') {
+          await _notifyImmediateAttention(report, evidenceUrls);
+        }
+
         _localStorage.markAsSynced('incidentReports', report.id);
         uploaded++;
       } catch (e) {
@@ -292,14 +299,188 @@ class OfflineSyncService {
     return _SyncCounts(uploaded: uploaded, downloaded: downloaded);
   }
 
+  Future<List<String>> _uploadIncidentEvidence(IncidentReport report) async {
+    final encodedPhotos = report.evidencePhotosBase64;
+    if (encodedPhotos == null || encodedPhotos.isEmpty) {
+      return const [];
+    }
+
+    final uploadedUrls = <String>[];
+    for (var i = 0; i < encodedPhotos.length; i++) {
+      try {
+        final bytes = base64Decode(encodedPhotos[i]);
+        final path =
+            'incident-reports/${report.userId}/${report.id}_${i}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+        await _supabase.storage
+            .from('documents')
+            .uploadBinary(
+              path,
+              bytes,
+              fileOptions: const FileOptions(upsert: true),
+            );
+
+        final publicUrl = _supabase.storage
+            .from('documents')
+            .getPublicUrl(path);
+        uploadedUrls.add(publicUrl);
+      } catch (e) {
+        debugPrint('Failed to upload incident evidence image ($i): $e');
+      }
+    }
+
+    return uploadedUrls;
+  }
+
+  Map<String, dynamic> _buildIncidentUploadPayload(
+    IncidentReport report,
+    List<String> evidenceUrls,
+  ) {
+    String description = report.description;
+    if (evidenceUrls.isNotEmpty) {
+      description =
+          '$description\n\nEvidence Photos:\n${evidenceUrls.join('\n')}';
+    }
+
+    return {
+      'id': report.id,
+      'user_id': report.userId,
+      'site_visit_id': report.siteVisitId,
+      'incident_type': report.incidentType,
+      'description': description,
+      'severity': report.severity,
+      'location': report.location,
+      'incident_date': report.incidentDate.toIso8601String(),
+      'witnesses': report.witnesses,
+      'immediate_action_taken': report.immediateActionTaken,
+      'requires_follow_up': report.requiresFollowUp,
+      'created_at': report.createdAt.toIso8601String(),
+      'updated_at': report.updatedAt.toIso8601String(),
+    };
+  }
+
+  Future<void> _notifyImmediateAttention(
+    IncidentReport report,
+    List<String> evidenceUrls,
+  ) async {
+    try {
+      final reporterProfile = await _supabase
+          .from('profiles')
+          .select('id, full_name, hub_id')
+          .eq('id', report.userId)
+          .maybeSingle();
+
+      final reporterName =
+          (reporterProfile?['full_name']?.toString().trim().isNotEmpty ?? false)
+          ? reporterProfile!['full_name'].toString().trim()
+          : 'Field User';
+      final reporterHubId = (reporterProfile?['hub_id'] ?? '').toString();
+
+      final profiles = await _supabase
+          .from('profiles')
+          .select('id, role, hub_id')
+          .inFilter('role', [
+            'admin',
+            'super_admin',
+            'fom',
+            'supervisor',
+            'coordinator',
+            'field_coordinator',
+            'state_coordinator',
+          ]);
+
+      final recipients = <String>{};
+      for (final raw in (profiles as List<dynamic>)) {
+        final profile = Map<String, dynamic>.from(raw as Map);
+        final recipientId = (profile['id'] ?? '').toString();
+        if (recipientId.isEmpty || recipientId == report.userId) continue;
+
+        final role = (profile['role'] ?? '').toString().toLowerCase();
+        final hubId = (profile['hub_id'] ?? '').toString();
+
+        final globalRole =
+            role == 'admin' || role == 'super_admin' || role == 'fom';
+        final hubRole =
+            role == 'supervisor' ||
+            role == 'coordinator' ||
+            role == 'field_coordinator' ||
+            role == 'state_coordinator';
+
+        if (globalRole ||
+            (hubRole && reporterHubId.isNotEmpty && hubId == reporterHubId)) {
+          recipients.add(recipientId);
+        }
+      }
+
+      if (recipients.isEmpty) {
+        return;
+      }
+
+      final evidenceSuffix = evidenceUrls.isEmpty
+          ? ''
+          : '\nEvidence count: ${evidenceUrls.length}';
+
+      final messageEn =
+          'Immediate attention incident reported by $reporterName at ${report.location}. Type: ${report.incidentType}.$evidenceSuffix';
+      final messageAr =
+          'تم الإبلاغ عن حادثة تتطلب اهتمامًا فوريًا بواسطة $reporterName في ${report.location}. النوع: ${report.incidentType}.$evidenceSuffix';
+
+      final now = DateTime.now().toUtc().toIso8601String();
+      final rows = recipients
+          .map(
+            (recipientId) => {
+              'recipient_id': recipientId,
+              'user_id': recipientId,
+              'title_en': 'Immediate Attention Incident',
+              'title_ar': 'حادثة تتطلب اهتمامًا فوريًا',
+              'message_en': messageEn,
+              'message_ar': messageAr,
+              'priority': 'urgent',
+              'event_type': 'incident_immediate_attention',
+              'entity_type': 'incident_report',
+              'status': 'pending',
+              'email_sent': false,
+              'created_at': now,
+            },
+          )
+          .toList();
+
+      await _supabase.from('notifications').insert(rows);
+
+      try {
+        await _supabase.functions.invoke(
+          'send-fcm-push',
+          body: {
+            'title': 'Immediate Attention Incident',
+            'body':
+                '$reporterName reported a critical incident at ${report.location}',
+            'data': {
+              'notification_type': 'incident_immediate_attention',
+              'incident_id': report.id,
+              'severity': report.severity,
+              'payload': 'notifications',
+            },
+            'userIds': recipients.toList(growable: false),
+          },
+        );
+      } catch (e) {
+        debugPrint('Failed to send incident FCM push: $e');
+      }
+    } catch (e) {
+      debugPrint('Failed to notify immediate-attention incident: $e');
+    }
+  }
+
   Future<_SyncCounts> _syncSafetyChecklists() async {
     _updateStatus(SyncStatus.syncing, 'Syncing safety checklists...');
 
     // Get local safety checklists that need syncing
     final localChecklists = _localStorage.getAllSafetyChecklists();
     final unsyncedChecklists = localChecklists
-        .where((checklist) =>
-            !_localStorage.isSynced('safetyChecklists', checklist.id))
+        .where(
+          (checklist) =>
+              !_localStorage.isSynced('safetyChecklists', checklist.id),
+        )
         .toList();
 
     int uploaded = 0;
@@ -334,7 +515,9 @@ class OfflineSyncService {
 
   Future<_SyncCounts> _syncComprehensiveSafetyChecklists() async {
     _updateStatus(
-        SyncStatus.syncing, 'Syncing comprehensive safety checklists...');
+      SyncStatus.syncing,
+      'Syncing comprehensive safety checklists...',
+    );
 
     int uploaded = 0;
     int downloaded = 0;
@@ -348,10 +531,11 @@ class OfflineSyncService {
       // Attempt primary table; if missing, fallback to alternate naming.
       Future<List> fetch(String table) async {
         return await _supabase
-            .from(table)
-            .select('*')
-            .eq('user_id', currentUserId)
-            .order('created_at', ascending: false) as List;
+                .from(table)
+                .select('*')
+                .eq('user_id', currentUserId)
+                .order('created_at', ascending: false)
+            as List;
       }
 
       List data = [];
@@ -360,12 +544,14 @@ class OfflineSyncService {
         data = await fetch('comprehensive_monitoring_checklists');
       } catch (e) {
         debugPrint(
-            'Primary table comprehensive_monitoring_checklists failed ($e), trying comprehensive_safety_checklists');
+          'Primary table comprehensive_monitoring_checklists failed ($e), trying comprehensive_safety_checklists',
+        );
         try {
           data = await fetch('comprehensive_safety_checklists');
         } catch (e2) {
           debugPrint(
-              'Fallback table comprehensive_safety_checklists also failed: $e2');
+            'Fallback table comprehensive_safety_checklists also failed: $e2',
+          );
           data = [];
         }
       }

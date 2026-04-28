@@ -37,7 +37,7 @@ final networkStatusProvider = StreamProvider<bool>((ref) async* {
   // This would integrate with connectivity_plus or similar
   // For now, we'll just check online status
   yield !DateTime.now().second.isEven; // Placeholder: always online for demo
-  
+
   // Real implementation:
   // yield* Connectivity().onConnectivityChanged
   //     .map((result) => result != ConnectivityResult.none);
@@ -55,7 +55,7 @@ final offlineStatsProvider = FutureProvider<OfflineStats>((ref) async {
 
 final offlineStatsStreamProvider = StreamProvider<OfflineStats>((ref) async* {
   final db = ref.watch(offlineDbProvider);
-  
+
   while (true) {
     final network = !DateTime.now().second.isEven; // Placeholder
     final stats = db.getOfflineStats(isOnline: network);
@@ -68,33 +68,40 @@ final offlineStatsStreamProvider = StreamProvider<OfflineStats>((ref) async* {
 // PENDING SYNC ACTIONS PROVIDERS
 // ============================================================================
 
-final pendingSyncActionsProvider = FutureProvider<List<PendingSyncAction>>((ref) async {
+final pendingSyncActionsProvider = FutureProvider<List<PendingSyncAction>>((
+  ref,
+) async {
   final db = ref.watch(offlineDbProvider);
   return db.getPendingSyncActions();
 });
 
-final pendingSyncActionsStreamProvider = StreamProvider<List<PendingSyncAction>>((ref) async* {
-  final db = ref.watch(offlineDbProvider);
-  
-  while (true) {
-    final actions = db.getPendingSyncActions();
-    yield actions;
-    await Future.delayed(const Duration(seconds: 1));
-  }
-});
+final pendingSyncActionsStreamProvider =
+    StreamProvider<List<PendingSyncAction>>((ref) async* {
+      final db = ref.watch(offlineDbProvider);
+
+      while (true) {
+        final actions = db.getPendingSyncActions();
+        yield actions;
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    });
 
 // ============================================================================
 // SITE VISITS PROVIDERS
 // ============================================================================
 
-final offlineSiteVisitsProvider = FutureProvider<List<OfflineSiteVisit>>((ref) async {
+final offlineSiteVisitsProvider = FutureProvider<List<OfflineSiteVisit>>((
+  ref,
+) async {
   final db = ref.watch(offlineDbProvider);
   return db.getAllSiteVisits();
 });
 
-final offlineSiteVisitsStreamProvider = StreamProvider<List<OfflineSiteVisit>>((ref) async* {
+final offlineSiteVisitsStreamProvider = StreamProvider<List<OfflineSiteVisit>>((
+  ref,
+) async* {
   final db = ref.watch(offlineDbProvider);
-  
+
   while (true) {
     final visits = db.getAllSiteVisits();
     yield visits;
@@ -106,7 +113,9 @@ final offlineSiteVisitsStreamProvider = StreamProvider<List<OfflineSiteVisit>>((
 // LOCATIONS PROVIDERS
 // ============================================================================
 
-final offlineLocationsProvider = FutureProvider<List<CachedLocation>>((ref) async {
+final offlineLocationsProvider = FutureProvider<List<CachedLocation>>((
+  ref,
+) async {
   final db = ref.watch(offlineDbProvider);
   final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
   return db.getAllLocations(userId: userId);
@@ -123,10 +132,11 @@ final latestLocationProvider = FutureProvider<CachedLocation?>((ref) async {
 // ============================================================================
 
 /// Family provider for syncing with different strategies
-final syncNotifierProvider = StateNotifierProvider<SyncNotifier, AsyncValue<SyncResult>>((ref) {
-  final syncManager = ref.watch(syncManagerProvider);
-  return SyncNotifier(syncManager);
-});
+final syncNotifierProvider =
+    StateNotifierProvider<SyncNotifier, AsyncValue<SyncResult>>((ref) {
+      final syncManager = ref.watch(syncManagerProvider);
+      return SyncNotifier(syncManager);
+    });
 
 class SyncNotifier extends StateNotifier<AsyncValue<SyncResult>> {
   final SyncManager _syncManager;
@@ -164,198 +174,242 @@ class SyncNotifier extends StateNotifier<AsyncValue<SyncResult>> {
 
 /// Start a site visit offline (with optional locked GPS location)
 final startSiteVisitOfflineProvider = FutureProvider.autoDispose
-    .family<String, ({String siteEntryId, String siteName, String siteCode, String state, String locality, Map<String, dynamic>? startLocation})>((ref, params) async {
-  final db = ref.watch(offlineDbProvider);
-  final syncManager = ref.watch(syncManagerProvider);
+    .family<
+      String,
+      ({
+        String siteEntryId,
+        String siteName,
+        String siteCode,
+        String state,
+        String locality,
+        Map<String, dynamic>? startLocation,
+      })
+    >((ref, params) async {
+      final db = ref.watch(offlineDbProvider);
+      final syncManager = ref.watch(syncManagerProvider);
 
-  final visitId = const Uuid().v4();
-  final now = DateTime.now();
+      final visitId = const Uuid().v4();
+      final now = DateTime.now();
 
-  // Build start location map from locked GPS
-  Map<String, dynamic>? startLocation;
-  if (params.startLocation != null) {
-    startLocation = {
-      'latitude': params.startLocation!['latitude'],
-      'longitude': params.startLocation!['longitude'],
-      'accuracy': params.startLocation!['accuracy'],
-      'timestamp': params.startLocation!['timestamp'] ?? now.toIso8601String(),
-      'locked': true, // Mark as locked - should never be modified
-      'captured_at': now.toIso8601String(),
-    };
-  }
+      // Build start location map from locked GPS
+      Map<String, dynamic>? startLocation;
+      if (params.startLocation != null) {
+        startLocation = {
+          'latitude': params.startLocation!['latitude'],
+          'longitude': params.startLocation!['longitude'],
+          'accuracy': params.startLocation!['accuracy'],
+          'timestamp':
+              params.startLocation!['timestamp'] ?? now.toIso8601String(),
+          'locked': true, // Mark as locked - should never be modified
+          'captured_at': now.toIso8601String(),
+        };
+      }
 
-  // Save visit locally with locked GPS
-  final visit = OfflineSiteVisit(
-    id: visitId,
-    siteEntryId: params.siteEntryId,
-    siteName: params.siteName,
-    siteCode: params.siteCode,
-    state: params.state,
-    locality: params.locality,
-    status: 'started',
-    startedAt: now,
-    startLocation: startLocation, // Store the locked GPS
-  );
-  await db.saveSiteVisitOffline(visit);
+      // Save visit locally with locked GPS
+      final visit = OfflineSiteVisit(
+        id: visitId,
+        siteEntryId: params.siteEntryId,
+        siteName: params.siteName,
+        siteCode: params.siteCode,
+        state: params.state,
+        locality: params.locality,
+        status: 'started',
+        startedAt: now,
+        startLocation: startLocation, // Store the locked GPS
+      );
+      await db.saveSiteVisitOffline(visit);
 
-  // Add pending sync action with locked GPS
-  await db.addPendingSync(PendingSyncAction(
-    id: const Uuid().v4(),
-    type: 'site_visit_start',
-    payload: {
-      'siteEntryId': params.siteEntryId,
-      'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
-      'startedAt': now.toIso8601String(),
-      'startLocation': startLocation, // Include locked GPS in sync payload
-    },
-    timestamp: DateTime.now().millisecondsSinceEpoch,
-  ));
+      // Add pending sync action with locked GPS
+      await db.addPendingSync(
+        PendingSyncAction(
+          id: const Uuid().v4(),
+          type: 'site_visit_start',
+          payload: {
+            'siteEntryId': params.siteEntryId,
+            'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
+            'startedAt': now.toIso8601String(),
+            'startLocation':
+                startLocation, // Include locked GPS in sync payload
+          },
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
 
-  // Trigger sync
-  syncManager.forceSync();
+      // Trigger sync
+      syncManager.forceSync();
 
-  return visitId;
-});
+      return visitId;
+    });
 
 /// Complete a site visit offline
 final completeSiteVisitOfflineProvider = FutureProvider.autoDispose
-    .family<void, ({String visitId, String? notes, List<String>? photos})>((ref, params) async {
-  final db = ref.watch(offlineDbProvider);
-  final syncManager = ref.watch(syncManagerProvider);
+    .family<void, ({String visitId, String? notes, List<String>? photos})>((
+      ref,
+      params,
+    ) async {
+      final db = ref.watch(offlineDbProvider);
+      final syncManager = ref.watch(syncManagerProvider);
 
-  // Update visit
-  await db.updateSiteVisitOffline(
-    params.visitId,
-    status: 'completed',
-    completedAt: DateTime.now(),
-    notes: params.notes,
-    photos: params.photos,
-  );
+      // Update visit
+      await db.updateSiteVisitOffline(
+        params.visitId,
+        status: 'completed',
+        completedAt: DateTime.now(),
+        notes: params.notes,
+        photos: params.photos,
+      );
 
-  // Add pending sync action
-  final visit = db.getOfflineSiteVisit(params.visitId);
-  if (visit != null) {
-    await db.addPendingSync(PendingSyncAction(
-      id: const Uuid().v4(),
-      type: 'site_visit_complete',
-      payload: {
-        'siteEntryId': visit.siteEntryId,
-        'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
-        'completedAt': DateTime.now().toIso8601String(),
-        'notes': params.notes,
-      },
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-    ));
-  }
+      // Add pending sync action
+      final visit = db.getOfflineSiteVisit(params.visitId);
+      if (visit != null) {
+        await db.addPendingSync(
+          PendingSyncAction(
+            id: const Uuid().v4(),
+            type: 'site_visit_complete',
+            payload: {
+              'siteEntryId': visit.siteEntryId,
+              'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
+              'completedAt': DateTime.now().toIso8601String(),
+              'notes': params.notes,
+            },
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+      }
 
-  // Trigger sync
-  syncManager.forceSync();
-});
+      // Trigger sync
+      syncManager.forceSync();
+    });
 
 /// Claim a site visit offline
 final claimSiteOfflineProvider = FutureProvider.autoDispose
     .family<void, String>((ref, siteEntryId) async {
-  final db = ref.watch(offlineDbProvider);
-  final syncManager = ref.watch(syncManagerProvider);
+      final db = ref.watch(offlineDbProvider);
+      final syncManager = ref.watch(syncManagerProvider);
 
-  await db.addPendingSync(PendingSyncAction(
-    id: const Uuid().v4(),
-    type: 'site_visit_claim',
-    payload: {
-      'siteEntryId': siteEntryId,
-      'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
-    },
-    timestamp: DateTime.now().millisecondsSinceEpoch,
-  ));
+      await db.addPendingSync(
+        PendingSyncAction(
+          id: const Uuid().v4(),
+          type: 'site_visit_claim',
+          payload: {
+            'siteEntryId': siteEntryId,
+            'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
+          },
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
 
-  syncManager.forceSync();
-});
+      syncManager.forceSync();
+    });
 
 /// Accept an assignment offline
 final acceptAssignmentOfflineProvider = FutureProvider.autoDispose
     .family<void, String>((ref, siteEntryId) async {
-  final db = ref.watch(offlineDbProvider);
-  final syncManager = ref.watch(syncManagerProvider);
+      final db = ref.watch(offlineDbProvider);
+      final syncManager = ref.watch(syncManagerProvider);
 
-  await db.addPendingSync(PendingSyncAction(
-    id: const Uuid().v4(),
-    type: 'assignment_accept',
-    payload: {
-      'siteEntryId': siteEntryId,
-      'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
-    },
-    timestamp: DateTime.now().millisecondsSinceEpoch,
-  ));
+      await db.addPendingSync(
+        PendingSyncAction(
+          id: const Uuid().v4(),
+          type: 'assignment_accept',
+          payload: {
+            'siteEntryId': siteEntryId,
+            'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
+          },
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
 
-  syncManager.forceSync();
-});
+      syncManager.forceSync();
+    });
 
 /// Queue a photo upload
 final queuePhotoUploadProvider = FutureProvider.autoDispose
-    .family<void, ({String base64Data, String fileName, String siteEntryId})>((ref, params) async {
-  final db = ref.watch(offlineDbProvider);
-  final syncManager = ref.watch(syncManagerProvider);
+    .family<void, ({String base64Data, String fileName, String siteEntryId})>((
+      ref,
+      params,
+    ) async {
+      final db = ref.watch(offlineDbProvider);
+      final syncManager = ref.watch(syncManagerProvider);
 
-  await db.addPendingSync(PendingSyncAction(
-    id: const Uuid().v4(),
-    type: 'photo_upload',
-    payload: {
-      'base64': params.base64Data,
-      'fileName': params.fileName,
-      'siteEntryId': params.siteEntryId,
-    },
-    timestamp: DateTime.now().millisecondsSinceEpoch,
-  ));
+      await db.addPendingSync(
+        PendingSyncAction(
+          id: const Uuid().v4(),
+          type: 'photo_upload',
+          payload: {
+            'base64': params.base64Data,
+            'fileName': params.fileName,
+            'siteEntryId': params.siteEntryId,
+          },
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
 
-  syncManager.forceSync();
-});
+      syncManager.forceSync();
+    });
 
 /// Save a location for offline tracking
 final saveLocationOfflineProvider = FutureProvider.autoDispose
-    .family<void, ({double lat, double lng, double? accuracy})>((ref, params) async {
-  final db = ref.watch(offlineDbProvider);
-  final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    .family<void, ({double lat, double lng, double? accuracy})>((
+      ref,
+      params,
+    ) async {
+      final db = ref.watch(offlineDbProvider);
+      final userId = Supabase.instance.client.auth.currentUser?.id ?? '';
 
-  final location = CachedLocation(
-    id: const Uuid().v4(),
-    userId: userId,
-    lat: params.lat,
-    lng: params.lng,
-    accuracy: params.accuracy,
-    timestamp: DateTime.now().millisecondsSinceEpoch,
-  );
+      final location = CachedLocation(
+        id: const Uuid().v4(),
+        userId: userId,
+        lat: params.lat,
+        lng: params.lng,
+        accuracy: params.accuracy,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+      );
 
-  await db.saveLocationOffline(location);
-});
+      await db.saveLocationOffline(location);
+    });
 
 /// Queue a cost submission
 final queueCostSubmissionProvider = FutureProvider.autoDispose
-    .family<void, ({String siteVisitId, double amount, String description, String category, String? receiptUrl})>((ref, params) async {
-  final db = ref.watch(offlineDbProvider);
-  final syncManager = ref.watch(syncManagerProvider);
+    .family<
+      void,
+      ({
+        String siteVisitId,
+        double amount,
+        String description,
+        String category,
+        String? receiptUrl,
+      })
+    >((ref, params) async {
+      final db = ref.watch(offlineDbProvider);
+      final syncManager = ref.watch(syncManagerProvider);
 
-  await db.addPendingSync(PendingSyncAction(
-    id: const Uuid().v4(),
-    type: 'cost_submission',
-    payload: {
-      'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
-      'siteVisitId': params.siteVisitId,
-      'amount': params.amount,
-      'description': params.description,
-      'category': params.category,
-      'receiptUrl': params.receiptUrl,
-    },
-    timestamp: DateTime.now().millisecondsSinceEpoch,
-  ));
+      await db.addPendingSync(
+        PendingSyncAction(
+          id: const Uuid().v4(),
+          type: 'cost_submission',
+          payload: {
+            'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
+            'siteVisitId': params.siteVisitId,
+            'amount': params.amount,
+            'description': params.description,
+            'category': params.category,
+            'receiptUrl': params.receiptUrl,
+          },
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
 
-  syncManager.forceSync();
-});
+      syncManager.forceSync();
+    });
 
 // ============================================================================
 // QUEUE MANAGEMENT
 // ============================================================================
 
-final queuedRequestsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+final queuedRequestsProvider = FutureProvider<Map<String, dynamic>>((
+  ref,
+) async {
   final queue = ref.watch(offlineQueueProvider);
   return queue.getQueueStatus();
 });
@@ -371,9 +425,9 @@ final syncQueueProvider = FutureProvider((ref) async {
 
 final syncProgressProvider = StreamProvider<SyncProgress>((ref) async* {
   final syncManager = ref.watch(syncManagerProvider);
-  
+
   final streamController = StreamController<SyncProgress>();
-  
+
   syncManager.onProgress((progress) {
     streamController.add(progress);
   });
@@ -383,9 +437,9 @@ final syncProgressProvider = StreamProvider<SyncProgress>((ref) async* {
 
 final syncCompleteProvider = StreamProvider<SyncResult>((ref) async* {
   final syncManager = ref.watch(syncManagerProvider);
-  
+
   final streamController = StreamController<SyncResult>();
-  
+
   syncManager.onComplete((result) {
     streamController.add(result);
   });

@@ -5,7 +5,7 @@ import 'dart:developer' as developer;
 
 class PhotoUploadService {
   /// Upload photos to Supabase Storage
-  /// 
+  ///
   /// [photoPaths] is a list of local file paths (String) that will be uploaded
   /// Returns a list of public URLs for the uploaded photos
   static Future<List<String>> uploadPhotos(
@@ -19,7 +19,9 @@ class PhotoUploadService {
       // storage uploads on web to avoid runtime errors and allow the
       // completion flow to succeed.
       if (kIsWeb) {
-        developer.log('PhotoUploadService: skipping photo uploads on web (not supported with File-based implementation).');
+        developer.log(
+          'PhotoUploadService: skipping photo uploads on web (not supported with File-based implementation).',
+        );
         return uploadedUrls;
       }
 
@@ -35,18 +37,24 @@ class PhotoUploadService {
         // Create unique file name
         final timestamp = DateTime.now().millisecondsSinceEpoch;
         final fileName = 'site-visits/$siteId/${timestamp}_$i.jpg';
-        
+
         try {
           // Check and refresh session before each upload if needed
           final supabase = Supabase.instance.client;
           final session = supabase.auth.currentSession;
           if (session == null || session.isExpired) {
-            developer.log('PhotoUploadService: Session expired before upload $i, refreshing...');
+            developer.log(
+              'PhotoUploadService: Session expired before upload $i, refreshing...',
+            );
             try {
               await supabase.auth.refreshSession();
-              developer.log('PhotoUploadService: Session refreshed successfully');
+              developer.log(
+                'PhotoUploadService: Session refreshed successfully',
+              );
             } catch (refreshError) {
-              developer.log('PhotoUploadService: Session refresh failed: $refreshError');
+              developer.log(
+                'PhotoUploadService: Session refresh failed: $refreshError',
+              );
               // Continue anyway - might still work if token is valid but expired flag is wrong
             }
           }
@@ -62,7 +70,7 @@ class PhotoUploadService {
                   upsert: false,
                 ),
               );
-          
+
           // Get public URL
           final publicUrl = supabase.storage
               .from('site-visit-photos')
@@ -72,14 +80,18 @@ class PhotoUploadService {
           developer.log('Photo uploaded: $publicUrl');
         } catch (uploadError) {
           developer.log('Error uploading photo $i: $uploadError');
-          
+
           // Check if it's an auth error and try to recover
           final errorStr = uploadError.toString().toLowerCase();
-          if ((errorStr.contains('auth') || errorStr.contains('unauthorized') || 
-               errorStr.contains('jwt') || errorStr.contains('token')) &&
+          if ((errorStr.contains('auth') ||
+                  errorStr.contains('unauthorized') ||
+                  errorStr.contains('jwt') ||
+                  errorStr.contains('token')) &&
               i == 0) {
             // If first photo fails with auth error, try refreshing session and retry
-            developer.log('PhotoUploadService: Auth error on first photo, attempting recovery...');
+            developer.log(
+              'PhotoUploadService: Auth error on first photo, attempting recovery...',
+            );
             try {
               final supabase = Supabase.instance.client;
               await supabase.auth.refreshSession();
@@ -98,7 +110,9 @@ class PhotoUploadService {
                   .from('site-visit-photos')
                   .getPublicUrl(fileName);
               uploadedUrls.add(publicUrl);
-              developer.log('PhotoUploadService: Retry successful after session refresh');
+              developer.log(
+                'PhotoUploadService: Retry successful after session refresh',
+              );
             } catch (retryError) {
               developer.log('PhotoUploadService: Retry failed: $retryError');
               // Continue with other photos even if this one fails
@@ -128,7 +142,9 @@ class PhotoUploadService {
         final fileName = pathParts.last;
 
         if (pathParts.length > 1) {
-          final folderPath = pathParts.sublist(0, pathParts.length - 1).join('/');
+          final folderPath = pathParts
+              .sublist(0, pathParts.length - 1)
+              .join('/');
           final fullPath = '$folderPath/$fileName';
 
           await Supabase.instance.client.storage
@@ -141,4 +157,3 @@ class PhotoUploadService {
     }
   }
 }
-

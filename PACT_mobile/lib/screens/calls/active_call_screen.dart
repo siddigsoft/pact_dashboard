@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../providers/call_provider.dart';
 import '../../services/webrtc_call_service.dart';
+import '../../widgets/standard_back_button.dart';
 
 class ActiveCallScreen extends ConsumerStatefulWidget {
   final String participantId;
@@ -30,6 +31,7 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
   Timer? _durationTimer;
   int _callDuration = 0;
   bool _showControls = true;
+  bool _isClosing = false;
 
   @override
   void initState() {
@@ -90,8 +92,23 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
   }
 
   void _endCall() {
-    ref.read(callStateProvider.notifier).endCall();
-    Navigator.of(context).pop();
+    if (_isClosing) return; // Prevent multiple calls
+    _isClosing = true;
+
+    ref
+        .read(callStateProvider.notifier)
+        .endCall()
+        .then((_) {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        })
+        .catchError((error) {
+          debugPrint('[ActiveCall] Error ending call: $error');
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
   }
 
   String _getInitials(String name) {
@@ -122,9 +139,12 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
       _localRenderer.srcObject = callState.localStream;
     }
 
-    if (callState.callState == CallState.ended) {
+    if (callState.callState == CallState.ended && !_isClosing) {
+      _isClosing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       });
     }
 
@@ -253,10 +273,7 @@ class _ActiveCallScreenState extends ConsumerState<ActiveCallScreen> {
                   ),
                   child: Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
+                      const StandardBackButton(),
                       const Spacer(),
                       if (widget.isVideoCall)
                         Column(

@@ -23,6 +23,8 @@ import '../models/site_visit.dart';
 import '../services/offline/models.dart';
 import '../services/local_storage_service.dart';
 import '../services/visit_location_settings.dart';
+import '../services/notification_trigger_service.dart';
+import '../widgets/reusable_app_bar.dart';
 
 class CompleteVisitScreen extends ConsumerStatefulWidget {
   final SiteVisit visit;
@@ -602,7 +604,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
       _isLocationLocked = false;
       _locationError = _bi(
         'Low GPS accuracy (${position.accuracy.toStringAsFixed(0)}m). Please retry to capture ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}m.',
-        'دقة GPS منخفضة (${position.accuracy.toStringAsFixed(0)}م). يـرجى إعادة المحاولة لالتقاط ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}م.',
+        'دقة GPS منخفضة (${position.accuracy.toStringAsFixed(0)}م). يرجى إعادة المحاولة لالتقاط ≤ ${_requiredLocationAccuracyMeters.toStringAsFixed(0)}م.',
       );
       return;
     }
@@ -1058,6 +1060,71 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             photos: _photos.map((p) => p.path).toList(),
           );
 
+      // 5b. Notify coordinator/supervisor (same as web) — fire-and-forget
+      try {
+        final entryRow = await supabase
+            .from('mmp_site_entries')
+            .select('mmp_id, site_name')
+            .eq('id', widget.visit.id)
+            .maybeSingle();
+        String? hubId;
+        if (entryRow != null) {
+          final mmpId = entryRow['mmp_id'] as String?;
+          if (mmpId != null) {
+            final mmpRow = await supabase
+                .from('mmp_files')
+                .select('hub_id')
+                .eq('id', mmpId)
+                .maybeSingle();
+            hubId = mmpRow?['hub_id'] as String?;
+          }
+        }
+        final siteName =
+            (entryRow?['site_name'] as String?) ?? widget.visit.siteName;
+        final collectorName =
+            (Supabase
+                    .instance
+                    .client
+                    .auth
+                    .currentUser
+                    ?.userMetadata?['full_name']
+                as String?) ??
+            'A collector';
+        if (hubId != null) {
+          final profiles = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('hub_id', hubId)
+              .inFilter('role', [
+                'supervisor',
+                'coordinator',
+                'field_coordinator',
+                'state_coordinator',
+              ]);
+          for (final p in profiles as List) {
+            final uid = (p as Map<String, dynamic>)['id'] as String?;
+            if (uid != null) {
+              await NotificationTriggerService().siteVisitCompleted(
+                uid,
+                siteName,
+                collectorName,
+                widget.visit.id,
+              );
+            }
+          }
+        }
+        // Notify the user who completed the visit (e.g. "You have completed site A")
+        await NotificationTriggerService().siteVisitCompletedBySelf(
+          userId,
+          siteName,
+          widget.visit.id,
+        );
+      } catch (e) {
+        debugPrint(
+          'CompleteVisit: failed to send siteVisitCompleted notifications: $e',
+        );
+      }
+
       widget.onCompleteSuccess?.call();
 
       // 6. Refresh visit lists so tiles update immediately
@@ -1262,14 +1329,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         throw Exception('User not authenticated');
       }
 
-      if (_currentLocation == null || !_isLocationLocked) {
-        _seedLocationFromActiveVisit();
-      }
-      if (_currentLocation == null || !_isLocationLocked) {
-        await _getCurrentLocation();
-      }
-
-      // Get or create draft ID - reuse existing draft if present
+      // Get or create draft ID - reuse existing draft if present (check first so we know if this is first-time draft)
       String draftId;
       final existingDrafts = db
           .getAllSiteVisits()
@@ -1286,6 +1346,17 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         }
       } else {
         draftId = uuid.v4();
+      }
+
+      // When drafting for the first time, keep accuracy and location unchanged (use visit-start only; do not fetch new GPS).
+      final isFirstTimeDraft = existingDrafts.isEmpty;
+      if (_currentLocation == null || !_isLocationLocked) {
+        _seedLocationFromActiveVisit();
+      }
+      if (_currentLocation == null || !_isLocationLocked) {
+        if (!isFirstTimeDraft) {
+          await _getCurrentLocation();
+        }
       }
 
       // Convert photos to base64 for local storage
@@ -1320,7 +1391,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
         'pdm_questionnaires': _pdmQuestionnaires,
         'market_name': _marketNameController.text.trim(),
         'warehouse_name': _warehouseName.trim(),
-        if (locationMap != null) 'locked_location': locationMap,
+        'locked_location': ?locationMap,
       };
 
       // Combine notes/activities with metadata for full draft restoration.
@@ -1395,39 +1466,39 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
     return Directionality(
       textDirection: _isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(_bi('Complete Visit', 'إكمال الزيارة')),
-          backgroundColor: AppColors.primaryOrange,
-          foregroundColor: Colors.white,
-          actions: [
-            // Language Toggle Button
-            Tooltip(
-              message: _bi('Toggle Language', 'تبديل اللغة'),
-              child: IconButton(
-                onPressed: () {
-                  // Toggle the app language between English and Arabic
-                  if (mounted) {
-                    // Using context.read() to access the LocaleProvider
-                    // ignore: use_build_context_synchronously
-                    final localeProvider = context.read<LocaleProvider>();
-                    localeProvider.toggleLocale();
-                  }
-                },
-                icon: Text(
-                  _isArabic ? 'EN' : 'ع',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
         body: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
+          child: Column(
+            children: [
+              ReusableAppBar(
+                title: _bi('Complete Visit', 'إكمال الزيارة'),
+                showBackButton: true,
+                actions: [
+                  // Language Toggle Button
+                  Tooltip(
+                    message: _bi('Toggle Language', 'تبديل اللغة'),
+                    child: IconButton(
+                      onPressed: () {
+                        // Toggle the app language between English and Arabic
+                        if (mounted) {
+                          // Using context.read() to access the LocaleProvider
+                          // ignore: use_build_context_synchronously
+                          final localeProvider = context.read<LocaleProvider>();
+                          localeProvider.toggleLocale();
+                        }
+                      },
+                      icon: Text(
+                        _isArabic ? 'EN' : 'ع',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1670,6 +1741,11 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       'Describe what you observed and did during the visit...',
                       'صف ما لاحظته وما قمت به أثناء الزيارة...',
                     ),
+                    hintStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF8C8C8C),
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -1710,6 +1786,11 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                     hintText: _bi(
                       'List the activities you performed...',
                       'اذكر الأنشطة التي قمت بها....',
+                    ),
+                    hintStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF8C8C8C),
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -2006,6 +2087,9 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
             ),
           ),
         ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2224,6 +2308,11 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                         'Enter warehouse name...',
                         'أدخل اسم المستودع...',
                       ),
+                      hintStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF8C8C8C),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2297,6 +2386,11 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       hintText: _bi('Enter count', 'أدخل العدد'),
+                      hintStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF8C8C8C),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -2393,6 +2487,11 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
                       hintText: _bi(
                         'Enter market name...',
                         'أدخل اسم السوق...',
+                      ),
+                      hintStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF8C8C8C),
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),

@@ -153,7 +153,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                   TextButton.icon(
                     onPressed: _toggleLanguage,
-                    icon: const Icon(Icons.language, color: Colors.white, size: 20),
+                    icon: const Icon(
+                      Icons.language,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     label: Text(
                       isArabic ? 'EN' : 'عربي',
                       style: GoogleFonts.poppins(
@@ -171,7 +175,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         children: [
                           _buildViewModeToggle(isArabic),
                           _buildCalendarCard(isArabic),
-                          Expanded(child: _buildVisitsList(selectedVisits, isArabic)),
+                          Expanded(
+                            child: _buildVisitsList(selectedVisits, isArabic),
+                          ),
                         ],
                       ),
               ),

@@ -2,7 +2,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'logger_service.dart';
 
 class SecureStorageService {
-  static final SecureStorageService _instance = SecureStorageService._internal();
+  static final SecureStorageService _instance =
+      SecureStorageService._internal();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   factory SecureStorageService() {
@@ -37,7 +38,10 @@ class SecureStorageService {
       await _storage.delete(key: key);
       LoggerService.log('Deleted secure data for key: $key');
     } catch (e) {
-      LoggerService.log('Error deleting secure data: $e', level: LogLevel.error);
+      LoggerService.log(
+        'Error deleting secure data: $e',
+        level: LogLevel.error,
+      );
       rethrow;
     }
   }
@@ -47,7 +51,10 @@ class SecureStorageService {
       await _storage.deleteAll();
       LoggerService.log('Deleted all secure data');
     } catch (e) {
-      LoggerService.log('Error deleting all secure data: $e', level: LogLevel.error);
+      LoggerService.log(
+        'Error deleting all secure data: $e',
+        level: LogLevel.error,
+      );
       rethrow;
     }
   }

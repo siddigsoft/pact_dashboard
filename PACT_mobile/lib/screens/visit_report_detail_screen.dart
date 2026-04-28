@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:developer' as developer;
 import '../theme/app_colors.dart';
 import '../models/site_visit.dart';
+import '../widgets/reusable_app_bar.dart';
 
 class ReportPhoto {
   final String id;
@@ -188,7 +189,7 @@ class _VisitReportDetailScreenState
           .from('reports')
           .select('*')
           .eq('site_visit_id', widget.visit.id)
-          .order('created_at', ascending: false)
+          .order('submitted_at', ascending: false)
           .limit(1)
           .maybeSingle();
 
@@ -205,16 +206,45 @@ class _VisitReportDetailScreenState
         _report = report;
       });
 
-      final photosResponse = await supabase
+      var photosResponse = await supabase
           .from('report_photos')
           .select('*')
           .eq('report_id', report.id)
           .order('created_at', ascending: true);
 
-      setState(() {
-        _photos = (photosResponse as List)
-            .map((p) => ReportPhoto.fromJson(p))
+      var photos = (photosResponse as List)
+          .map((p) => ReportPhoto.fromJson(p))
+          .toList();
+
+      // Fallback: some flows create multiple reports for same site, and photos
+      // may be linked to an older/newer report row than the latest one.
+      if (photos.isEmpty) {
+        final reportRows = await supabase
+            .from('reports')
+            .select('id')
+            .eq('site_visit_id', widget.visit.id)
+            .order('submitted_at', ascending: false);
+
+        final reportIds = (reportRows as List)
+            .map((r) => r['id']?.toString())
+            .where((id) => id != null && id.isNotEmpty)
+            .cast<String>()
             .toList();
+
+        if (reportIds.isNotEmpty) {
+          photosResponse = await supabase
+              .from('report_photos')
+              .select('*')
+              .inFilter('report_id', reportIds)
+              .order('created_at', ascending: true);
+          photos = (photosResponse as List)
+              .map((p) => ReportPhoto.fromJson(p))
+              .toList();
+        }
+      }
+
+      setState(() {
+        _photos = photos;
       });
 
       if (report.submittedBy.isNotEmpty) {
@@ -301,20 +331,25 @@ class _VisitReportDetailScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Visit Report'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        actions: [
-          if (_report != null)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadReportData,
-              tooltip: 'Refresh',
+      body: SafeArea(
+        child: Column(
+          children: [
+            ReusableAppBar(
+              title: 'Visit Report',
+              showBackButton: true,
+              actions: [
+                if (_report != null)
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _loadReportData,
+                    tooltip: 'Refresh',
+                  ),
+              ],
             ),
-        ],
+            Expanded(child: _buildBody()),
+          ],
+        ),
       ),
-      body: SafeArea(top: false, child: _buildBody()),
     );
   }
 

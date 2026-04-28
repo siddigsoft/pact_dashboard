@@ -126,34 +126,31 @@ class CompleteVisitFlow {
       var totalVisitFees = 0;
       for (final activity in selectedActivities) {
         if (activity == 'PDM') {
-          final pdmSiteVisits = reportData.pdmQuestionnaires > 0
-              ? (reportData.pdmQuestionnaires / 7).floor()
-              : 0;
           if (reportData.pdmQuestionnaires > 0) {
             activityDetails['PDM'] = {
               'questionnaires': reportData.pdmQuestionnaires,
-              'site_visits': pdmSiteVisits,
+              'site_visits': 1,
             };
           } else {
             activityDetails['PDM'] = {'site_visits': 1};
           }
-          totalVisitFees += pdmSiteVisits > 0 ? pdmSiteVisits : 1;
+          totalVisitFees += 1;
         } else if (activity == 'MDM') {
           activityDetails['MDM'] = {
             if (reportData.marketName != null &&
                 reportData.marketName!.isNotEmpty)
               'market_name': reportData.marketName,
-            'site_visits': 2,
+            'site_visits': 1,
           };
-          totalVisitFees += 2;
+          totalVisitFees += 1;
         } else if (activity == 'WHM') {
           activityDetails['WHM'] = {
             if (reportData.warehouseName != null &&
                 reportData.warehouseName!.isNotEmpty)
               'warehouse_name': reportData.warehouseName,
-            'site_visits': 2,
+            'site_visits': 1,
           };
-          totalVisitFees += 2;
+          totalVisitFees += 1;
         } else {
           activityDetails[activity] = {'site_visits': 1};
           totalVisitFees += 1;

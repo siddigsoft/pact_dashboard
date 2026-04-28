@@ -4,43 +4,44 @@ class ComprehensiveSafetyChecklist {
   final String id;
   final DateTime createdAt;
   final String userId;
-  
+
   // Enumerator & Site Details
   final String enumeratorName;
   final String enumeratorContact;
   final String teamLeader;
-  
+
   // Site Information
   final String locationHub;
   final String siteNameId;
   final DateTime visitDate;
   final String visitTime;
   final List<String> activitiesMonitored; // AM, DM, PDM, MDM, PHL
-  
+
   // Activity Monitoring (AM) - with Low/Med/High priority
   final Map<String, String> activityMonitoring; // question -> answer
-  final Map<String, String> activityPriorities; // question -> priority (Low/Med/High)
+  final Map<String, String>
+  activityPriorities; // question -> priority (Low/Med/High)
   final List<String> activityPhotos;
-  
+
   // Distribution Monitoring (DM)
   final Map<String, String> distributionMonitoring;
   final List<String> distributionPhotos;
-  
+
   // Post-Distribution Monitoring (PDM)
   final Map<String, String> postDistributionMonitoring;
   final List<String> postDistributionPhotos;
-  
+
   // Post-Harvest Loss (PHL)
   final Map<String, String> postHarvestLoss;
   final List<String> postHarvestPhotos;
-  
+
   // Market Diversion Monitoring (MDM)
   final Map<String, String> marketDiversionMonitoring;
   final List<String> marketDiversionPhotos;
-  
+
   // Additional notes
   final String additionalNotes;
-  
+
   // Sync status
   final bool isSynced;
   final DateTime lastModified;
@@ -115,18 +116,38 @@ class ComprehensiveSafetyChecklist {
       siteNameId: json['site_name_id'] as String,
       visitDate: DateTime.parse(json['visit_date'] as String),
       visitTime: json['visit_time'] as String,
-      activitiesMonitored: List<String>.from(json['activities_monitored'] as List),
-      activityMonitoring: Map<String, String>.from(json['activity_monitoring'] as Map),
-      activityPriorities: Map<String, String>.from(json['activity_priorities'] as Map),
+      activitiesMonitored: List<String>.from(
+        json['activities_monitored'] as List,
+      ),
+      activityMonitoring: Map<String, String>.from(
+        json['activity_monitoring'] as Map,
+      ),
+      activityPriorities: Map<String, String>.from(
+        json['activity_priorities'] as Map,
+      ),
       activityPhotos: List<String>.from(json['activity_photos'] as List),
-      distributionMonitoring: Map<String, String>.from(json['distribution_monitoring'] as Map),
-      distributionPhotos: List<String>.from(json['distribution_photos'] as List),
-      postDistributionMonitoring: Map<String, String>.from(json['post_distribution_monitoring'] as Map),
-      postDistributionPhotos: List<String>.from(json['post_distribution_photos'] as List),
-      postHarvestLoss: Map<String, String>.from(json['post_harvest_loss'] as Map),
+      distributionMonitoring: Map<String, String>.from(
+        json['distribution_monitoring'] as Map,
+      ),
+      distributionPhotos: List<String>.from(
+        json['distribution_photos'] as List,
+      ),
+      postDistributionMonitoring: Map<String, String>.from(
+        json['post_distribution_monitoring'] as Map,
+      ),
+      postDistributionPhotos: List<String>.from(
+        json['post_distribution_photos'] as List,
+      ),
+      postHarvestLoss: Map<String, String>.from(
+        json['post_harvest_loss'] as Map,
+      ),
       postHarvestPhotos: List<String>.from(json['post_harvest_photos'] as List),
-      marketDiversionMonitoring: Map<String, String>.from(json['market_diversion_monitoring'] as Map),
-      marketDiversionPhotos: List<String>.from(json['market_diversion_photos'] as List),
+      marketDiversionMonitoring: Map<String, String>.from(
+        json['market_diversion_monitoring'] as Map,
+      ),
+      marketDiversionPhotos: List<String>.from(
+        json['market_diversion_photos'] as List,
+      ),
       additionalNotes: json['additional_notes'] as String,
       isSynced: json['is_synced'] as bool? ?? false,
       lastModified: DateTime.parse(json['last_modified'] as String),

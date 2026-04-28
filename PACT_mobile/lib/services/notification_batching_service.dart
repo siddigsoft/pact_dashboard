@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'bilingual_notification_service.dart';
 
 class NotificationBatchingService {
@@ -36,7 +37,7 @@ class NotificationBatchingService {
 
     // Auto-flush if batch reaches threshold
     if (_notificationBatches[batchKey]!.length >= 5) {
-      flushBatch(batchKey);
+      await flushBatch(batchKey);
     }
   }
 
@@ -80,7 +81,7 @@ class NotificationBatchingService {
         );
       }
     } catch (e) {
-      print('[NotificationBatching] Error flushing batch: $e');
+      debugPrint('[NotificationBatching] Error flushing batch: $e');
     }
   }
 

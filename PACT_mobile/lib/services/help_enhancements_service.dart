@@ -84,7 +84,8 @@ class TicketMessage {
           json['profiles']?['full_name']?.toString() ??
           '',
       content: json['message']?.toString() ?? json['content']?.toString() ?? '',
-      isStaffReply: json['is_admin'] as bool? ?? json['is_staff_reply'] as bool? ?? false,
+      isStaffReply:
+          json['is_admin'] as bool? ?? json['is_staff_reply'] as bool? ?? false,
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),

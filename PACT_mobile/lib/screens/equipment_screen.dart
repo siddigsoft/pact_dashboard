@@ -12,6 +12,7 @@ import '../theme/app_colors.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_design_system.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/filter_status_bar.dart';
 
 class EquipmentScreen extends StatefulWidget {
   const EquipmentScreen({super.key});
@@ -279,6 +280,34 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Show enhanced filter status bar when filtering
+                            if (_selectedFilter != 'All')
+                              FilterStatusBar(
+                                filterLabel: 'Equipment Status',
+                                currentFilter: _selectedFilter,
+                                totalCount: _equipment.length,
+                                filteredCount: _equipment
+                                    .where(
+                                      (eq) =>
+                                          eq.status == _selectedFilter ||
+                                          (_selectedFilter == 'Available' &&
+                                              eq.status == 'OK') ||
+                                          (_selectedFilter == 'In Use' &&
+                                              eq.isCheckedIn == true) ||
+                                          (_selectedFilter ==
+                                              'Needs Maintenance'),
+                                    )
+                                    .length,
+                                subtitle: 'View only selected status',
+                                icon: Icons.inventory_2_outlined,
+                                primaryColor: AppColors.primaryOrange,
+                                showPercentage: true,
+                                showResetButton: true,
+                                onTap: () =>
+                                    setState(() => _selectedFilter = 'All'),
+                                onReset: () =>
+                                    setState(() => _selectedFilter = 'All'),
+                              ),
                             _buildFilterChips(),
                             const SizedBox(height: 16),
                             if (_equipment.isNotEmpty)

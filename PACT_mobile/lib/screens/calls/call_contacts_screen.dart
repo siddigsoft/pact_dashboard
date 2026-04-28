@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../providers/call_provider.dart';
-import 'active_call_screen.dart';
+import '../../services/agora_call_service.dart';
+import '../../services/contact_visibility_service.dart';
+import '../../services/user_preferences_service.dart';
+import '../../services/last_call_service.dart';
+import '../../widgets/enhanced_contact_tile.dart';
+import '../agora_call_screen.dart';
 
 class CallContactsScreen extends ConsumerStatefulWidget {
   const CallContactsScreen({super.key});
@@ -17,31 +22,36 @@ class _CallContactsScreenState extends ConsumerState<CallContactsScreen> {
   List<Map<String, dynamic>> _filteredContacts = [];
   bool _isLoading = true;
   Set<String> _onlineUserIds = {};
+  Set<String> _favoriteIds = {};
+  Map<String, LastCallInfo?> _lastCallInfoMap = {};
+  dynamic _presenceChannel; // Save channel reference for cleanup
 
   @override
   void initState() {
     super.initState();
     _loadContacts();
     _setupOnlinePresence();
+    _loadFavorites();
+    _loadLastCallInfo();
   }
 
   Future<void> _loadContacts() async {
     setState(() => _isLoading = true);
 
     try {
-      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-
-      final response = await Supabase.instance.client
-          .from('profiles')
-          .select('id, full_name, email, avatar_url, role')
-          .neq('id', currentUserId ?? '')
-          .order('full_name');
+      // Use visibility service to get filtered contacts based on role
+      final visibilityService = ContactVisibilityService();
+      final visibleContacts = await visibilityService.getVisibleContacts();
 
       setState(() {
-        _contacts = List<Map<String, dynamic>>.from(response);
+        _contacts = visibleContacts;
         _filteredContacts = _contacts;
         _isLoading = false;
       });
+
+      debugPrint(
+        '[CallContactsScreen] Loaded ${_contacts.length} visible contacts',
+      );
     } catch (e) {
       debugPrint('Error loading contacts: $e');
       setState(() => _isLoading = false);
@@ -49,31 +59,42 @@ class _CallContactsScreenState extends ConsumerState<CallContactsScreen> {
   }
 
   void _setupOnlinePresence() {
-    final channel = Supabase.instance.client.channel('user-call-presence');
+    _presenceChannel = Supabase.instance.client.channel('user-call-presence');
 
-    channel.onPresenceSync((payload) {
-      final presenceState = channel.presenceState();
+    _presenceChannel.onPresenceSync((payload) {
+      final presenceState = _presenceChannel.presenceState();
       final onlineIds = <String>{};
 
-      for (final key in presenceState.keys) {
-        final presences = presenceState[key] as List<dynamic>?;
-        if (presences != null) {
-          for (final p in presences) {
-            final userId = (p as Map<String, dynamic>)['userId'] as String?;
-            final online = p['online'] as bool? ?? false;
+      // presenceState() returns List<SinglePresenceState>.
+      // Each SinglePresenceState has .presences → List<Presence>,
+      // and each Presence has .payload → Map<String, dynamic>.
+      for (final singleState in presenceState) {
+        try {
+          for (final presence in singleState.presences) {
+            final data = presence.payload;
+            final userId =
+                data['user_id'] as String? ?? data['userId'] as String?;
+            final online =
+                data['is_online'] as bool? ?? data['online'] as bool? ?? false;
+
             if (userId != null && online) {
               onlineIds.add(userId);
             }
           }
+        } catch (e) {
+          debugPrint('[CallContactsScreen] Error processing presence: $e');
         }
       }
 
-      setState(() {
-        _onlineUserIds = onlineIds;
-      });
+      // Only update state if widget is still mounted
+      if (mounted) {
+        setState(() {
+          _onlineUserIds = onlineIds;
+        });
+      }
     });
 
-    channel.subscribe();
+    _presenceChannel.subscribe();
   }
 
   void _filterContacts(String query) {
@@ -95,31 +116,74 @@ class _CallContactsScreenState extends ConsumerState<CallContactsScreen> {
     Map<String, dynamic> contact, {
     bool isVideoCall = false,
   }) async {
-    final callNotifier = ref.read(callStateProvider.notifier);
+    final agoraService = AgoraCallService();
 
-    final success = await callNotifier.initiateCall(
-      targetUserId: contact['id'],
-      targetUserName: contact['full_name'] ?? 'Unknown',
-      targetUserAvatar: contact['avatar_url'],
-      isAudioOnly: !isVideoCall,
+    if (!agoraService.isReady) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Call service not ready. Please try again in a moment.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (agoraService.isInCall) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You are already in a call'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+
+    final targetUserId = contact['id'] as String;
+    final targetUserName = contact['full_name'] as String? ?? 'Unknown';
+    final targetUserAvatar = contact['avatar_url'] as String?;
+
+    debugPrint(
+      '[CallContactsScreen] Starting ${isVideoCall ? "video" : "audio"} call to $targetUserName ($targetUserId)',
     );
 
-    if (success && mounted) {
+    final result = await agoraService.startCall(
+      remoteUserId: targetUserId,
+      remoteUserName: targetUserName,
+      remoteUserAvatar: targetUserAvatar,
+      audioOnly: !isVideoCall,
+    );
+
+    if (result.success && result.channelName != null && mounted) {
+      debugPrint(
+        '[CallContactsScreen] Call started, navigating to AgoraCallScreen',
+      );
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => ActiveCallScreen(
-            participantId: contact['id'],
-            participantName: contact['full_name'] ?? 'Unknown',
-            participantAvatar: contact['avatar_url'],
-            isVideoCall: isVideoCall,
+          builder: (_) => AgoraCallScreen(
+            channelName: result.channelName!,
+            remoteUserId: targetUserId,
+            remoteUserName: targetUserName,
+            remoteUserAvatar: targetUserAvatar,
+            isAudioOnly: !isVideoCall,
+            isOutgoing: true,
           ),
-          fullscreenDialog: true,
         ),
       );
-    } else if (mounted) {
+    } else if (!result.success && mounted) {
+      debugPrint('[CallContactsScreen] Call failed: ${result.error}');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to start call. Please try again.'),
+        SnackBar(
+          content: Text(
+            result.error ?? 'Failed to start call. Please try again.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -135,15 +199,77 @@ class _CallContactsScreenState extends ConsumerState<CallContactsScreen> {
     return name[0].toUpperCase();
   }
 
+  Future<void> _loadFavorites() async {
+    try {
+      final favorites = await UserPreferencesService.getFavoriteContacts();
+      if (mounted) {
+        setState(() {
+          _favoriteIds = favorites.toSet();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading favorites: $e');
+    }
+  }
+
+  Future<void> _loadLastCallInfo() async {
+    try {
+      final infoMap = <String, LastCallInfo?>{};
+      for (final contact in _contacts) {
+        final lastCall = await LastCallService.getLastCall(contact['id']);
+        infoMap[contact['id']] = lastCall;
+      }
+      if (mounted) {
+        setState(() {
+          _lastCallInfoMap = infoMap;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading last call info: $e');
+    }
+  }
+
+  Future<void> _toggleFavorite(String contactId) async {
+    try {
+      if (_favoriteIds.contains(contactId)) {
+        await UserPreferencesService.removeFavorite(contactId);
+        setState(() => _favoriteIds.remove(contactId));
+      } else {
+        await UserPreferencesService.addFavorite(contactId);
+        setState(() => _favoriteIds.add(contactId));
+      }
+    } catch (e) {
+      debugPrint('Error toggling favorite: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    // Unsubscribe from presence channel to avoid memory leaks
+    if (_presenceChannel != null) {
+      try {
+        _presenceChannel.unsubscribe();
+      } catch (e) {
+        debugPrint(
+          '[CallContactsScreen] Error unsubscribing from presence: $e',
+        );
+      }
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(isArabic ? 'المكالمات' : 'Calls'),
-        elevation: 0,
-      ),
+      backgroundColor: Colors.white,
       body: Column(
         children: [
           Container(
@@ -201,8 +327,10 @@ class _CallContactsScreenState extends ConsumerState<CallContactsScreen> {
                       itemBuilder: (context, index) {
                         final contact = _filteredContacts[index];
                         final isOnline = _onlineUserIds.contains(contact['id']);
+                        final lastCallInfo = _lastCallInfoMap[contact['id']];
 
-                        return _ContactTile(
+                        return EnhancedContactTile(
+                          id: contact['id'],
                           name: contact['full_name'] ?? 'Unknown',
                           email: contact['email'] ?? '',
                           avatarUrl: contact['avatar_url'],
@@ -214,129 +342,17 @@ class _CallContactsScreenState extends ConsumerState<CallContactsScreen> {
                           onVideoCall: () =>
                               _initiateCall(contact, isVideoCall: true),
                           isArabic: isArabic,
+                          lastCallTime: lastCallInfo?.callTime,
+                          lastCallType: lastCallInfo?.callType,
+                          isFavorite: _favoriteIds.contains(contact['id']),
+                          onToggleFavorite: () =>
+                              _toggleFavorite(contact['id']),
                         );
                       },
                     ),
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-}
-
-class _ContactTile extends StatelessWidget {
-  final String name;
-  final String email;
-  final String? avatarUrl;
-  final String role;
-  final bool isOnline;
-  final String initials;
-  final VoidCallback onAudioCall;
-  final VoidCallback onVideoCall;
-  final bool isArabic;
-
-  const _ContactTile({
-    required this.name,
-    required this.email,
-    this.avatarUrl,
-    required this.role,
-    required this.isOnline,
-    required this.initials,
-    required this.onAudioCall,
-    required this.onVideoCall,
-    required this.isArabic,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: ListTile(
-        leading: Stack(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundImage: avatarUrl != null
-                  ? NetworkImage(avatarUrl!)
-                  : null,
-              backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-              child: avatarUrl == null
-                  ? Text(
-                      initials,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    )
-                  : null,
-            ),
-            if (isOnline)
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (role.isNotEmpty)
-              Text(
-                role,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).primaryColor,
-                ),
-              ),
-            Text(
-              isOnline
-                  ? (isArabic ? 'متصل الآن' : 'Online')
-                  : (isArabic ? 'غير متصل' : 'Offline'),
-              style: TextStyle(
-                fontSize: 12,
-                color: isOnline ? Colors.green : Colors.grey,
-              ),
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(
-                Icons.phone,
-                color: isOnline ? Colors.green : Colors.grey,
-              ),
-              onPressed: isOnline ? onAudioCall : null,
-              tooltip: isArabic ? 'مكالمة صوتية' : 'Voice Call',
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.videocam,
-                color: isOnline ? Colors.blue : Colors.grey,
-              ),
-              onPressed: isOnline ? onVideoCall : null,
-              tooltip: isArabic ? 'مكالمة فيديو' : 'Video Call',
-            ),
-          ],
-        ),
       ),
     );
   }

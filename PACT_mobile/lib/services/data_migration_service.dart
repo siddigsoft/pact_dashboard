@@ -47,7 +47,9 @@ class DataMigrationService {
     if (equipmentData != null) {
       try {
         final List<dynamic> jsonList = json.decode(equipmentData);
-        final equipmentList = jsonList.map((json) => Equipment.fromJson(json)).toList();
+        final equipmentList = jsonList
+            .map((json) => Equipment.fromJson(json))
+            .toList();
 
         // Save all equipment to Hive
         for (final equipment in equipmentList) {
@@ -69,7 +71,9 @@ class DataMigrationService {
     if (checklistData != null) {
       try {
         final List<dynamic> jsonList = json.decode(checklistData);
-        final checklists = jsonList.map((json) => SafetyChecklist.fromJson(json)).toList();
+        final checklists = jsonList
+            .map((json) => SafetyChecklist.fromJson(json))
+            .toList();
 
         for (final checklist in checklists) {
           await _localStorage.saveSafetyChecklist(checklist);
@@ -88,7 +92,9 @@ class DataMigrationService {
     if (incidentData != null) {
       try {
         final List<dynamic> jsonList = json.decode(incidentData);
-        final incidents = jsonList.map((json) => _convertIncidentReport(json)).toList();
+        final incidents = jsonList
+            .map((json) => _convertIncidentReport(json))
+            .toList();
 
         for (final incident in incidents) {
           await _localStorage.saveIncidentReport(incident);
@@ -109,23 +115,24 @@ class DataMigrationService {
       description: json['description'] ?? '',
       severity: json['requiresImmediate'] == true ? 'critical' : 'moderate',
       location: json['location'] ?? 'Unknown',
-      incidentDate: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
-      witnesses: json['witnesses'] != null ? List<String>.from(json['witnesses']) : null,
+      incidentDate: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
+      witnesses: json['witnesses'] != null
+          ? List<String>.from(json['witnesses'])
+          : null,
       immediateActionTaken: json['actionTaken'],
       requiresFollowUp: json['requiresImmediate'] == false,
-      createdAt: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
+      createdAt: json['date'] != null
+          ? DateTime.parse(json['date'])
+          : DateTime.now(),
       updatedAt: DateTime.now(),
     );
   }
 
   Future<void> _migrateTaskData(SharedPreferences prefs) async {
     // Look for various task-related keys
-    const taskKeys = [
-      'tasks',
-      'assigned_tasks',
-      'task_data',
-      'user_tasks'
-    ];
+    const taskKeys = ['tasks', 'assigned_tasks', 'task_data', 'user_tasks'];
 
     for (final key in taskKeys) {
       final taskData = prefs.getString(key);
@@ -155,7 +162,9 @@ class DataMigrationService {
       visitStatus: json['status'] ?? 'planned',
       notes: json['metadata']?['notes'],
       journeyPath: json['metadata']?['journeyPath'],
-      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
       updatedAt: DateTime.now(),
     );
   }
@@ -169,7 +178,7 @@ class DataMigrationService {
       'location_tracking_enabled',
       'sync_interval',
       'last_sync_time',
-      'user_preferences'
+      'user_preferences',
     ];
 
     for (final key in settingsKeys) {
