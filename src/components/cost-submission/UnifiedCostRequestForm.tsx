@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,8 @@ import {
   ChevronUp,
   ChevronDown,
   AlertCircle,
-  Copy
+  Copy,
+  ClipboardList
 } from "lucide-react";
 import { SupportingDocument } from "@/types/cost-submission";
 import CostDocumentUpload from "./CostDocumentUpload";
@@ -97,8 +98,17 @@ interface EditSubmissionData {
   reference_number: string | null;
   hub_id: string | null;
   project_id: string | null;
+  mmp_id: string | null;
   supporting_documents: any;
   status: string;
+}
+
+interface MmpOption {
+  id: string;
+  name: string;
+  month: string | null;
+  hub: string | null;
+  status: string | null;
 }
 
 interface UnifiedCostRequestFormProps {
@@ -181,6 +191,25 @@ export default function UnifiedCostRequestForm({
   const [hubId, setHubId] = useState(editData?.hub_id || currentUser?.hubId || '');
   const [requestDate, setRequestDate] = useState(editData?.expense_date || new Date().toISOString().split('T')[0]);
   const [requestTitle, setRequestTitle] = useState(editDefaults?.requestTitle || '');
+  const [mmpId, setMmpId] = useState(editData?.mmp_id || '');
+  const [mmps, setMmps] = useState<MmpOption[]>([]);
+  const [mmpsLoading, setMmpsLoading] = useState(false);
+
+  useEffect(() => {
+    setMmpsLoading(true);
+    const resolvedHubId = hubId || currentUser?.hubId;
+    const hubName = hubs.find(h => h.id === resolvedHubId)?.name;
+    let q = supabase
+      .from('mmp_files')
+      .select('id, name, month, hub, status')
+      .order('uploaded_at', { ascending: false })
+      .limit(100);
+    if (hubName) q = q.eq('hub', hubName);
+    q.then(({ data }) => {
+      setMmps((data || []) as MmpOption[]);
+      setMmpsLoading(false);
+    }).catch(() => setMmpsLoading(false));
+  }, [hubId, currentUser?.hubId, hubs]);
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
@@ -385,6 +414,10 @@ export default function UnifiedCostRequestForm({
       toast({ title: "Title Required", description: "Please enter a request title (at least 3 characters).", variant: "destructive" });
       return;
     }
+    if (!mmpId) {
+      toast({ title: "MMP Required", description: "Please select the Monthly Monitoring Plan (MMP) this cost is related to.", variant: "destructive" });
+      return;
+    }
     if (fundingType === 'reimbursement' && supportingDocuments.length === 0) {
       toast({ title: "Documents Required", description: "Please upload receipts for reimbursement requests", variant: "destructive" });
       return;
@@ -423,6 +456,7 @@ export default function UnifiedCostRequestForm({
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
           hub_id: resolvedHubId,
           project_id: resolvedProjectId,
+          mmp_id: mmpId || null,
           supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
           updated_at: new Date().toISOString(),
         };
@@ -485,6 +519,7 @@ export default function UnifiedCostRequestForm({
       } else {
         const groupId = uuidv4();
         const cleanRequestTitle = requestTitle.trim();
+        const resolvedMmpId = mmpId || null;
         const insertRows = lineItems.map(item => ({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100).toString(),
@@ -495,6 +530,7 @@ export default function UnifiedCostRequestForm({
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
           hub_id: resolvedHubId,
           project_id: resolvedProjectId,
+          mmp_id: resolvedMmpId,
           supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
           submitted_by: currentUser.id,
           submitter_role: currentUser.role || 'user',
@@ -616,6 +652,7 @@ export default function UnifiedCostRequestForm({
       setSupportingDocuments([]);
       setProjectId('');
       setRequestTitle('');
+      setMmpId('');
       setItemErrors({});
       onSuccess?.();
     } catch (error: any) {
@@ -756,6 +793,49 @@ export default function UnifiedCostRequestForm({
                 />
               </div>
             </div>
+          </div>
+
+          {/* MMP — mandatory */}
+          <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
+            <Label className="text-sm font-semibold text-rose-600 mb-1.5 flex items-center gap-1.5">
+              <ClipboardList className="h-4 w-4" />
+              Monthly Monitoring Plan (MMP)
+              <span className="text-rose-500 font-bold">*</span>
+              <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold">Required</span>
+            </Label>
+            <Select onValueChange={setMmpId} value={mmpId} disabled={mmpsLoading}>
+              <SelectTrigger
+                data-testid="select-mmp"
+                className={cn(
+                  "transition-colors",
+                  !mmpId ? "border-rose-300 bg-rose-50/40 focus:ring-rose-300/40 focus:border-rose-400" : "border-input"
+                )}
+              >
+                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : mmps.length === 0 ? "No MMPs available for your hub" : "Select the MMP this cost relates to…"} />
+              </SelectTrigger>
+              <SelectContent>
+                {mmps.map((mmp) => (
+                  <SelectItem key={mmp.id} value={mmp.id}>
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">
+                        {mmp.month ? `${mmp.month} — ` : ''}{mmp.name}
+                      </span>
+                      {mmp.status && (
+                        <span className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded-full font-semibold capitalize",
+                          mmp.status === 'active' || mmp.status === 'open' ? "bg-green-100 text-green-700" :
+                          mmp.status === 'closed' ? "bg-slate-100 text-slate-500" :
+                          "bg-amber-100 text-amber-700"
+                        )}>
+                          {mmp.status}
+                        </span>
+                      )}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">Select which MMP cycle these field costs are associated with</p>
           </div>
 
           <div>
