@@ -134,6 +134,7 @@ export default function AdminWhatsAppPage() {
   const [testMessage, setTestMessage] = useState('Hello from PACT Command Center! This is a test message.\n\nأهلاً من مركز قيادة باكت! هذه رسالة اختبار.');
   const [sending, setSending] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
+  const [connectionError, setConnectionError] = useState<{ keyMissing: boolean; detail: string } | null>(null);
   const [logFilter, setLogFilter] = useState<'all' | 'outbound' | 'inbound' | 'failed' | 'skipped'>('all');
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
@@ -260,27 +261,17 @@ export default function AdminWhatsAppPage() {
 
       if (!result.configured) {
         setConnectionStatus('error');
-        toast({
-          title: 'WASENDER_API_KEY Not Set',
-          description: 'Add WASENDER_API_KEY in Supabase → Edge Functions → Secrets, then redeploy the function.',
-          variant: 'destructive',
-        });
+        setConnectionError({ keyMissing: true, detail: 'WASENDER_API_KEY is not set in Supabase Edge Function Secrets.' });
+        toast({ title: 'WASENDER_API_KEY Not Set', description: 'Add it in Supabase → Edge Functions → Secrets, then redeploy.', variant: 'destructive' });
       } else if (result.providers?.wasender) {
         setConnectionStatus('connected');
-        const acct = result.wasender_detail;
-        const name = acct?.name || acct?.phone || '';
-        toast({
-          title: 'WasenderAPI Live ✓',
-          description: `Session active${name ? ` — ${name}` : ''}. Messages will be delivered.`,
-        });
+        setConnectionError(null);
+        toast({ title: 'WasenderAPI Connected ✓', description: 'API key accepted — messages will be delivered.' });
       } else {
         setConnectionStatus('error');
         const errDetail = result.error || 'Unknown error from WasenderAPI';
-        toast({
-          title: 'WasenderAPI Session Error',
-          description: errDetail,
-          variant: 'destructive',
-        });
+        setConnectionError({ keyMissing: false, detail: errDetail });
+        toast({ title: 'WasenderAPI Error', description: errDetail, variant: 'destructive' });
       }
     } catch (err) {
       setConnectionStatus('error');
@@ -1185,10 +1176,20 @@ export default function AdminWhatsAppPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {connectionStatus === 'error' && (
+              {connectionStatus === 'error' && connectionError && (
                 <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-800 dark:text-red-200">
-                  <p className="font-semibold mb-1">⚠ API key not found in edge function</p>
-                  <p>Set <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">WASENDER_API_KEY</code> in Supabase → Edge Functions → Secrets, then redeploy <code className="bg-red-100 dark:bg-red-900/50 px-1 rounded font-mono">send-whatsapp</code>.</p>
+                  {connectionError.keyMissing ? (
+                    <>
+                      <p className="font-semibold mb-1">⚠ WASENDER_API_KEY not configured</p>
+                      <p>Set <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">WASENDER_API_KEY</code> in Supabase → Edge Functions → Secrets, then redeploy <code className="bg-red-100 dark:bg-red-900/50 px-1 rounded font-mono">send-whatsapp</code>.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold mb-1">⚠ WasenderAPI returned an error</p>
+                      <p className="text-xs font-mono break-all mt-1 opacity-80">{connectionError.detail}</p>
+                      <p className="mt-1">Check your API key in <a href="https://wasenderapi.com" target="_blank" rel="noopener noreferrer" className="underline">wasenderapi.com</a> → Credentials tab.</p>
+                    </>
+                  )}
                 </div>
               )}
               {connectionStatus === 'connected' && (

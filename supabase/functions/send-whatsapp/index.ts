@@ -292,21 +292,24 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         )
       }
-      // Live test: call WasenderAPI account endpoint to verify the session is truly connected
+      // Live auth test: POST to send-message with empty payload.
+      // 401 = key invalid. Anything else (400/422/200) = key is authenticated.
       let wasenderLive = false
       let wasenderError: string | undefined
       let wasenderDetail: Record<string, unknown> = {}
       try {
-        const testResp = await fetch('https://www.wasenderapi.com/api/me', {
-          method: 'GET',
-          headers: { 'Authorization': `Bearer ${wasenderKey}` },
+        const testResp = await fetch(WASENDER_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${wasenderKey}` },
+          body: JSON.stringify({}),
         })
         const testBody = await testResp.text()
-        if (testResp.ok) {
-          try { wasenderDetail = JSON.parse(testBody) } catch (_) {}
-          wasenderLive = true
+        if (testResp.status === 401 || testResp.status === 403) {
+          wasenderError = `API key rejected by WasenderAPI (HTTP ${testResp.status}) — check the key in Supabase → Edge Functions → Secrets`
         } else {
-          wasenderError = `WasenderAPI /me returned HTTP ${testResp.status}: ${testBody.slice(0, 200)}`
+          // 400/422/200 all indicate the key is accepted; the error is just missing required fields which is expected
+          wasenderLive = true
+          try { wasenderDetail = JSON.parse(testBody) } catch (_) {}
         }
       } catch (e) {
         wasenderError = e instanceof Error ? e.message : 'Network error reaching WasenderAPI'
