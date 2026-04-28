@@ -389,7 +389,7 @@ export default function AdminWhatsAppPage() {
   };
 
   const filteredLogs = logs.filter(l => {
-    if (logFilter === 'outbound') return l.direction === 'outbound' && l.status !== 'skipped';
+    if (logFilter === 'outbound') return l.status === 'sent';
     if (logFilter === 'inbound') return l.direction === 'inbound';
     if (logFilter === 'failed') return l.status === 'failed';
     if (logFilter === 'skipped') return l.status === 'skipped';
@@ -788,11 +788,11 @@ export default function AdminWhatsAppPage() {
           <CardContent className="space-y-3">
             <div className="flex gap-2 flex-wrap">
               {([
-                { key: 'all', label: 'All', count: logs.length },
-                { key: 'outbound', label: 'Sent', count: logs.filter(l => l.direction === 'outbound' && l.status !== 'skipped').length },
-                { key: 'inbound', label: 'Replies', count: logs.filter(l => l.direction === 'inbound').length },
-                { key: 'failed', label: 'Failed', count: logs.filter(l => l.status === 'failed').length },
-                { key: 'skipped', label: 'Skipped', count: logs.filter(l => l.status === 'skipped').length },
+                { key: 'all',      label: 'All',     count: logs.length },
+                { key: 'outbound', label: 'Sent',    count: logs.filter(l => l.status === 'sent').length },
+                { key: 'inbound',  label: 'Replies', count: logs.filter(l => l.direction === 'inbound').length },
+                { key: 'failed',   label: 'Failed',  count: logs.filter(l => l.status === 'failed').length },
+                { key: 'skipped',  label: 'Skipped', count: logs.filter(l => l.status === 'skipped').length },
               ] as const).map(f => (
                 <button
                   key={f.key}
@@ -803,6 +803,7 @@ export default function AdminWhatsAppPage() {
                     logFilter === f.key
                       ? 'bg-[#1D3461] text-white border-[#1D3461]'
                       : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200 hover:border-slate-300',
+                    f.key === 'failed'  && logFilter !== f.key && f.count > 0 && 'border-red-300 text-red-700',
                     f.key === 'skipped' && logFilter !== f.key && f.count > 0 && 'border-amber-300 text-amber-700',
                   )}
                 >
