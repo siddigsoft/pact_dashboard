@@ -566,7 +566,7 @@ export const OperationsZone: React.FC = () => {
                 size="sm"
                 variant="outline"
                 className="border-orange-400 text-orange-700 hover:bg-orange-100 dark:hover:bg-orange-900/30 shrink-0"
-                onClick={() => navigate('/down-payment-advance-report?tab=reclaimImpact')}
+                onClick={() => navigate('/advance-requests-report?tab=reclaimImpact')}
                 data-testid="button-view-pending-reconciliation"
               >
                 <ExternalLink className="h-3 w-3 mr-1" />

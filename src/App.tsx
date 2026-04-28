@@ -397,6 +397,7 @@ const AppRoutes = () => {
         <Route path="/finance-approval" element={<FinanceApproval />} />
         <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
         <Route path="/advance-requests-report" element={<AdvanceRequestsReport />} />
+        <Route path="/down-payment-advance-report" element={<Navigate to="/advance-requests-report" replace />} />
         <Route path="/cost-predictions" element={<CostPredictions />} />
         <Route path="/exchange-rates" element={<ExchangeRates />} />
         <Route path="/supervisor-approvals" element={<SupervisorApprovals />} />
