@@ -899,6 +899,7 @@ function QuickAddDialog({ open, onClose, onCreate, onPatchAttachments, isCreatin
                 The task will appear on the calendar from <b>start</b> through <b>end</b>, showing <b>hours / day</b> on each day. Actual hours are auto-tracked.
               </p>
             </div>
+            </div>
 
             {/* Assign to */}
             <div>
