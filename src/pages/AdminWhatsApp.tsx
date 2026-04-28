@@ -249,17 +249,31 @@ export default function AdminWhatsAppPage() {
         ping?: boolean;
         configured?: boolean;
         providers?: { wasender?: boolean; meta?: boolean };
+        wasender_detail?: Record<string, unknown>;
         error?: string;
       };
 
-      if (result.providers?.wasender) {
-        setConnectionStatus('connected');
-        toast({ title: 'WasenderAPI Connected ✓', description: 'Messages will be delivered via WasenderAPI.' });
-      } else {
+      if (!result.configured) {
         setConnectionStatus('error');
         toast({
-          title: 'WasenderAPI Not Configured',
-          description: 'Set WASENDER_API_KEY in Supabase → Edge Functions → Secrets.',
+          title: 'WASENDER_API_KEY Not Set',
+          description: 'Add WASENDER_API_KEY in Supabase → Edge Functions → Secrets, then redeploy the function.',
+          variant: 'destructive',
+        });
+      } else if (result.providers?.wasender) {
+        setConnectionStatus('connected');
+        const acct = result.wasender_detail;
+        const name = acct?.name || acct?.phone || '';
+        toast({
+          title: 'WasenderAPI Live ✓',
+          description: `Session active${name ? ` — ${name}` : ''}. Messages will be delivered.`,
+        });
+      } else {
+        setConnectionStatus('error');
+        const errDetail = result.error || 'Unknown error from WasenderAPI';
+        toast({
+          title: 'WasenderAPI Session Error',
+          description: errDetail,
           variant: 'destructive',
         });
       }

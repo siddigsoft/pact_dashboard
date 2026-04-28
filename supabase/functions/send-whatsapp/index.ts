@@ -286,12 +286,38 @@ serve(async (req) => {
     let rawBody: Record<string, unknown> = {}
     try { rawBody = await req.json() } catch (_) {}
     if (rawBody.ping === true) {
+      if (!hasWasender) {
+        return new Response(
+          JSON.stringify({ ping: true, configured: false, providers: { wasender: false }, error: 'WASENDER_API_KEY not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      }
+      // Live test: call WasenderAPI account endpoint to verify the session is truly connected
+      let wasenderLive = false
+      let wasenderError: string | undefined
+      let wasenderDetail: Record<string, unknown> = {}
+      try {
+        const testResp = await fetch('https://www.wasenderapi.com/api/me', {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${wasenderKey}` },
+        })
+        const testBody = await testResp.text()
+        if (testResp.ok) {
+          try { wasenderDetail = JSON.parse(testBody) } catch (_) {}
+          wasenderLive = true
+        } else {
+          wasenderError = `WasenderAPI /me returned HTTP ${testResp.status}: ${testBody.slice(0, 200)}`
+        }
+      } catch (e) {
+        wasenderError = e instanceof Error ? e.message : 'Network error reaching WasenderAPI'
+      }
       return new Response(
         JSON.stringify({
           ping: true,
-          configured: hasWasender,
-          providers: { wasender: hasWasender, meta: false },
-          error: !hasWasender ? 'WASENDER_API_KEY not configured' : undefined,
+          configured: true,
+          providers: { wasender: wasenderLive },
+          wasender_detail: wasenderDetail,
+          error: wasenderError,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
