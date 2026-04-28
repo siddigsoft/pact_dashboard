@@ -482,8 +482,11 @@ async function dispatchTaskMultiChannel(opts: {
   titleAr: string;
   messageEn: string;
   messageAr: string;
+  dueDate?: string | null;
 }) {
   try {
+    const metadata: Record<string, string> = { task_name: opts.taskTitle };
+    if (opts.dueDate) metadata.due_date = opts.dueDate;
     await supabase.functions.invoke('dispatch-notification', {
       body: {
         event_type: opts.event,
@@ -499,7 +502,7 @@ async function dispatchTaskMultiChannel(opts: {
         action_url: opts.taskId
           ? `https://app.pactorg.com/tasks/${opts.taskId}`
           : 'https://app.pactorg.com/my-tasks',
-        metadata: { task_name: opts.taskTitle },
+        metadata,
         // Email leg gated by policy. send_email=false suppresses SMTP only;
         // the edge function still inserts the in-app row and still fires
         // WhatsApp. send_email=true (terminal events) emails normally.
@@ -725,6 +728,7 @@ export function usePersonalTasks(userId: string | undefined) {
             titleAr: 'تم تعيين مهمة جديدة',
             messageEn: `You have been assigned a new task: "${task.title}".`,
             messageAr: `تم تعيين مهمة جديدة لك: "${task.title}".`,
+            dueDate: task.dueDate ?? null,
           });
         } catch { /* non-critical */ }
       }
@@ -746,6 +750,7 @@ export function usePersonalTasks(userId: string | undefined) {
               titleAr: 'تمت إضافتك إلى مهمة',
               messageEn: `You were added as a collaborator on "${task.title}".`,
               messageAr: `تمت إضافتك كمتعاون في "${task.title}".`,
+              dueDate: task.dueDate ?? null,
             });
           } catch { /* non-critical */ }
         }

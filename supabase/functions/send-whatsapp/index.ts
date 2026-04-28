@@ -39,17 +39,19 @@ interface TemplateMapping {
 const v = (s: string | undefined | null, fallback = '—') =>
   (s && String(s).trim()) ? String(s).trim() : fallback
 
+const TASK_URL = (d: Record<string, string>) => v(d.url, `${APP_URL}/my-tasks`)
+
 const EVENT_TO_TEMPLATE: Record<string, TemplateMapping> = {
-  // ── Tasks → pact_task_event(name, task_title, action, due_date) — static URL button ─
-  task_created:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `created by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
-  task_assigned:       { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `assigned to you by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
-  task_started:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `started by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
-  task_acknowledged:   { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'acknowledged by the assignee', v(d.due_date, 'not set')] },
-  task_completed:      { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `completed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
-  task_status_changed: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `status changed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
-  task_updated:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `updated by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
-  task_reminder_3day:  { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'due in 3 days', v(d.due_date, 'soon')] },
-  project_task_assigned: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), `${v(d.task_title)} (project: ${v(d.project_name, 'N/A')})`, `assigned by ${v(d.actor, 'system')}`, v(d.due_date, 'not set')] },
+  // ── Tasks → pact_task_event(name, task_title, action, due_date, url) ─────────
+  task_created:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `created by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), TASK_URL(d)] },
+  task_assigned:       { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `assigned to you by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), TASK_URL(d)] },
+  task_started:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `started by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), TASK_URL(d)] },
+  task_acknowledged:   { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'acknowledged by the assignee', v(d.due_date, 'not set'), TASK_URL(d)] },
+  task_completed:      { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `completed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), TASK_URL(d)] },
+  task_status_changed: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `status changed by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), TASK_URL(d)] },
+  task_updated:        { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), `updated by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), TASK_URL(d)] },
+  task_reminder_3day:  { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), v(d.task_title), 'due in 3 days', v(d.due_date, 'soon'), TASK_URL(d)] },
+  project_task_assigned: { template: 'pact_task_event', vars: d => [v(d.recipient_name, 'there'), `${v(d.task_title)} (project: ${v(d.project_name, 'N/A')})`, `assigned by ${v(d.actor, 'system')}`, v(d.due_date, 'not set'), TASK_URL(d)] },
 
   // ── Approvals → pact_approval_request(name, item, submitted_by) — static URL button ─
   approval_required:         { template: 'pact_approval_request', vars: d => [v(d.recipient_name, 'there'), v(d.item, v(d.message, 'an item')), v(d.actor, 'system')] },

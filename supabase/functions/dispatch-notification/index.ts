@@ -641,6 +641,18 @@ serve(async (req) => {
     const finalTitleAr = title_ar || template.title_ar
     const effectivePriority = priority || template.priority || 'normal'
 
+    // Resolve actor name if triggered_by is set but triggered_by_name was not supplied
+    let resolvedTriggeredByName = triggered_by_name
+    if (triggered_by && !resolvedTriggeredByName) {
+      const { data: actorProfile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', triggered_by)
+        .single()
+      resolvedTriggeredByName = (actorProfile as { full_name?: string | null } | null)?.full_name || undefined
+    }
+    const effectiveActorName = resolvedTriggeredByName || triggered_by_name
+
     // Get recipients based on IDs and roles
     let recipients: any[] = []
 
@@ -727,7 +739,7 @@ serve(async (req) => {
         message_en,
         message_ar: message_ar || message_en,
         triggered_by,
-        triggered_by_name,
+        triggered_by_name: effectiveActorName,
         workflow_stage,
         action_url,
         metadata,
@@ -805,7 +817,7 @@ serve(async (req) => {
               description: `Email sent to ${effectiveEmail}: ${finalTitleEn}`,
               success: true,
               actor_id: triggered_by || 'system',
-              actor_name: triggered_by_name || 'System',
+              actor_name: effectiveActorName || 'System',
               metadata: { recipient: effectiveEmail, subject: `[${priorityLabel}] ${finalTitleEn}`, emailType: 'notification', messageId: info.messageId, deliveredAt: new Date().toISOString(), event_type, priority: effectivePriority }
             })
           } catch (logErr) {
@@ -834,7 +846,7 @@ serve(async (req) => {
               success: false,
               error_message: errMsg,
               actor_id: triggered_by || 'system',
-              actor_name: triggered_by_name || 'System',
+              actor_name: effectiveActorName || 'System',
               metadata: { recipient: effectiveEmail, event_type, priority: effectivePriority, errorMessage: errMsg }
             })
           } catch (logErr) {
@@ -869,7 +881,7 @@ serve(async (req) => {
         // Per-user opt-out is honoured inside send-whatsapp via user_integrations.whatsapp_enabled
         {
           const waData: Record<string, string> = {
-            actor: triggered_by_name || 'System',
+            actor: effectiveActorName || 'System',
             url: action_url || 'app.pactorg.com',
           }
           // Map common metadata fields to template data keys
@@ -920,7 +932,7 @@ serve(async (req) => {
         description: `Dispatched ${notifications.length} notifications for ${event_type}`,
         success: true,
         actor_id: triggered_by,
-        actor_name: triggered_by_name,
+        actor_name: effectiveActorName,
         metadata: { event_type, priority: effectivePriority, recipients_count: notifications.length, emails_sent: emailResults.filter(e => e.success).length, emails_failed: emailResults.filter(e => !e.success).length }
       })
     } catch (logError) {
