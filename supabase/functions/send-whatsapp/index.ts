@@ -300,7 +300,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const metaToken = Deno.env.get('META_WA_ACCESS_TOKEN')
+    const metaToken = Deno.env.get('META_WA_ACCESS_TOKEN_NEW') || Deno.env.get('META_WA_ACCESS_TOKEN')
     const metaPhoneId = Deno.env.get('META_WA_PHONE_NUMBER_ID')
     const wasenderKey = Deno.env.get('WASENDER_API_KEY')
 

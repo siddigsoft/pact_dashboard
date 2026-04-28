@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useTaskNotifications, statusToEvent } from '@/hooks/useTaskNotifications';
 import { Link, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { TaskInsightsTabs } from '@/components/tasks/TaskInsightsTabs';
 import { TaskWorkSessionCard } from '@/components/tasks/TaskWorkSessionCard';
