@@ -19,7 +19,13 @@ import {
   ArrowDownLeft, Settings, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
+
+const safeFormat = (raw: string | null | undefined, fmt: string, fallback = '—'): string => {
+  if (!raw) return fallback;
+  const d = new Date(raw);
+  return isValid(d) ? format(d, fmt) : fallback;
+};
 
 interface WhatsAppLog {
   id: string;
@@ -195,7 +201,8 @@ export default function AdminWhatsAppPage() {
   // Build conversation threads grouped by phone
   const conversations: Conversation[] = (() => {
     const map = new Map<string, WhatsAppLog[]>();
-    const sorted = [...logs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const safeTime = (v: string | null | undefined) => { const d = v ? new Date(v) : null; return d && isValid(d) ? d.getTime() : 0; };
+    const sorted = [...logs].sort((a, b) => safeTime(a.created_at) - safeTime(b.created_at));
     sorted.forEach(log => {
       if (!map.has(log.phone)) map.set(log.phone, []);
       map.get(log.phone)!.push(log);
@@ -213,9 +220,7 @@ export default function AdminWhatsAppPage() {
         unread: messages.filter(m => m.direction === 'inbound').length,
       });
     });
-    return convs.sort((a, b) =>
-      new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
-    );
+    return convs.sort((a, b) => safeTime(b.lastMessage.created_at) - safeTime(a.lastMessage.created_at));
   })();
 
   const selectedConv = conversations.find(c => c.phone === selectedPhone) ?? null;
@@ -590,7 +595,7 @@ export default function AdminWhatsAppPage() {
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-[10px] text-muted-foreground">
-                          {format(new Date(conv.lastMessage.created_at), 'd MMM, HH:mm')}
+                          {safeFormat(conv.lastMessage.created_at, 'd MMM, HH:mm')}
                         </p>
                         {conv.unread > 0 && (
                           <span className="inline-block mt-0.5 bg-green-600 text-white text-[9px] font-bold rounded-full px-1.5 py-0.5 leading-none">
@@ -658,7 +663,7 @@ export default function AdminWhatsAppPage() {
                         <p className="whitespace-pre-wrap break-words">{readableBody(msg.message_body)}</p>
                         <div className={cn('flex items-center gap-1 mt-1', msg.direction === 'outbound' ? 'justify-end' : 'justify-start')}>
                           <span className={cn('text-[10px]', msg.direction === 'outbound' ? 'text-blue-200' : 'text-muted-foreground')}>
-                            {format(new Date(msg.created_at), 'HH:mm · d MMM')}
+                            {safeFormat(msg.created_at, 'HH:mm · d MMM')}
                           </span>
                           {msg.direction === 'outbound' && (
                             <span className={cn('text-[10px]', msg.status === 'sent' ? 'text-green-300' : 'text-red-300')}>
@@ -816,7 +821,7 @@ export default function AdminWhatsAppPage() {
                         </Badge>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap hidden md:block">
                           <Clock className="h-3 w-3 inline mr-0.5" />
-                          {format(new Date(log.created_at), 'd MMM, HH:mm')}
+                          {safeFormat(log.created_at, 'd MMM, HH:mm')}
                         </span>
                         {expandedLog === log.id ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
                       </div>
@@ -838,7 +843,7 @@ export default function AdminWhatsAppPage() {
                           {log.status !== 'skipped' && log.error_message && (
                             <div className="col-span-2 text-red-600"><span className="font-semibold">Error:</span> {log.error_message}</div>
                           )}
-                          <div className="col-span-2"><span className="text-muted-foreground">Time:</span> {format(new Date(log.created_at), 'd MMM yyyy, HH:mm:ss')}</div>
+                          <div className="col-span-2"><span className="text-muted-foreground">Time:</span> {safeFormat(log.created_at, 'd MMM yyyy, HH:mm:ss')}</div>
                         </div>
                         {log.message_body && log.status !== 'skipped' && (() => {
                           const prov = getProvider(log.message_body);
