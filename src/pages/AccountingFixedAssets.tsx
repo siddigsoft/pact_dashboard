@@ -93,6 +93,11 @@ export default function AccountingFixedAssets() {
   const [form, setForm] = useState<Partial<Asset>>(BLANK);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
+  const [depRunDialog, setDepRunDialog] = useState(false);
+  const [depRunBusy, setDepRunBusy] = useState(false);
+  const [depRunStart, setDepRunStart] = useState(() => new Date().toISOString().slice(0, 7) + '-01');
+  const [depRunEnd, setDepRunEnd] = useState(() => { const d = new Date(); d.setDate(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()); return d.toISOString().slice(0, 10); });
+  const [depRunResults, setDepRunResults] = useState<{ asset: string; amount: number; entryId: string | null; error: string | null }[]>([]);
   const today = useMemo(() => new Date(), []);
 
   const loadAssets = useCallback(async () => {
@@ -159,6 +164,45 @@ export default function AccountingFixedAssets() {
     setSaving(false);
   };
 
+  const runDepreciation = async () => {
+    const active = assets.filter(a => a.status === 'active');
+    if (!active.length) { toast({ title: 'No active assets found', variant: 'destructive' }); return; }
+    setDepRunBusy(true);
+    setDepRunResults([]);
+    const periodStart = new Date(depRunStart);
+    const periodEnd = new Date(depRunEnd);
+    const monthsFraction = Math.max(0.01, (periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+    const results: typeof depRunResults = [];
+    for (const asset of active) {
+      try {
+        const { monthlyDep } = calcDepreciation(asset, today);
+        const depAmount = Math.round(monthlyDep * monthsFraction * 100) / 100;
+        if (depAmount < 0.01) { results.push({ asset: asset.name_en, amount: 0, entryId: null, error: 'Zero depreciation — fully depreciated or zero cost' }); continue; }
+        const { data: entry, error: eErr } = await supabase.from('acct_journal_entries').insert({
+          description_en: `Depreciation — ${asset.name_en} (${depRunStart.slice(0, 7)})`,
+          description_ar: `استهلاك — ${asset.name_ar ?? asset.name_en}`,
+          entry_date: depRunStart,
+          posting_date: depRunEnd,
+          status: 'draft',
+          total_debit: depAmount,
+          total_credit: depAmount,
+        }).select('id').single();
+        if (eErr) throw new Error(eErr.message);
+        if (entry && asset.dep_account_id) {
+          await supabase.from('acct_journal_lines').insert([
+            { journal_entry_id: entry.id, account_id: asset.dep_account_id, debit_credit: 'DR', amount: depAmount, functional_amount: depAmount, functional_currency: asset.currency, description: `Dep expense — ${asset.name_en}` },
+            { journal_entry_id: entry.id, account_id: asset.dep_account_id, debit_credit: 'CR', amount: depAmount, functional_amount: depAmount, functional_currency: asset.currency, description: `Accum dep — ${asset.name_en}` },
+          ]);
+        }
+        results.push({ asset: asset.name_en, amount: depAmount, entryId: entry?.id ?? null, error: null });
+      } catch (e: any) { results.push({ asset: asset.name_en, amount: 0, entryId: null, error: e.message }); }
+    }
+    setDepRunResults(results);
+    setDepRunBusy(false);
+    const ok = results.filter(r => !r.error).length;
+    toast({ title: `Depreciation run complete — ${ok}/${active.length} entries created` });
+  };
+
   const exportCsv = () => {
     const header = ['Tag', 'Name', 'Category', 'Acquisition Date', 'Cost', 'Currency', 'Book Value', 'Dep %', 'Status', 'Location'];
     const rows = filtered.map(a => {
@@ -203,6 +247,7 @@ export default function AccountingFixedAssets() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadAssets} disabled={loading} data-testid="button-refresh"><RefreshCw className={cn('h-4 w-4 mr-1', loading && 'animate-spin')} />Refresh</Button>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={!filtered.length} data-testid="button-export"><Download className="h-4 w-4 mr-1" />CSV</Button>
+          {canEdit && <Button variant="outline" size="sm" onClick={() => { setDepRunResults([]); setDepRunDialog(true); }} disabled={assets.filter(a => a.status === 'active').length === 0} data-testid="button-run-dep"><TrendingDown className="h-4 w-4 mr-1" />Run Depreciation</Button>}
           {canEdit && <Button size="sm" onClick={() => openDialog()} data-testid="button-add"><Plus className="h-4 w-4 mr-1" />Add Asset</Button>}
         </div>
       </div>
@@ -408,6 +453,45 @@ export default function AccountingFixedAssets() {
             <Button onClick={save} disabled={saving || !form.name_en} data-testid="button-save">
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{editingAsset ? 'Update' : 'Add Asset'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Depreciation Journal Run Dialog */}
+      <Dialog open={depRunDialog} onOpenChange={v => { if (!depRunBusy) setDepRunDialog(v); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><TrendingDown className="h-5 w-5 text-slate-600" />Run Period Depreciation</DialogTitle>
+            <DialogDescription>Creates draft journal entries for all active assets for the selected period. Review and post them in Journal Entries afterwards.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs mb-1">Period Start</Label><Input type="date" className="h-9" value={depRunStart} onChange={e => setDepRunStart(e.target.value)} /></div>
+              <div><Label className="text-xs mb-1">Period End</Label><Input type="date" className="h-9" value={depRunEnd} onChange={e => setDepRunEnd(e.target.value)} /></div>
+            </div>
+            <div className="rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
+              {assets.filter(a => a.status === 'active').length} active asset(s) will be processed. Entries are created in <strong>draft</strong> status — no GL impact until you post them. Assign Depreciation Expense and Accumulated Depreciation accounts in each asset record for line-level detail.
+            </div>
+            {depRunResults.length > 0 && (
+              <div className="border rounded max-h-40 overflow-y-auto">
+                {depRunResults.map((r, i) => (
+                  <div key={i} className={cn('flex items-center justify-between px-3 py-1.5 text-xs border-b last:border-b-0', r.error ? 'text-rose-700' : 'text-emerald-700')}>
+                    <span className="truncate">{r.asset}</span>
+                    {r.error ? <span className="text-rose-500 text-[10px] ml-2">{r.error.slice(0, 40)}</span> : <span className="tabular-nums font-medium">{formatNumber(r.amount)}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDepRunDialog(false)} disabled={depRunBusy}>Close</Button>
+            {depRunResults.length === 0 && (
+              <Button onClick={runDepreciation} disabled={depRunBusy || !depRunStart || !depRunEnd} data-testid="button-confirm-dep">
+                {depRunBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <TrendingDown className="h-4 w-4 mr-2" />}
+                {depRunBusy ? 'Processing…' : `Run for ${assets.filter(a => a.status === 'active').length} Asset(s)`}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

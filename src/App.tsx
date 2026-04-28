@@ -176,6 +176,8 @@ const AccountingFunds = lazy(() => import('./pages/AccountingFunds'));
 const AccountingSettings = lazy(() => import('./pages/AccountingSettings'));
 const AccountingBudgetVsActual = lazy(() => import('./pages/AccountingBudgetVsActual'));
 const AccountingVendors = lazy(() => import('./pages/AccountingVendors'));
+const AccountingFinanceDashboard = lazy(() => import('./pages/AccountingFinanceDashboard'));
+const AccountingPurchaseOrders = lazy(() => import('./pages/AccountingPurchaseOrders'));
 const AccountingAPAging = lazy(() => import('./pages/AccountingAPAging'));
 const AccountingCashFlow = lazy(() => import('./pages/AccountingCashFlow'));
 const AccountingFixedAssets = lazy(() => import('./pages/AccountingFixedAssets'));
@@ -501,6 +503,8 @@ const AppRoutes = () => {
         <Route path="/accounting/settings" element={<PageWrapper><AccountingSettings /></PageWrapper>} />
         <Route path="/accounting/budget-variance" element={<PageWrapper><AccountingBudgetVsActual /></PageWrapper>} />
         <Route path="/accounting/vendors" element={<PageWrapper><AccountingVendors /></PageWrapper>} />
+        <Route path="/accounting/finance-dashboard" element={<PageWrapper><AccountingFinanceDashboard /></PageWrapper>} />
+        <Route path="/accounting/purchase-orders" element={<PageWrapper><AccountingPurchaseOrders /></PageWrapper>} />
         <Route path="/accounting/ap-aging" element={<PageWrapper><AccountingAPAging /></PageWrapper>} />
         <Route path="/accounting/cash-flow" element={<PageWrapper><AccountingCashFlow /></PageWrapper>} />
         <Route path="/accounting/fixed-assets" element={<PageWrapper><AccountingFixedAssets /></PageWrapper>} />

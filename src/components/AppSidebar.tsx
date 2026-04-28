@@ -479,6 +479,9 @@
     // and crashed the entire dashboard for every user.
     const isAuditorRole = hasRole('auditor');
     const acctItems: MenuGroup['items'] = [];
+    if (!isHidden('/accounting/finance-dashboard') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-finance-dashboard', title: 'Finance Dashboard', url: '/accounting/finance-dashboard', icon: LayoutDashboard, priority: 0.5, isPinned: isPinned('/accounting/finance-dashboard') });
+    }
     if (!isHidden('/accounting/coa') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
       acctItems.push({ id: 'accounting-coa', title: 'Chart of Accounts', url: '/accounting/coa', icon: BarChart3, priority: 1, isPinned: isPinned('/accounting/coa') });
     }
@@ -502,6 +505,9 @@
     }
     if (!isHidden('/accounting/vendors') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole)) {
       acctItems.push({ id: 'accounting-vendors', title: 'Vendor Registry', url: '/accounting/vendors', icon: Building2, priority: 3.9, isPinned: isPinned('/accounting/vendors') });
+    }
+    if (!isHidden('/accounting/purchase-orders') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-purchase-orders', title: 'Purchase Orders', url: '/accounting/purchase-orders', icon: ClipboardList, priority: 3.905, isPinned: isPinned('/accounting/purchase-orders') });
     }
     if (!isHidden('/accounting/ap-aging') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
       acctItems.push({ id: 'accounting-ap-aging', title: 'AP Aging', url: '/accounting/ap-aging', icon: Clock, priority: 3.91, isPinned: isPinned('/accounting/ap-aging') });
