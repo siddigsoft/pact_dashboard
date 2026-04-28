@@ -113,6 +113,39 @@ const getOrCreateAdhocMMPFile = async (): Promise<string> => {
   return newMMP.id;
 };
 
+// ── Column-mapping types ─────────────────────────────────────────────────────
+interface ColumnMap {
+  siteName: string;   // required
+  state: string;      // required
+  locality: string;   // required
+  siteCode: string;
+  transportFee: string;
+  enumeratorFee: string;
+  assignTo: string;
+  dueDate: string;
+}
+
+// Known column aliases for auto-detection (lowercase)
+const COL_ALIASES: Record<keyof ColumnMap, string[]> = {
+  siteName:     ['site name','sitename','name','trdname','tradername','trader name','school name','market name','distribution point','site','market','location name','beneficiary site','pdm site','retailer name','retailer','trader'],
+  state:        ['state','admin1name','admin1 name','province','governorate','region','wilaya'],
+  locality:     ['locality','admin2name','admin2 name','district','county','sub-district','sub district','mahalia','locality name'],
+  siteCode:     ['site code','sitecode','code','id','site id','trdid','school code','pdm code','retailer code','site_code'],
+  transportFee: ['transport fee','transportfee','transport','transport cost','travel fee','travel cost'],
+  enumeratorFee:['enumerator fee','enumeratorfee','fee','monitor fee','enumerator fee (sdg)','enum fee','data collector fee'],
+  assignTo:     ['assign to','assignto','enumerator','monitor','data collector','collector','assigned to','assigned_to'],
+  dueDate:      ['due date','duedate','due','visit date','collection date','survey date','date'],
+};
+
+const autoDetectColumn = (headers: string[], field: keyof ColumnMap): string => {
+  const lower = headers.map(h => h.toLowerCase());
+  for (const alias of COL_ALIASES[field]) {
+    const idx = lower.indexOf(alias);
+    if (idx >= 0) return headers[idx];
+  }
+  return '';
+};
+
 interface AdhocSiteVisitsTabProps {
   canManage: boolean;
 }
@@ -131,6 +164,12 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   const [uploadedRows, setUploadedRows] = useState<AdhocRow[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState('');
+
+  // Column mapper
+  const [rawFileHeaders, setRawFileHeaders] = useState<string[]>([]);
+  const [rawFileRows, setRawFileRows] = useState<(string | number)[][]>([]);
+  const [showColumnMapper, setShowColumnMapper] = useState(false);
+  const [columnMap, setColumnMap] = useState<ColumnMap>({ siteName: '', state: '', locality: '', siteCode: '', transportFee: '', enumeratorFee: '', assignTo: '', dueDate: '' });
 
   // Manual entry sub-tab state
   const [manualRows, setManualRows] = useState<AdhocRow[]>([]);
@@ -246,6 +285,39 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
   // ── File upload helpers ──────────────────────────────────────────────────
 
+  const buildRowsFromMap = useCallback((headers: string[], rows: (string | number)[][], map: ColumnMap): AdhocRow[] => {
+    const getByHeader = (row: (string | number)[], colName: string) => {
+      if (!colName) return '';
+      const idx = headers.indexOf(colName);
+      if (idx < 0 || row[idx] === undefined || row[idx] === '') return '';
+      return String(row[idx]).trim();
+    };
+    return rows.map(row => {
+      const assignToName = getByHeader(row, map.assignTo);
+      const matchedCollector = collectors.find(c =>
+        (c.full_name || '').toLowerCase() === assignToName.toLowerCase() ||
+        (c.email || '').toLowerCase() === assignToName.toLowerCase()
+      );
+      const unmatchedAssignee = assignToName && !matchedCollector;
+      const r: AdhocRow = {
+        siteName:      getByHeader(row, map.siteName),
+        siteCode:      getByHeader(row, map.siteCode),
+        state:         getByHeader(row, map.state),
+        locality:      getByHeader(row, map.locality),
+        transportFee:  getByHeader(row, map.transportFee),
+        enumeratorFee: getByHeader(row, map.enumeratorFee),
+        assignToId:    matchedCollector?.id || '',
+        assignToName:  assignToName || (matchedCollector ? (matchedCollector.full_name || '') : ''),
+        dueDate:       getByHeader(row, map.dueDate),
+      };
+      r._errors = validateRow(r);
+      if (unmatchedAssignee) {
+        r._errors = [...(r._errors || []), `Enumerator "${assignToName}" not found — will be left open for claim`];
+      }
+      return r;
+    }).filter(r => r.siteName || r.state || r.locality);
+  }, [collectors]);
+
   const parseFile = (file: File) => {
     setUploadedFileName(file.name);
     const reader = new FileReader();
@@ -259,46 +331,47 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           return;
         }
 
-        const headers = raw[0].map(h => String(h).trim().toLowerCase());
-        const get = (row: (string | number)[], ...keys: string[]) => {
-          for (const k of keys) {
-            const idx = headers.indexOf(k);
-            if (idx >= 0 && row[idx] !== undefined && row[idx] !== '') return String(row[idx]).trim();
-          }
-          return '';
+        const headers = raw[0].map(h => String(h).trim());
+        const dataRows = raw.slice(1);
+
+        // Auto-detect columns using known aliases
+        const detected: ColumnMap = {
+          siteName:      autoDetectColumn(headers, 'siteName'),
+          state:         autoDetectColumn(headers, 'state'),
+          locality:      autoDetectColumn(headers, 'locality'),
+          siteCode:      autoDetectColumn(headers, 'siteCode'),
+          transportFee:  autoDetectColumn(headers, 'transportFee'),
+          enumeratorFee: autoDetectColumn(headers, 'enumeratorFee'),
+          assignTo:      autoDetectColumn(headers, 'assignTo'),
+          dueDate:       autoDetectColumn(headers, 'dueDate'),
         };
 
-        const parsed: AdhocRow[] = raw.slice(1).map(row => {
-          const assignToName = get(row, 'assign to', 'assignto', 'enumerator');
-          const matchedCollector = collectors.find(c =>
-            (c.full_name || '').toLowerCase() === assignToName.toLowerCase() ||
-            (c.email || '').toLowerCase() === assignToName.toLowerCase()
-          );
-          const unmatchedAssignee = assignToName && !matchedCollector;
-          const r: AdhocRow = {
-            siteName: get(row, 'site name', 'sitename', 'name'),
-            siteCode: get(row, 'site code', 'sitecode', 'code'),
-            state: get(row, 'state'),
-            locality: get(row, 'locality'),
-            transportFee: get(row, 'transport fee', 'transportfee', 'transport'),
-            enumeratorFee: get(row, 'enumerator fee', 'enumeratorfee', 'fee'),
-            assignToId: matchedCollector?.id || '',
-            assignToName: assignToName || (matchedCollector ? (matchedCollector.full_name || '') : ''),
-            dueDate: get(row, 'due date', 'duedate', 'due'),
-          };
-          r._errors = validateRow(r);
-          if (unmatchedAssignee) {
-            r._errors = [...(r._errors || []), `Enumerator "${assignToName}" not found — will be left open for claim`];
-          }
-          return r;
-        }).filter(r => r.siteName || r.state || r.locality);
+        const requiredMissing = !detected.siteName || !detected.state || !detected.locality;
 
-        setUploadedRows(parsed);
+        if (requiredMissing) {
+          // Store raw data and open column mapper
+          setRawFileHeaders(headers);
+          setRawFileRows(dataRows);
+          setColumnMap(detected);
+          setShowColumnMapper(true);
+        } else {
+          // All required columns found — parse immediately
+          setUploadedRows(buildRowsFromMap(headers, dataRows, detected));
+        }
       } catch (err) {
-        toast({ title: 'Parse error', description: 'Could not read the file. Please use the template.', variant: 'destructive' });
+        toast({ title: 'Parse error', description: 'Could not read the file.', variant: 'destructive' });
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  const applyColumnMap = () => {
+    if (!columnMap.siteName || !columnMap.state || !columnMap.locality) {
+      toast({ title: 'Required fields missing', description: 'Please map Site Name, State and Locality before continuing.', variant: 'destructive' });
+      return;
+    }
+    setUploadedRows(buildRowsFromMap(rawFileHeaders, rawFileRows, columnMap));
+    setShowColumnMapper(false);
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -842,6 +915,75 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           )}
         </CardContent>
       </Card>
+
+      {/* ── COLUMN MAPPER DIALOG ── */}
+      <Dialog open={showColumnMapper} onOpenChange={open => { if (!open) setShowColumnMapper(false); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4 text-teal-500" />
+              Map File Columns
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Some required columns couldn't be detected automatically in <strong>{uploadedFileName}</strong>.
+              Match each field to the correct column from your file.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            {(
+              [
+                { field: 'siteName'      as keyof ColumnMap, label: 'Site Name',       required: true },
+                { field: 'state'         as keyof ColumnMap, label: 'State',            required: true },
+                { field: 'locality'      as keyof ColumnMap, label: 'Locality',         required: true },
+                { field: 'siteCode'      as keyof ColumnMap, label: 'Site Code',        required: false },
+                { field: 'transportFee'  as keyof ColumnMap, label: 'Transport Fee',    required: false },
+                { field: 'enumeratorFee' as keyof ColumnMap, label: 'Enumerator Fee',   required: false },
+                { field: 'assignTo'      as keyof ColumnMap, label: 'Assign To',        required: false },
+                { field: 'dueDate'       as keyof ColumnMap, label: 'Due Date',         required: false },
+              ]
+            ).map(({ field, label, required }) => (
+              <div key={field} className="grid grid-cols-2 items-center gap-3">
+                <Label className="text-xs text-right">
+                  {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+                </Label>
+                <Select
+                  value={columnMap[field] || '__skip__'}
+                  onValueChange={v => setColumnMap(m => ({ ...m, [field]: v === '__skip__' ? '' : v }))}
+                >
+                  <SelectTrigger className={`h-8 text-xs ${required && !columnMap[field] ? 'border-red-400' : ''}`}
+                    data-testid={`mapper-select-${field}`}>
+                    <SelectValue placeholder="(skip)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__skip__">(skip / not in file)</SelectItem>
+                    {rawFileHeaders.map(h => (
+                      <SelectItem key={h} value={h}>{h}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </div>
+
+          {rawFileHeaders.length > 0 && (
+            <div className="text-xs text-muted-foreground bg-gray-50 dark:bg-gray-800/50 rounded p-2">
+              <strong>Detected columns:</strong> {rawFileHeaders.join(', ')}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowColumnMapper(false)}>Cancel</Button>
+            <Button size="sm" onClick={applyColumnMap}
+              disabled={!columnMap.siteName || !columnMap.state || !columnMap.locality}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              data-testid="button-apply-column-map">
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+              Apply Mapping
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── EDIT DIALOG ── */}
       <Dialog open={!!editEntry} onOpenChange={open => !open && setEditEntry(null)}>
