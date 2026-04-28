@@ -68,6 +68,7 @@
     Clock,
     Landmark,
     Settings2,
+    Zap,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -517,6 +518,9 @@
     }
     if (!isHidden('/accounting/fixed-assets') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
       acctItems.push({ id: 'accounting-fixed-assets', title: 'Fixed Assets', url: '/accounting/fixed-assets', icon: Package, priority: 3.93, isPinned: isPinned('/accounting/fixed-assets') });
+    }
+    if (!isHidden('/accounting/gl-bridge') && (isSuperAdmin || isAdmin || isFinancialAdmin || acctRole || isAuditorRole)) {
+      acctItems.push({ id: 'accounting-gl-bridge', title: 'GL Bridge Engine', url: '/accounting/gl-bridge', icon: Zap, priority: 3.94, isPinned: isPinned('/accounting/gl-bridge') });
     }
     if (!isHidden('/finance/audit-trail') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditorRole)) {
       acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
