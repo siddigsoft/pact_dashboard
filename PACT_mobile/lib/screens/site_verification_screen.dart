@@ -174,7 +174,10 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
   List<Map<String, dynamic>> _verifiedSites = []; // Tab 3: Verified
   List<Map<String, dynamic>> _approvedSites = []; // Tab 4: Approved
   List<Map<String, dynamic>> _completedSites = []; // Tab 5: Completed
-  List<Map<String, dynamic>> _rejectedSites = []; // Tab 6: Rejected
+  List<Map<String, dynamic>> _submittedSites = []; // Tab 6: Submitted
+  List<Map<String, dynamic>> _wfpConfirmedSites = []; // Tab 7: WFP Confirmed
+  List<Map<String, dynamic>> _notCoveredSites = []; // Tab 8: Not Covered
+  List<Map<String, dynamic>> _rejectedSites = []; // Tab 9: Rejected
 
   // Sub-tab for New tab (State Permit vs Locality Permit)
   int _newSubTabIndex = 0; // 0 = State Permit, 1 = Locality Permit
@@ -572,15 +575,32 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
         return status == 'completed';
       }).toList();
 
-      // Tab 6: REJECTED - Sites rejected during verification or returned from FOM
+      // Tab 6: SUBMITTED - Visit report submitted to WFP for confirmation
+      _submittedSites = sites.where((s) {
+        final status = s['status']?.toString().toLowerCase() ?? '';
+        return status == 'submitted';
+      }).toList();
+
+      // Tab 7: WFP CONFIRMED - Visit confirmed by WFP
+      _wfpConfirmedSites = sites.where((s) {
+        final status = s['status']?.toString().toLowerCase().replaceAll(' ', '_') ?? '';
+        return status == 'wfp_confirmed' || status == 'wfpconfirmed';
+      }).toList();
+
+      // Tab 8: NOT COVERED - Site was not visited/covered
+      _notCoveredSites = sites.where((s) {
+        final status = s['status']?.toString().toLowerCase().replaceAll(' ', '_') ?? '';
+        return status == 'not_covered' || status == 'notcovered';
+      }).toList();
+
+      // Tab 9: REJECTED - Sites rejected during verification or returned from FOM
       _rejectedSites = sites.where((s) {
         final status = s['status']?.toString().toLowerCase() ?? '';
-        // Include both rejected and returned_to_fom statuses
         return status == 'rejected' || status == 'returned_to_fom';
       }).toList();
 
       debugPrint(
-        'Tab counts - New: ${_newSites.length}, CP Verification: ${_cpVerificationSites.length}, Verified: ${_verifiedSites.length}, Approved: ${_approvedSites.length}, Completed: ${_completedSites.length}, Rejected: ${_rejectedSites.length}',
+        'Tab counts - New: ${_newSites.length}, CP Verification: ${_cpVerificationSites.length}, Verified: ${_verifiedSites.length}, Approved: ${_approvedSites.length}, Completed: ${_completedSites.length}, Submitted: ${_submittedSites.length}, WFP Confirmed: ${_wfpConfirmedSites.length}, Not Covered: ${_notCoveredSites.length}, Rejected: ${_rejectedSites.length}',
       );
 
       // FALLBACK: If we have sites but they're not categorized, we log them only.
@@ -594,6 +614,9 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
             _verifiedSites.length +
             _approvedSites.length +
             _completedSites.length +
+            _submittedSites.length +
+            _wfpConfirmedSites.length +
+            _notCoveredSites.length +
             _rejectedSites.length;
         if (categorizedCount < sites.length) {
           final uncategorized = sites.where((s) {
@@ -603,6 +626,9 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                 !_verifiedSites.any((vs) => vs['id'] == id) &&
                 !_approvedSites.any((as) => as['id'] == id) &&
                 !_completedSites.any((cs) => cs['id'] == id) &&
+                !_submittedSites.any((ss) => ss['id'] == id) &&
+                !_wfpConfirmedSites.any((ws) => ws['id'] == id) &&
+                !_notCoveredSites.any((nc) => nc['id'] == id) &&
                 !_rejectedSites.any((rs) => rs['id'] == id);
           }).toList();
 
@@ -764,6 +790,12 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
         return 'This site is approved and cannot be modified';
       } else if (status == 'completed') {
         return 'This site is completed and cannot be modified';
+      } else if (status == 'submitted') {
+        return 'This site has been submitted for WFP confirmation';
+      } else if (status == 'wfp_confirmed' || status == 'wfpconfirmed') {
+        return 'This site has been confirmed by WFP';
+      } else if (status == 'not_covered' || status == 'notcovered') {
+        return 'This site was marked as not covered';
       } else if (status == 'returned_to_fom') {
         return 'This site has been returned to FOM';
       }
@@ -1040,6 +1072,33 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                     ),
                     const SizedBox(width: 8),
                     _buildVerifTabButton(
+                      'submitted',
+                      'Submitted',
+                      'مقدم',
+                      Icons.upload_file,
+                      _submittedSites.length,
+                      Colors.orange,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton(
+                      'wfp_confirmed',
+                      'WFP Confirmed',
+                      'معتمد WFP',
+                      Icons.verified_user,
+                      _wfpConfirmedSites.length,
+                      Colors.cyan.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton(
+                      'not_covered',
+                      'Not Covered',
+                      'غير مغطى',
+                      Icons.location_off_outlined,
+                      _notCoveredSites.length,
+                      Colors.deepOrange,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildVerifTabButton(
                       'rejected',
                       'Rejected',
                       'مرفوض',
@@ -1150,6 +1209,12 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen> {
                   ? _buildSiteList(_approvedSites, 'approved')
                   : _activeTab == 'completed'
                   ? _buildSiteList(_completedSites, 'completed')
+                  : _activeTab == 'submitted'
+                  ? _buildSiteList(_submittedSites, 'submitted')
+                  : _activeTab == 'wfp_confirmed'
+                  ? _buildSiteList(_wfpConfirmedSites, 'wfp_confirmed')
+                  : _activeTab == 'not_covered'
+                  ? _buildSiteList(_notCoveredSites, 'not_covered')
                   : _activeTab == 'rejected'
                   ? _buildSiteList(_rejectedSites, 'rejected')
                   : _buildNewTabContent(),

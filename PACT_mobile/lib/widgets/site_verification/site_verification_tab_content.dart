@@ -1032,6 +1032,12 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
         return Icons.thumb_up_outlined;
       case 'completed':
         return Icons.check_circle_outline;
+      case 'submitted':
+        return Icons.upload_file;
+      case 'wfp_confirmed':
+        return Icons.verified_user;
+      case 'not_covered':
+        return Icons.location_off_outlined;
       case 'rejected':
         return Icons.cancel_outlined;
       default:
@@ -1051,6 +1057,12 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
         return 'No approved sites';
       case 'completed':
         return 'No completed sites';
+      case 'submitted':
+        return 'No submitted sites';
+      case 'wfp_confirmed':
+        return 'No WFP confirmed sites';
+      case 'not_covered':
+        return 'No not-covered sites';
       case 'rejected':
         return 'No rejected sites';
       default:
@@ -1070,6 +1082,12 @@ extension _SiteVerificationTabContent on _SiteVerificationScreenState {
         return 'Sites approved by hub supervisor';
       case 'completed':
         return 'Sites with completed visits and payment info';
+      case 'submitted':
+        return 'Visit reports submitted to WFP for confirmation';
+      case 'wfp_confirmed':
+        return 'Sites confirmed by WFP after visit report review';
+      case 'not_covered':
+        return 'Sites that were not visited or covered this cycle';
       case 'rejected':
         return 'Rejected sites that need re-verification';
       default:

@@ -4,6 +4,9 @@ enum VisitStatus {
   assigned,
   inProgress,
   completed,
+  submitted,
+  wfpConfirmed,
+  notCovered,
   rejected,
   cancelled,
 }
@@ -21,6 +24,12 @@ extension VisitStatusExtension on VisitStatus {
         return 'In Progress';
       case VisitStatus.completed:
         return 'Completed';
+      case VisitStatus.submitted:
+        return 'Submitted';
+      case VisitStatus.wfpConfirmed:
+        return 'WFP Confirmed';
+      case VisitStatus.notCovered:
+        return 'Not Covered';
       case VisitStatus.rejected:
         return 'Rejected';
       case VisitStatus.cancelled:
@@ -34,10 +43,10 @@ VisitStatus visitStatusFromString(String status) {
     case 'pending':
       return VisitStatus.pending;
     case 'available':
-    case 'dispatched': // Map dispatched to available
+    case 'dispatched':
       return VisitStatus.available;
     case 'assigned':
-    case 'accepted': // Map accepted to assigned
+    case 'accepted':
     case 'accept':
       return VisitStatus.assigned;
     case 'in_progress':
@@ -45,6 +54,14 @@ VisitStatus visitStatusFromString(String status) {
       return VisitStatus.inProgress;
     case 'completed':
       return VisitStatus.completed;
+    case 'submitted':
+      return VisitStatus.submitted;
+    case 'wfp_confirmed':
+    case 'wfpconfirmed':
+      return VisitStatus.wfpConfirmed;
+    case 'not_covered':
+    case 'notcovered':
+      return VisitStatus.notCovered;
     case 'rejected':
       return VisitStatus.rejected;
     case 'cancelled':

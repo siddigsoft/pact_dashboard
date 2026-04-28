@@ -489,7 +489,22 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
         return Colors.blue;
       case 'verified':
         return Colors.green;
+      case 'approved':
+      case 'costed':
+      case 'approved_and_costed':
+        return Colors.teal;
+      case 'completed':
+        return Colors.purple;
+      case 'submitted':
+        return Colors.orange;
+      case 'wfp_confirmed':
+      case 'wfpconfirmed':
+        return Colors.cyan.shade700;
+      case 'not_covered':
+      case 'notcovered':
+        return Colors.deepOrange;
       case 'returned_to_fom':
+      case 'rejected':
         return Colors.red;
       default:
         return Colors.grey;
@@ -506,8 +521,24 @@ extension _SiteVerificationCardWidgets on _SiteVerificationScreenState {
         return Icons.attach_file;
       case 'verified':
         return Icons.verified;
+      case 'approved':
+      case 'costed':
+      case 'approved_and_costed':
+        return Icons.thumb_up_outlined;
+      case 'completed':
+        return Icons.check_circle_outline;
+      case 'submitted':
+        return Icons.upload_file;
+      case 'wfp_confirmed':
+      case 'wfpconfirmed':
+        return Icons.verified_user;
+      case 'not_covered':
+      case 'notcovered':
+        return Icons.location_off_outlined;
       case 'returned_to_fom':
         return Icons.undo;
+      case 'rejected':
+        return Icons.cancel_outlined;
       default:
         return Icons.help_outline;
     }
