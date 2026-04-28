@@ -157,9 +157,11 @@ const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
   task_reminder_3day: 'whatsapp_notify_tasks', task_status_changed: 'whatsapp_notify_tasks',
   task_updated: 'whatsapp_notify_tasks', task_comment_added: 'whatsapp_notify_tasks',
   dependency_added: 'whatsapp_notify_tasks', dependency_blocked: 'whatsapp_notify_tasks',
-  dependency_resolved: 'whatsapp_notify_tasks',
+  dependency_resolved: 'whatsapp_notify_tasks', dependency_acknowledged: 'whatsapp_notify_tasks',
+  reminder: 'whatsapp_notify_tasks', daily_digest: 'whatsapp_notify_tasks',
   // MMP & Site Visits
   mmp_created: 'whatsapp_notify_mmp', mmp_assigned: 'whatsapp_notify_mmp',
+  mmp_updated: 'whatsapp_notify_mmp',
   mmp_forwarded: 'whatsapp_notify_mmp', mmp_completed: 'whatsapp_notify_mmp',
   mmp_recall_initiated: 'whatsapp_notify_mmp', mmp_reclaim_approved: 'whatsapp_notify_mmp',
   mmp_cycle_closed: 'whatsapp_notify_mmp',
@@ -187,6 +189,11 @@ const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
   budget_threshold_100: 'whatsapp_notify_payroll',
   advance_request_submitted: 'whatsapp_notify_payroll', advance_request_approved: 'whatsapp_notify_payroll',
   advance_request_rejected: 'whatsapp_notify_payroll',
+  // Approvals: Workspace Hub & Account
+  workspace_share: 'whatsapp_notify_approvals', workspace_access_request: 'whatsapp_notify_approvals',
+  workspace_access_granted: 'whatsapp_notify_approvals', workspace_access_revoked: 'whatsapp_notify_approvals',
+  workspace_access_rejected: 'whatsapp_notify_approvals',
+  user_approved: 'whatsapp_notify_approvals', user_rejected: 'whatsapp_notify_approvals',
   // Projects
   project_created: 'whatsapp_notify_projects', project_stage_advanced: 'whatsapp_notify_projects',
   project_stage_assigned: 'whatsapp_notify_projects',
@@ -196,6 +203,12 @@ const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
   project_member_added: 'whatsapp_notify_projects', project_task_assigned: 'whatsapp_notify_projects',
   project_task_completed: 'whatsapp_notify_projects', project_task_overdue: 'whatsapp_notify_projects',
   project_health_changed: 'whatsapp_notify_projects', project_budget_exceeded: 'whatsapp_notify_projects',
+  // CRM
+  crm_opportunity_stage_changed: 'whatsapp_notify_projects', crm_opportunity_won: 'whatsapp_notify_projects',
+  crm_partner_created: 'whatsapp_notify_projects', crm_engagement_created: 'whatsapp_notify_projects',
+  crm_contact_added: 'whatsapp_notify_projects',
+  // Broadcast / System
+  broadcast: 'whatsapp_notify_projects',
 }
 
 // ── Build Meta template payload ───────────────────────────────────────────────
