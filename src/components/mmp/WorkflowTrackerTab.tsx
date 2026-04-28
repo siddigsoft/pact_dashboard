@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ArrowRight, Clock, CheckCircle2, AlertCircle, RotateCcw, Users, MapPin, Calendar, Search, ChevronDown, ChevronRight, Building2, Download } from 'lucide-react';
+import { ArrowRight, Clock, CheckCircle2, AlertCircle, RotateCcw, Users, MapPin, Calendar, Search, ChevronDown, ChevronRight, Building2, Download, Send, Eye, Shield, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface SiteDetail {
@@ -813,110 +813,140 @@ interface WorkflowTrackerTabProps {
   coordinators?: { id: string; name: string }[];
 }
 
-type WorkflowStage = 'new' | 'forwarded_to_fom' | 'forwarded_to_coordinator' | 'forwarded_to_coordinators' | 'sites_verified' | 'completed' | 'recalled';
+type WorkflowStage =
+  | 'new'
+  | 'forwarded_to_fom'
+  | 'with_coordinators'
+  | 'dispatched'
+  | 'in_verification'
+  | 'sites_verified'
+  | 'wfp_confirmed'
+  | 'not_covered'
+  | 'completed'
+  | 'recalled';
 
 const STAGE_CONFIG: Record<WorkflowStage, { label: string; color: string; icon: typeof Clock }> = {
-  new: { label: 'New', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200', icon: Clock },
-  forwarded_to_fom: { label: 'Forwarded to FOM', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', icon: ArrowRight },
-  forwarded_to_coordinator: { label: 'With Coordinators', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', icon: Users },
-  forwarded_to_coordinators: { label: 'With Coordinators', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', icon: Users },
-  sites_verified: { label: 'Sites Verified', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', icon: CheckCircle2 },
-  completed: { label: 'Completed', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200', icon: CheckCircle2 },
-  recalled: { label: 'Recalled', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', icon: RotateCcw },
+  new:              { label: 'New',                       color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',       icon: Clock },
+  forwarded_to_fom: { label: 'Forwarded to FOM',          color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',       icon: ArrowRight },
+  with_coordinators:{ label: 'With Coordinators',         color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', icon: Users },
+  dispatched:       { label: 'Dispatched to Collectors',  color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',   icon: Send },
+  in_verification:  { label: 'Verification In Progress',  color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200', icon: Eye },
+  sites_verified:   { label: 'Sites Verified',            color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',   icon: CheckCircle2 },
+  wfp_confirmed:    { label: 'WFP Confirmed',             color: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',      icon: Shield },
+  not_covered:      { label: 'Has Uncovered Sites',       color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',          icon: XCircle },
+  completed:        { label: 'Completed',                 color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200', icon: CheckCircle2 },
+  recalled:         { label: 'Recalled',                  color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200', icon: RotateCcw },
 };
 
-const STAGE_ORDER: WorkflowStage[] = ['new', 'forwarded_to_fom', 'forwarded_to_coordinator', 'sites_verified', 'completed'];
+const STAGE_ORDER: WorkflowStage[] = [
+  'new', 'forwarded_to_fom', 'with_coordinators', 'dispatched',
+  'in_verification', 'sites_verified', 'wfp_confirmed', 'completed',
+];
 
 function deriveWorkflowStage(mmp: any): WorkflowStage {
   const workflow = mmp.workflow || {};
   const siteEntries = mmp.siteEntries || [];
   
-  // Check recalled first - if recalledAt exists and workflow fields were cleared, it's recalled
+  // ── Recalled ──────────────────────────────────────────────────────────────
   if (workflow.recalledAt && (!workflow.forwardedToCoordinatorIds?.length && !workflow.forwardedToFomIds?.length)) {
     return 'recalled';
   }
-  
-  // Check completed status early
+
+  // ── Completed ─────────────────────────────────────────────────────────────
   if (mmp.status === 'completed' || workflow.completedAt) {
     return 'completed';
   }
-  
-  // Check if all sites are verified
-  const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
-  const allVerified = siteEntries.length > 0 && siteEntries.every((s: any) => 
-    verifiedStatuses.includes(s.status?.toLowerCase())
-  );
-  if (allVerified && siteEntries.length > 0) {
-    return 'sites_verified';
-  }
-  
-  // PRIORITY: Check if ANY site entries have been forwarded to coordinators
-  // This takes precedence over stored workflow.currentStage which may be stale
+
+  // ── WFP Confirmed (all sites confirmed by WFP) ────────────────────────────
+  const allWfpConfirmed = siteEntries.length > 0 &&
+    siteEntries.every((s: any) => s.status?.toLowerCase() === 'wfp_confirmed');
+  if (allWfpConfirmed) return 'wfp_confirmed';
+
+  // ── All Sites Verified ────────────────────────────────────────────────────
+  const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'wfp_confirmed', 'not_covered', 'completed'];
+  const allVerified = siteEntries.length > 0 &&
+    siteEntries.every((s: any) => verifiedStatuses.includes(s.status?.toLowerCase()));
+  if (allVerified) return 'sites_verified';
+
+  // ── Has Uncovered Sites (not_covered present, rest verified) ─────────────
+  const hasNotCovered = siteEntries.some((s: any) => s.status?.toLowerCase() === 'not_covered');
+  const verifiedCount = siteEntries.filter((s: any) => verifiedStatuses.includes(s.status?.toLowerCase())).length;
+
+  // ── Verification In Progress (some verified, some still in field) ─────────
+  const fieldActiveStatuses = ['dispatched', 'accepted', 'claimed', 'ongoing'];
+  const hasFieldActive = siteEntries.some((s: any) => fieldActiveStatuses.includes(s.status?.toLowerCase()));
+  if (hasFieldActive && verifiedCount > 0) return 'in_verification';
+
+  // ── Dispatched to Collectors ───────────────────────────────────────────────
+  if (hasFieldActive) return 'dispatched';
+
+  // ── Partial verification with no active field sites ────────────────────────
+  if (verifiedCount > 0 && verifiedCount < siteEntries.length) return 'in_verification';
+
+  // ── Not Covered fallback ──────────────────────────────────────────────────
+  if (hasNotCovered && verifiedCount === 0) return 'not_covered';
+
+  // ── With Coordinators (sites forwarded/assigned to coordinators) ───────────
   const hasSitesForwardedToCoordinator = siteEntries.some((site: any) => {
-    const siteWorkflow = site.workflow || {};
     const additionalData = site.additional_data || site.additionalData || {};
     return (
-      site.forwarded_to_user_id ||
-      site.forwardedToUserId ||
-      site.forwarded_at ||
-      site.forwardedAt ||
-      site.dispatched_at ||
-      site.dispatchedAt ||
-      additionalData.assigned_to ||
-      additionalData.forwarded_to ||
-      siteWorkflow.forwardedToCoordinatorIds?.length > 0
+      site.forwarded_to_user_id || site.forwardedToUserId ||
+      site.forwarded_at || site.forwardedAt ||
+      site.dispatched_at || site.dispatchedAt ||
+      additionalData.assigned_to || additionalData.forwarded_to
     );
   });
-  if (hasSitesForwardedToCoordinator) {
-    return 'forwarded_to_coordinator';
-  }
-  
-  // Check MMP-level workflow for coordinator forwarding
-  if (workflow.forwardedToCoordinatorIds?.length > 0 || 
-      workflow.forwardedToCoordinators?.length > 0 ||
-      workflow.forwardedToCoordinatorAt ||
-      workflow.forwardedToCoordinatorsAt) {
-    return 'forwarded_to_coordinator';
-  }
-  
-  // Check database status field
-  if (mmp.status === 'forwarded_to_coordinator') {
-    return 'forwarded_to_coordinator';
-  }
-  
-  // Now check stored currentStage (may be stale, so checked after site-level checks)
+  if (hasSitesForwardedToCoordinator) return 'with_coordinators';
+
+  if (
+    workflow.forwardedToCoordinatorIds?.length > 0 ||
+    workflow.forwardedToCoordinators?.length > 0 ||
+    workflow.forwardedToCoordinatorAt ||
+    workflow.forwardedToCoordinatorsAt
+  ) return 'with_coordinators';
+
+  if (
+    mmp.status === 'forwarded_to_coordinator' ||
+    mmp.status === 'forwarded_to_coordinators'
+  ) return 'with_coordinators';
+
+  // ── Stored currentStage fallback ──────────────────────────────────────────
   if (workflow.currentStage) {
     const normalizedStage = String(workflow.currentStage)
       .toLowerCase()
       .replace(/[-\s]+/g, '_')
       .trim();
-    
+
     const stageMap: Record<string, WorkflowStage> = {
-      'new': 'new',
-      'forwarded_fom': 'forwarded_to_fom',
-      'forwarded_to_fom': 'forwarded_to_fom',
-      'forwarded_coordinator': 'forwarded_to_coordinator',
-      'forwarded_to_coordinator': 'forwarded_to_coordinator',
-      'forwarded_coordinators': 'forwarded_to_coordinator',
-      'forwarded_to_coordinators': 'forwarded_to_coordinator',
-      'awaitingcoordinatorverification': 'forwarded_to_coordinator',
-      'awaiting_coordinator_verification': 'forwarded_to_coordinator',
-      'with_coordinators': 'forwarded_to_coordinator',
-      'coordinator': 'forwarded_to_coordinator',
-      'sites_verified': 'sites_verified',
-      'verified': 'sites_verified',
-      'completed': 'completed',
+      'new':                              'new',
+      'forwarded_fom':                    'forwarded_to_fom',
+      'forwarded_to_fom':                 'forwarded_to_fom',
+      'forwarded_coordinator':            'with_coordinators',
+      'forwarded_to_coordinator':         'with_coordinators',
+      'forwarded_coordinators':           'with_coordinators',
+      'forwarded_to_coordinators':        'with_coordinators',
+      'awaitingcoordinatorverification':  'with_coordinators',
+      'awaiting_coordinator_verification':'with_coordinators',
+      'with_coordinators':                'with_coordinators',
+      'coordinator':                      'with_coordinators',
+      'dispatched':                       'dispatched',
+      'in_progress':                      'in_verification',
+      'in_verification':                  'in_verification',
+      'sites_verified':                   'sites_verified',
+      'verified':                         'sites_verified',
+      'wfp_confirmed':                    'wfp_confirmed',
+      'not_covered':                      'not_covered',
+      'completed':                        'completed',
+      'recalled':                         'recalled',
     };
-    if (stageMap[normalizedStage]) {
-      return stageMap[normalizedStage];
-    }
+    if (stageMap[normalizedStage]) return stageMap[normalizedStage];
   }
-  
-  // Fallback checks for FOM forwarding
+
+  // ── Forwarded to FOM fallback ─────────────────────────────────────────────
   if (workflow.forwardedToFomIds?.length > 0 || workflow.forwardedAt) {
     return 'forwarded_to_fom';
   }
-  
+
   return 'new';
 }
 
@@ -988,14 +1018,17 @@ function buildTimeline(mmp: any): { label: string; timestamp: Date | null; actor
 }
 
 function StageIndicator({ currentStage }: { currentStage: WorkflowStage }) {
-  // Normalize coordinator stages to the one in STAGE_ORDER
-  const normalizedStage = currentStage === 'forwarded_to_coordinators' ? 'forwarded_to_coordinator' : currentStage;
-  const currentIndex = STAGE_ORDER.indexOf(normalizedStage === 'recalled' ? 'new' : normalizedStage);
-  
+  // Off-pipeline stages (recalled, not_covered) snap to their nearest pipeline position
+  const pipelineStage: WorkflowStage =
+    currentStage === 'recalled' ? 'new' :
+    currentStage === 'not_covered' ? 'in_verification' :
+    currentStage;
+  const currentIndex = STAGE_ORDER.indexOf(pipelineStage);
+
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {STAGE_ORDER.map((stage, index) => {
-        const isActive = normalizedStage === stage || (normalizedStage === 'recalled' && stage === 'new');
+        const isActive = pipelineStage === stage;
         const isPast = index < currentIndex;
         const config = STAGE_CONFIG[stage];
         
