@@ -148,13 +148,17 @@ type WhatsAppCategoryCol =
   | 'whatsapp_notify_payroll' | 'whatsapp_notify_projects' | 'whatsapp_notify_mmp'
 
 const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
+  // Tasks
   task_created: 'whatsapp_notify_tasks', task_assigned: 'whatsapp_notify_tasks',
   task_started: 'whatsapp_notify_tasks', task_acknowledged: 'whatsapp_notify_tasks',
   task_completed: 'whatsapp_notify_tasks', task_delayed: 'whatsapp_notify_tasks',
   task_rejected: 'whatsapp_notify_tasks', task_cancelled: 'whatsapp_notify_tasks',
   task_overdue: 'whatsapp_notify_tasks', task_reminder_1day: 'whatsapp_notify_tasks',
   task_reminder_3day: 'whatsapp_notify_tasks', task_status_changed: 'whatsapp_notify_tasks',
-  task_updated: 'whatsapp_notify_tasks',
+  task_updated: 'whatsapp_notify_tasks', task_comment_added: 'whatsapp_notify_tasks',
+  dependency_added: 'whatsapp_notify_tasks', dependency_blocked: 'whatsapp_notify_tasks',
+  dependency_resolved: 'whatsapp_notify_tasks',
+  // MMP & Site Visits
   mmp_created: 'whatsapp_notify_mmp', mmp_assigned: 'whatsapp_notify_mmp',
   mmp_forwarded: 'whatsapp_notify_mmp', mmp_completed: 'whatsapp_notify_mmp',
   mmp_recall_initiated: 'whatsapp_notify_mmp', mmp_reclaim_approved: 'whatsapp_notify_mmp',
@@ -162,12 +166,18 @@ const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
   site_visit_assigned: 'whatsapp_notify_mmp', site_visit_started: 'whatsapp_notify_mmp',
   site_visit_completed: 'whatsapp_notify_mmp', site_visit_postponed: 'whatsapp_notify_mmp',
   site_flagged_uncovered: 'whatsapp_notify_mmp',
+  // Approvals & Leave
   approval_required: 'whatsapp_notify_approvals', signature_requested: 'whatsapp_notify_approvals',
   signature_completed: 'whatsapp_notify_approvals', leave_request_submitted: 'whatsapp_notify_approvals',
   leave_request_approved: 'whatsapp_notify_approvals', leave_request_rejected: 'whatsapp_notify_approvals',
-  leave_request_cancelled: 'whatsapp_notify_approvals',
+  leave_request_cancelled: 'whatsapp_notify_approvals', leave_balance_updated: 'whatsapp_notify_approvals',
+  // Timesheets
+  timesheet_submitted: 'whatsapp_notify_approvals', timesheet_approved: 'whatsapp_notify_approvals',
+  timesheet_rejected: 'whatsapp_notify_approvals', timesheet_revision_requested: 'whatsapp_notify_approvals',
+  // Payroll, Financial & Contracts
   payroll_run_completed: 'whatsapp_notify_payroll', payroll_approval_needed: 'whatsapp_notify_payroll',
   payroll_slip_ready: 'whatsapp_notify_payroll',
+  retainer_payment_processed: 'whatsapp_notify_payroll', retainer_overdue: 'whatsapp_notify_payroll',
   contract_expiring_30d: 'whatsapp_notify_payroll', contract_expiring_7d: 'whatsapp_notify_payroll',
   contract_expired: 'whatsapp_notify_payroll',
   cost_submitted: 'whatsapp_notify_payroll', cost_approved: 'whatsapp_notify_payroll',
@@ -177,13 +187,15 @@ const EVENT_CATEGORY_MAP: Record<string, WhatsAppCategoryCol> = {
   budget_threshold_100: 'whatsapp_notify_payroll',
   advance_request_submitted: 'whatsapp_notify_payroll', advance_request_approved: 'whatsapp_notify_payroll',
   advance_request_rejected: 'whatsapp_notify_payroll',
+  // Projects
   project_created: 'whatsapp_notify_projects', project_stage_advanced: 'whatsapp_notify_projects',
   project_stage_assigned: 'whatsapp_notify_projects',
   project_milestone_reached: 'whatsapp_notify_projects',
   project_milestone_overdue: 'whatsapp_notify_projects', project_stalled: 'whatsapp_notify_projects',
   project_completed: 'whatsapp_notify_projects', project_archived: 'whatsapp_notify_projects',
   project_member_added: 'whatsapp_notify_projects', project_task_assigned: 'whatsapp_notify_projects',
-  project_task_overdue: 'whatsapp_notify_projects', project_health_changed: 'whatsapp_notify_projects',
+  project_task_completed: 'whatsapp_notify_projects', project_task_overdue: 'whatsapp_notify_projects',
+  project_health_changed: 'whatsapp_notify_projects', project_budget_exceeded: 'whatsapp_notify_projects',
 }
 
 // ── Build Meta template payload ───────────────────────────────────────────────
