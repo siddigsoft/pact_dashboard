@@ -67,36 +67,59 @@ async function fetchMMPFiles(): Promise<MMPFile[]> {
   );
 }
 
+/**
+ * Replaced the previous approach of fetching ALL rows and counting client-side.
+ * Now runs 8 parallel COUNT-only queries (HEAD requests — no row data transferred).
+ * This is dramatically faster: each request returns a single integer instead of
+ * potentially thousands of rows.
+ */
 async function fetchSiteEntryCounts(): Promise<SiteEntryCounts> {
   if (!navigator.onLine) return defaultSiteEntryCounts;
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return defaultSiteEntryCounts;
 
-  const { data: rows, error } = await supabase
-    .from('mmp_site_entries')
-    .select('status, accepted_by');
+  try {
+    const [
+      dispatchedRes,
+      acceptedRes,
+      smartAssignedRes,
+      ongoingRes,
+      completedRes,
+      rejectedRes,
+      costedRes,
+      totalRes,
+    ] = await Promise.all([
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+        .eq('status', 'dispatched').is('accepted_by', null),
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+        .eq('status', 'accepted'),
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+        .eq('status', 'assigned'),
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+        .in('status', ['inprogress', 'in_progress', 'ongoing']),
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+        .eq('status', 'completed'),
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+        .in('status', ['rejected', 'declined']),
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+        .in('status', ['approved and costed', 'costed']),
+      supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }),
+    ]);
 
-  if (error) {
-    console.warn('Count query error:', error);
+    return {
+      dispatched:    dispatchedRes.count    ?? 0,
+      accepted:      acceptedRes.count      ?? 0,
+      smartAssigned: smartAssignedRes.count ?? 0,
+      ongoing:       ongoingRes.count       ?? 0,
+      completed:     completedRes.count     ?? 0,
+      rejected:      rejectedRes.count      ?? 0,
+      approvedCosted: costedRes.count       ?? 0,
+      total:         totalRes.count         ?? 0,
+    };
+  } catch (e) {
+    console.warn('[fetchSiteEntryCounts] count query error:', e);
     return defaultSiteEntryCounts;
   }
-
-  let dispatched = 0, accepted = 0, smartAssigned = 0, ongoing = 0;
-  let completed = 0, rejected = 0, approvedCosted = 0;
-  const total = rows?.length || 0;
-
-  for (const r of (rows || [])) {
-    const s = (r.status || '').toLowerCase();
-    if (s === 'dispatched' && !r.accepted_by) dispatched++;
-    else if (s === 'accepted') accepted++;
-    else if (s === 'assigned') smartAssigned++;
-    else if (s === 'inprogress' || s === 'in_progress' || s === 'ongoing') ongoing++;
-    else if (s === 'completed') completed++;
-    else if (s === 'rejected' || s === 'declined') rejected++;
-    else if (s === 'approved and costed' || s === 'costed') approvedCosted++;
-  }
-
-  return { dispatched, accepted, smartAssigned, ongoing, completed, rejected, approvedCosted, total };
 }
 
 /** Row shape returned by get_coordinator_site_entries RPC */
@@ -150,8 +173,11 @@ async function fetchCoordinatorSiteEntries(userId: string | null): Promise<Coord
   return (data ?? []) as CoordinatorSiteEntryRow[];
 }
 
-const MMP_FILES_STALE_MS = 60 * 1000;   // 1 minute
-const COUNTS_STALE_MS = 30 * 1000;      // 30 seconds
+// Tighter stale times so data feels fresh on every page visit.
+// The counts query is now very cheap (8 HEAD requests), so we poll more aggressively.
+const MMP_FILES_STALE_MS  = 20 * 1000;   // 20 s — list metadata
+const COUNTS_STALE_MS     =  8 * 1000;   // 8 s  — status counts (very cheap HEAD queries)
+const COUNTS_REFETCH_MS   = 30 * 1000;   // background poll every 30 s while page is open
 
 /**
  * `fetchMMPFiles` intentionally returns each MMP with empty `siteEntries` (loaded on-demand).
@@ -190,18 +216,23 @@ export function useMMPFilesQuery(enabled = true) {
     },
     staleTime: MMP_FILES_STALE_MS,
     placeholderData: (previousData) => previousData,
+    refetchOnWindowFocus: true,
     enabled,
   });
 }
 
 /**
- * Fetches site entry counts (dispatched, accepted, etc.). Cached and deduplicated.
+ * Fetches site entry counts using parallel COUNT-only HEAD queries (no row data).
+ * Fast enough to poll in the background every 30 s.
  */
 export function useMMPSiteEntryCountsQuery(enabled = true) {
   return useQuery({
     queryKey: mmpQueryKeys.siteEntryCounts(),
     queryFn: fetchSiteEntryCounts,
     staleTime: COUNTS_STALE_MS,
+    refetchInterval: COUNTS_REFETCH_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     placeholderData: (previousData) => previousData ?? defaultSiteEntryCounts,
     enabled,
   });
