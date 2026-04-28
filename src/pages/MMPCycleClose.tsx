@@ -48,6 +48,7 @@ import { parseWFPRow, matchAll, summarise } from '@/utils/wfpMatcher';
 import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
 import { logPaymentEvent } from '@/services/paymentEventLogger';
 import { dispatchNotification } from '@/lib/notify';
+import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed', labelAr: 'لم يتم التوزيع' },
@@ -2583,6 +2584,11 @@ const MMPCycleClose = () => {
               <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{wfpSummary.pendingReview}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="adhoc" data-testid="tab-adhoc" className="gap-1.5 px-3 py-2">
+            <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+            <span>Ad-hoc Visits</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الزيارات الطارئة</span>
+          </TabsTrigger>
           <TabsTrigger value="archive" data-testid="tab-archive" className="gap-1.5 px-3 py-2">
             <BookOpen className="h-3.5 w-3.5" />
             <span>Closed Cycles</span>
@@ -3398,6 +3404,10 @@ const MMPCycleClose = () => {
               )}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="adhoc" className="space-y-4">
+          <AdhocSiteVisitsTab canManage={isAdmin || isFOM || hasAnyRole(['Coordinator', 'coordinator'])} />
         </TabsContent>
 
         <TabsContent value="archive" className="space-y-4">
