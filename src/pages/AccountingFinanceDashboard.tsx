@@ -815,20 +815,25 @@ export default function AccountingFinanceDashboard() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Database Tables</span>
-            <span className="text-[10px] text-muted-foreground" dir="rtl">جداول قاعدة البيانات</span>
+            <span className="text-sm font-semibold">Live Database Status</span>
+            <span className="text-[10px] text-muted-foreground" dir="rtl">حالة قاعدة البيانات المباشرة</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {modules.loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             {!modules.loading && modules.data && (
-              <span className={cn(
-                'text-xs font-bold px-2.5 py-0.5 rounded-full',
-                activeModules === totalModules
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-              )}>
-                {activeModules}/{totalModules} live
-              </span>
+              <>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline tabular-nums">
+                  {Object.values(modules.data).reduce((s, m) => s + m.count, 0).toLocaleString()} rows total
+                </span>
+                <span className={cn(
+                  'text-xs font-bold px-2.5 py-0.5 rounded-full',
+                  activeModules === totalModules
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+                )}>
+                  {activeModules}/{totalModules} live
+                </span>
+              </>
             )}
           </div>
         </div>
@@ -875,70 +880,108 @@ export default function AccountingFinanceDashboard() {
             },
           ];
 
+          const globalMax = Math.max(1, ...groups.flatMap(g => g.items.map(i => i.entry.count)));
+
           return (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border">
-              {groups.map(g => (
-                <div key={g.heading} className="p-4">
-                  <div className="flex items-center gap-1.5 mb-3">
-                    <g.icon className={cn('h-3.5 w-3.5 shrink-0', g.iconColor)} />
-                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{g.heading}</span>
-                    <span className="text-[9px] text-muted-foreground ml-1" dir="rtl">{g.headingAr}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {g.items.map(item => (
-                      <Link key={item.label} to={item.href} className="flex items-center gap-2.5 group">
-                        {item.entry.active ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                        ) : (
-                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              {groups.map(g => {
+                const groupTotal = g.items.reduce((s, i) => s + (i.entry.active ? i.entry.count : 0), 0);
+                const groupActive = g.items.filter(i => i.entry.active).length;
+                return (
+                  <div key={g.heading} className="p-4">
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <g.icon className={cn('h-3.5 w-3.5 shrink-0', g.iconColor)} />
+                      <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{g.heading}</span>
+                      <span className="text-[9px] text-muted-foreground ml-1" dir="rtl">{g.headingAr}</span>
+                      <span className="ml-auto flex items-center gap-1 shrink-0">
+                        {groupActive < g.items.length && (
+                          <span className="text-[9px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full font-medium">
+                            {g.items.length - groupActive} pending
+                          </span>
                         )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className={cn('text-xs font-medium truncate group-hover:text-primary transition-colors', !item.entry.active && 'text-muted-foreground')}>
-                              {item.label}
-                            </span>
+                        {groupTotal > 0 && (
+                          <span className="text-[9px] text-muted-foreground tabular-nums font-semibold">
+                            {groupTotal.toLocaleString()} rec
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="space-y-2.5">
+                      {g.items.map(item => {
+                        const barPct = item.entry.active && globalMax > 0
+                          ? Math.max(3, Math.round((item.entry.count / globalMax) * 100))
+                          : 0;
+                        return (
+                          <Link key={item.label} to={item.href} className="flex items-center gap-2.5 group">
                             {item.entry.active ? (
-                              <span className="text-[10px] tabular-nums font-semibold text-muted-foreground shrink-0">
-                                {item.entry.count.toLocaleString()}
-                              </span>
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                             ) : (
-                              <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400 shrink-0 bg-amber-50 dark:bg-amber-900/20 px-1.5 rounded">
-                                No migration
-                              </span>
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                             )}
-                          </div>
-                          {item.entry.active && (
-                            <div className="h-1 mt-0.5 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-emerald-400 dark:bg-emerald-500 transition-all"
-                                style={{ width: item.entry.count > 0 ? `${Math.min(100, Math.round((item.entry.count / Math.max(1, item.entry.count)) * 100))}%` : '4%' }}
-                              />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className={cn('text-xs font-medium truncate group-hover:text-primary transition-colors', !item.entry.active && 'text-muted-foreground line-through decoration-amber-400')}>
+                                  {item.label}
+                                </span>
+                                {item.entry.active ? (
+                                  <span className="text-[10px] tabular-nums font-semibold text-foreground shrink-0">
+                                    {item.entry.count > 0 ? item.entry.count.toLocaleString() : <span className="text-muted-foreground">0</span>}
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400 shrink-0 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-full">
+                                    migrate
+                                  </span>
+                                )}
+                              </div>
+                              <div className="h-1 mt-1 rounded-full bg-muted overflow-hidden">
+                                {item.entry.active ? (
+                                  <div
+                                    className={cn('h-full rounded-full transition-all duration-500', item.entry.count > 0 ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-muted-foreground/20')}
+                                    style={{ width: `${barPct}%` }}
+                                  />
+                                ) : (
+                                  <div className="h-full w-full bg-amber-200 dark:bg-amber-800/30" />
+                                )}
+                              </div>
+                              <div className="flex items-center mt-0.5">
+                                <span className="text-[9px] text-muted-foreground" dir="rtl">{item.labelAr}</span>
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      </Link>
-                    ))}
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           );
         })()}
 
         {/* footer */}
-        {modules.data && (
-          <div className={cn(
-            'flex items-center gap-1.5 px-4 py-2.5 text-[10px] border-t border-border',
-            Object.values(modules.data).every(m => m.active)
-              ? 'bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-300'
-              : 'bg-amber-50/50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300',
-          )}>
-            {Object.values(modules.data).every(m => m.active)
-              ? <><CheckCircle2 className="h-3 w-3 shrink-0" /> All accounting tables are active — {Object.values(modules.data).reduce((s, m) => s + m.count, 0).toLocaleString()} total records across {totalModules} modules.</>
-              : <><AlertTriangle className="h-3 w-3 shrink-0" /> {totalModules - activeModules} module{totalModules - activeModules !== 1 ? 's' : ''} need SQL migration applied in the Supabase SQL Editor.</>
-            }
-          </div>
-        )}
+        {modules.data && (() => {
+          const totalRecords = Object.values(modules.data).reduce((s, m) => s + m.count, 0);
+          const allActive = Object.values(modules.data).every(m => m.active);
+          const pendingCount = totalModules - activeModules;
+          return (
+            <div className={cn(
+              'flex items-center justify-between gap-3 px-4 py-2.5 text-[10px] border-t border-border',
+              allActive
+                ? 'bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-300'
+                : 'bg-amber-50/50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300',
+            )}>
+              <div className="flex items-center gap-1.5">
+                {allActive
+                  ? <><CheckCircle2 className="h-3 w-3 shrink-0" /> All {totalModules} tables live — {totalRecords.toLocaleString()} total records</>
+                  : <><AlertTriangle className="h-3 w-3 shrink-0" /> {pendingCount} table{pendingCount !== 1 ? 's' : ''} need SQL migration in the Supabase SQL Editor</>
+                }
+              </div>
+              <div className="flex items-center gap-3 text-muted-foreground shrink-0">
+                <span>{activeModules} active · {totalRecords.toLocaleString()} rows · auto-refresh in {countdown}s</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
