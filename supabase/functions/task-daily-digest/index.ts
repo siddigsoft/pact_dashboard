@@ -111,7 +111,9 @@ serve(async (req: Request) => {
       })
     }
 
-    const today = new Date().toISOString().split('T')[0]
+    // Single timestamp for the entire run — prevents cross-midnight drift (#61)
+    const runAt = new Date()
+    const today = runAt.toISOString().split('T')[0]
     let sent = 0
     let skipped = 0
 
@@ -158,7 +160,7 @@ serve(async (req: Request) => {
       // Build email body
       const lines: string[] = []
       lines.push(`Good morning, ${profile.full_name ?? 'there'}!`)
-      lines.push(`Here's your task summary for today (${formatDate(today)}):`)
+      lines.push(`Here's your task summary for today (${runAt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}):`)
       lines.push('')
 
       if (overduePT.length > 0) {
@@ -234,7 +236,7 @@ serve(async (req: Request) => {
         const { error } = await sb.functions.invoke('send-email', {
           body: {
             to: profile.email,
-            subject: `📋 Your Daily Task Digest — ${new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`,
+            subject: `📋 Your Daily Task Digest — ${runAt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`,
             html: htmlBody,
           },
         })

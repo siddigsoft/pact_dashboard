@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   format, isToday, isBefore, parseISO, isValid, startOfDay,
   addDays, differenceInCalendarDays,
@@ -116,23 +116,60 @@ function recurrenceLabel(task: { recurrence?: string; recurrenceEndDate?: string
   return base;
 }
 
-function RecurringBadge({ task, compact = false }: { task: { recurrence?: string; recurrenceEndDate?: string | null }; compact?: boolean }) {
+function calcNextOccurrence(recurrence: string, dueDateStr: string | null | undefined): string | null {
+  if (!dueDateStr) return null;
+  try {
+    let next = parseISO(dueDateStr);
+    if (!isValid(next)) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (next >= today) return format(next, 'd MMM yyyy');
+    const intervalDays: Record<string, number> = {
+      daily: 1, every_2_days: 2, 'every-2-days': 2,
+      every_3_days: 3, 'every-3-days': 3,
+      weekly: 7, biweekly: 14,
+    };
+    const days = intervalDays[recurrence];
+    if (days) {
+      while (next < today) next = new Date(next.getTime() + days * 86400000);
+      return format(next, 'd MMM yyyy');
+    }
+    if (recurrence === 'monthly') {
+      while (next < today) next = new Date(next.getFullYear(), next.getMonth() + 1, next.getDate());
+      return format(next, 'd MMM yyyy');
+    }
+    if (recurrence === 'weekdays') {
+      while (next < today) {
+        next = new Date(next.getTime() + 86400000);
+        while (next.getDay() === 0 || next.getDay() === 6) next = new Date(next.getTime() + 86400000);
+      }
+      return format(next, 'd MMM yyyy');
+    }
+    return null;
+  } catch { return null; }
+}
+
+function RecurringBadge({ task, compact = false }: {
+  task: { recurrence?: string; recurrenceEndDate?: string | null; dueDate?: string | null };
+  compact?: boolean;
+}) {
   if (!task.recurrence || task.recurrence === 'none') return null;
   const label = recurrenceLabel(task);
+  const nextDate = calcNextOccurrence(task.recurrence, task.dueDate);
+  const tooltipContent = (
+    <div className="space-y-0.5">
+      <div>{label}</div>
+      {nextDate && <div className="text-teal-300 font-medium">Next: {nextDate}</div>}
+    </div>
+  );
   if (compact) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
-            data-testid="badge-recurring"
-            className="inline-flex items-center text-teal-600 cursor-default"
-          >
+          <span data-testid="badge-recurring" className="inline-flex items-center text-teal-600 cursor-default">
             <RefreshCw className="w-2.5 h-2.5" />
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          {label}
-        </TooltipContent>
+        <TooltipContent side="top" className="text-xs">{tooltipContent}</TooltipContent>
       </Tooltip>
     );
   }
@@ -147,9 +184,7 @@ function RecurringBadge({ task, compact = false }: { task: { recurrence?: string
           Repeats
         </span>
       </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        {label}
-      </TooltipContent>
+      <TooltipContent side="top" className="text-xs">{tooltipContent}</TooltipContent>
     </Tooltip>
   );
 }
@@ -1412,6 +1447,19 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
   const [editEstimatedHours, setEditEstimatedHours] = useState('');
   const [editActualHours,    setEditActualHours]    = useState('');
 
+  // Dependencies (EditDialog)
+  const [editDeps, setEditDeps] = useState<Array<{ type: string; label: string; requiresAck: boolean; id?: string }>>([]);
+  const [editDepInput, setEditDepInput] = useState('');
+  const [editTaskSearch, setEditTaskSearch] = useState('');
+  const [editTaskSearchResults, setEditTaskSearchResults] = useState<Array<{ id: string; title: string }>>([]);
+  const [searchingTasks, setSearchingTasks] = useState(false);
+
+  // Attachments (EditDialog)
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const [existingAttachments, setExistingAttachments] = useState<TaskAttachment[]>([]);
+  const [newFiles, setNewFiles]                       = useState<File[]>([]);
+  const [uploadingEditAttachments, setUploadingEditAttachments] = useState(false);
+
   // Recurrence state (EditDialog)
   const [editRecurrenceOn,           setEditRecurrenceOn]           = useState(false);
   const [editRecurrence,             setEditRecurrence]             = useState('daily');
@@ -1538,8 +1586,25 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       // Co-assignees
       setCoAssignees((task.coAssignees ?? []).map(c => ({ id: c.id, full_name: c.name, hours: c.hours ?? null })));
       setCoSearch('');
+      // Attachments
+      setExistingAttachments(task.attachments ?? []);
+      setNewFiles([]);
+      // Dependencies
+      setEditDeps((task.dependencies ?? []) as Array<{ type: string; label: string; requiresAck: boolean; id?: string }>);
+      setEditDepInput('');
+      setEditTaskSearch('');
+      setEditTaskSearchResults([]);
     }
   }, [task, departments]);
+
+  const searchTasksForDep = useCallback(async (q: string) => {
+    if (q.trim().length < 2) { setEditTaskSearchResults([]); return; }
+    setSearchingTasks(true);
+    try {
+      const { data } = await supabase.from('personal_tasks').select('id, title').ilike('title', `%${q.trim()}%`).neq('id', task?.id ?? '').limit(8);
+      setEditTaskSearchResults((data ?? []).map((r: any) => ({ id: r.id, title: r.title })));
+    } finally { setSearchingTasks(false); }
+  }, [task?.id]);
 
   if (!task) return null;
 
@@ -1563,13 +1628,10 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
     { value: 'cancelled'   as const, label: '🚫 Cancelled'     },
   ];
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) return;
     if (editRecurrenceOn && (editRecurrence === 'weekly' || editRecurrence === 'specific_days') && editRecurrenceDays.length === 0) return;
-    // If the task has any dependencies (existing or freshly added), require
-    // both total hours and hours-per-day so scheduling stays consistent.
-    const hasAnyDeps =
-      (Array.isArray(task.dependencies) && task.dependencies.length > 0);
+    const hasAnyDeps = (Array.isArray(task.dependencies) && task.dependencies.length > 0);
     if (hasAnyDeps) {
       const eh = editEstimatedHours ? parseFloat(editEstimatedHours) : NaN;
       const hpd = editHoursPerDay ? parseFloat(editHoursPerDay) : NaN;
@@ -1583,6 +1645,33 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       }
     }
     const typeMap = { general: null as null, project: 'project-task' as const, daytoday: 'day-to-day' as const };
+
+    // Upload new files, if any
+    let mergedAttachments: TaskAttachment[] = [...existingAttachments];
+    if (newFiles.length > 0) {
+      setUploadingEditAttachments(true);
+      const uploadedPaths: string[] = [];
+      try {
+        for (const f of newFiles) {
+          const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const path = `task-attachments/${task.id}/${Date.now()}_${safeName}`;
+          const { error: upErr } = await supabase.storage.from('workspace-files').upload(path, f, { upsert: false });
+          if (upErr) throw upErr;
+          uploadedPaths.push(path);
+          const { data: urlData } = supabase.storage.from('workspace-files').getPublicUrl(path);
+          mergedAttachments.push({ name: f.name, url: urlData?.publicUrl ?? '', uploadedAt: new Date().toISOString() });
+        }
+      } catch {
+        if (uploadedPaths.length > 0) {
+          try { await supabase.storage.from('workspace-files').remove(uploadedPaths); } catch { /* best-effort */ }
+        }
+        toast({ title: 'Attachment upload failed', description: 'Task metadata was not saved. Please try again.', variant: 'destructive' });
+        setUploadingEditAttachments(false);
+        return;
+      }
+      setUploadingEditAttachments(false);
+    }
+
     onSave(task.id, {
       title: title.trim(), priority, status,
       dueDate: dueDate || null, description: description || null,
@@ -1603,8 +1692,9 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
       recurrenceMonthlyDay: editRecurrence === 'monthly' && editRecurrenceOn ? editRecurrenceMonthlyDay : null,
       recurrenceEndDate: editRecurrenceOn && editRecurrenceEndDate ? editRecurrenceEndDate : null,
       estimatedHours: editEstimatedHours ? parseFloat(editEstimatedHours) : null,
-      // Only privileged roles can manually override actual_hours
       ...(canEditActualHours && { actualHours: editActualHours ? parseFloat(editActualHours) : null }),
+      attachments: mergedAttachments,
+      dependencies: editDeps,
     });
     onClose();
   };
@@ -2051,22 +2141,115 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
               </div>
             )}
 
-            {/* Existing dependencies (read-only view) */}
-            {task.dependencies?.length > 0 && (
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 block flex items-center gap-1.5">
-                  <ArrowRight className="w-3 h-3 text-slate-400" /> Dependencies
-                  <span className="text-slate-400 font-normal normal-case tracking-normal">(things needed to start — confirmed at Start)</span>
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {task.dependencies.map((d, i) => (
+            {/* Dependencies (editable) */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                <ArrowRight className="w-3 h-3 text-slate-400" />
+                Blockers / Dependencies
+                <span className="text-slate-400 font-normal normal-case tracking-normal">(things needed before this task can start)</span>
+              </label>
+              {/* Existing deps */}
+              {editDeps.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {editDeps.map((d, i) => (
                     <span key={i} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1D3461]/10 text-xs text-[#1D3461] font-medium">
-                      {typeof d === 'string' ? d : (d as { label?: string }).label ?? String(d)}
+                      {d.label}
+                      <button
+                        type="button"
+                        onClick={() => setEditDeps(prev => prev.filter((_, idx) => idx !== i))}
+                        data-testid={`edit-remove-dep-${i}`}
+                        className="text-[#1D3461]/50 hover:text-red-500 transition-colors ml-0.5"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
                     </span>
                   ))}
                 </div>
+              )}
+              {/* Add custom dep */}
+              <div className="flex gap-2 mb-2">
+                <input
+                  placeholder="e.g. 'Approval received', 'Survey complete'"
+                  value={editDepInput}
+                  onChange={e => setEditDepInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const v = editDepInput.trim();
+                      if (v && !editDeps.some(d => d.label === v)) {
+                        setEditDeps(prev => [...prev, { type: 'custom', label: v, requiresAck: false }]);
+                        setEditDepInput('');
+                      }
+                    }
+                  }}
+                  data-testid="edit-input-dep-custom"
+                  className="flex-1 h-9 px-3 rounded-xl border border-slate-200 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D3461]/20 focus:border-[#1D3461] transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const v = editDepInput.trim();
+                    if (v && !editDeps.some(d => d.label === v)) {
+                      setEditDeps(prev => [...prev, { type: 'custom', label: v, requiresAck: false }]);
+                      setEditDepInput('');
+                    }
+                  }}
+                  data-testid="edit-button-add-dep"
+                  disabled={!editDepInput.trim()}
+                  className="flex items-center gap-1 h-9 px-3 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs font-semibold transition-colors shrink-0 disabled:opacity-40"
+                >
+                  <Plus className="w-3 h-3" /> Add
+                </button>
               </div>
-            )}
+              {/* Search tasks to link as blocker */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                  <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <input
+                    placeholder="Search tasks to add as a blocker…"
+                    value={editTaskSearch}
+                    onChange={e => {
+                      setEditTaskSearch(e.target.value);
+                      void searchTasksForDep(e.target.value);
+                    }}
+                    data-testid="edit-input-dep-task-search"
+                    className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                  />
+                  {searchingTasks && <Loader2 className="w-3 h-3 animate-spin text-slate-400 shrink-0" />}
+                </div>
+                {editTaskSearch.trim().length >= 2 && (
+                  <div className="max-h-32 overflow-y-auto">
+                    {editTaskSearchResults.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-3">No matching tasks found</p>
+                    ) : (
+                      editTaskSearchResults.map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          disabled={editDeps.some(d => d.id === t.id)}
+                          onClick={() => {
+                            if (!editDeps.some(d => d.id === t.id)) {
+                              setEditDeps(prev => [...prev, { type: 'task', label: t.title, requiresAck: false, id: t.id }]);
+                              setEditTaskSearch('');
+                              setEditTaskSearchResults([]);
+                            }
+                          }}
+                          data-testid={`edit-dep-task-${t.id}`}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-left text-sm border-b border-slate-50 last:border-0 disabled:opacity-40"
+                        >
+                          <CheckSquare className="w-3.5 h-3.5 text-[#1D3461] shrink-0" />
+                          <span className="flex-1 truncate">{t.title}</span>
+                          {editDeps.some(d => d.id === t.id) && <span className="text-[10px] text-emerald-600">Added</span>}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+                {editTaskSearch.trim().length < 2 && (
+                  <p className="text-[10px] text-slate-400 px-3 py-2">Type at least 2 characters to search tasks</p>
+                )}
+              </div>
+            </div>
 
             {/* Completion Reward */}
             <div>
@@ -2089,6 +2272,68 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
                   compact
                 />
               </div>
+            </div>
+
+            {/* Attachments */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                <Paperclip className="w-3 h-3 text-slate-400" />
+                Attachments
+                <span className="text-slate-400 font-normal normal-case tracking-normal">(optional)</span>
+              </label>
+              <input
+                type="file"
+                multiple
+                ref={editFileInputRef}
+                className="hidden"
+                onChange={e => {
+                  const files = Array.from(e.target.files ?? []);
+                  setNewFiles(prev => [...prev, ...files]);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => editFileInputRef.current?.click()}
+                data-testid="edit-button-attach-file"
+                className="w-full flex items-center justify-center gap-2 h-10 rounded-xl border border-dashed border-slate-300 hover:border-[#1D3461] text-slate-400 hover:text-[#1D3461] text-xs font-semibold transition-all"
+              >
+                <Paperclip className="w-3.5 h-3.5" /> Click to attach files or photos
+              </button>
+              {(existingAttachments.length > 0 || newFiles.length > 0) && (
+                <div className="flex flex-col gap-1 mt-2">
+                  {existingAttachments.map((a, i) => (
+                    <div key={`existing-${i}`} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <Paperclip className="w-3 h-3 text-slate-400 shrink-0" />
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 font-medium flex-1 truncate hover:underline">{a.name}</a>
+                      <span className="text-[10px] text-slate-400 shrink-0">Saved</span>
+                      <button
+                        type="button"
+                        onClick={() => setExistingAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                        data-testid={`edit-remove-attachment-${i}`}
+                        className="text-slate-300 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {newFiles.map((f, i) => (
+                    <div key={`new-${i}`} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100">
+                      <Paperclip className="w-3 h-3 text-blue-400 shrink-0" />
+                      <span className="text-xs text-slate-700 font-medium flex-1 truncate">{f.name}</span>
+                      <span className="text-[10px] text-blue-500 shrink-0">{(f.size / 1024).toFixed(0)} KB · new</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewFiles(prev => prev.filter((_, idx) => idx !== i))}
+                        data-testid={`edit-remove-new-file-${i}`}
+                        className="text-slate-300 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Notes */}
@@ -2127,12 +2372,12 @@ function EditDialog({ task, onClose, onSave, onDelete, isUpdating, currentUserId
           </button>
           <button
             onClick={handleSave}
-            disabled={!title.trim() || isUpdating}
+            disabled={!title.trim() || isUpdating || uploadingEditAttachments}
             data-testid="edit-button-save"
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1D3461] hover:bg-[#0F2041] text-white text-xs font-semibold transition-colors disabled:opacity-50"
           >
-            {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-            Save Changes
+            {(isUpdating || uploadingEditAttachments) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {uploadingEditAttachments ? 'Uploading…' : 'Save Changes'}
           </button>
         </div>
       </DialogContent>

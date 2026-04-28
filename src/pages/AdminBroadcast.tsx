@@ -209,6 +209,7 @@ type ReceiptUser = {
   role: string;
   isRead: boolean;
   readAt: string | null;
+  waStatus?: 'sent' | 'failed' | null;
 };
 
 type SendSummary = {
@@ -508,12 +509,25 @@ export default function AdminBroadcastPage() {
       const profileMap: Record<string, { full_name: string; role: string }> = {};
       (profiles || []).forEach(p => { profileMap[p.id] = p; });
 
+      // Fetch per-user WhatsApp delivery status for this broadcast (#47 / #48)
+      const waStatusMap: Record<string, 'sent' | 'failed'> = {};
+      try {
+        const { data: waLogs } = await supabase
+          .from('whatsapp_logs')
+          .select('user_id, status')
+          .eq('broadcast_id', broadcastId);
+        for (const w of (waLogs ?? []) as { user_id: string; status: string }[]) {
+          if (w.user_id) waStatusMap[w.user_id] = w.status === 'sent' ? 'sent' : 'failed';
+        }
+      } catch { /* non-fatal */ }
+
       const receiptList: ReceiptUser[] = notifs.map(n => ({
         userId: n.user_id,
         name: profileMap[n.user_id]?.full_name || n.user_id?.slice(0, 8) || 'Unknown',
         role: profileMap[n.user_id]?.role || '—',
         isRead: n.is_read === true || n.status === 'read' || !!n.read_at,
         readAt: n.read_at || null,
+        waStatus: waStatusMap[n.user_id] ?? null,
       }));
 
       receiptList.sort((a, b) => {
@@ -1713,6 +1727,29 @@ export default function AdminBroadcastPage() {
                                 </div>
                               </div>
 
+                              {/* #49 — Unregistered users banner */}
+                              {(() => {
+                                const hasWaData = receiptList.some(r => r.waStatus !== undefined);
+                                const unregistered = hasWaData ? receiptList.filter(r => r.waStatus === null) : [];
+                                if (!hasWaData || unregistered.length === 0) return null;
+                                return (
+                                  <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2.5 text-xs mb-3">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold text-amber-700 dark:text-amber-300">
+                                        {unregistered.length} recipient{unregistered.length !== 1 ? 's' : ''} didn't receive a WhatsApp message
+                                      </p>
+                                      <p className="text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+                                        {unregistered.length !== 1 ? 'These users are' : 'This user is'} not registered in the WhatsApp integration. Ask {unregistered.length !== 1 ? 'them' : 'them'} to enable WhatsApp in their notification settings.
+                                      </p>
+                                      <p className="text-amber-500 dark:text-amber-400 mt-1 font-medium">
+                                        Unregistered: {unregistered.slice(0, 5).map(u => u.name).join(', ')}{unregistered.length > 5 ? ` +${unregistered.length - 5} more` : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
                               {/* User list */}
                               <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                                 {receiptList.map(r => (
@@ -1727,6 +1764,22 @@ export default function AdminBroadcastPage() {
                                       <p className="font-semibold truncate">{r.name}</p>
                                       <p className="text-muted-foreground capitalize">{r.role}</p>
                                     </div>
+                                    {/* #48 — WhatsApp delivery badge */}
+                                    {r.waStatus === 'sent' && (
+                                      <span title="WhatsApp delivered" className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 rounded-full px-2 py-0.5 shrink-0">
+                                        <MessageSquare className="w-2.5 h-2.5" /> WA ✓
+                                      </span>
+                                    )}
+                                    {r.waStatus === 'failed' && (
+                                      <span title="WhatsApp failed" className="flex items-center gap-1 text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/30 rounded-full px-2 py-0.5 shrink-0">
+                                        <MessageSquare className="w-2.5 h-2.5" /> WA ✗
+                                      </span>
+                                    )}
+                                    {r.waStatus === null && receiptList.some(u => u.waStatus !== undefined && u.waStatus !== null) && (
+                                      <span title="No WhatsApp (unregistered)" className="flex items-center gap-1 text-slate-400 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-0.5 shrink-0">
+                                        <MessageSquare className="w-2.5 h-2.5" /> —
+                                      </span>
+                                    )}
                                     {r.isRead && r.readAt ? (
                                       <div className="text-right shrink-0">
                                         <p className="text-emerald-600 dark:text-emerald-400 font-medium">Confirmed ✓</p>

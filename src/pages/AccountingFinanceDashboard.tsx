@@ -10,13 +10,18 @@ import {
   Loader2, RefreshCw, TrendingUp, TrendingDown, DollarSign, Package,
   Clock, BookOpen, ArrowRight, AlertTriangle, Activity, BarChart3,
   CheckCircle2, XCircle, FileText, ShoppingCart, Zap, ChevronRight,
+  Landmark, Wallet, Scale, CalendarDays, Layers, Settings2, ListOrdered,
+  CreditCard, PiggyBank, Receipt, ArrowUpDown,
 } from 'lucide-react';
-import { format, parseISO, subMonths, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
+import {
+  format, parseISO, subMonths, startOfMonth, endOfMonth,
+  differenceInDays, startOfYear,
+} from 'date-fns';
 import { formatNumber } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
-  BarChart, Bar, Cell, PieChart, Pie,
+  BarChart, Bar, Cell, Legend,
 } from 'recharts';
 
 /* ─── types ─────────────────────────────────────────────────────────── */
@@ -27,15 +32,23 @@ interface BudgetKPI { totalBudget: number; totalSpent: number; utilizationPct: n
 interface APSummary { outstanding: number; vendorCount: number; current: number; d1_30: number; d31_60: number; d61_90: number; over90: number }
 interface AssetKPI { totalBookValue: number; totalCost: number; activeCount: number; depreciatedPct: number }
 interface JournalSummary { draftCount: number; pendingCount: number; postedCount: number; recent: { id: string; date: string; desc: string; amount: number; status: string }[] }
-interface MonthlySpend { month: string; amount: number }
+interface MonthlyRevenueExpense { month: string; revenue: number; expense: number }
 interface POSummary { pendingCount: number; pendingAmount: number; draftCount: number; approvedCount: number }
-interface ModuleStatus { journals: boolean; vendors: boolean; assets: boolean; purchaseOrders: boolean; fiscalPeriods: boolean }
+interface CashKPI { totalCash: number; accountCount: number; unreconciledCount: number }
+interface RevenueKPI { totalRevenue: number; totalExpense: number; netIncome: number; ytdRevenue: number }
+interface COAStatus { accountCount: number; fundCount: number; fiscalPeriodCount: number; activePeriod: string | null }
+interface ModuleStatus {
+  coa: boolean; journals: boolean; vendors: boolean; assets: boolean;
+  purchaseOrders: boolean; fiscalPeriods: boolean; bankAccounts: boolean; funds: boolean;
+  bankRecon: boolean; trialBalance: boolean;
+}
 
 /* ─── health score ───────────────────────────────────────────────────── */
 function calcHealth(
   budget: BudgetKPI | null,
   ap: APSummary | null,
   journals: JournalSummary | null,
+  revenue: RevenueKPI | null,
   modules: ModuleStatus | null,
 ): { score: number; grade: 'A' | 'B' | 'C' | 'D' | 'F'; color: string } {
   let score = 100;
@@ -54,9 +67,14 @@ function calcHealth(
     else if (journals.draftCount > 5) score -= 5;
     if (journals.pendingCount > 10) score -= 5;
   }
+  if (revenue) {
+    if (revenue.netIncome < 0) score -= 10;
+  }
   if (modules) {
     const active = Object.values(modules).filter(Boolean).length;
-    if (active < 3) score -= 10;
+    const total = Object.keys(modules).length;
+    if (active < total * 0.5) score -= 15;
+    else if (active < total * 0.8) score -= 5;
   }
   score = Math.max(0, Math.min(100, score));
   if (score >= 90) return { score, grade: 'A', color: 'text-emerald-600' };
@@ -131,12 +149,45 @@ function AgingBar({ label, value, total, color }: { label: string; value: number
 }
 
 /* ─── module status pill ─────────────────────────────────────────────── */
-function ModulePill({ label, active }: { label: string; active: boolean }) {
-  return (
-    <div className={cn('flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border', active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800')}>
+function ModulePill({ label, active, href }: { label: string; active: boolean; href?: string }) {
+  const inner = (
+    <div className={cn(
+      'flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border transition-colors',
+      active
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800'
+        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800 cursor-help',
+    )}>
       {active ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
       {label}
     </div>
+  );
+  if (href && active) return <Link to={href}>{inner}</Link>;
+  return inner;
+}
+
+/* ─── section heading ────────────────────────────────────────────────── */
+function SectionHeading({ label, labelAr }: { label: string; labelAr: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{label}</span>
+      <span className="text-[10px] text-muted-foreground" dir="rtl">{labelAr}</span>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
+}
+
+/* ─── quick link card ────────────────────────────────────────────────── */
+function QuickLink({ href, icon: Icon, color, label, sub }: { href: string; icon: React.ElementType; color: string; label: string; sub: string }) {
+  return (
+    <Link to={href}>
+      <Card className="hover:shadow-sm transition-shadow cursor-pointer h-full">
+        <CardContent className="py-3 px-3">
+          <Icon className={cn('h-4 w-4 mb-1.5', color)} />
+          <div className="text-xs font-semibold leading-tight">{label}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{sub}</div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -149,14 +200,17 @@ export default function AccountingFinanceDashboard() {
   const [ap, setAP] = useState<KPIState<APSummary>>(INIT());
   const [assets, setAssets] = useState<KPIState<AssetKPI>>(INIT());
   const [journals, setJournals] = useState<KPIState<JournalSummary>>(INIT());
-  const [monthlySpend, setMonthlySpend] = useState<KPIState<MonthlySpend[]>>(INIT());
+  const [monthlyRevExp, setMonthlyRevExp] = useState<KPIState<MonthlyRevenueExpense[]>>(INIT());
   const [pos, setPOs] = useState<KPIState<POSummary>>(INIT());
+  const [cash, setCash] = useState<KPIState<CashKPI>>(INIT());
+  const [revenue, setRevenue] = useState<KPIState<RevenueKPI>>(INIT());
+  const [coa, setCOA] = useState<KPIState<COAStatus>>(INIT());
   const [modules, setModules] = useState<KPIState<ModuleStatus>>(INIT());
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [countdown, setCountdown] = useState(60);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* budget */
+  /* ── budget ── */
   const loadBudget = useCallback(async () => {
     setBudget(p => ({ ...p, loading: true, error: null }));
     try {
@@ -171,7 +225,7 @@ export default function AccountingFinanceDashboard() {
     } catch (e: any) { setBudget({ data: null, loading: false, error: e.message }); }
   }, []);
 
-  /* AP with aging buckets */
+  /* ── AP with aging buckets ── */
   const loadAP = useCallback(async () => {
     setAP(p => ({ ...p, loading: true, error: null }));
     try {
@@ -181,10 +235,8 @@ export default function AccountingFinanceDashboard() {
       ]);
       if (lineRes.error?.code === '42P01') { setAP({ data: { outstanding: 0, vendorCount: 0, current: 0, d1_30: 0, d31_60: 0, d61_90: 0, over90: 0 }, loading: false, error: null }); return; }
       if (lineRes.error) throw lineRes.error;
-
       const termsMap: Record<string, number> = {};
       for (const v of (vendorRes.data ?? []) as any[]) termsMap[v.id] = v.payment_terms ?? 30;
-
       const byVendor: Record<string, { balance: number; dates: string[] }> = {};
       for (const l of (lineRes.data ?? []) as any[]) {
         const v = l.vendor_id as string;
@@ -194,7 +246,6 @@ export default function AccountingFinanceDashboard() {
         byVendor[v].balance += sign * Number(l.functional_amount ?? 0);
         if (pd) byVendor[v].dates.push(pd);
       }
-
       let outstanding = 0, current = 0, d1_30 = 0, d31_60 = 0, d61_90 = 0, over90 = 0;
       const today = new Date();
       for (const [vid, vd] of Object.entries(byVendor)) {
@@ -215,7 +266,7 @@ export default function AccountingFinanceDashboard() {
     } catch (e: any) { setAP({ data: null, loading: false, error: e.message }); }
   }, []);
 
-  /* fixed assets */
+  /* ── fixed assets ── */
   const loadAssets = useCallback(async () => {
     setAssets(p => ({ ...p, loading: true, error: null }));
     try {
@@ -236,7 +287,7 @@ export default function AccountingFinanceDashboard() {
     } catch (e: any) { setAssets({ data: null, loading: false, error: e.message }); }
   }, []);
 
-  /* journals — counts + recent */
+  /* ── journals — counts + recent ── */
   const loadJournals = useCallback(async () => {
     setJournals(p => ({ ...p, loading: true, error: null }));
     try {
@@ -259,30 +310,36 @@ export default function AccountingFinanceDashboard() {
     } catch (e: any) { setJournals({ data: null, loading: false, error: e.message }); }
   }, []);
 
-  /* monthly expense spend */
-  const loadMonthlySpend = useCallback(async () => {
-    setMonthlySpend(p => ({ ...p, loading: true, error: null }));
+  /* ── monthly revenue vs expense (6 months) ── */
+  const loadMonthlyRevExp = useCallback(async () => {
+    setMonthlyRevExp(p => ({ ...p, loading: true, error: null }));
     try {
       const months = Array.from({ length: 6 }, (_, i) => {
         const d = subMonths(new Date(), 5 - i);
         return { label: format(d, 'MMM yy'), start: format(startOfMonth(d), 'yyyy-MM-dd'), end: format(endOfMonth(d), 'yyyy-MM-dd') };
       });
-      const results: MonthlySpend[] = [];
+      const results: MonthlyRevenueExpense[] = [];
       for (const m of months) {
         const { data } = await supabase.from('acct_journal_lines')
           .select('functional_amount, debit_credit, acct_accounts!inner(account_type), acct_journal_entries!inner(posting_date, status)')
-          .eq('acct_accounts.account_type', 'expense')
+          .in('acct_accounts.account_type', ['revenue', 'expense'])
           .eq('acct_journal_entries.status', 'posted')
           .gte('acct_journal_entries.posting_date', m.start)
           .lte('acct_journal_entries.posting_date', m.end);
-        const total = ((data ?? []) as any[]).reduce((s, l) => s + (l.debit_credit === 'DR' ? Number(l.functional_amount ?? 0) : 0), 0);
-        results.push({ month: m.label, amount: total });
+        let rev = 0, exp = 0;
+        for (const l of (data ?? []) as any[]) {
+          const type = (l.acct_accounts as any)?.account_type;
+          const amt = Number(l.functional_amount ?? 0);
+          if (type === 'revenue' && l.debit_credit === 'CR') rev += amt;
+          if (type === 'expense' && l.debit_credit === 'DR') exp += amt;
+        }
+        results.push({ month: m.label, revenue: rev, expense: exp });
       }
-      setMonthlySpend({ data: results, loading: false, error: null });
-    } catch { setMonthlySpend({ data: [], loading: false, error: null }); }
+      setMonthlyRevExp({ data: results, loading: false, error: null });
+    } catch { setMonthlyRevExp({ data: [], loading: false, error: null }); }
   }, []);
 
-  /* purchase orders */
+  /* ── purchase orders ── */
   const loadPOs = useCallback(async () => {
     setPOs(p => ({ ...p, loading: true, error: null }));
     try {
@@ -290,33 +347,105 @@ export default function AccountingFinanceDashboard() {
       if (error?.code === '42P01') { setPOs({ data: { pendingCount: 0, pendingAmount: 0, draftCount: 0, approvedCount: 0 }, loading: false, error: null }); return; }
       if (error) throw error;
       const rows = (data ?? []) as any[];
-      const pending = rows.filter(r => ['submitted'].includes(r.status));
-      const draft = rows.filter(r => r.status === 'draft');
-      const approved = rows.filter(r => r.status === 'approved');
-      setPOs({ data: { pendingCount: pending.length, pendingAmount: pending.reduce((s, r) => s + Number(r.amount ?? 0), 0), draftCount: draft.length, approvedCount: approved.length }, loading: false, error: null });
+      const pending = rows.filter(r => r.status === 'submitted');
+      setPOs({ data: { pendingCount: pending.length, pendingAmount: pending.reduce((s, r) => s + Number(r.amount ?? 0), 0), draftCount: rows.filter(r => r.status === 'draft').length, approvedCount: rows.filter(r => r.status === 'approved').length }, loading: false, error: null });
     } catch (e: any) { setPOs({ data: null, loading: false, error: e.message }); }
   }, []);
 
-  /* module status probe */
+  /* ── cash position (bank accounts) ── */
+  const loadCash = useCallback(async () => {
+    setCash(p => ({ ...p, loading: true, error: null }));
+    try {
+      const [bankRes, reconRes] = await Promise.all([
+        supabase.from('acct_bank_accounts').select('current_balance, currency, is_active').limit(200),
+        supabase.from('acct_bank_recon_items').select('id, status').limit(5000),
+      ]);
+      if (bankRes.error?.code === '42P01') { setCash({ data: { totalCash: 0, accountCount: 0, unreconciledCount: 0 }, loading: false, error: null }); return; }
+      if (bankRes.error) throw bankRes.error;
+      const activeAccounts = ((bankRes.data ?? []) as any[]).filter(a => a.is_active !== false);
+      const totalCash = activeAccounts.reduce((s: number, a: any) => s + Number(a.current_balance ?? 0), 0);
+      const unreconciledCount = reconRes.error ? 0 : ((reconRes.data ?? []) as any[]).filter((r: any) => r.status === 'unreconciled').length;
+      setCash({ data: { totalCash, accountCount: activeAccounts.length, unreconciledCount }, loading: false, error: null });
+    } catch (e: any) { setCash({ data: null, loading: false, error: e.message }); }
+  }, []);
+
+  /* ── revenue & net income (YTD) ── */
+  const loadRevenue = useCallback(async () => {
+    setRevenue(p => ({ ...p, loading: true, error: null }));
+    try {
+      const ytdStart = format(startOfYear(new Date()), 'yyyy-MM-dd');
+      const { data, error } = await supabase.from('acct_journal_lines')
+        .select('functional_amount, debit_credit, acct_accounts!inner(account_type), acct_journal_entries!inner(posting_date, status)')
+        .in('acct_accounts.account_type', ['revenue', 'expense'])
+        .eq('acct_journal_entries.status', 'posted')
+        .gte('acct_journal_entries.posting_date', ytdStart);
+      if (error?.code === '42P01') { setRevenue({ data: { totalRevenue: 0, totalExpense: 0, netIncome: 0, ytdRevenue: 0 }, loading: false, error: null }); return; }
+      if (error) throw error;
+      let totalRevenue = 0, totalExpense = 0;
+      for (const l of (data ?? []) as any[]) {
+        const type = (l.acct_accounts as any)?.account_type;
+        const amt = Number(l.functional_amount ?? 0);
+        if (type === 'revenue' && l.debit_credit === 'CR') totalRevenue += amt;
+        if (type === 'expense' && l.debit_credit === 'DR') totalExpense += amt;
+      }
+      setRevenue({ data: { totalRevenue, totalExpense, netIncome: totalRevenue - totalExpense, ytdRevenue: totalRevenue }, loading: false, error: null });
+    } catch (e: any) { setRevenue({ data: null, loading: false, error: e.message }); }
+  }, []);
+
+  /* ── COA / fiscal / funds meta ── */
+  const loadCOA = useCallback(async () => {
+    setCOA(p => ({ ...p, loading: true, error: null }));
+    try {
+      const [acctRes, fundRes, periodRes] = await Promise.all([
+        supabase.from('acct_accounts').select('id').limit(5000),
+        supabase.from('acct_funds').select('id').limit(500),
+        supabase.from('acct_fiscal_periods').select('id, period_name, is_open').limit(100),
+      ]);
+      const activePeriod = ((periodRes.data ?? []) as any[]).find(p => p.is_open)?.period_name ?? null;
+      setCOA({
+        data: {
+          accountCount: (acctRes.error?.code === '42P01') ? 0 : (acctRes.data?.length ?? 0),
+          fundCount: (fundRes.error?.code === '42P01') ? 0 : (fundRes.data?.length ?? 0),
+          fiscalPeriodCount: (periodRes.error?.code === '42P01') ? 0 : (periodRes.data?.length ?? 0),
+          activePeriod,
+        },
+        loading: false, error: null,
+      });
+    } catch (e: any) { setCOA({ data: null, loading: false, error: e.message }); }
+  }, []);
+
+  /* ── module status probe ── */
   const loadModules = useCallback(async () => {
     setModules(p => ({ ...p, loading: true, error: null }));
-    const check = async (table: string) => { const { error } = await supabase.from(table as any).select('id').limit(1); return !error || error.code !== '42P01'; };
-    const [journals, vendors, assets, purchaseOrders, fiscalPeriods] = await Promise.all([
-      check('acct_journal_entries'), check('acct_vendors'), check('acct_fixed_assets'), check('acct_purchase_orders'), check('acct_fiscal_periods'),
+    const check = async (table: string) => {
+      const { error } = await supabase.from(table as any).select('id').limit(1);
+      return !error || error.code !== '42P01';
+    };
+    const [coa, journals, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon, trialBalance] = await Promise.all([
+      check('acct_accounts'),
+      check('acct_journal_entries'),
+      check('acct_vendors'),
+      check('acct_fixed_assets'),
+      check('acct_purchase_orders'),
+      check('acct_fiscal_periods'),
+      check('acct_bank_accounts'),
+      check('acct_funds'),
+      check('acct_bank_recon_items'),
+      check('acct_journal_lines'),
     ]);
-    setModules({ data: { journals, vendors, assets, purchaseOrders, fiscalPeriods }, loading: false, error: null });
+    setModules({ data: { coa, journals, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon, trialBalance }, loading: false, error: null });
   }, []);
 
   const loadAll = useCallback(() => {
     setLastRefresh(new Date());
     setCountdown(60);
-    void loadBudget(); void loadAP(); void loadAssets();
-    void loadJournals(); void loadMonthlySpend(); void loadPOs(); void loadModules();
-  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlySpend, loadPOs, loadModules]);
+    void loadBudget(); void loadAP(); void loadAssets(); void loadJournals();
+    void loadMonthlyRevExp(); void loadPOs(); void loadCash(); void loadRevenue();
+    void loadCOA(); void loadModules();
+  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
 
-  /* auto-refresh every 60 s */
   useEffect(() => {
     countdownRef.current = setInterval(() => {
       setCountdown(c => {
@@ -330,8 +459,11 @@ export default function AccountingFinanceDashboard() {
   if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
-  const spendTrend = monthlySpend.data ?? [];
-  const health = calcHealth(budget.data, ap.data, journals.data, modules.data);
+  const revExpTrend = monthlyRevExp.data ?? [];
+  const hasRevExpData = revExpTrend.some(d => d.revenue > 0 || d.expense > 0);
+  const health = calcHealth(budget.data, ap.data, journals.data, revenue.data, modules.data);
+  const activeModules = modules.data ? Object.values(modules.data).filter(Boolean).length : 0;
+  const totalModules = modules.data ? Object.keys(modules.data).length : 10;
 
   /* alerts */
   const alerts: { icon: React.ElementType; color: string; label: string; action: string; href: string }[] = [];
@@ -345,6 +477,10 @@ export default function AccountingFinanceDashboard() {
     alerts.push({ icon: AlertTriangle, color: 'text-rose-500', label: `${budget.data.overBudgetCount} budget${budget.data.overBudgetCount === 1 ? '' : 's'} are over 100% utilization`, action: 'View', href: '/budget' });
   if (ap.data && ap.data.over90 > 0)
     alerts.push({ icon: XCircle, color: 'text-rose-600', label: `${formatNumber(ap.data.over90, 0)} in AP balances overdue by more than 90 days`, action: 'AP Aging', href: '/accounting/ap-aging' });
+  if (cash.data && cash.data.unreconciledCount > 20)
+    alerts.push({ icon: Landmark, color: 'text-indigo-500', label: `${cash.data.unreconciledCount} bank transactions are unreconciled`, action: 'Reconcile', href: '/accounting/bank-recon' });
+  if (revenue.data && revenue.data.netIncome < 0)
+    alerts.push({ icon: TrendingDown, color: 'text-rose-500', label: `Net loss of ${formatNumber(Math.abs(revenue.data.netIncome), 0)} YTD — review expense vs revenue`, action: 'Statements', href: '/accounting/reports' });
 
   const apTotal = ap.data ? ap.data.outstanding : 0;
 
@@ -358,17 +494,19 @@ export default function AccountingFinanceDashboard() {
             <BarChart3 className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">Finance Dashboard</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold">Accounting Dashboard</h1>
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-400 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20">
                 <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />LIVE
               </Badge>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-300 text-slate-500">
+                {activeModules}/{totalModules} modules active
+              </Badge>
             </div>
-            <p className="text-muted-foreground text-sm">لوحة المالية التنفيذية — Consolidated accounting overview</p>
+            <p className="text-muted-foreground text-sm">لوحة المحاسبة التنفيذية — Consolidated accounting & finance overview</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* health score */}
           <div className="text-right hidden sm:block">
             <div className="text-[10px] text-muted-foreground">Financial Health</div>
             <div className={cn('text-xl font-bold tabular-nums', health.color)}>
@@ -399,14 +537,52 @@ export default function AccountingFinanceDashboard() {
         </div>
       )}
 
-      {/* ── KPI row ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
+      {/* ── KPI row 1: Core financial metrics ── */}
+      <SectionHeading label="Core Financial Metrics" labelAr="المؤشرات المالية الأساسية" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <KpiCard
+          title="YTD Revenue"
+          titleAr="إيرادات السنة"
+          value={revenue.data ? formatNumber(revenue.data.totalRevenue, 0) : '—'}
+          sub={revenue.data ? `${formatNumber(revenue.data.totalExpense, 0)} expenses YTD` : undefined}
+          icon={TrendingUp}
+          accent="bg-emerald-600"
+          href="/accounting/reports"
+          loading={revenue.loading}
+          error={revenue.error}
+          trend={revenue.data && revenue.data.totalRevenue > revenue.data.totalExpense ? 'down' : null}
+        />
+        <KpiCard
+          title="Net Income / Loss"
+          titleAr="صافي الدخل / الخسارة"
+          value={revenue.data ? formatNumber(revenue.data.netIncome, 0) : '—'}
+          sub={revenue.data ? (revenue.data.netIncome >= 0 ? 'Surplus YTD' : 'Deficit YTD') : undefined}
+          icon={Scale}
+          accent={revenue.data && revenue.data.netIncome < 0 ? 'bg-rose-600' : 'bg-teal-600'}
+          href="/accounting/reports"
+          loading={revenue.loading}
+          error={revenue.error}
+          alert={revenue.data ? revenue.data.netIncome < 0 : false}
+          trend={revenue.data && revenue.data.netIncome < 0 ? 'up' : null}
+        />
+        <KpiCard
+          title="Cash Position"
+          titleAr="الوضع النقدي"
+          value={cash.data ? formatNumber(cash.data.totalCash, 0) : '—'}
+          sub={cash.data ? `${cash.data.accountCount} bank account${cash.data.accountCount !== 1 ? 's' : ''}${cash.data.unreconciledCount > 0 ? ` · ${cash.data.unreconciledCount} unreconciled` : ''}` : undefined}
+          icon={Wallet}
+          accent="bg-sky-600"
+          href="/accounting/bank-recon"
+          loading={cash.loading}
+          error={cash.error}
+          alert={cash.data ? cash.data.unreconciledCount > 20 : false}
+        />
         <KpiCard
           title="Budget Utilization"
           titleAr="نسبة استخدام الميزانية"
           value={budget.data ? `${budget.data.utilizationPct}%` : '—'}
           sub={budget.data ? `${formatNumber(budget.data.totalSpent, 0)} of ${formatNumber(budget.data.totalBudget, 0)} spent` : undefined}
-          icon={TrendingUp}
+          icon={BarChart3}
           accent={budget.data && budget.data.utilizationPct > 90 ? 'bg-rose-600' : 'bg-blue-600'}
           href="/budget"
           loading={budget.loading}
@@ -414,6 +590,11 @@ export default function AccountingFinanceDashboard() {
           trend={budget.data && budget.data.utilizationPct > 80 ? 'up' : null}
           alert={budget.data ? budget.data.utilizationPct > 90 : false}
         />
+      </div>
+
+      {/* ── KPI row 2: Operations ── */}
+      <SectionHeading label="Operational Overview" labelAr="نظرة عملية" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <KpiCard
           title="AP Outstanding"
           titleAr="مستحقات الموردين"
@@ -450,18 +631,6 @@ export default function AccountingFinanceDashboard() {
           alert={pos.data ? pos.data.pendingCount > 0 : false}
         />
         <KpiCard
-          title="Draft Journals"
-          titleAr="القيود المسودة"
-          value={journals.data ? String(journals.data.draftCount + journals.data.pendingCount) : '—'}
-          sub={journals.data ? `${journals.data.draftCount} draft · ${journals.data.pendingCount} pending · ${journals.data.postedCount} posted` : undefined}
-          icon={FileText}
-          accent={journals.data && (journals.data.draftCount + journals.data.pendingCount) > 0 ? 'bg-amber-600' : 'bg-emerald-600'}
-          href="/accounting/journals"
-          loading={journals.loading}
-          error={journals.error}
-          alert={journals.data ? (journals.data.draftCount + journals.data.pendingCount) > 5 : false}
-        />
-        <KpiCard
           title="Active Project Budgets"
           titleAr="الميزانيات النشطة"
           value={budget.data ? String(budget.data.activeBudgets) : '—'}
@@ -475,40 +644,88 @@ export default function AccountingFinanceDashboard() {
         />
       </div>
 
-      {/* ── charts + journals ── */}
+      {/* ── KPI row 3: GL & Setup ── */}
+      <SectionHeading label="GL & System Setup" labelAr="دفتر الأستاذ والإعداد" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <KpiCard
+          title="Chart of Accounts"
+          titleAr="دليل الحسابات"
+          value={coa.data ? String(coa.data.accountCount) : '—'}
+          sub={coa.data ? `${coa.data.accountCount} accounts defined` : undefined}
+          icon={ListOrdered}
+          accent="bg-indigo-600"
+          href="/accounting/coa"
+          loading={coa.loading}
+          error={coa.error}
+        />
+        <KpiCard
+          title="Active Fiscal Period"
+          titleAr="الفترة المالية الحالية"
+          value={coa.data ? (coa.data.activePeriod ?? 'None') : '—'}
+          sub={coa.data ? `${coa.data.fiscalPeriodCount} periods configured` : undefined}
+          icon={CalendarDays}
+          accent={coa.data && !coa.data.activePeriod ? 'bg-amber-600' : 'bg-teal-700'}
+          href="/accounting/fiscal-years"
+          loading={coa.loading}
+          error={coa.error}
+          alert={coa.data ? !coa.data.activePeriod : false}
+        />
+        <KpiCard
+          title="Funds Registry"
+          titleAr="سجل الصناديق"
+          value={coa.data ? String(coa.data.fundCount) : '—'}
+          sub={coa.data ? `${coa.data.fundCount} fund${coa.data.fundCount !== 1 ? 's' : ''} registered` : undefined}
+          icon={PiggyBank}
+          accent="bg-cyan-600"
+          href="/accounting/funds"
+          loading={coa.loading}
+          error={coa.error}
+        />
+        <KpiCard
+          title="Draft Journals"
+          titleAr="القيود المسودة"
+          value={journals.data ? String(journals.data.draftCount + journals.data.pendingCount) : '—'}
+          sub={journals.data ? `${journals.data.draftCount} draft · ${journals.data.pendingCount} pending · ${journals.data.postedCount} posted` : undefined}
+          icon={FileText}
+          accent={journals.data && (journals.data.draftCount + journals.data.pendingCount) > 0 ? 'bg-amber-600' : 'bg-emerald-600'}
+          href="/accounting/journals"
+          loading={journals.loading}
+          error={journals.error}
+          alert={journals.data ? (journals.data.draftCount + journals.data.pendingCount) > 5 : false}
+        />
+      </div>
+
+      {/* ── charts ── */}
+      <SectionHeading label="Financial Charts" labelAr="الرسوم البيانية المالية" />
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-5">
 
-        {/* expense trend */}
+        {/* revenue vs expense chart */}
         <Card className="lg:col-span-3">
           <CardHeader className="pb-2 pt-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">6-Month Expense Trend</CardTitle>
-              <Link to="/accounting/cash-flow" className="text-xs text-primary hover:underline flex items-center gap-1">Cash Flow <ArrowRight className="h-3 w-3" /></Link>
+              <CardTitle className="text-sm">Revenue vs Expenses — 6 Months</CardTitle>
+              <Link to="/accounting/reports" className="text-xs text-primary hover:underline flex items-center gap-1">Statements <ArrowRight className="h-3 w-3" /></Link>
             </div>
           </CardHeader>
           <CardContent>
-            {monthlySpend.loading ? (
-              <div className="flex items-center justify-center h-40"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-            ) : spendTrend.every(d => d.amount === 0) ? (
-              <div className="h-40 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            {monthlyRevExp.loading ? (
+              <div className="flex items-center justify-center h-44"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            ) : !hasRevExpData ? (
+              <div className="h-44 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                 <Activity className="h-8 w-8 opacity-30" />
-                <span className="text-sm">No posted expense entries yet</span>
+                <span className="text-sm">No posted entries yet</span>
                 <span className="text-xs">Post journal entries to see the trend</span>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={spendTrend} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
+              <ResponsiveContainer width="100%" height={176}>
+                <BarChart data={revExpTrend} margin={{ top: 4, right: 8, left: 4, bottom: 0 }} barCategoryGap="30%">
                   <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 9 }} tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} width={42} />
-                  <Tooltip formatter={(v: number) => [formatNumber(v), 'Expenses']} />
-                  <Area type="monotone" dataKey="amount" stroke="#6366f1" fill="url(#expGrad)" strokeWidth={2} dot={{ r: 3, fill: '#6366f1' }} />
-                </AreaChart>
+                  <Tooltip formatter={(v: number, name: string) => [formatNumber(v), name]} />
+                  <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
+                  <Bar dataKey="revenue" name="Revenue" fill="#10b981" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="expense" name="Expenses" fill="#f43f5e" radius={[2, 2, 0, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -528,11 +745,11 @@ export default function AccountingFinanceDashboard() {
 
               <TabsContent value="aging" className="mt-0">
                 {ap.loading ? (
-                  <div className="flex items-center justify-center h-32"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                  <div className="flex items-center justify-center h-36"><Loader2 className="h-4 w-4 animate-spin" /></div>
                 ) : ap.error ? (
                   <div className="text-xs text-amber-600 text-center py-8">Run acct_vendors migration to enable AP</div>
                 ) : ap.data && ap.data.outstanding === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center h-36 gap-2 text-muted-foreground">
                     <CheckCircle2 className="h-7 w-7 text-emerald-500 opacity-70" />
                     <span className="text-xs">No outstanding AP balances</span>
                   </div>
@@ -554,7 +771,7 @@ export default function AccountingFinanceDashboard() {
 
               <TabsContent value="journals" className="mt-0 -mx-2">
                 {journals.loading ? (
-                  <div className="flex items-center justify-center h-32"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                  <div className="flex items-center justify-center h-36"><Loader2 className="h-4 w-4 animate-spin" /></div>
                 ) : !journals.data || journals.data.recent.length === 0 ? (
                   <div className="text-center text-xs text-muted-foreground py-10">No journal entries yet</div>
                 ) : (
@@ -582,47 +799,67 @@ export default function AccountingFinanceDashboard() {
         </Card>
       </div>
 
-      {/* ── quick links ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-5">
-        {[
-          { label: 'General Ledger', sub: 'Transaction history', href: '/accounting/ledger', icon: BookOpen, color: 'text-blue-600 dark:text-blue-400' },
-          { label: 'Financial Statements', sub: 'Income & Balance Sheet', href: '/accounting/reports', icon: TrendingUp, color: 'text-emerald-600 dark:text-emerald-400' },
-          { label: 'Budget vs. Actual', sub: 'Variance analysis', href: '/accounting/budget-variance', icon: BarChart3, color: 'text-violet-600 dark:text-violet-400' },
-          { label: 'Bank Reconciliation', sub: 'Statement matching', href: '/accounting/bank-recon', icon: Activity, color: 'text-indigo-600 dark:text-indigo-400' },
-          { label: 'Cash Flow', sub: '6-month projection', href: '/accounting/cash-flow', icon: TrendingDown, color: 'text-sky-600 dark:text-sky-400' },
-          { label: 'Vendor Registry', sub: 'Manage suppliers', href: '/accounting/vendors', icon: Zap, color: 'text-rose-600 dark:text-rose-400' },
-        ].map(l => (
-          <Link key={l.href} to={l.href}>
-            <Card className="hover:shadow-sm transition-shadow cursor-pointer h-full">
-              <CardContent className="py-3 px-3">
-                <l.icon className={cn('h-4 w-4 mb-1.5', l.color)} />
-                <div className="text-xs font-semibold leading-tight">{l.label}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{l.sub}</div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+      {/* ── quick links — all 16 modules ── */}
+      <SectionHeading label="All Accounting Modules" labelAr="جميع وحدات المحاسبة" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-5">
+        <QuickLink href="/accounting/journals"       icon={FileText}    color="text-amber-600 dark:text-amber-400"   label="Journal Entries"      sub="GL posting engine" />
+        <QuickLink href="/accounting/ledger"         icon={BookOpen}    color="text-blue-600 dark:text-blue-400"     label="General Ledger"       sub="Transaction history" />
+        <QuickLink href="/accounting/trial-balance"  icon={ArrowUpDown} color="text-indigo-600 dark:text-indigo-400" label="Trial Balance"        sub="Debit / Credit check" />
+        <QuickLink href="/accounting/reports"        icon={TrendingUp}  color="text-emerald-600 dark:text-emerald-400" label="Financial Statements" sub="Income & Balance Sheet" />
+        <QuickLink href="/accounting/coa"            icon={ListOrdered} color="text-violet-600 dark:text-violet-400" label="Chart of Accounts"    sub="Account hierarchy" />
+        <QuickLink href="/accounting/fiscal-years"   icon={CalendarDays} color="text-teal-600 dark:text-teal-400"   label="Fiscal Years"         sub="Periods & close" />
+        <QuickLink href="/accounting/funds"          icon={PiggyBank}   color="text-cyan-600 dark:text-cyan-400"    label="Fund Registry"        sub="Fund restrictions" />
+        <QuickLink href="/accounting/budget-variance" icon={BarChart3}  color="text-purple-600 dark:text-purple-400" label="Budget vs Actual"    sub="Variance analysis" />
+        <QuickLink href="/accounting/bank-recon"     icon={Landmark}    color="text-sky-600 dark:text-sky-400"      label="Bank Reconciliation"  sub="Statement matching" />
+        <QuickLink href="/accounting/cash-flow"      icon={Activity}    color="text-lime-600 dark:text-lime-400"    label="Cash Flow"            sub="6-month projection" />
+        <QuickLink href="/accounting/ap-aging"       icon={Clock}       color="text-rose-600 dark:text-rose-400"    label="AP Aging"             sub="Overdue payables" />
+        <QuickLink href="/accounting/vendors"        icon={Zap}         color="text-orange-600 dark:text-orange-400" label="Vendor Registry"     sub="Manage suppliers" />
+        <QuickLink href="/accounting/purchase-orders" icon={ShoppingCart} color="text-violet-600 dark:text-violet-400" label="Purchase Orders"   sub="PO approvals" />
+        <QuickLink href="/accounting/fixed-assets"   icon={Package}     color="text-slate-600 dark:text-slate-400"  label="Fixed Assets"         sub="Depreciation tracking" />
+        <QuickLink href="/accounting/settings"       icon={Settings2}   color="text-gray-600 dark:text-gray-400"   label="Settings"             sub="Accounting config" />
+        <QuickLink href="/budget"                    icon={DollarSign}  color="text-emerald-700 dark:text-emerald-400" label="Project Budgets"   sub="Budget utilization" />
       </div>
 
       {/* ── module status ── */}
       <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
-        <div className="flex items-center gap-2 mb-2">
-          <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Module Status</span>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Module Status</span>
+          </div>
+          {!modules.loading && modules.data && (
+            <span className={cn('text-[11px] font-medium', activeModules === totalModules ? 'text-emerald-600' : 'text-amber-600')}>
+              {activeModules}/{totalModules} live
+            </span>
+          )}
         </div>
         {modules.loading ? (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Checking…</div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Checking modules…</div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <ModulePill label="Journal Entries" active={modules.data?.journals ?? false} />
-            <ModulePill label="Vendors / AP" active={modules.data?.vendors ?? false} />
-            <ModulePill label="Fixed Assets" active={modules.data?.assets ?? false} />
-            <ModulePill label="Purchase Orders" active={modules.data?.purchaseOrders ?? false} />
-            <ModulePill label="Fiscal Periods" active={modules.data?.fiscalPeriods ?? false} />
+            <ModulePill label="Chart of Accounts" active={modules.data?.coa ?? false} href="/accounting/coa" />
+            <ModulePill label="Journal Entries" active={modules.data?.journals ?? false} href="/accounting/journals" />
+            <ModulePill label="Journal Lines" active={modules.data?.trialBalance ?? false} href="/accounting/trial-balance" />
+            <ModulePill label="Vendors / AP" active={modules.data?.vendors ?? false} href="/accounting/vendors" />
+            <ModulePill label="Fixed Assets" active={modules.data?.assets ?? false} href="/accounting/fixed-assets" />
+            <ModulePill label="Purchase Orders" active={modules.data?.purchaseOrders ?? false} href="/accounting/purchase-orders" />
+            <ModulePill label="Fiscal Periods" active={modules.data?.fiscalPeriods ?? false} href="/accounting/fiscal-years" />
+            <ModulePill label="Bank Accounts" active={modules.data?.bankAccounts ?? false} href="/accounting/bank-recon" />
+            <ModulePill label="Funds" active={modules.data?.funds ?? false} href="/accounting/funds" />
+            <ModulePill label="Bank Recon" active={modules.data?.bankRecon ?? false} href="/accounting/bank-recon" />
           </div>
         )}
         {modules.data && Object.values(modules.data).some(v => !v) && (
-          <p className="text-[10px] text-muted-foreground mt-2">Modules showing ⚠ need their SQL migration applied in the Supabase SQL Editor.</p>
+          <p className="text-[10px] text-muted-foreground mt-2 flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+            Modules showing ⚠ need their SQL migration applied in the Supabase SQL Editor.
+          </p>
+        )}
+        {modules.data && Object.values(modules.data).every(Boolean) && (
+          <p className="text-[10px] text-emerald-600 mt-2 flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3 shrink-0" />
+            All accounting modules are active and ready.
+          </p>
         )}
       </div>
     </div>
