@@ -23,17 +23,6 @@ interface DataCollector {
   email?: string | null;
 }
 
-const ACTIVITY_TYPES = ['Standard', 'Hot Meal', 'RPME', 'DCT PDM', 'Retailers'] as const;
-type ActivityType = typeof ACTIVITY_TYPES[number];
-
-const ACTIVITY_COLORS: Record<string, string> = {
-  'Standard':  'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  'Hot Meal':  'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-  'RPME':      'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-  'DCT PDM':   'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
-  'Retailers': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-};
-
 interface AdhocRow {
   siteName: string;
   siteCode: string;
@@ -44,7 +33,6 @@ interface AdhocRow {
   assignToId: string;
   assignToName: string;
   dueDate: string;
-  activityType: ActivityType;
   _errors?: string[];
 }
 
@@ -62,7 +50,6 @@ interface ExistingEntry {
   due_date?: string;
   created_at?: string;
   dispatched_at?: string;
-  activityType?: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -80,7 +67,6 @@ const FILTER_STATUSES = ['all', 'dispatched', 'assigned', 'claimed', 'completed'
 const emptyRow = (): AdhocRow => ({
   siteName: '', siteCode: '', state: '', locality: '',
   transportFee: '', enumeratorFee: '', assignToId: '', assignToName: '', dueDate: '',
-  activityType: 'Standard',
 });
 
 const validateRow = (row: AdhocRow): string[] => {
@@ -91,20 +77,11 @@ const validateRow = (row: AdhocRow): string[] => {
   return errors;
 };
 
-const ACTIVITY_TYPE_SLUG: Record<string, string> = {
-  'Standard':  'standard',
-  'Hot Meal':  'hotmeal',
-  'RPME':      'rpme',
-  'DCT PDM':   'dctpdm',
-  'Retailers': 'retailers',
-};
-
-const getOrCreateAdhocMMPFile = async (activityType: ActivityType = 'Standard'): Promise<string> => {
+const getOrCreateAdhocMMPFile = async (): Promise<string> => {
   const now = new Date();
   const monthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  const slug = ACTIVITY_TYPE_SLUG[activityType] || 'standard';
-  const mmpId = `adhoc-${slug}-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const mmpName = `Ad-hoc ${activityType} — ${monthYear}`;
+  const mmpId = `adhoc-tasks-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const mmpName = `Ad-hoc Tasks — ${monthYear}`;
 
   const { data: existing } = await supabase
     .from('mmp_files')
@@ -150,9 +127,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   // Create mode
   const [createMode, setCreateMode] = useState<'upload' | 'manual'>('manual');
 
-  // Activity type for the current create session
-  const [selectedActivityType, setSelectedActivityType] = useState<ActivityType>('Standard');
-
   // Upload sub-tab state
   const [uploadedRows, setUploadedRows] = useState<AdhocRow[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -163,9 +137,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   const [formRow, setFormRow] = useState<AdhocRow>(emptyRow());
   const [collectorSearch, setCollectorSearch] = useState('');
   const [showCollectorDropdown, setShowCollectorDropdown] = useState(false);
-
-  // Activity type filter for existing entries
-  const [activityTypeFilter, setActivityTypeFilter] = useState<string>('all');
 
   // Submission
   const [submitting, setSubmitting] = useState(false);
@@ -222,7 +193,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       const fileIds = adhocFiles.map(f => f.id);
       const { data: entries } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, assigned_to, transport_fee, enumerator_fee, due_date, created_at, dispatched_at, main_activity')
+        .select('id, site_name, site_code, state, locality, status, assigned_to, transport_fee, enumerator_fee, due_date, created_at, dispatched_at')
         .in('mmp_file_id', fileIds)
         .order('created_at', { ascending: false });
 
@@ -246,7 +217,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
         site_name: e.site_name || '',
         status: e.status || 'dispatched',
         assignedToName: e.assigned_to ? (namesMap[e.assigned_to] || e.assigned_to) : undefined,
-        activityType: (e as any).main_activity || 'Standard',
       })));
     } catch (err) {
       console.error('Failed to load adhoc entries:', err);
@@ -305,8 +275,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
             (c.email || '').toLowerCase() === assignToName.toLowerCase()
           );
           const unmatchedAssignee = assignToName && !matchedCollector;
-          const rawActivity = get(row, 'activity type', 'activitytype', 'activity', 'type');
-          const matchedActivity = ACTIVITY_TYPES.find(a => a.toLowerCase() === rawActivity.toLowerCase()) || selectedActivityType;
           const r: AdhocRow = {
             siteName: get(row, 'site name', 'sitename', 'name'),
             siteCode: get(row, 'site code', 'sitecode', 'code'),
@@ -317,7 +285,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
             assignToId: matchedCollector?.id || '',
             assignToName: assignToName || (matchedCollector ? (matchedCollector.full_name || '') : ''),
             dueDate: get(row, 'due date', 'duedate', 'due'),
-            activityType: matchedActivity,
           };
           r._errors = validateRow(r);
           if (unmatchedAssignee) {
@@ -349,8 +316,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Activity Type', 'Site Name', 'Site Code', 'State', 'Locality', 'Transport Fee', 'Enumerator Fee', 'Assign To', 'Due Date'],
-      [selectedActivityType, '', '', '', '', '', '', '', ''],
+      ['Site Name', 'Site Code', 'State', 'Locality', 'Transport Fee', 'Enumerator Fee', 'Assign To', 'Due Date'],
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Ad-hoc Sites Template');
@@ -383,41 +349,28 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     }
     setSubmitting(true);
     try {
-      // Group rows by activity type so each gets its own MMP file
-      const byActivity: Record<string, AdhocRow[]> = {};
-      for (const row of validRows) {
-        const at = row.activityType || selectedActivityType;
-        if (!byActivity[at]) byActivity[at] = [];
-        byActivity[at].push(row);
-      }
-
+      const mmpFileId = await getOrCreateAdhocMMPFile();
       const now = new Date().toISOString();
       let assigned = 0, open = 0;
-      const allEntries: any[] = [];
 
-      for (const [actType, actRows] of Object.entries(byActivity)) {
-        const mmpFileId = await getOrCreateAdhocMMPFile(actType as ActivityType);
-        for (const row of actRows) {
-          const hasAssignee = !!row.assignToId;
-          if (hasAssignee) assigned++; else open++;
-          allEntries.push({
-            mmp_file_id: mmpFileId,
-            site_name: row.siteName.trim(),
-            site_code: row.siteCode.trim() || null,
-            state: row.state.trim(),
-            locality: row.locality.trim(),
-            transport_fee: row.transportFee ? Number(row.transportFee) : null,
-            enumerator_fee: row.enumeratorFee ? Number(row.enumeratorFee) : null,
-            assigned_to: row.assignToId || null,
-            status: hasAssignee ? 'assigned' : 'dispatched',
-            dispatched_at: now,
-            due_date: row.dueDate || null,
-            main_activity: actType,
-          });
-        }
-      }
+      const entries = validRows.map(row => {
+        const hasAssignee = !!row.assignToId;
+        if (hasAssignee) assigned++; else open++;
+        return {
+          mmp_file_id: mmpFileId,
+          site_name: row.siteName.trim(),
+          site_code: row.siteCode.trim() || null,
+          state: row.state.trim(),
+          locality: row.locality.trim(),
+          transport_fee: row.transportFee ? Number(row.transportFee) : null,
+          enumerator_fee: row.enumeratorFee ? Number(row.enumeratorFee) : null,
+          assigned_to: row.assignToId || null,
+          status: hasAssignee ? 'assigned' : 'dispatched',
+          dispatched_at: now,
+          due_date: row.dueDate || null,
+        };
+      });
 
-      const entries = allEntries;
       const { error } = await supabase.from('mmp_site_entries').insert(entries);
       if (error) throw error;
 
@@ -500,20 +453,14 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   // ── Filtered existing entries ────────────────────────────────────────────
 
   const filteredExisting = useMemo(() => {
-    let result = existingEntries;
-    if (activityTypeFilter !== 'all') {
-      result = result.filter(e => (e.activityType || 'Standard') === activityTypeFilter);
-    }
-    if (statusFilter !== 'all') {
-      const s = statusFilter.toLowerCase();
-      result = result.filter(e => {
-        const es = (e.status || '').toLowerCase();
-        if (s === 'claimed') return es === 'claimed' || es === 'accepted';
-        return es === s;
-      });
-    }
-    return result;
-  }, [existingEntries, statusFilter, activityTypeFilter]);
+    if (statusFilter === 'all') return existingEntries;
+    const s = statusFilter.toLowerCase();
+    return existingEntries.filter(e => {
+      const es = (e.status || '').toLowerCase();
+      if (s === 'claimed') return es === 'claimed' || es === 'accepted';
+      return es === s;
+    });
+  }, [existingEntries, statusFilter]);
 
   const canEdit = (entry: ExistingEntry) => {
     const s = (entry.status || '').toLowerCase();
@@ -532,30 +479,10 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       {canManage && (
         <Card className="border border-gray-200 dark:border-gray-800">
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <PlusCircle className="h-4 w-4 text-teal-500" />
-                Create Ad-hoc Site Visits
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">Activity Type</Label>
-                <Select value={selectedActivityType} onValueChange={(v) => {
-                  setSelectedActivityType(v as ActivityType);
-                  setFormRow(r => ({ ...r, activityType: v as ActivityType }));
-                }}>
-                  <SelectTrigger className="h-7 text-xs w-36" data-testid="select-activity-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ACTIVITY_TYPES.map(at => (
-                      <SelectItem key={at} value={at}>
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium mr-1.5 ${ACTIVITY_COLORS[at]}`}>{at}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <PlusCircle className="h-4 w-4 text-teal-500" />
+              Create Ad-hoc Site Visits
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Tabs value={createMode} onValueChange={(v) => setCreateMode(v as 'manual' | 'upload')}>
@@ -685,14 +612,13 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
                       {manualRows.map((row, idx) => (
                         <div key={idx} className="flex items-center justify-between gap-3 px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                          <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ACTIVITY_COLORS[row.activityType] || ''}`}>{row.activityType}</span>
+                          <div className="flex-1 min-w-0">
                             <span className="font-medium">{row.siteName}</span>
-                            <span className="text-muted-foreground">{row.state} › {row.locality}</span>
-                            {row.siteCode && <span className="text-muted-foreground">({row.siteCode})</span>}
-                            {row.assignToName && <span className="text-amber-600 dark:text-amber-400">→ {row.assignToName}</span>}
-                            {row.transportFee && <span className="text-muted-foreground">T: {row.transportFee} SDG</span>}
-                            {row.enumeratorFee && <span className="text-muted-foreground">E: {row.enumeratorFee} SDG</span>}
+                            <span className="text-muted-foreground ml-2">{row.state} › {row.locality}</span>
+                            {row.siteCode && <span className="text-muted-foreground ml-2">({row.siteCode})</span>}
+                            {row.assignToName && <span className="ml-2 text-amber-600 dark:text-amber-400">→ {row.assignToName}</span>}
+                            {row.transportFee && <span className="ml-2 text-muted-foreground">T: {row.transportFee} SDG</span>}
+                            {row.enumeratorFee && <span className="ml-2 text-muted-foreground">E: {row.enumeratorFee} SDG</span>}
                           </div>
                           <button onClick={() => removeManualRow(idx)} className="text-red-500 hover:text-red-700 flex-shrink-0"
                             data-testid={`button-remove-manual-row-${idx}`}>
@@ -746,7 +672,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                       <table className="w-full text-xs">
                         <thead className="bg-gray-50 dark:bg-gray-800/30">
                           <tr>
-                            {['Activity', 'Site Name', 'Code', 'State', 'Locality', 'Transport', 'Enum. Fee', 'Assign To', 'Due Date', ''].map(h => (
+                            {['Site Name', 'Code', 'State', 'Locality', 'Transport', 'Enum. Fee', 'Assign To', 'Due Date', ''].map(h => (
                               <th key={h} className="px-2 py-1.5 text-left text-muted-foreground font-medium whitespace-nowrap">{h}</th>
                             ))}
                           </tr>
@@ -754,9 +680,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                           {uploadedRows.map((row, idx) => (
                             <tr key={idx} className={row._errors?.length ? 'bg-red-50 dark:bg-red-950/20' : ''}>
-                              <td className="px-2 py-1.5">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ACTIVITY_COLORS[row.activityType] || ''}`}>{row.activityType}</span>
-                              </td>
                               <td className="px-2 py-1.5">
                                 <span className={row._errors?.includes('Site Name required') ? 'text-red-500' : ''}>
                                   {row.siteName || <span className="text-red-400 italic">required</span>}
@@ -830,31 +753,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               <RefreshCw className={`h-4 w-4 ${loadingExisting ? 'animate-spin' : ''}`} />
             </button>
           </div>
-          {/* Activity type filter chips */}
-          <div className="flex gap-1.5 flex-wrap pt-2">
-            <button
-              onClick={() => setActivityTypeFilter('all')}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${activityTypeFilter === 'all' ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-300 dark:border-gray-600 text-muted-foreground hover:border-gray-400'}`}
-              data-testid="filter-activity-all"
-            >
-              All Activities
-            </button>
-            {ACTIVITY_TYPES.map(at => {
-              const count = existingEntries.filter(e => (e.activityType || 'Standard') === at).length;
-              if (count === 0) return null;
-              return (
-                <button key={at}
-                  onClick={() => setActivityTypeFilter(at)}
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${activityTypeFilter === at ? `${ACTIVITY_COLORS[at]} border-transparent` : 'border-gray-300 dark:border-gray-600 text-muted-foreground hover:border-gray-400'}`}
-                  data-testid={`filter-activity-${at.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  {at} ({count})
-                </button>
-              );
-            })}
-          </div>
           {/* Status filter chips */}
-          <div className="flex gap-1.5 flex-wrap pt-1">
+          <div className="flex gap-1.5 flex-wrap pt-2">
             {FILTER_STATUSES.map(s => (
               <button key={s}
                 onClick={() => setStatusFilter(s)}
@@ -883,7 +783,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
-                    {['Activity', 'Site Name', 'State', 'Locality', 'Status', 'Assigned To', 'Transport', 'Enum. Fee', 'Due Date', 'Created', ''].map(h => (
+                    {['Site Name', 'State', 'Locality', 'Status', 'Assigned To', 'Transport', 'Enum. Fee', 'Due Date', 'Created', ''].map(h => (
                       <th key={h} className="px-2 py-2 text-left text-muted-foreground font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -896,11 +796,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                     return (
                       <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                         data-testid={`row-adhoc-entry-${entry.id}`}>
-                        <td className="px-2 py-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ACTIVITY_COLORS[entry.activityType || 'Standard'] || ''}`}>
-                            {entry.activityType || 'Standard'}
-                          </span>
-                        </td>
                         <td className="px-2 py-2 font-medium max-w-[160px] truncate">{entry.site_name}</td>
                         <td className="px-2 py-2 text-muted-foreground">{entry.state || '—'}</td>
                         <td className="px-2 py-2 text-muted-foreground">{entry.locality || '—'}</td>
