@@ -238,24 +238,53 @@ export default function AdminWhatsAppPage() {
             Authorization: `Bearer ${accessToken}`,
             apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({
-            user_ids: [], phone_numbers: [],
-            event_type: 'reminder',
-            data: { message: 'connection-check' },
-          }),
+          body: JSON.stringify({ ping: true }),
         }
       );
-      const result = await response.json() as { error?: string };
-      if (result.error === 'WASENDER_API_KEY not configured') {
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Function returned HTTP ${response.status}: ${text.slice(0, 200)}`);
+      }
+
+      const result = await response.json() as {
+        ping?: boolean;
+        configured?: boolean;
+        providers?: { wasender?: boolean; meta?: boolean };
+        error?: string;
+      };
+
+      if (result.error || result.configured === false) {
         setConnectionStatus('error');
-        toast({ title: 'API Key Not Configured', description: 'Set WASENDER_API_KEY in Supabase → Edge Functions → Secrets.', variant: 'destructive' });
-      } else {
+        toast({
+          title: 'WasenderAPI Not Configured',
+          description: 'Set WASENDER_API_KEY in Supabase → Edge Functions → Secrets, then redeploy.',
+          variant: 'destructive',
+        });
+      } else if (result.providers?.wasender || result.providers?.meta) {
         setConnectionStatus('connected');
-        toast({ title: 'Connection OK', description: 'WasenderAPI is reachable and the key is configured.' });
+        const parts = [];
+        if (result.providers.wasender) parts.push('WasenderAPI ✓');
+        if (result.providers.meta) parts.push('Meta Cloud API ✓');
+        toast({
+          title: 'Connection OK',
+          description: parts.join(' · ') + ' — messages will go through.',
+        });
+      } else {
+        setConnectionStatus('error');
+        toast({
+          title: 'No provider active',
+          description: 'WASENDER_API_KEY is not set in Supabase Edge Function secrets.',
+          variant: 'destructive',
+        });
       }
     } catch (err) {
       setConnectionStatus('error');
-      toast({ title: 'Connection Error', description: err instanceof Error ? err.message : 'Connection check failed', variant: 'destructive' });
+      toast({
+        title: 'Connection Error',
+        description: err instanceof Error ? err.message : 'Connection check failed',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -1107,6 +1136,173 @@ export default function AdminWhatsAppPage() {
       {/* ── SETTINGS TAB ── */}
       {activeTab === 'settings' && (
         <div className="space-y-4">
+
+          {/* ── Quick Activation Guide ── */}
+          <Card data-testid="card-activation-guide" className="border-emerald-200 dark:border-emerald-800">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                  <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Quick Activation Guide</CardTitle>
+                  <CardDescription>Follow these steps once to get WhatsApp notifications working end-to-end</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ol className="space-y-4">
+
+                {/* Step 1 */}
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-center mt-0.5">1</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Set the WasenderAPI key in Supabase secrets</p>
+                    <p className="text-xs text-muted-foreground">
+                      Go to <strong>Supabase dashboard → Edge Functions → Secrets</strong> and add:
+                    </p>
+                    <div className="rounded-md bg-muted/60 border px-3 py-2 font-mono text-xs space-y-1 mt-1">
+                      <p><span className="text-emerald-600 dark:text-emerald-400">WASENDER_API_KEY</span> = your WasenderAPI key (get it from <span className="underline">wasenderapi.com</span>)</p>
+                      <p className="text-muted-foreground"># Optional — secures inbound replies:</p>
+                      <p><span className="text-muted-foreground">WASENDER_WEBHOOK_SECRET</span> = any strong random string</p>
+                    </div>
+                  </div>
+                </li>
+
+                {/* Step 2 */}
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-center mt-0.5">2</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Deploy (or re-deploy) the two WhatsApp edge functions</p>
+                    <p className="text-xs text-muted-foreground">Run these two commands from the project root in your terminal:</p>
+                    <div className="rounded-md bg-muted/60 border px-3 py-2 font-mono text-xs space-y-1 mt-1">
+                      <p>supabase functions deploy send-whatsapp --project-ref abznugnirnlrqnnfkein</p>
+                      <p>supabase functions deploy whatsapp-webhook --project-ref abznugnirnlrqnnfkein</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      If you don't have the Supabase CLI, install it first:{' '}
+                      <code className="bg-muted px-1 rounded">npm install -g supabase</code>{' '}
+                      then run <code className="bg-muted px-1 rounded">supabase login</code>
+                    </p>
+                  </div>
+                </li>
+
+                {/* Step 3 */}
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-center mt-0.5">3</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Run the WhatsApp database migration</p>
+                    <p className="text-xs text-muted-foreground">
+                      Open the Supabase SQL Editor and run{' '}
+                      <code className="bg-muted px-1 rounded">supabase/migrations/20260416_whatsapp_integration.sql</code>{' '}
+                      followed by{' '}
+                      <code className="bg-muted px-1 rounded">supabase/migrations/20260416_whatsapp_logs_broadcast_id.sql</code>.
+                      These create the <code className="bg-muted px-1 rounded">whatsapp_logs</code> and{' '}
+                      <code className="bg-muted px-1 rounded">user_integrations</code> tables if they don't exist yet.
+                    </p>
+                  </div>
+                </li>
+
+                {/* Step 4 */}
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-center mt-0.5">4</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Verify — click Check Connection below</p>
+                    <p className="text-xs text-muted-foreground">
+                      A green "Connected" badge confirms the API key is live in the edge function.
+                      If you still see an error, double-check the key value in Supabase secrets and redeploy.
+                    </p>
+                  </div>
+                </li>
+
+                {/* Step 5 */}
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-center mt-0.5">5</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Enable WhatsApp for each user (per-user opt-in)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Each staff member goes to <strong>My Profile → Notification Settings → WhatsApp</strong>,
+                      enters their number, and turns on the categories they want (Tasks, Approvals, etc.).
+                      Alternatively, you can enable it for them directly in the database{' '}
+                      (<code className="bg-muted px-1 rounded">user_integrations.whatsapp_enabled = true</code>).
+                    </p>
+                  </div>
+                </li>
+
+                {/* Step 6 — Webhook optional */}
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold flex items-center justify-center mt-0.5">6</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-muted-foreground">Optional — configure inbound webhook for replies</p>
+                    <p className="text-xs text-muted-foreground">
+                      In your WasenderAPI dashboard, set the webhook URL to the address shown in the Inbound Webhook card below.
+                      This allows staff replies to appear in the Inbox tab.
+                    </p>
+                  </div>
+                </li>
+
+              </ol>
+            </CardContent>
+          </Card>
+
+          {/* WasenderAPI Connection Check */}
+          <Card data-testid="card-connection-check" className="border-emerald-200 dark:border-emerald-800">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                    <Activity className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      WasenderAPI
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">Primary (free-text)</span>
+                    </CardTitle>
+                    <CardDescription>Bilingual EN+AR messages — active whenever WASENDER_API_KEY is set</CardDescription>
+                  </div>
+                </div>
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    connectionStatus === 'connected' && 'bg-green-100 text-green-700 dark:bg-green-900/30',
+                    connectionStatus === 'error' && 'bg-red-100 text-red-700 dark:bg-red-900/30',
+                    connectionStatus === 'checking' && 'bg-amber-100 text-amber-700',
+                  )}
+                  data-testid="badge-connection-status"
+                >
+                  {connectionStatus === 'idle' && <><XCircle className="h-3 w-3 mr-1" />Not checked</>}
+                  {connectionStatus === 'checking' && <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Checking…</>}
+                  {connectionStatus === 'connected' && <><CheckCircle2 className="h-3 w-3 mr-1" />Connected</>}
+                  {connectionStatus === 'error' && <><AlertTriangle className="h-3 w-3 mr-1" />Error</>}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {connectionStatus === 'error' && (
+                <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-800 dark:text-red-200">
+                  <p className="font-semibold mb-1">⚠ API key not found in edge function</p>
+                  <p>Set <code className="font-mono bg-red-100 dark:bg-red-900/50 px-1 rounded">WASENDER_API_KEY</code> in Supabase → Edge Functions → Secrets, then redeploy <code className="bg-red-100 dark:bg-red-900/50 px-1 rounded font-mono">send-whatsapp</code>.</p>
+                </div>
+              )}
+              {connectionStatus === 'connected' && (
+                <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-800 dark:text-green-200">
+                  <p className="font-semibold">✓ API key confirmed — WhatsApp notifications are active</p>
+                  <p className="mt-0.5 text-xs">Messages will fire automatically for tasks, approvals, payroll, MMP events, and more.</p>
+                </div>
+              )}
+              <Button
+                onClick={checkConnection}
+                disabled={connectionStatus === 'checking'}
+                variant="outline"
+                className="gap-2"
+                data-testid="button-check-connection"
+              >
+                {connectionStatus === 'checking' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+                Check Connection
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Meta Cloud API Connection */}
           <Card data-testid="card-meta-connection" className="border-blue-200 dark:border-blue-800">
             <CardHeader>
@@ -1118,27 +1314,32 @@ export default function AdminWhatsAppPage() {
                   <div>
                     <CardTitle className="text-base flex items-center gap-2">
                       Meta WhatsApp Cloud API
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">Primary</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">Optional (templates)</span>
                     </CardTitle>
-                    <CardDescription>Official template messages from {metaStatus.display_phone_number || '+256 751 900013'}</CardDescription>
+                    <CardDescription>Pre-approved template messages from {metaStatus.display_phone_number || '+256 751 900013'}</CardDescription>
                   </div>
                 </div>
                 <Badge variant="secondary" className={cn(
                   'shrink-0',
                   metaStatus.ok && metaStatus.status === 'CONNECTED' && 'bg-green-100 text-green-700 dark:bg-green-900/30',
-                  !metaStatus.ok && !metaStatus.checking && 'bg-amber-100 text-amber-700',
+                  !metaStatus.ok && !metaStatus.checking && 'bg-slate-100 text-slate-600',
                   metaStatus.checking && 'bg-blue-100 text-blue-700'
                 )}>
                   {metaStatus.checking ? <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Checking…</>
                     : metaStatus.ok && metaStatus.status === 'CONNECTED' ? <><CheckCircle2 className="h-3 w-3 mr-1" />Connected</>
-                    : <><AlertTriangle className="h-3 w-3 mr-1" />Not checked</>}
+                    : <><Info className="h-3 w-3 mr-1" />Not checked</>}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
-                <p className="font-semibold mb-1">Setup required</p>
-                <p>Set <code className="font-mono bg-blue-100 dark:bg-blue-900/50 px-1 rounded">META_WA_ACCESS_TOKEN_NEW</code>, <code className="font-mono bg-blue-100 dark:bg-blue-900/50 px-1 rounded">META_WA_PHONE_NUMBER_ID</code>, and <code className="font-mono bg-blue-100 dark:bg-blue-900/50 px-1 rounded">META_WABA_ID</code> in your Supabase Edge Function secrets.</p>
+                <p className="font-semibold mb-1">Optional — only needed for Meta template messages</p>
+                <p>If you want to use the official Meta Cloud API alongside WasenderAPI, add these to Supabase Edge Function Secrets:</p>
+                <div className="font-mono text-xs mt-2 space-y-0.5 bg-blue-100 dark:bg-blue-900/50 rounded p-2">
+                  <p>META_WA_ACCESS_TOKEN_NEW</p>
+                  <p>META_WA_PHONE_NUMBER_ID</p>
+                  <p>META_WABA_ID</p>
+                </div>
               </div>
               {metaStatus.ok && (
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1160,57 +1361,7 @@ export default function AdminWhatsAppPage() {
             </CardContent>
           </Card>
 
-          {/* WasenderAPI Connection */}
-          <Card data-testid="card-connection-check" className="border-emerald-200 dark:border-emerald-800">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
-                    <Activity className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      WasenderAPI
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">Backup</span>
-                    </CardTitle>
-                    <CardDescription>Free-text bilingual messages — used when Meta fails</CardDescription>
-                  </div>
-                </div>
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    connectionStatus === 'connected' && 'bg-green-100 text-green-700 dark:bg-green-900/30',
-                    connectionStatus === 'error' && 'bg-red-100 text-red-700 dark:bg-red-900/30',
-                    connectionStatus === 'checking' && 'bg-amber-100 text-amber-700',
-                  )}
-                  data-testid="badge-connection-status"
-                >
-                  {connectionStatus === 'idle' && <><XCircle className="h-3 w-3 mr-1" />Not checked</>}
-                  {connectionStatus === 'checking' && <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Checking…</>}
-                  {connectionStatus === 'connected' && <><CheckCircle2 className="h-3 w-3 mr-1" />Connected</>}
-                  {connectionStatus === 'error' && <><AlertTriangle className="h-3 w-3 mr-1" />Error</>}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-200">
-                <p className="font-semibold mb-1">Setup required</p>
-                <p>Set <code className="font-mono bg-amber-100 dark:bg-amber-900/50 px-1 rounded">WASENDER_API_KEY</code> in your Supabase dashboard → Edge Functions → Secrets. Optionally set <code className="font-mono bg-amber-100 dark:bg-amber-900/50 px-1 rounded">WASENDER_WEBHOOK_SECRET</code> to secure inbound messages.</p>
-              </div>
-              <Button
-                onClick={checkConnection}
-                disabled={connectionStatus === 'checking'}
-                variant="outline"
-                className="gap-2"
-                data-testid="button-check-connection"
-              >
-                {connectionStatus === 'checking' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
-                Check Connection
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Webhook */}
+          {/* Inbound Webhook */}
           <Card data-testid="card-webhook">
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -1218,15 +1369,12 @@ export default function AdminWhatsAppPage() {
                   <Webhook className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-base">Inbound Webhook</CardTitle>
-                  <CardDescription>Receive replies sent to PACT's WhatsApp number</CardDescription>
+                  <CardTitle className="text-base">Inbound Webhook URL</CardTitle>
+                  <CardDescription>Paste this into WasenderAPI dashboard to receive replies from staff</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Paste this URL into your <strong>WasenderAPI dashboard → Webhook Settings</strong>. When any staff member replies to PACT's WhatsApp number, the message is logged and appears in the Inbox above.
-              </p>
               <div className="flex gap-2">
                 <div className="flex-1 rounded-lg border bg-muted/50 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
                   {webhookUrl}
@@ -1245,9 +1393,9 @@ export default function AdminWhatsAppPage() {
               <ul className="text-sm text-muted-foreground space-y-1">
                 {[
                   'Receives replies from staff who message PACT\'s WhatsApp number',
-                  'Automatically matches sender phone to PACT staff profile',
-                  'Logs all inbound messages — visible in Inbox and Delivery Logs',
-                  'Secured via WASENDER_WEBHOOK_SECRET (set in Supabase secrets)',
+                  'Automatically matches sender phone to their PACT staff profile',
+                  'Logs all inbound messages — visible in the Inbox and Delivery Logs tabs',
+                  'Secured via WASENDER_WEBHOOK_SECRET (set in Supabase Edge Function secrets)',
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />

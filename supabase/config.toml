@@ -29,3 +29,13 @@ verify_jwt = false
 # credits wallet for task completion rewards via a trusted server path.
 [functions.credit-task-reward]
 verify_jwt = false
+
+# WhatsApp webhook is called by Meta Cloud API / WasenderAPI — no Supabase JWT.
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+# send-whatsapp is called by dispatch-notification (service-role key) and by
+# the browser (user JWT). Both are valid Supabase credentials, so verify_jwt
+# stays at the default (true). No change needed here — left as comment for docs.
+# [functions.send-whatsapp]
+# verify_jwt = true   ← default, no need to set explicitly

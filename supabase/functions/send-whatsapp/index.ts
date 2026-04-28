@@ -281,6 +281,26 @@ serve(async (req) => {
 
     const hasMeta = !!(metaToken && metaPhoneId)
     const hasWasender = !!wasenderKey
+    // ── Ping / status check ───────────────────────────────────────────────────
+    // AdminWhatsApp calls with { ping: true } to check which providers are live.
+    // Return immediately — no message sending.
+    let rawBody: Record<string, unknown> = {}
+    try { rawBody = await req.json() } catch (_) {}
+    if (rawBody.ping === true) {
+      return new Response(
+        JSON.stringify({
+          ping: true,
+          configured: hasMeta || hasWasender,
+          providers: {
+            wasender: hasWasender,
+            meta: hasMeta,
+          },
+          error: (!hasMeta && !hasWasender) ? 'WASENDER_API_KEY not configured' : undefined,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     if (!hasMeta && !hasWasender) {
       console.warn('[WhatsApp] No provider configured (Meta or Wasender)')
       return new Response(
@@ -288,7 +308,7 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
-    const body = await req.json()
+    const body = rawBody as Record<string, unknown>
     const {
       user_ids = [], phone_numbers = [],
       event_type = 'reminder',
