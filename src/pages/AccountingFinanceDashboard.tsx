@@ -37,10 +37,12 @@ interface POSummary { pendingCount: number; pendingAmount: number; draftCount: n
 interface CashKPI { totalCash: number; accountCount: number; unreconciledCount: number }
 interface RevenueKPI { totalRevenue: number; totalExpense: number; netIncome: number; ytdRevenue: number }
 interface COAStatus { accountCount: number; fundCount: number; fiscalPeriodCount: number; activePeriod: string | null }
+interface ModuleEntry { active: boolean; count: number }
 interface ModuleStatus {
-  coa: boolean; journals: boolean; vendors: boolean; assets: boolean;
-  purchaseOrders: boolean; fiscalPeriods: boolean; bankAccounts: boolean; funds: boolean;
-  bankRecon: boolean; trialBalance: boolean;
+  coa: ModuleEntry; journals: ModuleEntry; journalLines: ModuleEntry;
+  vendors: ModuleEntry; assets: ModuleEntry; purchaseOrders: ModuleEntry;
+  fiscalPeriods: ModuleEntry; bankAccounts: ModuleEntry; funds: ModuleEntry;
+  bankRecon: ModuleEntry;
 }
 
 /* ─── health score ───────────────────────────────────────────────────── */
@@ -71,7 +73,7 @@ function calcHealth(
     if (revenue.netIncome < 0) score -= 10;
   }
   if (modules) {
-    const active = Object.values(modules).filter(Boolean).length;
+    const active = Object.values(modules).filter(m => m.active).length;
     const total = Object.keys(modules).length;
     if (active < total * 0.5) score -= 15;
     else if (active < total * 0.8) score -= 5;
@@ -146,23 +148,6 @@ function AgingBar({ label, value, total, color }: { label: string; value: number
       <span className="w-8 text-right text-muted-foreground shrink-0">{pct}%</span>
     </div>
   );
-}
-
-/* ─── module status pill ─────────────────────────────────────────────── */
-function ModulePill({ label, active, href }: { label: string; active: boolean; href?: string }) {
-  const inner = (
-    <div className={cn(
-      'flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border transition-colors',
-      active
-        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800'
-        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800 cursor-help',
-    )}>
-      {active ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-      {label}
-    </div>
-  );
-  if (href && active) return <Link to={href}>{inner}</Link>;
-  return inner;
 }
 
 /* ─── section heading ────────────────────────────────────────────────── */
@@ -414,26 +399,29 @@ export default function AccountingFinanceDashboard() {
     } catch (e: any) { setCOA({ data: null, loading: false, error: e.message }); }
   }, []);
 
-  /* ── module status probe ── */
+  /* ── module status probe — checks table existence AND fetches record count ── */
   const loadModules = useCallback(async () => {
     setModules(p => ({ ...p, loading: true, error: null }));
-    const check = async (table: string) => {
-      const { error } = await supabase.from(table as any).select('id').limit(1);
-      return !error || error.code !== '42P01';
+    const probe = async (table: string): Promise<ModuleEntry> => {
+      const { count, error } = await supabase
+        .from(table as any)
+        .select('*', { count: 'exact', head: true });
+      const active = !error || error.code !== '42P01';
+      return { active, count: active ? (count ?? 0) : 0 };
     };
-    const [coa, journals, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon, trialBalance] = await Promise.all([
-      check('acct_accounts'),
-      check('acct_journal_entries'),
-      check('acct_vendors'),
-      check('acct_fixed_assets'),
-      check('acct_purchase_orders'),
-      check('acct_fiscal_periods'),
-      check('acct_bank_accounts'),
-      check('acct_funds'),
-      check('acct_bank_recon_items'),
-      check('acct_journal_lines'),
+    const [coa, journals, journalLines, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon] = await Promise.all([
+      probe('acct_accounts'),
+      probe('acct_journal_entries'),
+      probe('acct_journal_lines'),
+      probe('acct_vendors'),
+      probe('acct_fixed_assets'),
+      probe('acct_purchase_orders'),
+      probe('acct_fiscal_periods'),
+      probe('acct_bank_accounts'),
+      probe('acct_funds'),
+      probe('acct_bank_recon_items'),
     ]);
-    setModules({ data: { coa, journals, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon, trialBalance }, loading: false, error: null });
+    setModules({ data: { coa, journals, journalLines, vendors, assets, purchaseOrders, fiscalPeriods, bankAccounts, funds, bankRecon }, loading: false, error: null });
   }, []);
 
   const loadAll = useCallback(() => {
@@ -462,7 +450,7 @@ export default function AccountingFinanceDashboard() {
   const revExpTrend = monthlyRevExp.data ?? [];
   const hasRevExpData = revExpTrend.some(d => d.revenue > 0 || d.expense > 0);
   const health = calcHealth(budget.data, ap.data, journals.data, revenue.data, modules.data);
-  const activeModules = modules.data ? Object.values(modules.data).filter(Boolean).length : 0;
+  const activeModules = modules.data ? Object.values(modules.data).filter(m => m.active).length : 0;
   const totalModules = modules.data ? Object.keys(modules.data).length : 10;
 
   /* alerts */
@@ -820,46 +808,136 @@ export default function AccountingFinanceDashboard() {
         <QuickLink href="/budget"                    icon={DollarSign}  color="text-emerald-700 dark:text-emerald-400" label="Project Budgets"   sub="Budget utilization" />
       </div>
 
-      {/* ── module status ── */}
-      <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
-        <div className="flex items-center justify-between mb-2">
+      {/* ── live module status ── */}
+      <SectionHeading label="Live Module Status" labelAr="حالة الوحدات المباشرة" />
+      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden mb-2">
+        {/* header bar */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Module Status</span>
+            <span className="text-sm font-semibold">Database Tables</span>
+            <span className="text-[10px] text-muted-foreground" dir="rtl">جداول قاعدة البيانات</span>
           </div>
-          {!modules.loading && modules.data && (
-            <span className={cn('text-[11px] font-medium', activeModules === totalModules ? 'text-emerald-600' : 'text-amber-600')}>
-              {activeModules}/{totalModules} live
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {modules.loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            {!modules.loading && modules.data && (
+              <span className={cn(
+                'text-xs font-bold px-2.5 py-0.5 rounded-full',
+                activeModules === totalModules
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+              )}>
+                {activeModules}/{totalModules} live
+              </span>
+            )}
+          </div>
         </div>
+
         {modules.loading ? (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Checking modules…</div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <ModulePill label="Chart of Accounts" active={modules.data?.coa ?? false} href="/accounting/coa" />
-            <ModulePill label="Journal Entries" active={modules.data?.journals ?? false} href="/accounting/journals" />
-            <ModulePill label="Journal Lines" active={modules.data?.trialBalance ?? false} href="/accounting/trial-balance" />
-            <ModulePill label="Vendors / AP" active={modules.data?.vendors ?? false} href="/accounting/vendors" />
-            <ModulePill label="Fixed Assets" active={modules.data?.assets ?? false} href="/accounting/fixed-assets" />
-            <ModulePill label="Purchase Orders" active={modules.data?.purchaseOrders ?? false} href="/accounting/purchase-orders" />
-            <ModulePill label="Fiscal Periods" active={modules.data?.fiscalPeriods ?? false} href="/accounting/fiscal-years" />
-            <ModulePill label="Bank Accounts" active={modules.data?.bankAccounts ?? false} href="/accounting/bank-recon" />
-            <ModulePill label="Funds" active={modules.data?.funds ?? false} href="/accounting/funds" />
-            <ModulePill label="Bank Recon" active={modules.data?.bankRecon ?? false} href="/accounting/bank-recon" />
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Probing accounting tables…
           </div>
-        )}
-        {modules.data && Object.values(modules.data).some(v => !v) && (
-          <p className="text-[10px] text-muted-foreground mt-2 flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
-            Modules showing ⚠ need their SQL migration applied in the Supabase SQL Editor.
-          </p>
-        )}
-        {modules.data && Object.values(modules.data).every(Boolean) && (
-          <p className="text-[10px] text-emerald-600 mt-2 flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3 shrink-0" />
-            All accounting modules are active and ready.
-          </p>
+        ) : (() => {
+          const md = modules.data;
+          if (!md) return null;
+
+          type ModGroup = { heading: string; headingAr: string; icon: React.ElementType; iconColor: string; items: { label: string; labelAr: string; entry: ModuleEntry; href: string }[] };
+          const groups: ModGroup[] = [
+            {
+              heading: 'Core GL', headingAr: 'دفتر الأستاذ', icon: BookOpen, iconColor: 'text-blue-600',
+              items: [
+                { label: 'Chart of Accounts', labelAr: 'دليل الحسابات',  entry: md.coa,          href: '/accounting/coa' },
+                { label: 'Journal Entries',   labelAr: 'قيود اليومية',   entry: md.journals,     href: '/accounting/journals' },
+                { label: 'Journal Lines',     labelAr: 'سطور القيود',    entry: md.journalLines, href: '/accounting/trial-balance' },
+                { label: 'Fiscal Periods',    labelAr: 'الفترات المالية', entry: md.fiscalPeriods, href: '/accounting/fiscal-years' },
+                { label: 'Funds',             labelAr: 'سجل الصناديق',   entry: md.funds,        href: '/accounting/funds' },
+              ],
+            },
+            {
+              heading: 'AP & Procurement', headingAr: 'الذمم والمشتريات', icon: ShoppingCart, iconColor: 'text-violet-600',
+              items: [
+                { label: 'Vendors',          labelAr: 'الموردون',          entry: md.vendors,        href: '/accounting/vendors' },
+                { label: 'Purchase Orders',  labelAr: 'أوامر الشراء',      entry: md.purchaseOrders, href: '/accounting/purchase-orders' },
+              ],
+            },
+            {
+              heading: 'Cash & Banking', headingAr: 'النقد والبنوك', icon: Landmark, iconColor: 'text-sky-600',
+              items: [
+                { label: 'Bank Accounts', labelAr: 'الحسابات البنكية',  entry: md.bankAccounts, href: '/accounting/bank-recon' },
+                { label: 'Recon Items',   labelAr: 'بنود التسوية',       entry: md.bankRecon,    href: '/accounting/bank-recon' },
+              ],
+            },
+            {
+              heading: 'Assets', headingAr: 'الأصول', icon: Package, iconColor: 'text-slate-600',
+              items: [
+                { label: 'Fixed Assets', labelAr: 'الأصول الثابتة', entry: md.assets, href: '/accounting/fixed-assets' },
+              ],
+            },
+          ];
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border">
+              {groups.map(g => (
+                <div key={g.heading} className="p-4">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <g.icon className={cn('h-3.5 w-3.5 shrink-0', g.iconColor)} />
+                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{g.heading}</span>
+                    <span className="text-[9px] text-muted-foreground ml-1" dir="rtl">{g.headingAr}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {g.items.map(item => (
+                      <Link key={item.label} to={item.href} className="flex items-center gap-2.5 group">
+                        {item.entry.active ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={cn('text-xs font-medium truncate group-hover:text-primary transition-colors', !item.entry.active && 'text-muted-foreground')}>
+                              {item.label}
+                            </span>
+                            {item.entry.active ? (
+                              <span className="text-[10px] tabular-nums font-semibold text-muted-foreground shrink-0">
+                                {item.entry.count.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400 shrink-0 bg-amber-50 dark:bg-amber-900/20 px-1.5 rounded">
+                                No migration
+                              </span>
+                            )}
+                          </div>
+                          {item.entry.active && (
+                            <div className="h-1 mt-0.5 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-emerald-400 dark:bg-emerald-500 transition-all"
+                                style={{ width: item.entry.count > 0 ? `${Math.min(100, Math.round((item.entry.count / Math.max(1, item.entry.count)) * 100))}%` : '4%' }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* footer */}
+        {modules.data && (
+          <div className={cn(
+            'flex items-center gap-1.5 px-4 py-2.5 text-[10px] border-t border-border',
+            Object.values(modules.data).every(m => m.active)
+              ? 'bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-300'
+              : 'bg-amber-50/50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300',
+          )}>
+            {Object.values(modules.data).every(m => m.active)
+              ? <><CheckCircle2 className="h-3 w-3 shrink-0" /> All accounting tables are active — {Object.values(modules.data).reduce((s, m) => s + m.count, 0).toLocaleString()} total records across {totalModules} modules.</>
+              : <><AlertTriangle className="h-3 w-3 shrink-0" /> {totalModules - activeModules} module{totalModules - activeModules !== 1 ? 's' : ''} need SQL migration applied in the Supabase SQL Editor.</>
+            }
+          </div>
         )}
       </div>
     </div>
