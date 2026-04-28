@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isValid, formatDistanceToNow, isBefore } from 'date-fns';
 import {
-  Folder, FolderOpen, FolderPlus, FolderCopy, FileText, Upload, Search, MoreVertical,
+  Folder, FolderOpen, FolderPlus, Folders, FileText, Upload, Search, MoreVertical,
   Download, Trash2, Share2, Eye, MessageSquare, Clock, Shield, Lock, LockOpen,
   Users, ChevronRight, ChevronDown, X, Plus, Edit2, AlertTriangle,
   CheckCircle2, Star, StarOff, Grid, List, Filter, Tag, Link,
@@ -1503,7 +1503,7 @@ export default function WorkspaceHub() {
                   <Palette className="h-3.5 w-3.5 mr-2" />Customize Color & Icon
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => duplicateFolder(folder)}>
-                  <FolderCopy className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
+                  <Folders className="h-3.5 w-3.5 mr-2 text-blue-600" />Duplicate Folder
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => { setPasswordSetTarget({ id: folder.id, name: folder.name, password_hash: folder.password_hash, isFolder: true }); setNewPasswordValue(''); setConfirmPasswordValue(''); }}>
