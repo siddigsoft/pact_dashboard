@@ -193,6 +193,22 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     // Quick check — if wallet already exists skip all creation attempts
     if (await walletExistsInDb(userId)) return true;
 
+    // Route 0 — SECURITY DEFINER RPC that creates a minimal profile (only `id`
+    // required, every other column is nullable) then the wallet.
+    // This bypasses BOTH the FK constraint issue (profile created first) AND RLS.
+    // Available after supabase/migrations/20260429_wallet_fix_v4_minimal_rpc.sql
+    // has been applied in the Supabase SQL editor.
+    try {
+      const { data: rpc0Data, error: rpc0Err } = await supabase.rpc(
+        'ensure_wallet_and_profile',
+        { p_user_id: userId }
+      );
+      if (!rpc0Err && rpc0Data === true && await walletExistsInDb(userId)) return true;
+      if (rpc0Err) console.warn('[ensureWallet] ensure_wallet_and_profile RPC error:', rpc0Err?.message);
+    } catch (rpc0Ex) {
+      console.warn('[ensureWallet] ensure_wallet_and_profile RPC threw:', rpc0Ex);
+    }
+
     const walletPayload = {
       user_id: userId,
       currency: 'SDG',
@@ -224,17 +240,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       console.warn('[ensureWallet] edge function threw:', fnEx);
     }
 
-    // Route 3 — SECURITY DEFINER RPC (available after 20260427_wallet_fix_complete.sql
-    // is applied in Supabase SQL editor)
+    // Route 3 — older SECURITY DEFINER RPC (requires admin role check)
     const { error: rpcErr } = await supabase.rpc('create_wallet_for_user', {
       target_user_id: userId,
     });
     if (!rpcErr && await walletExistsInDb(userId)) return true;
-    if (rpcErr) console.warn('[ensureWallet] RPC error:', rpcErr?.message);
+    if (rpcErr) console.warn('[ensureWallet] create_wallet_for_user RPC error:', rpcErr?.message);
 
-    // Final check — DB-level BEFORE UPDATE trigger (aaa_ensure_wallet_on_dpr_approve)
-    // may auto-create the wallet at update time if the migration has been applied.
-    // We can't rely on it here, so if nothing worked, return false.
     console.warn('[ensureWallet] all routes failed for user:', userId);
     return false;
   };
