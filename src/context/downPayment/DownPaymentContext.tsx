@@ -179,7 +179,20 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
    * Returns true if the wallet is guaranteed to exist, false if all routes failed
    * (caller should throw a user-visible error in that case).
    */
+  /** SELECT-check: confirms wallet row is actually present in the DB. */
+  const walletExistsInDb = async (userId: string): Promise<boolean> => {
+    const { data } = await supabase
+      .from('wallets')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    return !!data?.id;
+  };
+
   const ensureWalletExists = async (userId: string): Promise<boolean> => {
+    // Quick check — if wallet already exists skip all creation attempts
+    if (await walletExistsInDb(userId)) return true;
+
     const walletPayload = {
       user_id: userId,
       currency: 'SDG',
@@ -191,30 +204,38 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       total_earned: 0,
     };
 
-    // Route 1 — direct upsert (allowed for admin / financialAdmin by RLS)
+    // Route 1 — direct upsert (works when admin-level RLS INSERT policy is in place).
+    // NOTE: PostgREST can silently swallow RLS violations on ON CONFLICT DO NOTHING
+    // upserts and return no error. Always verify with a SELECT after attempting.
     const { error: upsertErr } = await supabase
       .from('wallets')
       .upsert(walletPayload, { onConflict: 'user_id', ignoreDuplicates: true });
-    if (!upsertErr) return true;
+    if (!upsertErr && await walletExistsInDb(userId)) return true;
+    if (upsertErr) console.warn('[ensureWallet] upsert error:', upsertErr.message);
 
     // Route 2 — edge function (service-role; bypasses RLS for any authenticated admin)
     try {
       const { error: fnErr } = await supabase.functions.invoke('ensure-wallet', {
         body: { target_user_id: userId },
       });
-      if (!fnErr) return true;
-      console.warn('[ensureWallet] edge function failed:', fnErr);
+      if (!fnErr && await walletExistsInDb(userId)) return true;
+      if (fnErr) console.warn('[ensureWallet] edge function failed:', fnErr);
     } catch (fnEx) {
       console.warn('[ensureWallet] edge function threw:', fnEx);
     }
 
-    // Route 3 — SECURITY DEFINER RPC (available after SQL migration is applied)
+    // Route 3 — SECURITY DEFINER RPC (available after 20260427_wallet_fix_complete.sql
+    // is applied in Supabase SQL editor)
     const { error: rpcErr } = await supabase.rpc('create_wallet_for_user', {
       target_user_id: userId,
     });
-    if (!rpcErr) return true;
+    if (!rpcErr && await walletExistsInDb(userId)) return true;
+    if (rpcErr) console.warn('[ensureWallet] RPC error:', rpcErr?.message);
 
-    console.warn('[ensureWallet] all routes failed. Last RPC error:', rpcErr?.message);
+    // Final check — DB-level BEFORE UPDATE trigger (aaa_ensure_wallet_on_dpr_approve)
+    // may auto-create the wallet at update time if the migration has been applied.
+    // We can't rely on it here, so if nothing worked, return false.
+    console.warn('[ensureWallet] all routes failed for user:', userId);
     return false;
   };
 
