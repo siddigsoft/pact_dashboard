@@ -13,6 +13,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useUser } from '@/context/user/UserContext';
 
+const cleanName = (raw: any): string => {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  return s.replace(/^["']|["']$/g, '').trim();
+};
+
 interface AdvanceInfo {
   id: string;
   status: string;
@@ -243,7 +249,7 @@ function StatusCategorySection({
 
   const byLocality = new Map<string, SiteStatusDetail[]>();
   sites.forEach(site => {
-    const loc = site.locality || 'Unknown Locality';
+    const loc = cleanName(site.locality) || 'Unknown Locality';
     if (!byLocality.has(loc)) byLocality.set(loc, []);
     byLocality.get(loc)!.push(site);
   });
@@ -435,7 +441,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     };
 
     siteEntries.forEach((entry: any) => {
-      const stateName = entry.state || entry.stateName || 'Unknown State';
+      const stateName = cleanName(entry.state || entry.stateName) || 'Unknown State';
       
       if (!stateMap.has(stateName)) {
         stateMap.set(stateName, {
@@ -494,8 +500,8 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         status: entryStatus,
         statusLabel: statusLabels[entryStatus] || (entry.status || entryStatus).replace(/_/g, ' '),
         statusCategory,
-        locality: entry.locality || entry.localityName || '',
-        stateName: entry.state || entry.stateName || stateName,
+        locality: cleanName(entry.locality || entry.localityName) || '',
+        stateName: cleanName(entry.state || entry.stateName) || stateName,
         hubName: entry.hub_office || entry.hub_name || entry.hubName || '',
         transportBudget: entry.transport_fee != null ? Number(entry.transport_fee) : (entry.transport_budget_total != null ? Number(entry.transport_budget_total) : (ad.transport_budget_total != null ? Number(ad.transport_budget_total) : undefined)),
         reason: entry.verification_notes || ad.rejection_comments || ad.rejection_reason || ad.return_reason || entry.rejection_comments || '',
