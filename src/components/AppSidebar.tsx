@@ -584,8 +584,8 @@
     if (!isHidden('/training-certifications')) {
       hrItems.push({ id: 'training-certifications', title: "Training & Certifications", url: "/training-certifications", icon: Award, priority: 11, isPinned: isPinned('/training-certifications') });
     }
-    // 12. Hierarchy Audit Log — HR/admin only
-    if (!isHidden('/hierarchy-audit') && (isSuperAdmin || isAdmin || ['hr','hr_manager'].includes(defaultRole.toLowerCase()))) {
+    // 12. Hierarchy Audit Log — admin & super admin only
+    if (!isHidden('/hierarchy-audit') && (isSuperAdmin || isAdmin)) {
       hrItems.push({ id: 'hierarchy-audit', title: "Hierarchy Audit Log", url: "/hierarchy-audit", icon: ScrollText, priority: 12, isPinned: isPinned('/hierarchy-audit') });
     }
     // 13–16. HR audit gaps H2-H5 self-service pages

@@ -209,7 +209,7 @@ function ActivityChart({ rows }: { rows: AuditRow[] }) {
 export default function HierarchyAuditLogPage() {
   const { hasAnyRole } = useAuthorization();
   const { currentUser } = useUser();
-  const isAdmin = hasAnyRole(['super_admin', 'admin', 'hr']);
+  const isAdmin = hasAnyRole(['super_admin', 'admin']);
 
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
