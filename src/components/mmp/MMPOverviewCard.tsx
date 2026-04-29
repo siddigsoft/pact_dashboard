@@ -11,6 +11,11 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { getRecallTierForRole } from '@/utils/recallUtils';
 import { RecallDialog } from './RecallDialog';
 
+const cleanName = (raw: any): string => {
+  if (!raw) return '';
+  return String(raw).trim().replace(/^["']|["']$/g, '').trim();
+};
+
 interface MMPOverviewCardProps {
   mmpFile: MMPFile;
   siteEntries: any[];
@@ -62,8 +67,8 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
               (() => {
                 const stateGroups: { [key: string]: { [key: string]: number } } = {};
                 siteEntries.forEach(site => {
-                  const state = site.state || site.state_name || (site.location && site.location.state) || 'Unknown State';
-                  const locality = site.locality || site.locality_name || 'Unknown Locality';
+                  const state = cleanName(site.state || site.state_name || (site.location && site.location.state)) || 'Unknown State';
+                  const locality = cleanName(site.locality || site.locality_name) || 'Unknown Locality';
                   stateGroups[state] = stateGroups[state] || {};
                   stateGroups[state][locality] = (stateGroups[state][locality] || 0) + 1;
                 });
