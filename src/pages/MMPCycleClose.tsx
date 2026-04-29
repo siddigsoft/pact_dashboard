@@ -2704,7 +2704,12 @@ const MMPCycleClose = () => {
                               const tab = url.searchParams.get('tab');
                               if (tab) setActiveTab(tab);
                             } else {
-                              navigate(nextBlocker.link!);
+                              const activeMmpName = checklistMmpId ? (mmpFiles?.find(m => m.id === checklistMmpId)?.name || '') : '';
+                              let dest = nextBlocker.link!;
+                              if (dest === '/finance' && checklistMmpId) {
+                                dest = `/finance?mmpId=${checklistMmpId}&mmpName=${encodeURIComponent(activeMmpName)}`;
+                              }
+                              navigate(dest);
                             }
                           }}
                           data-testid="button-next-step-resolve"

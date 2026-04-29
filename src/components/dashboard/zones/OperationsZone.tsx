@@ -93,6 +93,12 @@ export const OperationsZone: React.FC = () => {
   const [closingCycles, setClosingCycles] = useState<{ id: string; name: string; deadline: string | null; uncovered: number; reasoned: number }[]>([]);
   const [cycleSummary, setCycleSummary] = useState<{ active: number; closing: number; pending_approval: number; closed: number }>({ active: 0, closing: 0, pending_approval: 0, closed: 0 });
   const [pendingReclaimCount, setPendingReclaimCount] = useState(0);
+  const [actionRequired, setActionRequired] = useState<{
+    costSubmissions: number;
+    withdrawals: number;
+    downPayments: number;
+    cyclesNearDeadline: number;
+  }>({ costSubmissions: 0, withdrawals: 0, downPayments: 0, cyclesNearDeadline: 0 });
 
   useEffect(() => {
     const isFinancialUser = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'financial_auditor', 'financialadmin', 'fom', 'FOM']);
@@ -112,6 +118,35 @@ export const OperationsZone: React.FC = () => {
       } catch { /* non-critical */ }
     };
     fetchPendingReclaims();
+  }, [hasAnyRole]);
+
+  useEffect(() => {
+    const isAdminOrFOM = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'fom', 'FOM', 'financialadmin', 'financial_admin']);
+    if (!isAdminOrFOM) return;
+    const fetchActionCounts = async () => {
+      try {
+        const [ocRes, wRes, dpRes, mmpRes] = await Promise.all([
+          supabase.from('operational_cost_submissions').select('id', { count: 'exact', head: true }).or('tier1_status.eq.pending,tier2_status.eq.pending'),
+          supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'supervisor_approved'),
+          supabase.from('down_payment_requests').select('id', { count: 'exact', head: true }).in('status', ['pending_supervisor', 'pending_admin']),
+          supabase.from('mmp_files').select('id, cycle_close_deadline, cycle_status'),
+        ]);
+        const nearDeadline = (mmpRes.data || []).filter((m: any) => {
+          if (m.cycle_status === 'closed') return false;
+          if (!m.cycle_close_deadline) return false;
+          const d = new Date(m.cycle_close_deadline);
+          const daysLeft = (d.getTime() - Date.now()) / 86400000;
+          return daysLeft >= 0 && daysLeft <= 5;
+        }).length;
+        setActionRequired({
+          costSubmissions: ocRes.count || 0,
+          withdrawals: wRes.count || 0,
+          downPayments: dpRes.count || 0,
+          cyclesNearDeadline: nearDeadline,
+        });
+      } catch { /* non-critical */ }
+    };
+    fetchActionCounts();
   }, [hasAnyRole]);
 
   useEffect(() => {
@@ -541,6 +576,61 @@ export const OperationsZone: React.FC = () => {
           data-testid="card-metric-performance"
         />
       </div>
+
+      {/* ── Action Required Panel ── */}
+      {(actionRequired.costSubmissions > 0 || actionRequired.withdrawals > 0 || actionRequired.downPayments > 0 || actionRequired.cyclesNearDeadline > 0) && (
+        <Card className="border-red-200 dark:border-red-800 bg-red-50/40 dark:bg-red-950/10 shadow-sm" data-testid="card-action-required">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+              <span className="text-sm font-semibold text-red-800 dark:text-red-300">Action Required</span>
+              <div className="h-px flex-1 bg-red-200/60 dark:bg-red-800/40" />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {actionRequired.costSubmissions > 0 && (
+                <button
+                  className="text-left p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 hover:border-red-400 hover:shadow-sm transition-all"
+                  onClick={() => navigate('/cost-submission')}
+                  data-testid="action-card-cost-submissions"
+                >
+                  <div className="text-lg font-bold text-red-600 dark:text-red-400">{actionRequired.costSubmissions}</div>
+                  <div className="text-xs text-muted-foreground">Pending cost approvals</div>
+                </button>
+              )}
+              {actionRequired.withdrawals > 0 && (
+                <button
+                  className="text-left p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-orange-200 dark:border-orange-800 hover:border-orange-400 hover:shadow-sm transition-all"
+                  onClick={() => navigate('/finance')}
+                  data-testid="action-card-withdrawals"
+                >
+                  <div className="text-lg font-bold text-orange-600 dark:text-orange-400">{actionRequired.withdrawals}</div>
+                  <div className="text-xs text-muted-foreground">Withdrawals to process</div>
+                </button>
+              )}
+              {actionRequired.downPayments > 0 && (
+                <button
+                  className="text-left p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 hover:border-amber-400 hover:shadow-sm transition-all"
+                  onClick={() => navigate('/down-payment-approval')}
+                  data-testid="action-card-down-payments"
+                >
+                  <div className="text-lg font-bold text-amber-600 dark:text-amber-400">{actionRequired.downPayments}</div>
+                  <div className="text-xs text-muted-foreground">Advances to approve</div>
+                </button>
+              )}
+              {actionRequired.cyclesNearDeadline > 0 && (
+                <button
+                  className="text-left p-2.5 rounded-lg bg-white dark:bg-gray-900 border border-purple-200 dark:border-purple-800 hover:border-purple-400 hover:shadow-sm transition-all"
+                  onClick={() => navigate('/mmp/cycle-close')}
+                  data-testid="action-card-cycles-deadline"
+                >
+                  <div className="text-lg font-bold text-purple-600 dark:text-purple-400">{actionRequired.cyclesNearDeadline}</div>
+                  <div className="text-xs text-muted-foreground">Cycles near deadline</div>
+                </button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {pendingReclaimCount > 0 && (
         <Card className="border-orange-200 dark:border-orange-800 bg-orange-50/70 dark:bg-orange-950/20 shadow-sm" data-testid="card-pending-reconciliation">

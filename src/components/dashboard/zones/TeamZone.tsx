@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2, FileText, BarChart3 } from 'lucide-react';
+import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2, FileText, BarChart3, AlertTriangle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { TeamCommunication } from '../TeamCommunication';
 import TeamLocationMap from '../TeamLocationMap';
 import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
@@ -27,6 +28,7 @@ export const TeamZone: React.FC = () => {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
   const [hubName, setHubName] = useState<string | null>(null);
+  const [unassignedSiteCount, setUnassignedSiteCount] = useState(0);
   
   const navigate = useNavigate();
   const { users } = useUser();
@@ -78,6 +80,22 @@ export const TeamZone: React.FC = () => {
     };
     fetchHubName();
   }, [isSupervisor, supervisorHubIds]);
+
+  // Fetch count of sites with no enumerator assigned for supervisor's hub
+  useEffect(() => {
+    if (!isSupervisor) return;
+    const fetch = async () => {
+      try {
+        const { count } = await supabase
+          .from('site_visits')
+          .select('id', { count: 'exact', head: true })
+          .is('assigned_to', null)
+          .not('status', 'eq', 'completed');
+        setUnassignedSiteCount(count || 0);
+      } catch { /* non-critical */ }
+    };
+    fetch();
+  }, [isSupervisor]);
 
   // Filter and sort team members who can be assigned to site visits (coordinators and data collectors only)
   // For supervisors: only show team members in their hubs (primary and secondary)
@@ -209,6 +227,20 @@ export const TeamZone: React.FC = () => {
         </div>
         <div className="absolute inset-0 bg-grid-pattern opacity-5" />
       </div>
+
+      {/* Unassigned sites alert for supervisors */}
+      {isSupervisor && unassignedSiteCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20 px-4 py-2.5" data-testid="banner-unassigned-sites">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">{unassignedSiteCount} site{unassignedSiteCount !== 1 ? 's' : ''} without an assigned enumerator</span>
+            <span className="text-xs text-amber-700 dark:text-amber-300 block">These sites are at risk of being missed this cycle. Assign team members now.</span>
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0 border-amber-400 text-amber-800 dark:text-amber-300 text-xs hover:bg-amber-100 dark:hover:bg-amber-950" onClick={() => navigate('/site-visits')} data-testid="button-view-unassigned">
+            Assign Now
+          </Button>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4 max-w-2xl h-auto p-1 bg-muted/30 mx-auto rounded-xl border border-border/40">

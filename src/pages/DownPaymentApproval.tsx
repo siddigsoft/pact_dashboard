@@ -319,7 +319,47 @@ function AllRequestsTable({
 
   return (
     <>
-      <div className="overflow-x-auto">
+      {/* Mobile card fallback (< md) */}
+      <div className="flex flex-col gap-3 md:hidden px-1 pb-2" data-testid="all-requests-mobile-cards">
+        {requests.map(req => {
+          const rem = req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
+          return (
+            <div key={req.id} className="rounded-lg border bg-card shadow-sm p-3 space-y-2" data-testid={`card-all-${req.id}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm truncate">{req.requestedByName || getProfileName(req.requestedBy)}</p>
+                  <p className="text-xs text-muted-foreground truncate">{req.siteName}</p>
+                </div>
+                {getStatusBadge(req.status, req.metadata)}
+              </div>
+              <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-xs">
+                <div>
+                  <span className="text-muted-foreground block">Requested</span>
+                  <span className="font-mono font-medium">{req.requestedAmount.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Paid</span>
+                  <span className="font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Remaining</span>
+                  <span className={`font-mono ${rem > 0 ? 'text-amber-600' : ''}`}>{rem > 0 ? rem.toLocaleString() : '0'}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{fmtDate(req.requestedAt)} · {req.hubName || req.stateName || '—'}</span>
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setDetailsReq(req)} data-testid={`button-all-details-mobile-${req.id}`}>
+                  <FileText className="h-3 w-3 mr-1" />
+                  Details
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table (≥ md) */}
+      <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -397,6 +437,26 @@ export default function DownPaymentApproval() {
   const [disbMmp, setDisbMmp] = useState('all');
   const [disbEnumerator, setDisbEnumerator] = useState('all');
   const [disbGroupBy, setDisbGroupBy] = useState('none');
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+
+  const handleMarkFullyPaid = useCallback(async (req: DownPaymentRequest) => {
+    if (!window.confirm(`Mark "${req.requestedByName || 'this advance'}" (${(req.approvedAmount ?? req.requestedAmount).toLocaleString()} SDG) as Fully Paid?\n\nThis will unblock the cycle close gate.`)) return;
+    setMarkingPaidId(req.id);
+    try {
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({ status: 'fully_paid', updated_at: new Date().toISOString() })
+        .eq('id', req.id);
+      if (error) throw error;
+      // Force a page refresh of the down payment context
+      window.location.reload();
+    } catch (err) {
+      console.error('Error marking advance as fully paid:', err);
+      alert('Failed to update status. Please try again.');
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }, []);
 
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -877,6 +937,7 @@ export default function DownPaymentApproval() {
             const disbursed = filteredRequests.filter(r =>
               r.status === 'fully_paid' || r.status === 'partially_paid' || r.status === 'approved'
             );
+            const stuckCount = disbursed.filter(r => r.status === 'approved').length;
 
             // Unique option lists for filter dropdowns
             const uStates = [...new Set(disbursed.map(r => r.stateName).filter(Boolean))].sort() as string[];
@@ -966,12 +1027,41 @@ export default function DownPaymentApproval() {
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                     {req.updatedAt ? format(parseISO(req.updatedAt), 'dd/MM/yy') : '—'}
                   </TableCell>
+                  <TableCell>
+                    {req.status === 'approved' && isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[10px] px-2 border-emerald-400 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950 whitespace-nowrap"
+                        disabled={markingPaidId === req.id}
+                        onClick={() => handleMarkFullyPaid(req)}
+                        data-testid={`button-mark-paid-${req.id}`}
+                      >
+                        {markingPaidId === req.id ? '...' : '✓ Mark Paid'}
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             };
 
             return (
               <>
+                {/* Alert banner for stuck approved advances */}
+                {stuckCount > 0 && isAdmin && (
+                  <div className="flex items-center gap-3 rounded-lg border border-orange-300/60 bg-orange-50/70 dark:bg-orange-950/20 px-4 py-3" data-testid="banner-stuck-advances">
+                    <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                        {stuckCount} advance{stuckCount !== 1 ? 's' : ''} approved but not yet paid
+                      </p>
+                      <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                        These block cycle close. Use "✓ Mark Paid" in the table below to unblock if payment was made outside the system.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/30">
@@ -1154,6 +1244,7 @@ export default function DownPaymentApproval() {
                                       <TableHead className="text-right">Remaining</TableHead>
                                       <TableHead>Status</TableHead>
                                       <TableHead>Updated</TableHead>
+                                      <TableHead>Actions</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>{rows.map(renderRow)}</TableBody>
@@ -1181,6 +1272,7 @@ export default function DownPaymentApproval() {
                               <TableHead className="text-right">Remaining</TableHead>
                               <TableHead>Status</TableHead>
                               <TableHead>Updated</TableHead>
+                              <TableHead>Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>{filtered.map(renderRow)}</TableBody>

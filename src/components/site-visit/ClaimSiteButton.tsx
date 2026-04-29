@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
-import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote, ShieldX, MapPinOff } from 'lucide-react';
+import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote, ShieldX, MapPinOff, MapPin } from 'lucide-react';
 import { useClaimFeeCalculation, type ClaimFeeBreakdown, normalizeRoleScopeForEnum } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 import { useClassification } from '@/context/classification/ClassificationContext';
@@ -432,6 +432,22 @@ export function ClaimSiteButton({
           <div className="flex-1 overflow-y-auto px-6 pb-4">
             {feeBreakdown && (
               <div className="space-y-4 py-4">
+                {/* GPS proximity indicator */}
+                {canClaimSite.distanceKm !== null && (
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                    canClaimSite.distanceKm <= 5
+                      ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                      : canClaimSite.distanceKm <= 20
+                        ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
+                        : 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300'
+                  }`} data-testid="gps-distance-indicator">
+                    <MapPin className="h-4 w-4 shrink-0" />
+                    <span>
+                      You are <strong>{formatDistance(canClaimSite.distanceKm)}</strong> from this site
+                      {canClaimSite.distanceKm <= 5 && ' — GPS verified ✓'}
+                    </span>
+                  </div>
+                )}
                 {canSeeBreakdown ? (
                   <>
                     {feeBreakdown.classificationLevel && (

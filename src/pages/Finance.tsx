@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ReasonPickerDialog } from "@/components/audit/ReasonPickerDialog";
 import { useAppContext } from "@/context/AppContext";
 import { DataFreshnessBadge } from "@/components/realtime";
@@ -61,7 +61,10 @@ const formatCurrencyCents = (cents: number) => {
 
 const Finance: React.FC = () => {
   const appContext = useAppContext();
-  const [activeTab, setActiveTab] = useState("financial-tracking");
+  const [searchParams] = useSearchParams();
+  const cycleContextMmpId = searchParams.get('mmpId') || null;
+  const cycleContextMmpName = searchParams.get('mmpName') || null;
+  const [activeTab, setActiveTab] = useState(() => cycleContextMmpId ? "payments" : "financial-tracking");
   const transactions: any[] = (appContext as any).transactions ?? [];
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -74,6 +77,25 @@ const Finance: React.FC = () => {
 
   const [pendingWithdrawals, setPendingWithdrawals] = useState<AdminWithdrawalRequest[]>([]);
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(true);
+
+  // Finance officer inbox — pending action counts
+  const [financeInbox, setFinanceInbox] = useState<{ pendingCosts: number; pendingWithdrawalCount: number; stuckAdvances: number } | null>(null);
+
+  useEffect(() => {
+    const fetchInbox = async () => {
+      try {
+        const [{ count: costs }, { count: withdrawalCount }, { count: advances }] = await Promise.all([
+          supabase.from('operational_cost_submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          supabase.from('withdrawal_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          supabase.from('down_payment_requests').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
+        ]);
+        setFinanceInbox({ pendingCosts: costs || 0, pendingWithdrawalCount: withdrawalCount || 0, stuckAdvances: advances || 0 });
+      } catch { /* non-critical */ }
+    };
+    if (isSuperAdmin() || hasAnyRole(['admin', 'Admin', 'financialAdmin', 'financial_admin', 'FinancialAdmin', 'fom', 'FOM'])) {
+      fetchInbox();
+    }
+  }, [isSuperAdmin, hasAnyRole]);
 
   const [expenseCategories, setExpenseCategories] = useState<{ category: string; total_cents: number; count: number }[]>([]);
   const [expensesLoading, setExpensesLoading] = useState(true);
@@ -868,6 +890,66 @@ const Finance: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {cycleContextMmpId && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-300/60 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-2.5" data-testid="banner-cycle-context-finance">
+          <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-blue-800 dark:text-blue-200">
+              Reviewing approvals for cycle close:{" "}
+              <strong>{cycleContextMmpName || cycleContextMmpId}</strong>
+            </span>
+            <span className="text-xs text-blue-600 dark:text-blue-400 block">
+              Approve pending cost submissions and withdrawal requests below to unblock the cycle.
+            </span>
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0 text-xs border-blue-400 text-blue-700 dark:text-blue-300" onClick={() => navigate('/mmp/cycle-close')} data-testid="button-back-to-cycle-close">
+            ← Back to Cycle Close
+          </Button>
+        </div>
+      )}
+
+      {/* Finance Officer Inbox */}
+      {financeInbox && (financeInbox.pendingCosts + financeInbox.pendingWithdrawalCount + financeInbox.stuckAdvances > 0) && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="finance-officer-inbox">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+            <Wallet className="h-3.5 w-3.5" />
+            Finance Inbox — Pending Your Action
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {financeInbox.pendingCosts > 0 && (
+              <button
+                onClick={() => navigate('/cost-submissions?tab=pending')}
+                className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
+                data-testid="inbox-pending-costs"
+              >
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold">{financeInbox.pendingCosts}</span>
+                Cost submissions pending review
+              </button>
+            )}
+            {financeInbox.pendingWithdrawalCount > 0 && (
+              <button
+                onClick={() => navigate('/withdrawal-approval')}
+                className="flex items-center gap-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-1.5 text-xs font-medium text-blue-800 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors"
+                data-testid="inbox-pending-withdrawals"
+              >
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold">{financeInbox.pendingWithdrawalCount}</span>
+                Withdrawal requests awaiting approval
+              </button>
+            )}
+            {financeInbox.stuckAdvances > 0 && (
+              <button
+                onClick={() => navigate('/down-payment-approval?tab=tracker')}
+                className="flex items-center gap-2 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 px-3 py-1.5 text-xs font-medium text-orange-800 dark:text-orange-200 hover:bg-orange-100 dark:hover:bg-orange-950/50 transition-colors"
+                data-testid="inbox-stuck-advances"
+              >
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">{financeInbox.stuckAdvances}</span>
+                Transport advances approved but not marked paid
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 gap-2 p-1 h-auto">
