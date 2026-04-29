@@ -89,7 +89,7 @@ export const PAGE_DEFS: PageDef[] = [
   { slug:'cycle-management',    label:'Cycle Management',       path:'/mmp/cycle-close',        icon:Activity, group:'Coordination',
     roles:['superAdmin','admin','fom','supervisor'] },
   { slug:'staff-directory',     label:'Staff Directory',        path:'/admin/staff-profiles',   icon:Users, group:'Coordination',
-    roles:['all'] },
+    roles:['superAdmin','admin'] },
 
   // ── Payments & Finance ────────────────────────────────────────────────────
   { slug:'wallet',              label:'My Wallet',              path:'/wallet',                 icon:CreditCard, group:'Finance',

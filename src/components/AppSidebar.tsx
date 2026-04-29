@@ -400,7 +400,7 @@
     if (!isHidden('/mmp/cycle-close') && (isSuperAdmin || isAdmin || isFOM || isSupervisor)) {
       coordinationItems.push({ id: 'mmp-cycle-close', title: "Cycle Management", url: "/mmp/cycle-close", icon: CheckCircle, priority: 4, isPinned: isPinned('/mmp/cycle-close') });
     }
-    if (!isHidden('/admin/staff-profiles')) {
+    if (!isHidden('/admin/staff-profiles') && (isSuperAdmin || isAdmin)) {
       coordinationItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 5, isPinned: isPinned('/admin/staff-profiles') });
     }
     if (coordinationItems.length) groups.push({ id: 'coordination', label: "Coordination & Oversight", order: 4.5, items: coordinationItems });
@@ -538,18 +538,18 @@
 
     // ── 7. HR & People — logical flow: Employees → Payroll → Retainer → Leave → Analytics → My Payslip ──
     const hrItems: MenuGroup['items'] = [];
-    // 1. Employees — visible to all roles except Data Collector and Coordinator
+    // 1. Employees — admin & super admin only; data shows all except coordinators & data collectors
     const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
-    const canSeeEmployees = !isDataCollector && !isCoordinator;
-    if (!isHidden('/employees') && canSeeEmployees) {
+    const hrStrictAccess = isSuperAdmin || isAdmin;
+    if (!isHidden('/employees') && hrStrictAccess) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
     // 2. Payroll — salary setup, run payroll, payslips, reports (admin only)
     if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'payroll-admin', title: "Payroll", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 2, isPinned: false });
     }
-    // 3. Retainer Payments — visible to Coordinators only (they are on retainer contracts)
-    if (!isHidden('/retainer-management') && isCoordinator) {
+    // 3. Retainer Payments — admin & super admin only; data shows coordinator-role users only
+    if (!isHidden('/retainer-management') && hrStrictAccess) {
       hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/retainer-management", icon: CreditCard, priority: 3, isPinned: isPinned('/retainer-management') });
     }
     // 4. Leave Requests — all staff submit; admins approve

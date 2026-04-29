@@ -1395,16 +1395,21 @@ export default function Employees() {
       if (deptsRes.data?.length) setDepartments(deptsRes.data);
 
       if (pRes.data) {
-        setProfiles(pRes.data.map((p: any) => {
-          let raw = p.bank_account;
-          if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
-          const ba = normalizeBA(raw);
-          const last_activity = p.last_activity || (p.device_info ? p.updated_at : null);
-          const device_info   = p.device_info || null;
-          const app_version   = p.app_version || null;
-          const presence      = isUserOnline(p.id) ? 'online' : presenceFromActivity(last_activity, p.updated_at);
-          return { ...p, bank_account: ba, last_activity, device_info, app_version, presence, is_employee: !!p.is_employee };
-        }));
+        setProfiles(pRes.data
+          .filter((p: any) => {
+            const r = (p.role || '').toLowerCase().replace(/[\s_-]/g, '');
+            return r !== 'coordinator' && r !== 'datacollector';
+          })
+          .map((p: any) => {
+            let raw = p.bank_account;
+            if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = null; } }
+            const ba = normalizeBA(raw);
+            const last_activity = p.last_activity || (p.device_info ? p.updated_at : null);
+            const device_info   = p.device_info || null;
+            const app_version   = p.app_version || null;
+            const presence      = isUserOnline(p.id) ? 'online' : presenceFromActivity(last_activity, p.updated_at);
+            return { ...p, bank_account: ba, last_activity, device_info, app_version, presence, is_employee: !!p.is_employee };
+          }));
       }
     } catch (err: any) {
       toast({ title: 'Failed to load employees', description: err?.message, variant: 'destructive' });
