@@ -230,11 +230,48 @@ export function CycleMMPCard({
     ? 'bg-purple-500'
     : 'bg-emerald-500';
 
+  const CYCLE_STEPS: { key: string; label: string }[] = [
+    { key: 'active', label: 'Active' },
+    { key: 'closing', label: 'Closing' },
+    { key: 'pending_approval', label: 'Awaiting Approval' },
+    { key: 'closed', label: 'Closed' },
+  ];
+  const currentStepIdx = CYCLE_STEPS.findIndex(s => s.key === cycleStatus);
+
   return (
     <Card className="overflow-hidden transition-all" data-testid={`card-cycle-${mmp.id}`}>
       <CardContent className="p-0">
         <div className={`h-1 w-full ${topBarColor}`} />
-        <div className="p-4 pb-3">
+
+        {/* Status stepper */}
+        <div className="flex items-center px-4 pt-3 pb-0 gap-0" data-testid={`stepper-${mmp.id}`}>
+          {CYCLE_STEPS.map((step, idx) => {
+            const isActive = idx === currentStepIdx;
+            const isDone = idx < currentStepIdx;
+            const isLast = idx === CYCLE_STEPS.length - 1;
+            return (
+              <div key={step.key} className="flex items-center flex-1 min-w-0">
+                <div className="flex flex-col items-center shrink-0">
+                  <div className={`h-2 w-2 rounded-full border ${
+                    isDone
+                      ? 'bg-emerald-500 border-emerald-500'
+                      : isActive
+                        ? cycleStatus === 'closing' ? 'bg-amber-500 border-amber-500' : cycleStatus === 'pending_approval' ? 'bg-purple-500 border-purple-500' : 'bg-primary border-primary'
+                        : 'bg-muted border-border'
+                  }`} />
+                  <span className={`text-[9px] mt-0.5 leading-none whitespace-nowrap ${
+                    isActive ? 'font-semibold text-foreground' : isDone ? 'text-muted-foreground' : 'text-muted-foreground/50'
+                  }`}>{step.label}</span>
+                </div>
+                {!isLast && (
+                  <div className={`h-px flex-1 mx-1 ${idx < currentStepIdx ? 'bg-emerald-400' : 'bg-border'}`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="p-4 pb-3 pt-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">

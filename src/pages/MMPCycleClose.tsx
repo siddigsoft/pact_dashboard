@@ -24,11 +24,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, MapPin,
-  ArrowRight, FileText, BarChart3, Filter, Download,
+  ArrowRight, ArrowLeft, FileText, BarChart3, Filter, Download,
   ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield, ShieldAlert,
   Activity, Target, Layers, SortAsc, SortDesc,
-  BookOpen, RotateCcw, HelpCircle, Loader2, DollarSign,
+  BookOpen, RotateCcw, HelpCircle, Loader2, DollarSign, Lightbulb,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -233,10 +233,21 @@ const MMPCycleClose = () => {
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
   const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
 
-  // Reset reconciliation acknowledgment whenever the operator switches to a different cycle
+  // When user opens the checklist for an MMP, auto-sync the Uncovered Sites tab filter
+  // so navigating there immediately shows only that MMP's sites.
   useEffect(() => {
     setReconciliationAcknowledged(false);
+    if (checklistMmpId) {
+      setSelectedMmpId(checklistMmpId);
+    } else {
+      setSelectedMmpId('all');
+    }
   }, [checklistMmpId]);
+
+  // Derive the first actionable blocker from the readiness checklist
+  const nextBlocker = useMemo(() => {
+    return cycleReadiness.items.find(i => !i.passed && !i.notConfigured) ?? null;
+  }, [cycleReadiness.items]);
 
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
@@ -2673,6 +2684,44 @@ const MMPCycleClose = () => {
                       Dismiss
                     </Button>
                   </div>
+
+                  {/* Next-step guide card */}
+                  {!cycleReadiness.loading && nextBlocker && (
+                    <div className="flex items-start gap-3 rounded-lg border border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3" data-testid="banner-next-step">
+                      <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Next step to unblock</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">{nextBlocker.label}</p>
+                      </div>
+                      {nextBlocker.link && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 text-xs border-amber-500/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950"
+                          onClick={() => {
+                            if (nextBlocker.link!.startsWith('/mmp/cycle-close')) {
+                              const url = new URL(nextBlocker.link!, window.location.origin);
+                              const tab = url.searchParams.get('tab');
+                              if (tab) setActiveTab(tab);
+                            } else {
+                              navigate(nextBlocker.link!);
+                            }
+                          }}
+                          data-testid="button-next-step-resolve"
+                        >
+                          Resolve <ArrowRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {!cycleReadiness.loading && cycleReadiness.allPassed && (
+                    <div className="flex items-center gap-2 rounded-lg border border-green-400/40 bg-green-50/50 dark:bg-green-950/20 px-4 py-3 text-sm text-green-800 dark:text-green-200" data-testid="banner-all-clear">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                      All requirements met — you can proceed to close this cycle.
+                    </div>
+                  )}
+
                   <CloseReadinessChecklist
                     title="Cycle Close Readiness"
                     items={cycleReadiness.items}
@@ -2817,6 +2866,17 @@ const MMPCycleClose = () => {
         </TabsContent>
 
         <TabsContent value="uncovered" className="space-y-4">
+          {checklistMmpId && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-300/50 bg-blue-50/50 dark:bg-blue-950/20 px-4 py-2.5 text-xs" data-testid="banner-cycle-context-uncovered">
+              <ArrowLeft className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-blue-800 dark:text-blue-200">
+                Closing: <strong>{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</strong> — sites filtered to this cycle.
+              </span>
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-700 dark:text-blue-300 ml-auto" onClick={() => setActiveTab('active')} data-testid="button-back-to-checklist">
+                ← Back to checklist
+              </Button>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row gap-3 items-end flex-wrap">
             <div className="flex-1 relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
