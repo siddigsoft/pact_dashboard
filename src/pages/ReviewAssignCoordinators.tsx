@@ -786,8 +786,8 @@ const ReviewAssignCoordinators: FC = () => {
                 const hasUnforwardedSites = unforwardedSites.length > 0;
                 const hasForwardedSites = forwardedSites.length > 0;
                 
-                // Get unique localities within this state group for display
-                const localitiesInGroup = [...new Set(groupSites.map((s: any) => String(s.locality || '').trim()).filter(Boolean))];
+                // Get unique localities within this state group for display (strip surrounding quotes from raw stored names)
+                const localitiesInGroup = [...new Set(groupSites.map((s: any) => String(s.locality || '').trim().replace(/^["']+|["']+$/g, '').trim()).filter(Boolean))];
                 
                 // For unassigned sites, get the unique raw state names to show what's not matching
                 const rawStateNames = isUnassigned 
@@ -985,8 +985,11 @@ const ReviewAssignCoordinators: FC = () => {
                             {(() => {
                               const allSitesByLocality: Record<string, { forwarded: any[], unforwarded: any[] }> = {};
                               
+                              const cleanLocalityName = (raw: any) =>
+                                String(raw || '').trim().replace(/^["']+|["']+$/g, '').trim() || 'Unknown Locality';
+
                               unforwardedSites.forEach((site: any) => {
-                                const localityName = String(site.locality || '').trim() || 'Unknown Locality';
+                                const localityName = cleanLocalityName(site.locality);
                                 if (!allSitesByLocality[localityName]) {
                                   allSitesByLocality[localityName] = { forwarded: [], unforwarded: [] };
                                 }
@@ -994,7 +997,7 @@ const ReviewAssignCoordinators: FC = () => {
                               });
                               
                               forwardedSites.forEach((site: any) => {
-                                const localityName = String(site.locality || '').trim() || 'Unknown Locality';
+                                const localityName = cleanLocalityName(site.locality);
                                 if (!allSitesByLocality[localityName]) {
                                   allSitesByLocality[localityName] = { forwarded: [], unforwarded: [] };
                                 }
