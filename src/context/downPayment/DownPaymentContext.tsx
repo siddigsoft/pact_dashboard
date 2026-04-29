@@ -803,62 +803,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           const request = requests.find(r => r.id === data.requestId);
       if (!request) throw new Error('Request not found');
 
-      // Fetch or create wallet — advance does NOT change balance (it is deducted from the site visit fee at completion)
-      // NOTE: Use .limit(1) everywhere before .maybeSingle() / .single() to guard against
-      // duplicate wallet rows (e.g. from a DB trigger) causing "Cannot coerce the result
-      // to a single JSON object" (PostgREST PGRST100).
-      let walletData: any;
+      // Use a SECURITY DEFINER RPC so financial admins can create/read wallets for
+      // any user without hitting RLS on the wallets table.  The RPC ensures the
+      // profile row exists, creates the wallet if missing, and returns the wallet
+      // id + current balances — all in one round-trip.
+      const { data: walletInfo, error: walletRpcError } = await supabase
+        .rpc('get_or_create_wallet_for_payment', { p_user_id: request.requestedBy });
+      if (walletRpcError) throw new Error(`Could not load wallet: ${walletRpcError.message}`);
+      if (!walletInfo?.wallet_id) throw new Error('Could not load wallet for this user');
 
-      const fetchWallet = async () => {
-        const { data: rows, error } = await supabase
-          .from('wallets')
-          .select('*')
-          .eq('user_id', request.requestedBy)
-          .order('created_at', { ascending: true })
-          .limit(1);
-        if (error) throw error;
-        return rows?.[0] ?? null;
+      const walletData = {
+        id: walletInfo.wallet_id as string,
+        balances: (walletInfo.balances ?? { SDG: 0 }) as Record<string, number>,
       };
-
-      const existingWallet = await fetchWallet();
-
-      if (!existingWallet) {
-        // Try direct INSERT first; if RLS blocks it (admin creating for another user)
-        // fall back to the SECURITY DEFINER RPC which bypasses the policy safely.
-        const { data: newWalletRows, error: createError } = await supabase
-          .from('wallets')
-          .insert({
-            user_id: request.requestedBy,
-            currency: 'SDG',
-            balance_cents: 0,
-            total_earned_cents: 0,
-            total_paid_out_cents: 0,
-            pending_payout_cents: 0,
-            balances: { SDG: 0 },
-            total_earned: 0,
-          })
-          .select();
-
-        if (createError) {
-          // RLS violation → use admin RPC
-          if (createError.code === '42501' || createError.message?.includes('row-level security')) {
-            const { error: rpcError } = await supabase.rpc('create_wallet_for_user', {
-              target_user_id: request.requestedBy,
-            });
-            if (rpcError) throw new Error(`Wallet creation failed: ${rpcError.message}`);
-            walletData = await fetchWallet();
-            if (!walletData) throw new Error('Wallet still not found after RPC creation');
-          } else {
-            throw createError;
-          }
-        } else {
-          walletData = Array.isArray(newWalletRows) ? newWalletRows[0] : newWalletRows;
-        }
-      } else {
-        walletData = existingWallet;
-      }
-
-      if (!walletData) throw new Error('Could not load wallet for this user');
 
       // Balance is unchanged — advance is a pre-payment deducted from the site visit fee
       const currentBalance = Number(walletData.balances?.['SDG'] ?? 0);

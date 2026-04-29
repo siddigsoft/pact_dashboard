@@ -4648,8 +4648,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md flex flex-col max-h-[90vh]">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5 text-green-600" />
               Mark Advance as Paid / تحديد السلفة كمدفوعة
@@ -4660,7 +4660,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           </DialogHeader>
 
           {markAsPaidDialog.request && (
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto pr-1">
+              <div className="space-y-4 py-1">
               <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
                 <p className="font-medium">{markAsPaidDialog.request.siteName}</p>
                 <p className="text-lg font-bold tabular-nums">
@@ -4723,10 +4724,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   data-testid="input-advance-payment-notes"
                 />
               </div>
+              </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="flex-shrink-0 pt-3 border-t gap-2">
             <Button
               type="button"
               variant="outline"
