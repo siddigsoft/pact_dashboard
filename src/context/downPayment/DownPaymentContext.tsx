@@ -168,7 +168,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     enabled: !!currentUser,
   });
 
-  const MUTATION_TIMEOUT_MS = 30000;
+  const MUTATION_TIMEOUT_MS = 60000;
 
   /**
    * Ensures a wallet exists for `userId` before any approval that fires a DB
@@ -617,17 +617,6 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         adminUpdatePayload.supervisor_approved_by = data.approvedBy;
         adminUpdatePayload.supervisor_approved_at = now;
         adminUpdatePayload.supervisor_notes = data.notes;
-      }
-
-      // Best-effort wallet pre-creation. The aaa_ensure_wallet_on_dpr_approve
-      // BEFORE UPDATE trigger (applied via 20260429_wallet_approval_fix_runbook.sql)
-      // handles creation at the DB level even if all frontend routes fail.
-      if (request.requestedBy) {
-        const walletReady = await ensureWalletExists(request.requestedBy);
-        if (!walletReady) {
-          console.warn('[adminApprove] ensureWalletExists returned false for', request.requestedBy,
-            '— proceeding anyway; DB trigger will create wallet if migration was applied.');
-        }
       }
 
       const { data: adminUpdated, error } = await supabase
@@ -1250,42 +1239,10 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
     }
 
-    // ── Pre-create wallets for all affected users ──────────────────────────
-    // A DB trigger fires on DOWN_PAYMENT_REQUESTS UPDATE and looks up the
-    // requester's wallet. If no wallet exists yet it raises "Wallet not found
-    // for user <uuid>" and blocks the whole update. We create missing wallets
-    // here (INSERT … ON CONFLICT DO NOTHING) so the trigger always finds one.
-    const allAffectedUserIds = [
-      ...new Set([
-        ...supervisorRows.map(r => {
-          const req = requests.find(x => x.id === r.id);
-          return req?.requestedBy;
-        }),
-        ...adminRows.map(r => {
-          const req = requests.find(x => x.id === r.id);
-          return req?.requestedBy;
-        }),
-      ].filter(Boolean) as string[]),
-    ];
-    if (allAffectedUserIds.length > 0) {
-      // Create wallets for all affected users sequentially (each call tries 3 routes).
-      const walletResults = await Promise.allSettled(
-        allAffectedUserIds.map(uid => ensureWalletExists(uid))
-      );
-      const failedWallets = walletResults
-        .map((r, i) => ({ uid: allAffectedUserIds[i], ok: r.status === 'fulfilled' && r.value }))
-        .filter(x => !x.ok);
-
-      if (failedWallets.length > 0) {
-        // Log but do NOT block — the aaa_ensure_wallet_on_dpr_approve BEFORE UPDATE
-        // trigger (from 20260429_wallet_approval_fix_runbook.sql) auto-creates wallets
-        // at the DB level, so the updates below will still succeed.
-        console.warn('[BulkApprove] ensureWalletExists failed for', failedWallets.length,
-          'user(s):', failedWallets.map(f => f.uid).join(', '),
-          '— proceeding; DB trigger will handle wallet creation.');
-      }
-    }
-    // ───────────────────────────────────────────────────────────────────────
+    // Wallet pre-creation is handled at the DB level by the
+    // aaa_ensure_wallet_on_dpr_approve BEFORE UPDATE trigger.
+    // The SQL backfill (20260429_wallet_FINAL_drop_bad_trigger.sql) has already
+    // created wallets for all existing requesters, so no pre-check is needed here.
 
     let success = 0;
     let failed = 0;
@@ -1474,7 +1431,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       });
     }
 
-    await refreshRequests();
+    refreshRequests().catch(console.error);
     return { success, failed };
         })(),
         MUTATION_TIMEOUT_MS,
