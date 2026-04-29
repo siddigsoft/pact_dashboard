@@ -400,7 +400,7 @@
     if (!isHidden('/mmp/cycle-close') && (isSuperAdmin || isAdmin || isFOM || isSupervisor)) {
       coordinationItems.push({ id: 'mmp-cycle-close', title: "Cycle Management", url: "/mmp/cycle-close", icon: CheckCircle, priority: 4, isPinned: isPinned('/mmp/cycle-close') });
     }
-    if (!isHidden('/admin/staff-profiles') && canSeePath('/admin/staff-profiles', defaultRole)) {
+    if (!isHidden('/admin/staff-profiles')) {
       coordinationItems.push({ id: 'staff-directory', title: "Staff Directory", url: "/admin/staff-profiles", icon: UsersRound, priority: 5, isPinned: isPinned('/admin/staff-profiles') });
     }
     if (coordinationItems.length) groups.push({ id: 'coordination', label: "Coordination & Oversight", order: 4.5, items: coordinationItems });
@@ -538,17 +538,18 @@
 
     // ── 7. HR & People — logical flow: Employees → Payroll → Retainer → Leave → Analytics → My Payslip ──
     const hrItems: MenuGroup['items'] = [];
-    // 1. Employees — who works here: contracts, bank accounts, contract type
+    // 1. Employees — visible to all roles except Data Collector and Coordinator
     const hrAdminAccess = isSuperAdmin || isAdmin || isFinancialAdmin;
-    if (!isHidden('/employees') && hrAdminAccess) {
+    const canSeeEmployees = !isDataCollector && !isCoordinator;
+    if (!isHidden('/employees') && canSeeEmployees) {
       hrItems.push({ id: 'employees', title: "Employees", url: "/employees", icon: Users, priority: 1, isPinned: isPinned('/employees') });
     }
     // 2. Payroll — salary setup, run payroll, payslips, reports (admin only)
     if (!isHidden('/hr') && hrAdminAccess) {
       hrItems.push({ id: 'payroll-admin', title: "Payroll", url: "/hr?tab=payroll-admin", icon: Banknote, priority: 2, isPinned: false });
     }
-    // 3. Retainer Payments — retainer agreements and monthly payments (admin only)
-    if (!isHidden('/hr') && hrAdminAccess) {
+    // 3. Retainer Payments — visible to Coordinators only (they are on retainer contracts)
+    if (!isHidden('/retainer-management') && isCoordinator) {
       hrItems.push({ id: 'retainer-hr', title: "Retainer Payments", url: "/retainer-management", icon: CreditCard, priority: 3, isPinned: isPinned('/retainer-management') });
     }
     // 4. Leave Requests — all staff submit; admins approve
