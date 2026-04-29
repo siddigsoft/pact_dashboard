@@ -192,7 +192,12 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       const unreconciledAdvances = advances.filter(a => {
         const isTerminal = a.status === 'approved' || a.status === 'paid' || a.status === 'fully_paid';
         const meta = a.metadata ?? {};
-        const isReconciled = meta['reconciled'] === true || Boolean(meta['reconciled_at']);
+        // fully_paid means payment is complete — treat as reconciled.
+        // metadata flags allow explicit reconciliation for approved/partially-paid advances.
+        const isReconciled =
+          a.status === 'fully_paid' ||
+          meta['reconciled'] === true ||
+          Boolean(meta['reconciled_at']);
         return isTerminal && !isReconciled;
       }).length;
 
@@ -234,12 +239,12 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         },
         {
           id: 'transport_advances',
-          label: 'All transport advances reconciled',
-          description: 'Approved transport advances for this cycle must be reconciled.',
+          label: 'All transport advances settled',
+          description: 'Approved transport advances for this cycle must be fully paid or explicitly reconciled before closing.',
           passed: advancesError || unreconciledAdvances === 0,
           count: totalAdvances - unreconciledAdvances,
           total: totalAdvances,
-          link: '/reconciliation-dashboard',
+          link: '/down-payment-approval',
           notConfigured: advancesError,
         },
         {

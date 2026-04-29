@@ -19,9 +19,10 @@ import {
   ChevronLeft,
   CalendarCheck,
   Sparkles,
-  Zap
+  Zap,
+  Calendar,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -63,8 +64,11 @@ const safeFormatDate = (dateStr: string | null) => {
 
 const ReconciliationDashboard = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { users } = useUser();
+
+  const mmpIdParam = searchParams.get('mmpId');
 
   const [submissions, setSubmissions] = useState<OpCostRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,13 +79,21 @@ const ReconciliationDashboard = () => {
   const [projectFilter, setProjectFilter] = useState('all');
   const [matchResults, setMatchResults] = useState<Map<string, MatchConfidence>>(new Map());
   const [autoMatchRunning, setAutoMatchRunning] = useState(false);
+  const [cycleContext, setCycleContext] = useState<{ name: string; month: number; year: number } | null>(null);
+  const [cycleDates, setCycleDates] = useState<{ startDate: string; endDate: string } | null>(null);
 
-  const fetchData = async () => {
+  // opts === undefined → use current cycleDates state; opts === null → no filter (clear)
+  const fetchData = async (opts?: { startDate: string; endDate: string } | null) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('operational_cost_submissions')
         .select('id, project_id, expense_category, amount_cents, currency, description, submitted_by, paid_at, reconciled_at, reconciled_amount_cents, created_at')
         .order('paid_at', { ascending: true });
+      const dates = opts === undefined ? cycleDates : opts;
+      if (dates?.startDate) {
+        query = query.gte('created_at', dates.startDate).lte('created_at', dates.endDate);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       setSubmissions((data as OpCostRow[]) || []);
     } catch (err) {
@@ -93,8 +105,34 @@ const ReconciliationDashboard = () => {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const loadWithContext = async () => {
+      if (mmpIdParam) {
+        try {
+          const { data: mmpRow } = await supabase
+            .from('mmp_files')
+            .select('name, month, year')
+            .eq('id', mmpIdParam)
+            .single();
+          if (mmpRow && mmpRow.month && mmpRow.year) {
+            const m = mmpRow.month as number;
+            const y = mmpRow.year as number;
+            setCycleContext({ name: (mmpRow.name as string) || 'MMP', month: m, year: y });
+            const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+            const lastDay = new Date(y, m, 0).getDate();
+            const endDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            const dates = { startDate: startDate + 'T00:00:00', endDate: endDate + 'T23:59:59' };
+            setCycleDates(dates);
+            await fetchData(dates);
+            return;
+          }
+        } catch {
+          // fall through to unfiltered load
+        }
+      }
+      await fetchData();
+    };
+    loadWithContext();
+  }, [mmpIdParam]);
 
   const getUserName = (userId: string) => {
     const u = users.find(u => u.id === userId);
@@ -480,6 +518,25 @@ const ReconciliationDashboard = () => {
         title="Reconciliation Dashboard"
         description="This page allows finance staff to systematically reconcile payments against submitted receipts. Items appear here once they have been marked as paid but have not yet been reconciled. Use the Reconcile button to confirm that payment has been verified against the original submission. Bulk reconciliation is available for processing multiple items at once."
       />
+
+      {cycleContext && (
+        <div className="flex items-center gap-2 rounded-md border border-blue-400/40 bg-blue-50/60 dark:bg-blue-950/30 px-4 py-3 text-sm" data-testid="banner-cycle-context">
+          <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+          <span className="text-blue-800 dark:text-blue-200">
+            <strong>Cycle filter active:</strong>{' '}
+            {cycleContext.name} —{' '}
+            {new Date(cycleContext.year, cycleContext.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}.
+            Showing submissions from this cycle only.{' '}
+            <button
+              className="underline text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100"
+              onClick={() => { setCycleContext(null); setCycleDates(null); fetchData(null); }}
+              data-testid="button-clear-cycle-filter"
+            >
+              Clear filter
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="kpi-cards">
         <Card data-testid="kpi-pending-reconciliation">

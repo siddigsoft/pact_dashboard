@@ -141,7 +141,7 @@ export function CloseReadinessChecklist({
                       {item.description}
                       {isWarning && (
                         <span className="block mt-0.5 text-amber-700 dark:text-amber-400">
-                          This gate is inactive — the required database table has not been created yet. Run the SQL migration in <code className="font-mono text-xs">supabase/withdrawal_requests_migration.sql</code> to enable it.
+                          This gate is inactive — a required database feature is not yet configured. Ask your system administrator to run the pending SQL migrations to enable it.
                         </span>
                       )}
                     </p>

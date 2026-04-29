@@ -2202,7 +2202,12 @@ const MMPCycleClose = () => {
             <FileSpreadsheet className="h-4 w-4 mr-1" /> Export Excel
           </Button>
           {isAdmin && (
-            <Button variant="outline" size="sm" onClick={() => navigate('/reconciliation-dashboard')} data-testid="button-goto-reconciliation">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(checklistMmpId ? `/reconciliation-dashboard?mmpId=${checklistMmpId}` : '/reconciliation-dashboard')}
+              data-testid="button-goto-reconciliation"
+            >
               <BarChart3 className="h-4 w-4 mr-1" /> Reconciliation
             </Button>
           )}

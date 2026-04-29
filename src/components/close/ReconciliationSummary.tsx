@@ -170,11 +170,11 @@ export function ReconciliationSummary({
               variant="outline"
               size="sm"
               className="text-xs w-full"
-              onClick={() => navigate('/reconciliation-dashboard')}
+              onClick={() => navigate('/finance')}
               data-testid="button-open-reconciliation"
             >
               <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
-              Open Reconciliation Dashboard
+              Review & Approve Cost Submissions
               <ExternalLink className="h-3 w-3 ml-1.5" />
             </Button>
           </>
