@@ -1574,6 +1574,11 @@ const MMPCycleClose = () => {
         setFinanceOverrideDialog({ mmpId, issues: financeIssues, action: 'finalize' });
         return;
       }
+      toast({
+        title: 'Finance Gate — Cycle Cannot Be Closed',
+        description: `Resolve the following before closing:\n• ${financeIssues.join('\n• ')}`,
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -1620,6 +1625,11 @@ const MMPCycleClose = () => {
           setFinanceOverrideDialog({ mmpId, issues: financeIssues, action: 'approve' });
           return;
         }
+        toast({
+          title: 'Finance Gate — Approval Blocked',
+          description: `Resolve the following before approving:\n• ${financeIssues.join('\n• ')}`,
+          variant: 'destructive',
+        });
         return;
       }
     }

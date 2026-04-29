@@ -197,6 +197,7 @@ export function CycleMMPCard({
   const [activitySubFilter, setActivitySubFilter] = useState<'none' | 'hub' | 'state'>('none');
   const [activitySubValue, setActivitySubValue] = useState<string>('');
   const [showCloseHistory, setShowCloseHistory] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
   const navigate = useNavigate();
 
   const closeRecords: CycleCloseRecord[] = (mmp as any)?.cycle_close_records || [];
@@ -844,7 +845,7 @@ export function CycleMMPCard({
                   <Button size="sm" onClick={() => handleApproveCycle(mmp.id)} data-testid={`button-approve-${mmp.id}`}>
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Approve & Close
                   </Button>
-                  <AlertDialog>
+                  <AlertDialog onOpenChange={(open) => { if (!open) setRejectNote(''); }}>
                     <AlertDialogTrigger asChild>
                       <Button size="sm" variant="destructive" data-testid={`button-reject-${mmp.id}`}>
                         <XCircle className="h-3.5 w-3.5 mr-1.5" /> Reject
@@ -854,12 +855,27 @@ export function CycleMMPCard({
                       <AlertDialogHeader>
                         <AlertDialogTitle>Reject Cycle Close</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will return the cycle to &quot;Closing&quot; status. The team will need to address issues before resubmitting.
+                          This will return the cycle to &quot;Closing&quot; status. The team will need to resolve issues and resubmit.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
+                      <div className="px-1 pb-2">
+                        <label className="text-sm font-medium mb-1.5 block">Reason for rejection <span className="text-muted-foreground font-normal">(required)</span></label>
+                        <textarea
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                          rows={3}
+                          placeholder="Explain what the team needs to fix before resubmitting..."
+                          value={rejectNote}
+                          onChange={e => setRejectNote(e.target.value)}
+                          data-testid="input-reject-note"
+                        />
+                      </div>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleRejectCycle(mmp.id, 'Cycle close rejected - additional review needed')} data-testid="button-confirm-reject">
+                        <AlertDialogAction
+                          disabled={!rejectNote.trim()}
+                          onClick={() => handleRejectCycle(mmp.id, rejectNote.trim() || 'Cycle close rejected — additional review needed')}
+                          data-testid="button-confirm-reject"
+                        >
                           Reject
                         </AlertDialogAction>
                       </AlertDialogFooter>
