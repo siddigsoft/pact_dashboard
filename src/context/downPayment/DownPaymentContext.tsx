@@ -607,16 +607,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         adminUpdatePayload.supervisor_notes = data.notes;
       }
 
-      // Pre-create wallet before setting status='approved'.  A DB trigger on this table
-      // looks up the requester's wallet; if none exists it raises an error or hangs.
+      // Best-effort wallet pre-creation. The aaa_ensure_wallet_on_dpr_approve
+      // BEFORE UPDATE trigger (applied via 20260429_wallet_approval_fix_runbook.sql)
+      // handles creation at the DB level even if all frontend routes fail.
       if (request.requestedBy) {
         const walletReady = await ensureWalletExists(request.requestedBy);
         if (!walletReady) {
-          throw new Error(
-            'Cannot approve: unable to create wallet for this user.\n' +
-            'Quickest fix — run supabase/migrations/20260427_wallet_fix_complete.sql ' +
-            'in the Supabase SQL editor, OR deploy the ensure-wallet edge function.'
-          );
+          console.warn('[adminApprove] ensureWalletExists returned false for', request.requestedBy,
+            '— proceeding anyway; DB trigger will create wallet if migration was applied.');
         }
       }
 
@@ -1267,16 +1265,12 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         .filter(x => !x.ok);
 
       if (failedWallets.length > 0) {
-        toastRef.current({
-          title: 'Wallet Setup Required / مطلوب إعداد المحفظة',
-          description:
-            `Could not create wallets for ${failedWallets.length} user(s). ` +
-            'Run supabase/migrations/20260427_wallet_fix_complete.sql in Supabase SQL editor ' +
-            'OR deploy the ensure-wallet edge function.',
-          variant: 'destructive',
-        });
-        await refreshRequests();
-        return { success: 0, failed: data.requestIds.length };
+        // Log but do NOT block — the aaa_ensure_wallet_on_dpr_approve BEFORE UPDATE
+        // trigger (from 20260429_wallet_approval_fix_runbook.sql) auto-creates wallets
+        // at the DB level, so the updates below will still succeed.
+        console.warn('[BulkApprove] ensureWalletExists failed for', failedWallets.length,
+          'user(s):', failedWallets.map(f => f.uid).join(', '),
+          '— proceeding; DB trigger will handle wallet creation.');
       }
     }
     // ───────────────────────────────────────────────────────────────────────
