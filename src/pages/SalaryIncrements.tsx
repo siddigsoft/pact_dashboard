@@ -86,6 +86,8 @@ export default function SalaryIncrements() {
   const [form, setForm] = useState({ ...BLANK });
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState('');
+  const [empSearch, setEmpSearch] = useState('');
+  const [dialogEmpSearch, setDialogEmpSearch] = useState('');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -117,8 +119,8 @@ export default function SalaryIncrements() {
   async function fetchAll() {
     setLoading(true);
     const [incRes, profRes] = await Promise.all([
-      supabase.from('salary_increments').select('*').order('effective_date', { ascending: false }),
-      supabase.from('profiles').select('id, full_name').order('full_name'),
+      supabase.from('salary_increments').select('*').order('effective_date', { ascending: false }).limit(2000),
+      supabase.from('profiles').select('id, full_name').order('full_name').limit(500),
     ]);
     const pm: Record<string, string> = Object.fromEntries((profRes.data ?? []).map((p: any) => [p.id, p.full_name]));
     if (incRes.data) {
@@ -135,6 +137,7 @@ export default function SalaryIncrements() {
   function openNew() {
     setEditing(null);
     setForm({ ...BLANK, user_id: isAdmin ? '' : (currentUser?.id ?? '') });
+    setDialogEmpSearch('');
     setDialogOpen(true);
   }
 
@@ -150,6 +153,7 @@ export default function SalaryIncrements() {
       reason: inc.reason ?? '',
       notes: inc.notes ?? '',
     });
+    setDialogEmpSearch('');
     setDialogOpen(true);
   }
 
@@ -298,11 +302,29 @@ export default function SalaryIncrements() {
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         {isAdmin && (
-          <Select value={selectedUser} onValueChange={setSelectedUser}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="All employees" /></SelectTrigger>
+          <Select value={selectedUser} onValueChange={v => { setSelectedUser(v); setEmpSearch(''); }}>
+            <SelectTrigger className="w-52">
+              <SelectValue placeholder="All employees">
+                {selectedUser ? (profiles.find(p => p.id === selectedUser)?.full_name ?? 'Employee') : 'All Employees'}
+              </SelectValue>
+            </SelectTrigger>
             <SelectContent>
+              <div className="p-1.5 border-b">
+                <Input
+                  autoFocus
+                  placeholder="Search employee…"
+                  value={empSearch}
+                  onChange={e => setEmpSearch(e.target.value)}
+                  className="h-7 text-sm"
+                  onKeyDown={e => e.stopPropagation()}
+                />
+              </div>
               <SelectItem value="">All Employees</SelectItem>
-              {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}
+              {profiles
+                .filter(p => !empSearch || p.full_name.toLowerCase().includes(empSearch.toLowerCase()))
+                .slice(0, 50)
+                .map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)
+              }
             </SelectContent>
           </Select>
         )}
@@ -374,7 +396,7 @@ export default function SalaryIncrements() {
       )}
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) setDialogEmpSearch(''); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Increment' : 'Record Salary Increment'}</DialogTitle>
@@ -382,10 +404,28 @@ export default function SalaryIncrements() {
           <div className="space-y-3 py-2">
             <div>
               <Label>Employee *</Label>
-              <Select value={form.user_id} onValueChange={v => setForm(p => ({ ...p, user_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+              <Select value={form.user_id} onValueChange={v => { setForm(p => ({ ...p, user_id: v })); setDialogEmpSearch(''); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee">
+                    {form.user_id ? (profiles.find(p => p.id === form.user_id)?.full_name ?? 'Employee') : 'Select employee'}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
-                  {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}
+                  <div className="p-1.5 border-b">
+                    <Input
+                      autoFocus
+                      placeholder="Search employee…"
+                      value={dialogEmpSearch}
+                      onChange={e => setDialogEmpSearch(e.target.value)}
+                      className="h-7 text-sm"
+                      onKeyDown={e => e.stopPropagation()}
+                    />
+                  </div>
+                  {profiles
+                    .filter(p => !dialogEmpSearch || p.full_name.toLowerCase().includes(dialogEmpSearch.toLowerCase()))
+                    .slice(0, 50)
+                    .map(p => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)
+                  }
                 </SelectContent>
               </Select>
             </div>
