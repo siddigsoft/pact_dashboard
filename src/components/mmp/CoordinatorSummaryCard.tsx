@@ -413,13 +413,19 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         });
       }
       setFundDialog({ open: false, site: null, editMode: false, existingAdvance: null });
-      // Refresh advance map to show updated status
+      // Refresh advance map — use pagination to bypass any PostgREST max-rows setting
       const entryIds = siteEntries.map((e: any) => e.id).filter((id: any) => typeof id === 'string' && id.length > 0);
       if (entryIds.length > 0) {
-        const { data } = await supabase.from('down_payment_requests').select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification').in('mmp_site_entry_id', entryIds);
-        if (data) {
+        const PAGE = 1000;
+        let allAdv: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data } = await supabase.from('down_payment_requests').select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification').in('mmp_site_entry_id', entryIds).range(from, from + PAGE - 1);
+          allAdv = [...allAdv, ...(data || [])];
+          if (!data || data.length < PAGE) break;
+        }
+        if (allAdv.length > 0) {
           const map: Record<string, AdvanceInfo> = {};
-          data.forEach((row: any) => {
+          allAdv.forEach((row: any) => {
             const eid = row.mmp_site_entry_id;
             if (!eid) return;
             const existing = map[eid];
@@ -506,6 +512,10 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
 
       const stateData = stateMap.get(stateName)!;
       stateData.totalSites++;
+
+      // Normalise to lowercase for all set lookups — MUST be declared before any use below
+      const entryStatus = (entry.status || '').toLowerCase().trim();
+
       // Increment per-status count for this state
       stateData.statusCounts[entryStatus] = (stateData.statusCounts[entryStatus] ?? 0) + 1;
 
@@ -518,9 +528,6 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                        entry.coordinator_name || 
                        entry.coordinatorName;
       const receivedAt = entry.forwarded_at || entry.forwardedAt || entry.dispatched_at || entry.dispatchedAt;
-      
-      // Normalise to lowercase for all set lookups
-      const entryStatus = (entry.status || '').toLowerCase().trim();
       const isVerified = verifiedStatuses.has(entryStatus);
       const isReturned = returnedStatuses.has(entryStatus);
       const isRejected = rejectedStatuses.has(entryStatus);
@@ -670,13 +677,21 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
 
       if (entryIds.length === 0) return;
 
-      // Supabase .in() with many IDs is sent as POST (no URL limit issues for reasonable sizes)
-      const { data, error } = await supabase
-        .from('down_payment_requests')
-        .select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification')
-        .in('mmp_site_entry_id', entryIds);
-
-      if (error || !data) return;
+      // Paginate in chunks of 1000 to bypass any PostgREST max-rows setting
+      const PAGE = 1000;
+      let allData: any[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('down_payment_requests')
+          .select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification')
+          .in('mmp_site_entry_id', entryIds)
+          .range(from, from + PAGE - 1);
+        if (error) break;
+        allData = [...allData, ...(data || [])];
+        if (!data || data.length < PAGE) break;
+      }
+      const data = allData;
+      if (data.length === 0) return;
 
       // Build a map: site_entry_id → most-relevant advance record
       // If there are multiple requests per site, prefer the one that is not cancelled/rejected
@@ -901,6 +916,23 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                                   </Badge>
                                 );
                               })}
+                              {(() => {
+                                const withAdvance = coord.siteDetails.filter(s => advanceMap[s.id] && advanceMap[s.id].status !== 'cancelled' && advanceMap[s.id].status !== 'rejected').length;
+                                const fullyPaid = coord.siteDetails.filter(s => advanceMap[s.id]?.status === 'fully_paid').length;
+                                const noRequest = coord.sitesAssigned - withAdvance;
+                                if (withAdvance === 0) return (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 flex items-center gap-0.5 text-muted-foreground border-dashed">
+                                    <Wallet className="h-2.5 w-2.5" />
+                                    No Advances
+                                  </Badge>
+                                );
+                                return (
+                                  <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 flex items-center gap-0.5 ${fullyPaid === withAdvance ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                                    <Wallet className="h-2.5 w-2.5" />
+                                    {withAdvance}/{coord.sitesAssigned} advances{noRequest > 0 ? ` · ${noRequest} pending` : ''}
+                                  </Badge>
+                                );
+                              })()}
                             </div>
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {coord.sitesAssigned} sites
