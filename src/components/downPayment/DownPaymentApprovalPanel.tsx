@@ -350,11 +350,16 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   }, [requests, users]);
   const uniqueEnumerators = useMemo(() => {
     const approvedReqs = requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status));
-    const enumeratorIds = [...new Set(approvedReqs.map(r => r.requestedBy).filter(Boolean))];
-    return enumeratorIds.map(id => {
-      const u = users?.find(u => u.id === id);
-      return { id: id!, name: (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown' };
-    }).sort((a, b) => a.name.localeCompare(b.name));
+    const seen = new Map<string, string>();
+    approvedReqs.forEach(r => {
+      if (r.requestedBy && !seen.has(r.requestedBy as string)) {
+        const stored = r.requestedByName;
+        const u = users?.find(u => u.id === r.requestedBy);
+        const name = (stored && stored !== 'Unknown') ? stored : ((u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown');
+        seen.set(r.requestedBy as string, name);
+      }
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [requests, users]);
 
   const allUniqueRequesters = useMemo(() => {
@@ -2987,6 +2992,21 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         </TabsList>
 
         <TabsContent value="pending">
+          {allUniqueRequesters.length > 1 && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Data Collector:</span>
+              <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
+                <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-pending-dc"><SelectValue placeholder="All Collectors" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Collectors</SelectItem>
+                  {allUniqueRequesters.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {filters.dataCollectorId && (
+                <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setFilters(f => ({ ...f, dataCollectorId: undefined }))}><X className="h-3 w-3 mr-1" />Clear</Button>
+              )}
+            </div>
+          )}
           {selectedIds.size > 0 && pendingRequests.length > 0 && (
             <Card className="mb-4 border-primary">
               <CardContent className="p-3 flex items-center justify-between gap-4">
@@ -3087,6 +3107,21 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         </TabsContent>
 
         <TabsContent value="approved">
+          {allUniqueRequesters.length > 1 && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Data Collector:</span>
+              <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
+                <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-approved-dc"><SelectValue placeholder="All Collectors" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Collectors</SelectItem>
+                  {allUniqueRequesters.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {filters.dataCollectorId && (
+                <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setFilters(f => ({ ...f, dataCollectorId: undefined }))}><X className="h-3 w-3 mr-1" />Clear</Button>
+              )}
+            </div>
+          )}
           {selectedIds.size > 0 && approvedRequests.length > 0 && (() => {
             const selectedApproved = approvedRequests.filter(r => selectedIds.has(r.id));
             const totalAmount = selectedApproved.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
@@ -3434,6 +3469,21 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
         <TabsContent value="completed">
           <div className="space-y-4">
+            {allUniqueRequesters.length > 1 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Data Collector:</span>
+                <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
+                  <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-completed-dc"><SelectValue placeholder="All Collectors" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Collectors</SelectItem>
+                    {allUniqueRequesters.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {filters.dataCollectorId && (
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setFilters(f => ({ ...f, dataCollectorId: undefined }))}><X className="h-3 w-3 mr-1" />Clear</Button>
+                )}
+              </div>
+            )}
             <div className="flex gap-2 flex-wrap">
               <Button
                 variant={completedSubTab === 'paid_waiting' ? 'default' : 'outline'}
@@ -3526,6 +3576,21 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         </TabsContent>
 
         <TabsContent value="closed">
+          {allUniqueRequesters.length > 1 && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Data Collector:</span>
+              <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
+                <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-closed-dc"><SelectValue placeholder="All Collectors" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Collectors</SelectItem>
+                  {allUniqueRequesters.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {filters.dataCollectorId && (
+                <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setFilters(f => ({ ...f, dataCollectorId: undefined }))}><X className="h-3 w-3 mr-1" />Clear</Button>
+              )}
+            </div>
+          )}
           {closedRequests.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
@@ -3548,6 +3613,21 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         </TabsContent>
 
         <TabsContent value="all">
+          {allUniqueRequesters.length > 1 && (
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Data Collector:</span>
+              <Select value={filters.dataCollectorId || 'all'} onValueChange={v => setFilters(f => ({ ...f, dataCollectorId: v === 'all' ? undefined : v }))}>
+                <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-all-dc"><SelectValue placeholder="All Collectors" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Collectors</SelectItem>
+                  {allUniqueRequesters.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {filters.dataCollectorId && (
+                <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setFilters(f => ({ ...f, dataCollectorId: undefined }))}><X className="h-3 w-3 mr-1" />Clear</Button>
+              )}
+            </div>
+          )}
           {filteredRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests found</CardContent></Card>
           ) : (
