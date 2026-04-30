@@ -21,27 +21,35 @@ export const downPaymentQueryKeys = {
     [...downPaymentQueryKeys.all, 'requests', userId ?? '', hubId ?? '', secondaryHubId ?? '', role ?? ''] as const,
 };
 
+/** Strip surrounding single/double quotes and trim whitespace — some rows in
+ *  the DB were inserted with literal quote chars around geographic names. */
+const cleanStr = (val: string | null | undefined): string | undefined => {
+  if (!val) return undefined;
+  const s = String(val).trim().replace(/^["']+|["']+$/g, '').trim();
+  return s || undefined;
+};
+
 function transformFromDB(data: any): DownPaymentRequest {
   const mmpEntry = data.mmp_site_entries;
-  const stateName = mmpEntry?.state || data.metadata?.state_name || undefined;
+  const stateName = cleanStr(mmpEntry?.state || data.metadata?.state_name);
 
   return {
     id: data.id,
     siteVisitId: data.site_visit_id,
     mmpSiteEntryId: data.mmp_site_entry_id,
-    siteName: data.site_name,
-    mmpName: mmpEntry?.mmp_files?.name || data.metadata?.mmp_name || undefined,
+    siteName: cleanStr(data.site_name) ?? data.site_name,
+    mmpName: cleanStr(mmpEntry?.mmp_files?.name || data.metadata?.mmp_name),
     stateName,
-    localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
-    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name || 'WFP TPM',
-    wfpProjectName: mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name || undefined,
+    localityName: cleanStr(mmpEntry?.locality || data.metadata?.locality_name),
+    projectName: cleanStr(mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name) || 'WFP TPM',
+    wfpProjectName: cleanStr(mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name),
     activityType: data.metadata?.activity_type || undefined,
     requestedBy: data.requested_by,
     requestedByName: data.metadata?.requested_by_name || undefined,
     requestedAt: data.requested_at,
     requesterRole: data.requester_role,
     hubId: data.hub_id,
-    hubName: data.hub_name,
+    hubName: cleanStr(data.hub_name) ?? data.hub_name,
     totalTransportationBudget: parseFloat(data.total_transportation_budget),
     requestedAmount: parseFloat(data.requested_amount),
     approvedAmount: data.metadata?.approved_amount ? parseFloat(data.metadata.approved_amount) : undefined,
