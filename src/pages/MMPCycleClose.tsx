@@ -3163,13 +3163,6 @@ const MMPCycleClose = () => {
           ) : (
             <div className="space-y-1">
               <div className="flex items-center px-3 py-2 bg-muted rounded-t-lg text-xs font-medium text-muted-foreground">
-                <div className="w-8">
-                  <Checkbox
-                    checked={filteredSites.length > 0 && filteredSites.every(s => selectedSites.has(s.id))}
-                    onCheckedChange={toggleAllFiltered}
-                    data-testid="checkbox-select-all"
-                  />
-                </div>
                 <div className="flex-1 grid grid-cols-6 gap-2">
                   <span className="col-span-2">Site</span>
                   <span>State</span>
@@ -3177,6 +3170,14 @@ const MMPCycleClose = () => {
                   <span>Status</span>
                   <span>Reason</span>
                 </div>
+                <div className="w-8 flex justify-center">
+                  <Checkbox
+                    checked={filteredSites.length > 0 && filteredSites.every(s => selectedSites.has(s.id))}
+                    onCheckedChange={toggleAllFiltered}
+                    data-testid="checkbox-select-all"
+                  />
+                </div>
+                <div className="w-6" />
               </div>
               {filteredSites.map(site => (
                 <SiteRow
@@ -4020,9 +4021,6 @@ const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }
   return (
     <div className={`border rounded-lg px-3 py-2 ${selected ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800' : 'bg-card'}`} data-testid={`row-site-${site.id}`}>
       <div className="flex items-center">
-        <div className="w-8">
-          <Checkbox checked={selected} onCheckedChange={onToggle} data-testid={`checkbox-site-${site.id}`} />
-        </div>
         <div className="flex-1 grid grid-cols-6 gap-2 items-center text-sm cursor-pointer" onClick={() => setExpanded(!expanded)}>
           <div className="col-span-2">
             <div className="font-medium truncate">{site.site_name}</div>
@@ -4039,13 +4037,16 @@ const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }
             </Badge>
           </div>
         </div>
-        <div className="w-6">
+        <div className="w-8 flex justify-center" onClick={e => e.stopPropagation()}>
+          <Checkbox checked={selected} onCheckedChange={onToggle} data-testid={`checkbox-site-${site.id}`} />
+        </div>
+        <div className="w-6 cursor-pointer" onClick={() => setExpanded(!expanded)}>
           {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </div>
       </div>
 
       {expanded && canAssign && (
-        <div className="mt-3 pt-3 border-t pl-8">
+        <div className="mt-3 pt-3 border-t pl-2">
           <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
             <div className="space-y-1 flex-1">
               <label className="text-xs text-muted-foreground">Reason for Not Covered</label>
