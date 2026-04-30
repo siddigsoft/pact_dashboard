@@ -231,11 +231,33 @@ const MMPCycleClose = () => {
 
   interface CostSubSummary { category: string; count: number; approvedCents: number; pendingCents: number; currency: string; }
   interface AdvanceSummary { status: string; count: number; totalCents: number; currency: string; }
+  interface AdvanceDetail {
+    id: string;
+    requesterName: string;
+    siteName: string;
+    paymentType: string;
+    requestedAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    status: string;
+    currency: string;
+  }
+  interface WithdrawalDetail {
+    id: string;
+    userName: string;
+    amount: number;
+    currency: string;
+    status: string;
+    reason: string;
+  }
   interface CycleSummaryData {
     costSubs: CostSubSummary[];
     advances: AdvanceSummary[];
+    advanceDetails: AdvanceDetail[];
+    withdrawals: WithdrawalDetail[];
     totalApprovedCents: number;
     totalAdvancesCents: number;
+    totalWithdrawalAmount: number;
     currency: string;
   }
   const [cycleSummaryData, setCycleSummaryData] = useState<CycleSummaryData | null>(null);
@@ -287,31 +309,90 @@ const MMPCycleClose = () => {
         .limit(10000);
       const entryIds = (entries || []).map((e: any) => e.id);
       let advances: AdvanceSummary[] = [];
+      let advanceDetails: AdvanceDetail[] = [];
       if (entryIds.length > 0) {
         const PAGE = 1000;
         let allAdv: any[] = [];
         for (let from = 0; ; from += PAGE) {
           const { data } = await supabase
             .from('down_payment_requests')
-            .select('status, amount_cents, currency')
+            .select('id, status, requested_amount, total_paid_amount, remaining_amount, payment_type, site_name, currency, requested_by')
             .in('mmp_site_entry_id', entryIds)
             .range(from, from + PAGE - 1);
           allAdv = [...allAdv, ...(data || [])];
           if (!data || data.length < PAGE) break;
         }
+        // Build status-grouped summary (keep existing)
         const advMap: Record<string, { count: number; totalCents: number; currency: string }> = {};
         allAdv.forEach((a: any) => {
           const s = a.status || 'unknown';
           if (!advMap[s]) advMap[s] = { count: 0, totalCents: 0, currency: a.currency || 'SDG' };
           advMap[s].count++;
-          advMap[s].totalCents += a.amount_cents ?? 0;
+          advMap[s].totalCents += Math.round((a.requested_amount ?? 0) * 100);
         });
         advances = Object.entries(advMap).map(([status, v]) => ({ status, ...v }));
+
+        // Fetch requester names
+        const requesterIds = [...new Set(allAdv.map((a: any) => a.requested_by).filter(Boolean))];
+        const nameMap: Record<string, string> = {};
+        if (requesterIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, display_name')
+            .in('id', requesterIds);
+          (profiles || []).forEach((p: any) => {
+            nameMap[p.id] = p.display_name || p.full_name || 'Unknown';
+          });
+        }
+
+        advanceDetails = allAdv.map((a: any) => ({
+          id: a.id,
+          requesterName: nameMap[a.requested_by] || 'Unknown',
+          siteName: a.site_name || '—',
+          paymentType: a.payment_type || 'full_advance',
+          requestedAmount: a.requested_amount ?? 0,
+          paidAmount: a.total_paid_amount ?? 0,
+          remainingAmount: a.remaining_amount ?? (a.requested_amount ?? 0) - (a.total_paid_amount ?? 0),
+          status: a.status || 'unknown',
+          currency: a.currency || 'SDG',
+        }));
       }
+
+      // Withdrawal requests for this MMP
+      let withdrawals: WithdrawalDetail[] = [];
+      const { data: wdRaw } = await supabase
+        .from('withdrawal_requests')
+        .select('id, user_id, amount, currency, status, reason, request_reason')
+        .eq('mmp_id', mmpId);
+      if (wdRaw && wdRaw.length > 0) {
+        const wdUserIds = [...new Set(wdRaw.map((w: any) => w.user_id).filter(Boolean))];
+        const wdNameMap: Record<string, string> = {};
+        if (wdUserIds.length > 0) {
+          const { data: wdProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, display_name')
+            .in('id', wdUserIds);
+          (wdProfiles || []).forEach((p: any) => {
+            wdNameMap[p.id] = p.display_name || p.full_name || 'Unknown';
+          });
+        }
+        withdrawals = wdRaw.map((w: any) => ({
+          id: w.id,
+          userName: wdNameMap[w.user_id] || 'Unknown',
+          amount: w.amount ?? 0,
+          currency: w.currency || 'SDG',
+          status: w.status || 'unknown',
+          reason: w.request_reason || w.reason || '—',
+        }));
+      }
+
       const totalApprovedCents = costSubs.reduce((s, r) => s + r.approvedCents, 0);
       const totalAdvancesCents = advances.reduce((s, r) => s + r.totalCents, 0);
-      const currency = costSubs[0]?.currency || advances[0]?.currency || 'SDG';
-      setCycleSummaryData({ costSubs, advances, totalApprovedCents, totalAdvancesCents, currency });
+      const totalWithdrawalAmount = withdrawals
+        .filter(w => !['rejected', 'cancelled'].includes(w.status))
+        .reduce((s, w) => s + w.amount, 0);
+      const currency = costSubs[0]?.currency || advances[0]?.currency || withdrawals[0]?.currency || 'SDG';
+      setCycleSummaryData({ costSubs, advances, advanceDetails, withdrawals, totalApprovedCents, totalAdvancesCents, totalWithdrawalAmount, currency });
     } catch {
       // Non-critical — summary is informational only
     } finally {
@@ -2035,14 +2116,36 @@ const MMPCycleClose = () => {
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(costRows), 'Cost Submissions');
 
-    // Sheet 2: Transport Advances
-    const advRows = cycleSummaryData.advances.map(r => ({
-      'Status': r.status,
-      'Count': r.count,
-      'Total Amount': fmt(r.totalCents, r.currency),
+    // Sheet 2: Transport Advances (per person)
+    const advRows = cycleSummaryData.advanceDetails.map(a => ({
+      'Recipient': a.requesterName,
+      'Site': a.siteName,
+      'Type': a.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
+      'Total Advanced': `${a.requestedAmount.toLocaleString()} ${a.currency}`,
+      'Paid': a.paidAmount > 0 ? `${a.paidAmount.toLocaleString()} ${a.currency}` : '—',
+      'Remaining': a.remainingAmount > 0 ? `${a.remainingAmount.toLocaleString()} ${a.currency}` : 'Settled',
+      'Status': a.remainingAmount <= 0 ? 'Fully Paid' : a.paidAmount > 0 ? 'Partial' : a.status,
     }));
-    advRows.push({ 'Status': 'TOTAL', 'Count': cycleSummaryData.advances.reduce((s, r) => s + r.count, 0), 'Total Amount': fmt(cycleSummaryData.totalAdvancesCents, cycleSummaryData.currency) });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(advRows), 'Transport Advances');
+    if (advRows.length > 0) {
+      const totalAdv = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.requestedAmount, 0);
+      const totalPaidAdv = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.paidAmount, 0);
+      const totalRem = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0);
+      advRows.push({ 'Recipient': 'TOTAL', 'Site': '', 'Type': '', 'Total Advanced': `${totalAdv.toLocaleString()} ${cycleSummaryData.currency}`, 'Paid': `${totalPaidAdv.toLocaleString()} ${cycleSummaryData.currency}`, 'Remaining': `${totalRem.toLocaleString()} ${cycleSummaryData.currency}`, 'Status': '' } as any);
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(advRows.length > 0 ? advRows : [{ 'Note': 'No transport advances found' }]), 'Transport Advances');
+
+    // Sheet 3: Withdrawal Requests
+    if (cycleSummaryData.withdrawals.length > 0) {
+      const wdRows = cycleSummaryData.withdrawals.map(w => ({
+        'Requested By': w.userName,
+        'Amount': `${w.amount.toLocaleString()} ${w.currency}`,
+        'Status': w.status,
+        'Reason': w.reason,
+      }));
+      const activeTotal = cycleSummaryData.totalWithdrawalAmount;
+      wdRows.push({ 'Requested By': 'TOTAL (active)', 'Amount': `${activeTotal.toLocaleString()} ${cycleSummaryData.currency}`, 'Status': '', 'Reason': '' } as any);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(wdRows), 'Withdrawal Requests');
+    }
 
     // Sheet 3: Coverage snapshot from siteVisitCounts
     const counts = siteVisitCounts[checklistMmpId];
@@ -3606,40 +3709,148 @@ const MMPCycleClose = () => {
                                       </div>
                                     )}
 
-                                    {/* Transport Advances */}
-                                    {cycleSummaryData.advances.length > 0 && (
+                                    {/* Transport Advances — per person */}
+                                    {cycleSummaryData.advanceDetails.length > 0 && (
                                       <div className="rounded-lg border overflow-hidden">
-                                        <div className="px-3 py-2 bg-muted/40 text-xs font-semibold">Transport Advances (Down-Payments)</div>
+                                        <div className="px-3 py-2 bg-blue-50 dark:bg-blue-950/40 text-xs font-semibold flex items-center gap-2">
+                                          <span>🚗 Transport Advances (Down-Payments)</span>
+                                          <Badge variant="secondary" className="ml-auto text-[10px]">
+                                            {cycleSummaryData.advanceDetails.length} advance{cycleSummaryData.advanceDetails.length !== 1 ? 's' : ''}
+                                          </Badge>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="border-b bg-muted/20">
+                                                <th className="px-3 py-1.5 text-left font-medium">Recipient</th>
+                                                <th className="px-3 py-1.5 text-left font-medium">Site</th>
+                                                <th className="px-3 py-1.5 text-left font-medium">Type</th>
+                                                <th className="px-3 py-1.5 text-right font-medium">Total Advanced</th>
+                                                <th className="px-3 py-1.5 text-right font-medium text-green-700">Paid</th>
+                                                <th className="px-3 py-1.5 text-right font-medium text-orange-600">Remaining</th>
+                                                <th className="px-3 py-1.5 text-center font-medium">Status</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {cycleSummaryData.advanceDetails.map(a => {
+                                                const isFullyPaid = a.remainingAmount <= 0;
+                                                const isPartial = a.paidAmount > 0 && !isFullyPaid;
+                                                return (
+                                                  <tr key={a.id} className="border-b last:border-0 hover:bg-muted/10">
+                                                    <td className="px-3 py-1.5 font-medium">{a.requesterName}</td>
+                                                    <td className="px-3 py-1.5 text-muted-foreground max-w-[120px] truncate">{a.siteName}</td>
+                                                    <td className="px-3 py-1.5">
+                                                      <Badge variant="outline" className="text-[10px]">
+                                                        {a.paymentType === 'full_advance' ? 'Full' : 'Installments'}
+                                                      </Badge>
+                                                    </td>
+                                                    <td className="px-3 py-1.5 text-right font-mono">{a.requestedAmount.toLocaleString()} {a.currency}</td>
+                                                    <td className="px-3 py-1.5 text-right font-mono text-green-700">{a.paidAmount > 0 ? `${a.paidAmount.toLocaleString()} ${a.currency}` : '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right font-mono text-orange-600">{a.remainingAmount > 0 ? `${a.remainingAmount.toLocaleString()} ${a.currency}` : <span className="text-green-600">✓ Settled</span>}</td>
+                                                    <td className="px-3 py-1.5 text-center">
+                                                      <Badge className={`text-[10px] ${isFullyPaid ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : isPartial ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'}`}>
+                                                        {isFullyPaid ? 'Fully Paid' : isPartial ? 'Partial' : a.status}
+                                                      </Badge>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                            <tfoot>
+                                              <tr className="bg-muted/30 font-semibold">
+                                                <td className="px-3 py-1.5" colSpan={3}>Total</td>
+                                                <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.advanceDetails.reduce((s, a) => s + a.requestedAmount, 0).toLocaleString()} {cycleSummaryData.currency}</td>
+                                                <td className="px-3 py-1.5 text-right font-mono text-green-700">{cycleSummaryData.advanceDetails.reduce((s, a) => s + a.paidAmount, 0).toLocaleString()} {cycleSummaryData.currency}</td>
+                                                <td className="px-3 py-1.5 text-right font-mono text-orange-600">{cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0).toLocaleString()} {cycleSummaryData.currency}</td>
+                                                <td />
+                                              </tr>
+                                            </tfoot>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Withdrawal Requests */}
+                                    {cycleSummaryData.withdrawals.length > 0 && (
+                                      <div className="rounded-lg border overflow-hidden">
+                                        <div className="px-3 py-2 bg-purple-50 dark:bg-purple-950/40 text-xs font-semibold flex items-center gap-2">
+                                          <span>💸 Cash Withdrawal Requests</span>
+                                          <Badge variant="secondary" className="ml-auto text-[10px]">
+                                            {cycleSummaryData.withdrawals.filter(w => !['rejected','cancelled'].includes(w.status)).length} active
+                                          </Badge>
+                                        </div>
                                         <table className="w-full text-xs">
                                           <thead>
                                             <tr className="border-b bg-muted/20">
-                                              <th className="px-3 py-1.5 text-left font-medium">Status</th>
-                                              <th className="px-3 py-1.5 text-right font-medium">Count</th>
-                                              <th className="px-3 py-1.5 text-right font-medium">Total Amount</th>
+                                              <th className="px-3 py-1.5 text-left font-medium">Requested By</th>
+                                              <th className="px-3 py-1.5 text-left font-medium">Reason</th>
+                                              <th className="px-3 py-1.5 text-right font-medium">Amount</th>
+                                              <th className="px-3 py-1.5 text-center font-medium">Status</th>
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {cycleSummaryData.advances.map(r => (
-                                              <tr key={r.status} className="border-b last:border-0 hover:bg-muted/10">
-                                                <td className="px-3 py-1.5"><Badge variant="outline" className="text-[10px]">{r.status}</Badge></td>
-                                                <td className="px-3 py-1.5 text-right text-muted-foreground">{r.count}</td>
-                                                <td className="px-3 py-1.5 text-right font-mono">{(r.totalCents / 100).toLocaleString()} {r.currency}</td>
+                                            {cycleSummaryData.withdrawals.map(w => (
+                                              <tr key={w.id} className="border-b last:border-0 hover:bg-muted/10">
+                                                <td className="px-3 py-1.5 font-medium">{w.userName}</td>
+                                                <td className="px-3 py-1.5 text-muted-foreground max-w-[160px] truncate">{w.reason}</td>
+                                                <td className="px-3 py-1.5 text-right font-mono">{w.amount.toLocaleString()} {w.currency}</td>
+                                                <td className="px-3 py-1.5 text-center">
+                                                  <Badge className={`text-[10px] ${w.status === 'paid' || w.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : w.status === 'rejected' || w.status === 'cancelled' ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'}`}>
+                                                    {w.status}
+                                                  </Badge>
+                                                </td>
                                               </tr>
                                             ))}
                                           </tbody>
                                           <tfoot>
                                             <tr className="bg-muted/30 font-semibold">
-                                              <td className="px-3 py-1.5">Total</td>
-                                              <td className="px-3 py-1.5 text-right">{cycleSummaryData.advances.reduce((s, r) => s + r.count, 0)}</td>
-                                              <td className="px-3 py-1.5 text-right font-mono">{(cycleSummaryData.totalAdvancesCents / 100).toLocaleString()} {cycleSummaryData.currency}</td>
+                                              <td className="px-3 py-1.5" colSpan={2}>Total (active)</td>
+                                              <td className="px-3 py-1.5 text-right font-mono">{cycleSummaryData.totalWithdrawalAmount.toLocaleString()} {cycleSummaryData.currency}</td>
+                                              <td />
                                             </tr>
                                           </tfoot>
                                         </table>
                                       </div>
                                     )}
 
-                                    {cycleSummaryData.costSubs.length === 0 && cycleSummaryData.advances.length === 0 && (
-                                      <p className="text-xs text-muted-foreground text-center py-2">No cost submissions or transport advances found for this cycle.</p>
+                                    {/* Outstanding Obligations Summary */}
+                                    {(cycleSummaryData.advanceDetails.length > 0 || cycleSummaryData.withdrawals.length > 0) && (() => {
+                                      const totalRemaining = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0);
+                                      const totalPending = cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0) / 100;
+                                      const totalOutstanding = totalRemaining + totalPending + cycleSummaryData.totalWithdrawalAmount;
+                                      return (
+                                        <div className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 p-3">
+                                          <p className="text-xs font-semibold text-orange-800 dark:text-orange-300 mb-2">📋 Financial Obligations After WFP Confirmation</p>
+                                          <div className="space-y-1.5 text-xs">
+                                            {totalRemaining > 0 && (
+                                              <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Advance balances still to settle</span>
+                                                <span className="font-mono font-semibold text-orange-700 dark:text-orange-300">{totalRemaining.toLocaleString()} {cycleSummaryData.currency}</span>
+                                              </div>
+                                            )}
+                                            {totalPending > 0 && (
+                                              <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Pending cost submissions (fees)</span>
+                                                <span className="font-mono font-semibold text-orange-700 dark:text-orange-300">{totalPending.toLocaleString()} {cycleSummaryData.currency}</span>
+                                              </div>
+                                            )}
+                                            {cycleSummaryData.totalWithdrawalAmount > 0 && (
+                                              <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Cash withdrawal requests</span>
+                                                <span className="font-mono font-semibold text-orange-700 dark:text-orange-300">{cycleSummaryData.totalWithdrawalAmount.toLocaleString()} {cycleSummaryData.currency}</span>
+                                              </div>
+                                            )}
+                                            <div className="flex justify-between border-t border-orange-200 dark:border-orange-700 pt-1.5 mt-1">
+                                              <span className="font-semibold">Total Outstanding</span>
+                                              <span className="font-mono font-bold text-orange-800 dark:text-orange-200">{totalOutstanding.toLocaleString()} {cycleSummaryData.currency}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {cycleSummaryData.costSubs.length === 0 && cycleSummaryData.advances.length === 0 && cycleSummaryData.withdrawals.length === 0 && (
+                                      <p className="text-xs text-muted-foreground text-center py-2">No cost submissions, advances, or withdrawal requests found for this cycle.</p>
                                     )}
 
                                     {/* Export button */}
