@@ -3154,6 +3154,7 @@ const MMPCycleClose = () => {
                               return (
                                 <div
                                   key={step.id}
+                                  ref={isCurrentStep ? (el) => { setTimeout(() => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150); } : undefined}
                                   className={`rounded-xl border transition-all ${
                                     isDone
                                       ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20 p-4'
