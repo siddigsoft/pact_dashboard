@@ -250,14 +250,31 @@ const MMPCycleClose = () => {
     status: string;
     reason: string;
   }
+  interface EnumeratorCostDetail {
+    id: string;
+    enumeratorName: string;
+    siteName: string;
+    siteCode: string;
+    state: string;
+    locality: string;
+    enumeratorFee: number;
+    transportFee: number;
+    totalCost: number;
+    status: string;
+    costAcknowledged: boolean;
+    currency: string;
+  }
   interface CycleSummaryData {
     costSubs: CostSubSummary[];
     advances: AdvanceSummary[];
     advanceDetails: AdvanceDetail[];
     withdrawals: WithdrawalDetail[];
+    enumeratorCosts: EnumeratorCostDetail[];
     totalApprovedCents: number;
     totalAdvancesCents: number;
     totalWithdrawalAmount: number;
+    totalEnumeratorFee: number;
+    totalTransportFee: number;
     currency: string;
   }
   const [cycleSummaryData, setCycleSummaryData] = useState<CycleSummaryData | null>(null);
@@ -386,13 +403,51 @@ const MMPCycleClose = () => {
         }));
       }
 
+      // Enumerator costs from mmp_site_entries
+      let enumeratorCosts: EnumeratorCostDetail[] = [];
+      const { data: siteEntries } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, enumerator_fee, transport_fee, cost, cost_acknowledged')
+        .eq('mmp_file_id', mmpId)
+        .not('enumerator_fee', 'is', null)
+        .order('site_name');
+      if (siteEntries && siteEntries.length > 0) {
+        const enumeratorIds = [...new Set((siteEntries as any[]).map((e: any) => e.accepted_by).filter(Boolean))];
+        const enumNameMap: Record<string, string> = {};
+        if (enumeratorIds.length > 0) {
+          const { data: enumProfiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, display_name')
+            .in('id', enumeratorIds);
+          (enumProfiles || []).forEach((p: any) => {
+            enumNameMap[p.id] = p.display_name || p.full_name || 'Unknown';
+          });
+        }
+        enumeratorCosts = (siteEntries as any[]).map((e: any) => ({
+          id: e.id,
+          enumeratorName: enumNameMap[e.accepted_by] || 'Unassigned',
+          siteName: e.site_name || '—',
+          siteCode: e.site_code || '—',
+          state: e.state || '—',
+          locality: e.locality || '—',
+          enumeratorFee: e.enumerator_fee ?? 0,
+          transportFee: e.transport_fee ?? 0,
+          totalCost: e.cost ?? ((e.enumerator_fee ?? 0) + (e.transport_fee ?? 0)),
+          status: e.status || 'unknown',
+          costAcknowledged: e.cost_acknowledged ?? false,
+          currency: 'SDG',
+        }));
+      }
+
       const totalApprovedCents = costSubs.reduce((s, r) => s + r.approvedCents, 0);
       const totalAdvancesCents = advances.reduce((s, r) => s + r.totalCents, 0);
       const totalWithdrawalAmount = withdrawals
         .filter(w => !['rejected', 'cancelled'].includes(w.status))
         .reduce((s, w) => s + w.amount, 0);
+      const totalEnumeratorFee = enumeratorCosts.reduce((s, e) => s + e.enumeratorFee, 0);
+      const totalTransportFee = enumeratorCosts.reduce((s, e) => s + e.transportFee, 0);
       const currency = costSubs[0]?.currency || advances[0]?.currency || withdrawals[0]?.currency || 'SDG';
-      setCycleSummaryData({ costSubs, advances, advanceDetails, withdrawals, totalApprovedCents, totalAdvancesCents, totalWithdrawalAmount, currency });
+      setCycleSummaryData({ costSubs, advances, advanceDetails, withdrawals, enumeratorCosts, totalApprovedCents, totalAdvancesCents, totalWithdrawalAmount, totalEnumeratorFee, totalTransportFee, currency });
     } catch {
       // Non-critical — summary is informational only
     } finally {
@@ -2147,7 +2202,36 @@ const MMPCycleClose = () => {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(wdRows), 'Withdrawal Requests');
     }
 
-    // Sheet 3: Coverage snapshot from siteVisitCounts
+    // Sheet: Enumerator Costs
+    if (cycleSummaryData.enumeratorCosts.length > 0) {
+      const enumRows = cycleSummaryData.enumeratorCosts.map(e => ({
+        'Enumerator': e.enumeratorName,
+        'Site Name': e.siteName,
+        'Site Code': e.siteCode,
+        'State': e.state,
+        'Locality': e.locality,
+        'Enumerator Fee (SDG)': e.enumeratorFee,
+        'Transport Fee (SDG)': e.transportFee,
+        'Total Cost (SDG)': e.totalCost,
+        'Visit Status': e.status,
+        'Cost Acknowledged': e.costAcknowledged ? 'Yes' : 'No',
+      }));
+      enumRows.push({
+        'Enumerator': 'TOTAL',
+        'Site Name': '',
+        'Site Code': '',
+        'State': '',
+        'Locality': '',
+        'Enumerator Fee (SDG)': cycleSummaryData.totalEnumeratorFee,
+        'Transport Fee (SDG)': cycleSummaryData.totalTransportFee,
+        'Total Cost (SDG)': cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee,
+        'Visit Status': '',
+        'Cost Acknowledged': '',
+      } as any);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(enumRows), 'Enumerator Costs');
+    }
+
+    // Sheet: Coverage snapshot from siteVisitCounts
     const counts = siteVisitCounts[checklistMmpId];
     if (counts) {
       const covRows = Object.entries(counts.statusCounts).map(([status, count]) => ({ 'Status': status, 'Count': count }));
@@ -2157,6 +2241,191 @@ const MMPCycleClose = () => {
 
     XLSX.writeFile(wb, `${mmpName}-cycle-summary-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }, [cycleSummaryData, checklistMmpId, mmpFiles, siteVisitCounts]);
+
+  const exportCycleSummaryPDF = useCallback(async () => {
+    if (!cycleSummaryData || !checklistMmpId) return;
+    const mmpName = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.name || checklistMmpId?.slice(0, 8) || 'cycle';
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF('landscape');
+    const genDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    // Header
+    doc.setFillColor(30, 64, 175);
+    doc.rect(0, 0, 297, 28, 'F');
+    doc.setFontSize(18);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PACT Field Operations', 14, 12);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Cycle Financial Obligations Report', 14, 21);
+    doc.setFontSize(10);
+    doc.text(`Generated: ${genDate}`, 200, 12);
+    doc.text(`MMP: ${mmpName}`, 200, 20);
+
+    let y = 35;
+
+    // Summary KPIs
+    const totalEnumCost = cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee;
+    const totalRemainingAdv = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0);
+    const totalPendingFees = cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0) / 100;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Financial Summary', 14, y);
+    y += 5;
+    autoTable(doc, {
+      startY: y,
+      head: [['Category', 'Amount (SDG)']],
+      body: [
+        ['Enumerator Fees (Field Staff)', cycleSummaryData.totalEnumeratorFee.toLocaleString()],
+        ['Transport Fees', cycleSummaryData.totalTransportFee.toLocaleString()],
+        ['Total Enumerator + Transport Cost', totalEnumCost.toLocaleString()],
+        ['Approved Operational Cost Submissions', (cycleSummaryData.totalApprovedCents / 100).toLocaleString()],
+        ['Pending Cost Submissions (fees)', totalPendingFees.toLocaleString()],
+        ['Advance Balances — Still to Settle', totalRemainingAdv.toLocaleString()],
+        ['Cash Withdrawal Requests (active)', cycleSummaryData.totalWithdrawalAmount.toLocaleString()],
+        ['TOTAL OUTSTANDING', (totalEnumCost + totalPendingFees + totalRemainingAdv + cycleSummaryData.totalWithdrawalAmount).toLocaleString()],
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 10, fontStyle: 'bold', textColor: 255 },
+      bodyStyles: { fontSize: 9 },
+      didParseCell: (data) => {
+        if (data.row.index === 7) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [254, 243, 199];
+        }
+      },
+    });
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    // Section 1: Enumerator Costs
+    if (cycleSummaryData.enumeratorCosts.length > 0) {
+      if (y > 160) { doc.addPage(); y = 20; }
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text('Enumerator & Transport Costs by Site', 14, y);
+      y += 5;
+      autoTable(doc, {
+        startY: y,
+        head: [['Enumerator', 'Site Name', 'Code', 'State', 'Locality', 'Enum. Fee', 'Transport', 'Total', 'Status', 'Ack.']],
+        body: cycleSummaryData.enumeratorCosts.map(e => [
+          e.enumeratorName,
+          e.siteName.substring(0, 28),
+          e.siteCode,
+          e.state,
+          e.locality,
+          e.enumeratorFee.toLocaleString(),
+          e.transportFee.toLocaleString(),
+          e.totalCost.toLocaleString(),
+          e.status.replace(/_/g, ' '),
+          e.costAcknowledged ? '✓' : '—',
+        ]),
+        foot: [['TOTAL', '', '', '', '',
+          cycleSummaryData.totalEnumeratorFee.toLocaleString(),
+          cycleSummaryData.totalTransportFee.toLocaleString(),
+          (cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee).toLocaleString(),
+          '', '']],
+        theme: 'striped',
+        headStyles: { fillColor: [5, 150, 105], fontSize: 8, fontStyle: 'bold', textColor: 255 },
+        footStyles: { fillColor: [209, 250, 229], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 32 }, 1: { cellWidth: 40 }, 2: { cellWidth: 15 },
+          3: { cellWidth: 22 }, 4: { cellWidth: 22 }, 5: { cellWidth: 22 },
+          6: { cellWidth: 22 }, 7: { cellWidth: 22 }, 8: { cellWidth: 22 }, 9: { cellWidth: 10 },
+        },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Section 2: Transport Advances per person
+    if (cycleSummaryData.advanceDetails.length > 0) {
+      if (y > 160) { doc.addPage(); y = 20; }
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text('Transport Advances (Down-Payments)', 14, y);
+      y += 5;
+      autoTable(doc, {
+        startY: y,
+        head: [['Recipient', 'Site', 'Type', 'Total Advanced', 'Paid', 'Remaining', 'Status']],
+        body: cycleSummaryData.advanceDetails.map(a => [
+          a.requesterName,
+          a.siteName.substring(0, 30),
+          a.paymentType === 'full_advance' ? 'Full' : 'Installments',
+          `${a.requestedAmount.toLocaleString()} ${a.currency}`,
+          a.paidAmount > 0 ? `${a.paidAmount.toLocaleString()} ${a.currency}` : '—',
+          a.remainingAmount > 0 ? `${a.remainingAmount.toLocaleString()} ${a.currency}` : 'Settled',
+          a.remainingAmount <= 0 ? 'Fully Paid' : a.paidAmount > 0 ? 'Partial' : a.status,
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246], fontSize: 9, fontStyle: 'bold', textColor: 255 },
+        bodyStyles: { fontSize: 8 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Section 3: Operational Cost Submissions
+    if (cycleSummaryData.costSubs.length > 0) {
+      if (y > 160) { doc.addPage(); y = 20; }
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text('Operational Cost Submissions', 14, y);
+      y += 5;
+      autoTable(doc, {
+        startY: y,
+        head: [['Category', 'Count', 'Approved (SDG)', 'Pending (SDG)', 'Total (SDG)']],
+        body: cycleSummaryData.costSubs.map(r => [
+          r.category, r.count,
+          (r.approvedCents / 100).toLocaleString(),
+          (r.pendingCents / 100).toLocaleString(),
+          ((r.approvedCents + r.pendingCents) / 100).toLocaleString(),
+        ]),
+        foot: [['TOTAL', cycleSummaryData.costSubs.reduce((s, r) => s + r.count, 0),
+          (cycleSummaryData.totalApprovedCents / 100).toLocaleString(),
+          (cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0) / 100).toLocaleString(),
+          ((cycleSummaryData.totalApprovedCents + cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0)) / 100).toLocaleString()]],
+        theme: 'striped',
+        headStyles: { fillColor: [124, 58, 237], fontSize: 9, fontStyle: 'bold', textColor: 255 },
+        footStyles: { fillColor: [237, 233, 254], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Section 4: Withdrawal Requests
+    if (cycleSummaryData.withdrawals.length > 0) {
+      if (y > 160) { doc.addPage(); y = 20; }
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text('Cash Withdrawal Requests', 14, y);
+      y += 5;
+      autoTable(doc, {
+        startY: y,
+        head: [['Requested By', 'Amount (SDG)', 'Status', 'Reason']],
+        body: cycleSummaryData.withdrawals.map(w => [w.userName, w.amount.toLocaleString(), w.status, w.reason.substring(0, 50)]),
+        theme: 'striped',
+        headStyles: { fillColor: [168, 85, 247], fontSize: 9, fontStyle: 'bold', textColor: 255 },
+        bodyStyles: { fontSize: 9 },
+      });
+    }
+
+    // Footer on all pages
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(`PACT Command Center — Confidential — Page ${i} of ${pageCount}`, 14, 200);
+    }
+
+    doc.save(`${mmpName}-cycle-financial-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+  }, [cycleSummaryData, checklistMmpId, mmpFiles]);
 
   const handleFinalizeCycleClose = async (mmpId: string) => {
     if (!canManageCycle) return;
@@ -3849,21 +4118,82 @@ const MMPCycleClose = () => {
                                       );
                                     })()}
 
-                                    {cycleSummaryData.costSubs.length === 0 && cycleSummaryData.advances.length === 0 && cycleSummaryData.withdrawals.length === 0 && (
-                                      <p className="text-xs text-muted-foreground text-center py-2">No cost submissions, advances, or withdrawal requests found for this cycle.</p>
+                                    {/* Enumerator Costs */}
+                                    {cycleSummaryData.enumeratorCosts.length > 0 && (
+                                      <div className="rounded-lg border overflow-hidden">
+                                        <div className="px-3 py-2 bg-green-50 dark:bg-green-950/40 text-xs font-semibold flex items-center gap-2">
+                                          <span>👤 Enumerator & Transport Costs (Site Visits)</span>
+                                          <Badge variant="secondary" className="ml-auto text-[10px]">
+                                            {cycleSummaryData.enumeratorCosts.length} sites
+                                          </Badge>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="border-b bg-muted/20">
+                                                <th className="px-3 py-1.5 text-left font-medium">Enumerator</th>
+                                                <th className="px-3 py-1.5 text-left font-medium">Site</th>
+                                                <th className="px-3 py-1.5 text-left font-medium">State / Locality</th>
+                                                <th className="px-3 py-1.5 text-right font-medium text-blue-700">Enum. Fee</th>
+                                                <th className="px-3 py-1.5 text-right font-medium text-indigo-700">Transport</th>
+                                                <th className="px-3 py-1.5 text-right font-medium font-semibold">Total</th>
+                                                <th className="px-3 py-1.5 text-center font-medium">Ack.</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {cycleSummaryData.enumeratorCosts.map(e => (
+                                                <tr key={e.id} className="border-b last:border-0 hover:bg-muted/10">
+                                                  <td className="px-3 py-1.5 font-medium">{e.enumeratorName}</td>
+                                                  <td className="px-3 py-1.5 text-muted-foreground max-w-[110px] truncate">{e.siteName}</td>
+                                                  <td className="px-3 py-1.5 text-muted-foreground text-[11px]">{e.state}{e.locality && e.locality !== '—' ? ` / ${e.locality}` : ''}</td>
+                                                  <td className="px-3 py-1.5 text-right font-mono text-blue-700">{e.enumeratorFee > 0 ? `${e.enumeratorFee.toLocaleString()} ${e.currency}` : '—'}</td>
+                                                  <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{e.transportFee > 0 ? `${e.transportFee.toLocaleString()} ${e.currency}` : '—'}</td>
+                                                  <td className="px-3 py-1.5 text-right font-mono font-semibold">{e.totalCost.toLocaleString()} {e.currency}</td>
+                                                  <td className="px-3 py-1.5 text-center">{e.costAcknowledged ? <span className="text-green-600">✓</span> : <span className="text-muted-foreground">—</span>}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                            <tfoot>
+                                              <tr className="bg-muted/30 font-semibold">
+                                                <td className="px-3 py-1.5" colSpan={3}>Total</td>
+                                                <td className="px-3 py-1.5 text-right font-mono text-blue-700">{cycleSummaryData.totalEnumeratorFee.toLocaleString()} {cycleSummaryData.currency}</td>
+                                                <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{cycleSummaryData.totalTransportFee.toLocaleString()} {cycleSummaryData.currency}</td>
+                                                <td className="px-3 py-1.5 text-right font-mono">{(cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee).toLocaleString()} {cycleSummaryData.currency}</td>
+                                                <td />
+                                              </tr>
+                                            </tfoot>
+                                          </table>
+                                        </div>
+                                      </div>
                                     )}
 
-                                    {/* Export button */}
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="w-full gap-1.5"
-                                      onClick={exportCycleSummaryExcel}
-                                      data-testid="button-export-cycle-summary"
-                                    >
-                                      <FileSpreadsheet className="h-4 w-4" />
-                                      Export Full Summary to Excel
-                                    </Button>
+                                    {cycleSummaryData.costSubs.length === 0 && cycleSummaryData.advances.length === 0 && cycleSummaryData.withdrawals.length === 0 && cycleSummaryData.enumeratorCosts.length === 0 && (
+                                      <p className="text-xs text-muted-foreground text-center py-2">No cost submissions, advances, withdrawal requests, or enumerator costs found for this cycle.</p>
+                                    )}
+
+                                    {/* Export buttons */}
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1 gap-1.5"
+                                        onClick={exportCycleSummaryExcel}
+                                        data-testid="button-export-cycle-summary-excel"
+                                      >
+                                        <FileSpreadsheet className="h-4 w-4" />
+                                        Export to Excel
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1 gap-1.5 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
+                                        onClick={exportCycleSummaryPDF}
+                                        data-testid="button-export-cycle-summary-pdf"
+                                      >
+                                        <FileText className="h-4 w-4" />
+                                        Export Full PDF Report
+                                      </Button>
+                                    </div>
                                   </>
                                 )}
                               </CollapsibleContent>
