@@ -663,6 +663,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                     ))}
                   </SelectContent>
                 </Select>
+                {!selectedProjectId && (
+                  <p className="text-[11px] text-red-600">Project selection is compulsory before creating ad-hoc sites.</p>
+                )}
               </div>
 
               {/* ── MANUAL ENTRY ── */}
@@ -902,7 +905,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                 )}
                 <Button
                   onClick={() => submitRows(activeRows)}
-                  disabled={submitting || validCount === 0}
+                  disabled={submitting || validCount === 0 || !selectedProjectId}
                   className="ml-auto flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
                   data-testid="button-create-adhoc-visits"
                 >
