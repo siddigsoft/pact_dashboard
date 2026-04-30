@@ -3442,10 +3442,34 @@ const MMPCycleClose = () => {
 
         {/* ── PENDING FINANCE TAB ── */}
         <TabsContent value="finance" className="space-y-4">
+          {/* MMP selector row — always visible at the top of the Finance tab */}
+          <Card>
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">View MMP:</span>
+                <Select value={selectedMmpId} onValueChange={setSelectedMmpId} data-testid="select-finance-mmp">
+                  <SelectTrigger className="w-[260px] h-8 text-sm" data-testid="trigger-finance-mmp">
+                    <SelectValue placeholder="Select an MMP…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">— Select an MMP —</SelectItem>
+                    {activeMmps.map(m => (
+                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedMmpId !== 'all' && (
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setSelectedMmpId('all')} data-testid="button-clear-finance-mmp">
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
           {selectedMmpId === 'all' ? (
             <Card>
               <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                Select a specific MMP from the <strong>Active Cycles</strong> tab, then come back here to view its pending finance items.
+                Select an MMP above to view its pending finance items.
               </CardContent>
             </Card>
           ) : financeLoading ? (
