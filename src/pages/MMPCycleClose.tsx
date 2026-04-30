@@ -3022,9 +3022,15 @@ const MMPCycleClose = () => {
             )}
           </div>
 
-          {filteredSites.length !== uncoveredSites.length && (
+          {(filteredSites.length !== uncoveredSites.length || selectedMmpId !== 'all') && (
             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground px-1">
-              <span data-testid="text-filter-count">Showing {filteredSites.length} of {uncoveredSites.length} uncovered sites</span>
+              <span data-testid="text-filter-count">
+                Showing {filteredSites.length} of{' '}
+                {selectedMmpId !== 'all'
+                  ? (siteVisitCounts[selectedMmpId]?.total ?? uncoveredSites.filter(s => s.mmp_id === selectedMmpId).length)
+                  : uncoveredSites.length}{' '}
+                {selectedMmpId !== 'all' ? 'sites in this MMP' : 'uncovered sites'}
+              </span>
               <Button variant="ghost" size="sm" onClick={() => { setSelectedMmpId('all'); setFilterHub('all'); setFilterReason('all'); setSearchQuery(''); }} data-testid="button-clear-filters">
                 Clear Filters
               </Button>
