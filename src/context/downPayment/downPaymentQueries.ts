@@ -127,6 +127,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   // Always fetch without a join so RLS on mmp_site_entries never silently
   // drops down_payment_requests rows.  Geographic fields (state/locality/mmpName)
   // are populated from metadata first, then filled in by the enrichment RPC below.
+  console.log('[DownPayment] Fetching — role:', userRole, '| hubId:', user.hubId, '| userId:', user.id);
   let allData: any[] = [];
   let error: any = null;
   for (let _dpf = 0; ; _dpf += 1000) {
@@ -134,6 +135,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     if (_dpe) { error = _dpe; break; }
     if (!_dpp) break;
     allData = [...allData, ..._dpp];
+    console.log('[DownPayment] Page', _dpf / 1000, '— rows in page:', _dpp.length, '| total so far:', allData.length);
     if (_dpp.length < 1000) break;
   }
   let data: any[] | null = allData.length > 0 ? allData : null;
