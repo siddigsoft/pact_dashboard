@@ -243,11 +243,80 @@ const MMPCycleClose = () => {
   const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
 
   // Finance tab state
-  type FinanceCost = { id: string; description: string | null; vendor: string | null; amount_cents: number; currency: string | null; expense_date: string | null; expense_category: string | null };
+  type FinanceCost = { id: string; description: string | null; vendor: string | null; amount_cents: number; currency: string | null; expense_date: string | null; expense_category: string | null; tier1_status: string | null; tier2_status: string | null; tier3_status: string | null };
   type FinanceAdvance = { id: string; status: string; amount_cents: number | null; currency: string | null };
   const [financeCosts, setFinanceCosts] = useState<FinanceCost[]>([]);
   const [financeAdvances, setFinanceAdvances] = useState<FinanceAdvance[]>([]);
   const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeApproving, setFinanceApproving] = useState<Set<string>>(new Set());
+  const [financeApprovingAll, setFinanceApprovingAll] = useState(false);
+
+  const handleApproveCost = useCallback(async (costId: string) => {
+    const cost = financeCosts.find(c => c.id === costId);
+    if (!cost || !currentUser?.id) return;
+    const now = new Date().toISOString();
+    let update: Record<string, string> = {};
+    if (cost.tier1_status === 'pending') {
+      update = { tier1_status: 'approved', tier1_approved_by: currentUser.id, tier1_approved_at: now };
+    } else if (cost.tier2_status === 'pending') {
+      update = { tier2_status: 'approved', tier2_approved_by: currentUser.id, tier2_approved_at: now };
+    } else if (cost.tier3_status === 'pending') {
+      update = { tier3_status: 'approved', tier3_approved_by: currentUser.id, tier3_approved_at: now };
+    } else return;
+    setFinanceApproving(prev => new Set(prev).add(costId));
+    try {
+      const { error } = await supabase.from('operational_cost_submissions').update(update).eq('id', costId);
+      if (error) throw error;
+      setFinanceCosts(prev => prev.filter(c => {
+        if (c.id !== costId) return true;
+        const updated = { ...c, ...update };
+        return updated.tier1_status === 'pending' || updated.tier2_status === 'pending' || updated.tier3_status === 'pending';
+      }));
+      toast({ title: 'Approved', description: 'Cost submission approved.' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setFinanceApproving(prev => { const s = new Set(prev); s.delete(costId); return s; });
+    }
+  }, [financeCosts, currentUser?.id, toast]);
+
+  const handleApproveAllCosts = useCallback(async () => {
+    if (!currentUser?.id || financeCosts.length === 0) return;
+    setFinanceApprovingAll(true);
+    const now = new Date().toISOString();
+    try {
+      await Promise.all(financeCosts.map(async cost => {
+        let update: Record<string, string> = {};
+        if (cost.tier1_status === 'pending') {
+          update = { tier1_status: 'approved', tier1_approved_by: currentUser.id!, tier1_approved_at: now };
+        } else if (cost.tier2_status === 'pending') {
+          update = { tier2_status: 'approved', tier2_approved_by: currentUser.id!, tier2_approved_at: now };
+        } else if (cost.tier3_status === 'pending') {
+          update = { tier3_status: 'approved', tier3_approved_by: currentUser.id!, tier3_approved_at: now };
+        } else return;
+        await supabase.from('operational_cost_submissions').update(update).eq('id', cost.id);
+      }));
+      setFinanceCosts([]);
+      toast({ title: 'All Approved', description: `${financeCosts.length} cost submissions approved.` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally {
+      setFinanceApprovingAll(false);
+    }
+  }, [financeCosts, currentUser?.id, toast]);
+
+  const refetchFinance = useCallback(async () => {
+    if (!selectedMmpId || selectedMmpId === 'all') return;
+    setFinanceLoading(true);
+    try {
+      const { data: costs } = await supabase
+        .from('operational_cost_submissions')
+        .select('id, description, vendor, amount_cents, currency, expense_date, expense_category, tier1_status, tier2_status, tier3_status')
+        .eq('mmp_id', selectedMmpId)
+        .or('tier1_status.eq.pending,tier2_status.eq.pending,tier3_status.eq.pending');
+      setFinanceCosts((costs as FinanceCost[]) || []);
+    } finally { setFinanceLoading(false); }
+  }, [selectedMmpId]);
 
   useEffect(() => {
     if (activeTab !== 'finance' || !selectedMmpId || selectedMmpId === 'all') {
@@ -260,9 +329,9 @@ const MMPCycleClose = () => {
       try {
         const { data: costs } = await supabase
           .from('operational_cost_submissions')
-          .select('id, description, vendor, amount_cents, currency, expense_date, expense_category')
+          .select('id, description, vendor, amount_cents, currency, expense_date, expense_category, tier1_status, tier2_status, tier3_status')
           .eq('mmp_id', selectedMmpId)
-          .or('tier1_status.eq.pending,tier2_status.eq.pending');
+          .or('tier1_status.eq.pending,tier2_status.eq.pending,tier3_status.eq.pending');
         setFinanceCosts((costs as FinanceCost[]) || []);
 
         const { data: siteEntries } = await supabase
@@ -3492,8 +3561,33 @@ const MMPCycleClose = () => {
                     <ReceiptText className="h-4 w-4 text-amber-500" />
                     Pending Cost Submissions
                     {financeCosts.length > 0 && (
-                      <Badge variant="destructive" className="ml-auto">{financeCosts.length}</Badge>
+                      <Badge variant="destructive" className="ml-1">{financeCosts.length}</Badge>
                     )}
+                    <div className="ml-auto flex items-center gap-2">
+                      {financeCosts.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                          onClick={handleApproveAllCosts}
+                          disabled={financeApprovingAll}
+                          data-testid="button-approve-all-costs"
+                        >
+                          {financeApprovingAll ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                          Approve All
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={refetchFinance}
+                        disabled={financeLoading}
+                        data-testid="button-refresh-finance-costs"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${financeLoading ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </div>
                   </CardTitle>
                   <CardDescription className="text-xs">
                     {mmpFiles?.find(m => m.id === selectedMmpId)?.name ?? 'This MMP'} — cost submissions waiting for approval
@@ -3505,43 +3599,55 @@ const MMPCycleClose = () => {
                       <CheckCircle2 className="h-4 w-4" /> All cost submissions are approved — no pending items.
                     </p>
                   ) : (
-                    <>
-                      <div className="rounded-lg border overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b bg-muted/30">
-                              <th className="px-3 py-2 text-left font-medium">Description / Vendor</th>
-                              <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">Category</th>
-                              <th className="px-3 py-2 text-right font-medium">Amount</th>
-                              <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">Date</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {financeCosts.map(c => (
+                    <div className="rounded-lg border overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b bg-muted/30">
+                            <th className="px-3 py-2 text-left font-medium">Description / Vendor</th>
+                            <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">Category</th>
+                            <th className="px-3 py-2 text-right font-medium">Amount</th>
+                            <th className="px-3 py-2 text-left font-medium hidden md:table-cell">Date</th>
+                            <th className="px-3 py-2 text-center font-medium">Stage</th>
+                            <th className="px-3 py-2 text-center font-medium">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {financeCosts.map(c => {
+                            const pendingTier = c.tier1_status === 'pending' ? 'Tier 1' : c.tier2_status === 'pending' ? 'Tier 2' : c.tier3_status === 'pending' ? 'Tier 3' : null;
+                            const isApproving = financeApproving.has(c.id);
+                            return (
                               <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
-                                <td className="px-3 py-2 max-w-[200px] truncate">{c.description || c.vendor || '—'}</td>
+                                <td className="px-3 py-2 max-w-[180px] truncate">{c.description || c.vendor || '—'}</td>
                                 <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">{c.expense_category || '—'}</td>
                                 <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
                                   {c.amount_cents != null ? `${(c.amount_cents / 100).toLocaleString()} ${c.currency ?? 'SDG'}` : '—'}
                                 </td>
-                                <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">{c.expense_date ?? '—'}</td>
+                                <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">{c.expense_date ?? '—'}</td>
+                                <td className="px-3 py-2 text-center">
+                                  {pendingTier && (
+                                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300">
+                                      {pendingTier}
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 text-[11px] px-2 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-600 dark:text-green-400 dark:hover:bg-green-900/20"
+                                    onClick={() => handleApproveCost(c.id)}
+                                    disabled={isApproving || !pendingTier}
+                                    data-testid={`button-approve-cost-${c.id}`}
+                                  >
+                                    {isApproving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Approve'}
+                                  </Button>
+                                </td>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="mt-3 flex justify-end">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/cost-submission?mmpId=${selectedMmpId}&mmpName=${encodeURIComponent(mmpFiles?.find(m => m.id === selectedMmpId)?.name ?? '')}&tab=pending`)}
-                          data-testid="button-open-cost-submission-from-finance-tab"
-                        >
-                          Approve in Cost Submission page
-                          <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-                        </Button>
-                      </div>
-                    </>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
