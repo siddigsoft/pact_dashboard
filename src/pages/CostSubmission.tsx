@@ -108,6 +108,7 @@ interface OperationalCostSubmission {
   hub_id: string | null;
   project_id: string | null;
   mmp_file_id: string | null;
+  mmp_id: string | null;
   submitted_by: string;
   submitted_at: string | null;
   submitter_role: string | null;
@@ -238,6 +239,21 @@ const CostSubmission = () => {
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
   const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
+  const [mmpFilter, setMmpFilter] = useState<string>('all');
+  const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
+
+  // Derive distinct MMP options from loaded cost data
+  useEffect(() => {
+    const ids = [...new Set(operationalCosts.map(o => o.mmp_id).filter(Boolean))] as string[];
+    if (ids.length === 0) { setMmpOptions([]); return; }
+    supabase
+      .from('mmp_files')
+      .select('id, name')
+      .in('id', ids)
+      .then(({ data }) => {
+        setMmpOptions((data || []).map((m: { id: string; name: string }) => ({ id: m.id, name: m.name })));
+      });
+  }, [operationalCosts]);
   
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
@@ -578,10 +594,14 @@ const CostSubmission = () => {
     }
     // Cycle-close context: narrow to only this MMP's submissions
     if (cycleContextMmpId) {
-      filtered = filtered.filter(o => (o as any).mmp_id === cycleContextMmpId || (o as any).mmpFileId === cycleContextMmpId);
+      filtered = filtered.filter(o => o.mmp_id === cycleContextMmpId || (o as any).mmpFileId === cycleContextMmpId);
+    }
+    // Manual MMP filter
+    if (mmpFilter !== 'all') {
+      filtered = filtered.filter(o => o.mmp_id === mmpFilter);
     }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase();
@@ -3314,7 +3334,27 @@ const CostSubmission = () => {
             </CardHeader>
           </Card>
 
-          {/* Status Filter Tabs */}
+          {/* Status Filter Tabs + MMP Filter */}
+          <div className="flex items-center gap-2 flex-wrap mb-1" data-testid="mmp-filter-bar">
+            {mmpOptions.length > 0 && !cycleContextMmpId && (
+              <Select value={mmpFilter} onValueChange={setMmpFilter} data-testid="select-mmp-filter">
+                <SelectTrigger className="h-8 text-xs w-[220px]" data-testid="trigger-mmp-filter">
+                  <SelectValue placeholder="All MMPs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All MMPs</SelectItem>
+                  {mmpOptions.map(m => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {mmpFilter !== 'all' && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setMmpFilter('all')} data-testid="button-clear-mmp-filter">
+                Clear MMP filter
+              </Button>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
             {([
               { key: 'all', label: 'All', labelAr: 'الكل', count: filteredOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
