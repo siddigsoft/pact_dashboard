@@ -36,6 +36,8 @@ interface SiteVisitCounts {
   pending: number;
   assigned: number;
   dispatched: number;
+  accepted: number;
+  notCovered: number;
 }
 
 type CloseScope = 'full' | 'hub' | 'state' | 'activity';
@@ -213,6 +215,8 @@ export function CycleMMPCard({
   const pendingCount = siteVisitCounts?.pending || 0;
   const assignedCount = siteVisitCounts?.assigned || 0;
   const dispatchedCount = siteVisitCounts?.dispatched || 0;
+  const acceptedCount = siteVisitCounts?.accepted || 0;
+  const notCoveredCount = siteVisitCounts?.notCovered || 0;
   const coveragePercent = totalSiteCount > 0 ? Math.round((completedCount / totalSiteCount) * 100) : 0;
 
   const mmpStatus = mmp.status || 'pending';
@@ -326,11 +330,13 @@ export function CycleMMPCard({
                     </span>
                   </div>
                   <Progress value={coveragePercent} className="h-2 mb-2.5" />
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-3 gap-1.5">
                     <StatBox count={completedCount} label="Done" labelAr="مكتمل" colorClass="bg-emerald-500/10" testId={`text-completed-count-${mmp.id}`} />
-                    <StatBox count={pendingCount} label="Pending" labelAr="معلق" colorClass="bg-yellow-500/10" testId={`text-pending-count-${mmp.id}`} />
-                    <StatBox count={assignedCount} label="Assigned" labelAr="معين" colorClass="bg-blue-500/10" testId={`text-assigned-count-${mmp.id}`} />
+                    <StatBox count={acceptedCount} label="Accepted" labelAr="مقبول" colorClass="bg-teal-500/10" testId={`text-accepted-count-${mmp.id}`} />
                     <StatBox count={dispatchedCount} label="Sent" labelAr="مرسل" colorClass="bg-purple-500/10" testId={`text-dispatched-count-${mmp.id}`} />
+                    <StatBox count={assignedCount} label="Assigned" labelAr="معين" colorClass="bg-blue-500/10" testId={`text-assigned-count-${mmp.id}`} />
+                    <StatBox count={pendingCount} label="Pending" labelAr="معلق" colorClass="bg-yellow-500/10" testId={`text-pending-count-${mmp.id}`} />
+                    <StatBox count={notCoveredCount} label="Not Covered" labelAr="غير مغطى" colorClass="bg-red-500/10" testId={`text-not-covered-count-${mmp.id}`} />
                   </div>
                 </div>
               </div>

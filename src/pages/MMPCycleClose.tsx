@@ -213,7 +213,7 @@ const MMPCycleClose = () => {
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
   const [selectedMmpId, setSelectedMmpId] = useState<string>('all');
-  const [siteVisitCounts, setSiteVisitCounts] = useState<Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }>>({});
+  const [siteVisitCounts, setSiteVisitCounts] = useState<Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number; accepted: number; notCovered: number }>>({});
   const followUps = useMemo<FollowUpRecord[]>(() => {
     return uncoveredSites
       .filter(s => s.not_covered_reason && HIGH_PRIORITY_REASONS.includes(s.not_covered_reason))
@@ -1073,14 +1073,16 @@ const MMPCycleClose = () => {
       if (mmpIds.length === 0) return;
       try {
         const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified'];
-        const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }> = {};
+        const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number; accepted: number; notCovered: number }> = {};
         await Promise.all(mmpIds.map(async (mmpId) => {
-          const [totalRes, completedRes, pendingRes, assignedRes, dispatchedRes] = await Promise.all([
+          const [totalRes, completedRes, pendingRes, assignedRes, dispatchedRes, acceptedRes, notCoveredRes] = await Promise.all([
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId),
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).in('status', coveredStatuses),
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'pending'),
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'assigned'),
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'dispatched'),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'accepted'),
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('not_covered_flag', true),
           ]);
           counts[mmpId] = {
             total: totalRes.count ?? 0,
@@ -1088,6 +1090,8 @@ const MMPCycleClose = () => {
             pending: pendingRes.count ?? 0,
             assigned: assignedRes.count ?? 0,
             dispatched: dispatchedRes.count ?? 0,
+            accepted: acceptedRes.count ?? 0,
+            notCovered: notCoveredRes.count ?? 0,
           };
         }));
         setSiteVisitCounts(counts);
