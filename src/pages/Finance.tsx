@@ -919,7 +919,7 @@ const Finance: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             {financeInbox.pendingCosts > 0 && (
               <button
-                onClick={() => navigate('/cost-submissions?tab=pending')}
+                onClick={() => navigate('/cost-submission')}
                 className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
                 data-testid="inbox-pending-costs"
               >
