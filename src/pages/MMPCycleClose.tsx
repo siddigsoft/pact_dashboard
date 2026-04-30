@@ -617,7 +617,7 @@ const MMPCycleClose = () => {
   const isSuperAdmin = hasAnyRole(['super_admin', 'Super Admin']);
   const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
   const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
-  const canManageCycle = isAdmin;
+  const canManageCycle = isAdmin || isSuperAdmin;
   const canAssignReasons = isAdmin || isSupervisor || isFOM;
 
   const [userHubName, setUserHubName] = useState<string>('');
@@ -2780,8 +2780,8 @@ const MMPCycleClose = () => {
         </div>
       )}
 
-      {/* ── Purple "Awaiting Your Approval" banner — shown to FOM / Admin only ── */}
-      {(isFOM || isAdmin) && pendingApprovalMmps.length > 0 && (
+      {/* ── Purple "Awaiting Your Approval" banner — shown to FOM / Admin / Super Admin ── */}
+      {(isFOM || isAdmin || isSuperAdmin) && pendingApprovalMmps.length > 0 && (
         <div className="mb-4 flex flex-col gap-2">
           {pendingApprovalMmps.map(mmp => (
             <div

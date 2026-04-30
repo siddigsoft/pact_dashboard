@@ -2168,8 +2168,8 @@ const MMP = () => {
     });
   };
 
-  const isSuperAdmin = hasRole(['Super Admin', 'superadmin', 'super admin']);
-  const isAdmin = hasRole(['Admin', 'admin', 'Super Admin', 'superadmin', 'super admin']);
+  const isSuperAdmin = hasRole(['super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin']);
+  const isAdmin = hasRole(['Admin', 'admin', 'super_admin', 'Super Admin', 'superadmin', 'super admin', 'SuperAdmin']);
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
   const isSupervisor = hasRole(['Supervisor', 'supervisor', 'hubsupervisor', 'hub_supervisor']);
@@ -2515,7 +2515,7 @@ const MMP = () => {
   const [mmpBannerApproving, setMmpBannerApproving] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin && !isSuperAdmin) return;
     const checkClosingCycles = async () => {
       const { data } = await supabase
         .from('mmp_files')
@@ -2527,16 +2527,16 @@ const MMP = () => {
       setClosingCycleId(data?.[0]?.id ?? null);
     };
     checkClosingCycles();
-  }, [isAdmin]);
+  }, [isAdmin, isSuperAdmin]);
 
   useEffect(() => {
-    if (!isFOM && !isAdmin) return;
+    if (!isFOM && !isAdmin && !isSuperAdmin) return;
     supabase
       .from('mmp_files')
       .select('id, name')
       .eq('cycle_status', 'pending_approval')
       .then(({ data }) => setPendingApprovalMmps((data || []) as { id: string; name: string }[]));
-  }, [isFOM, isAdmin]);
+  }, [isFOM, isAdmin, isSuperAdmin]);
 
   const handleMmpBannerApprove = useCallback(async (mmpId: string) => {
     setMmpBannerApproving(mmpId);
@@ -4939,8 +4939,8 @@ const MMP = () => {
         </div>
       )}
 
-      {/* ── Purple "Awaiting Your Approval" banner — FOM / Admin only ── */}
-      {(isFOM || isAdmin) && pendingApprovalMmps.length > 0 && (
+      {/* ── Purple "Awaiting Your Approval" banner — FOM / Admin / Super Admin ── */}
+      {(isFOM || isAdmin || isSuperAdmin) && pendingApprovalMmps.length > 0 && (
         <div className="flex flex-col gap-2 mb-2">
           {pendingApprovalMmps.map(mmp => (
             <div
