@@ -230,7 +230,11 @@ const CostSubmission = () => {
       setPendingMode(null);
     }
   };
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">(() => {
+    const t = searchParams.get('tab');
+    const valid = ["all", "pending", "under_review", "approved", "rejected", "paid", "reconciled"] as const;
+    return (valid as readonly string[]).includes(t ?? '') ? (t as "all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled") : "all";
+  });
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
   const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);

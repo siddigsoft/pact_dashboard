@@ -284,7 +284,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           passed: pendingCostSubs === 0,
           count: 0,
           total: pendingCostSubs,
-          link: `/cost-submission?mmpId=${mmpId}&mmpName=${encodeURIComponent(mmpName)}`,
+          link: `/cost-submission?mmpId=${mmpId}&mmpName=${encodeURIComponent(mmpName)}&tab=pending`,
         },
         {
           id: 'transport_advances',
