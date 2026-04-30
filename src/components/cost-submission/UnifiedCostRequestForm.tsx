@@ -195,21 +195,31 @@ export default function UnifiedCostRequestForm({
   const [mmps, setMmps] = useState<MmpOption[]>([]);
   const [mmpsLoading, setMmpsLoading] = useState(false);
 
+  // Load MMPs when the selected project changes (filter by project_id)
   useEffect(() => {
     setMmpsLoading(true);
-    const resolvedHubId = hubId || currentUser?.hubId;
-    const hubName = hubs.find(h => h.id === resolvedHubId)?.name;
+    // If no project selected, clear MMP list and exit
+    if (!projectId) {
+      setMmps([]);
+      setMmpsLoading(false);
+      return;
+    }
     let q = supabase
       .from('mmp_files')
       .select('id, name, month, hub, status')
       .order('uploaded_at', { ascending: false })
-      .limit(100);
-    if (hubName) q = q.eq('hub', hubName);
+      .limit(100)
+      .eq('project_id', projectId);
     q.then(({ data }) => {
       setMmps((data || []) as MmpOption[]);
       setMmpsLoading(false);
     }).catch(() => setMmpsLoading(false));
-  }, [hubId, currentUser?.hubId, hubs]);
+  }, [projectId]);
+
+  // Reset selected MMP when project changes
+  useEffect(() => {
+    setMmpId('');
+  }, [projectId]);
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
@@ -811,31 +821,26 @@ export default function UnifiedCostRequestForm({
                   !mmpId ? "border-rose-300 bg-rose-50/40 focus:ring-rose-300/40 focus:border-rose-400" : "border-input"
                 )}
               >
-                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : mmps.length === 0 ? "No MMPs available for your hub" : "Select the MMP this cost relates to…"} />
+                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : mmps.length === 0 ? "No MMPs available for selected project" : "Select the MMP this cost relates to…"} />
               </SelectTrigger>
               <SelectContent>
-                {mmps.map((mmp) => (
-                  <SelectItem key={mmp.id} value={mmp.id}>
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {mmp.month ? `${mmp.month} — ` : ''}{mmp.name}
-                      </span>
-                      {mmp.status && (
-                        <span className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded-full font-semibold capitalize",
-                          mmp.status === 'active' || mmp.status === 'open' ? "bg-green-100 text-green-700" :
-                          mmp.status === 'closed' ? "bg-slate-100 text-slate-500" :
-                          "bg-amber-100 text-amber-700"
-                        )}>
-                          {mmp.status}
-                        </span>
-                      )}
-                    </span>
+                {mmpsLoading ? (
+                  <SelectItem value="__LOADING__" disabled>
+                    Loading MMPs...
                   </SelectItem>
-                ))}
+                ) : mmps.length === 0 ? (
+                  <SelectItem value="__NONE__" disabled>
+                    No MMPs available for selected project
+                  </SelectItem>
+                ) : (
+                  mmps.map((mmp) => (
+                    <SelectItem key={mmp.id} value={mmp.id}>
+                      {mmp.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground mt-1">Select which MMP cycle these field costs are associated with</p>
           </div>
 
           <div>
