@@ -44,26 +44,11 @@ export function ReconciliationSummary({
           query = query.eq('project_id', projectId);
           resolvedScopeLabel = '(this project)';
         } else if (mmpId) {
-          const mmpRes = await supabase
-            .from('mmp_files')
-            .select('month, year, name')
-            .eq('id', mmpId)
-            .single();
-          const mmpRow = mmpRes.data as { month: number | null; year: number | null; name: string | null } | null;
-          const month = mmpRow?.month ?? null;
-          const year = mmpRow?.year ?? null;
-
-          if (year !== null && month !== null) {
-            const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-            const lastDay = new Date(year, month, 0).getDate();
-            const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-            query = query.gte('expense_date', startDate).lte('expense_date', endDate);
-            resolvedScopeLabel = mmpContextLabel
-              ? `(${mmpContextLabel} — ${new Date(year, month - 1).toLocaleString('default', { month: 'short', year: 'numeric' })})`
-              : `(cycle: ${new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })})`;
-          } else {
-            resolvedScopeLabel = mmpContextLabel ? `(cycle: ${mmpContextLabel})` : '(this cycle)';
-          }
+          // Filter directly by mmp_id FK — this is the correct scope.
+          // A date-range filter would pick up cost submissions from other
+          // MMPs that share the same calendar month, inflating the numbers.
+          query = query.eq('mmp_id', mmpId);
+          resolvedScopeLabel = mmpContextLabel ? `(cycle: ${mmpContextLabel})` : '(this cycle)';
         }
 
         const { data: costData } = await query;

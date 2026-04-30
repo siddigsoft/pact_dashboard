@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, XCircle, Loader2, ExternalLink, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ExternalLink, AlertTriangle, ShieldCheck, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ interface ChecklistItem {
   total: number;
   link?: string;
   notConfigured?: boolean;
+  pendingViaReport?: number;
 }
 
 interface CloseReadinessChecklistProps {
@@ -155,6 +156,14 @@ export function CloseReadinessChecklist({
                       >
                         Resolve <ExternalLink className="h-3 w-3 ml-1" />
                       </Button>
+                    )}
+                    {item.passed && (item.pendingViaReport ?? 0) > 0 && (
+                      <div className="flex items-start gap-1.5 mt-1.5 text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 rounded px-2 py-1.5 border border-blue-200/60 dark:border-blue-800/40">
+                        <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>
+                          <strong>{item.pendingViaReport}</strong> advance{item.pendingViaReport !== 1 ? 's' : ''} pending disbursement — add to payment report (transport + enumerator fees) and mark paid.
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>

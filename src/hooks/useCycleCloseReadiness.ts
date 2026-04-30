@@ -10,6 +10,7 @@ export interface CycleChecklistItem {
   total: number;
   link?: string;
   notConfigured?: boolean;
+  pendingViaReport?: number;
 }
 
 export interface CycleCloseReadiness {
@@ -64,19 +65,14 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       setCycleMonth(month);
       setCycleYear(year);
 
-      let costSubsQuery = supabase
+      // Filter cost submissions by mmp_id FK directly.
+      // Using a date-range filter picks up submissions from other MMPs that
+      // share the same calendar month — giving inflated totals.
+      const costSubsQuery = supabase
         .from('operational_cost_submissions')
-        .select('id, tier1_status, tier2_status, expense_date')
+        .select('id, tier1_status, tier2_status')
+        .eq('mmp_id', mmpId)
         .or('tier1_status.eq.pending,tier2_status.eq.pending');
-
-      if (year !== null && month !== null) {
-        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-        const lastDay = new Date(year, month, 0).getDate();
-        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-        costSubsQuery = costSubsQuery
-          .gte('expense_date', startDate)
-          .lte('expense_date', endDate);
-      }
 
       // Fetch site entries (paginated) and cost submissions in parallel
       const [siteVisits, costSubsRes] = await Promise.all([
@@ -189,17 +185,35 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         ? []
         : (advancesRes.data || []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
       const totalAdvances = advances.length;
-      const unreconciledAdvances = advances.filter(a => {
-        const isTerminal = a.status === 'approved' || a.status === 'paid' || a.status === 'fully_paid';
+
+      // Advances split into three buckets:
+      // 1. Cleared   — fully_paid / paid, OR explicitly reconciled via metadata
+      // 2. Via report — approved but zero disbursement yet; these will be
+      //                 settled in the "report of payments" (transport + enumerator
+      //                 fees paid together). NOT blocking — just informational.
+      // 3. Blocking  — partially_paid (some payment made, not completed) and
+      //                NOT explicitly reconciled. Must resolve before close.
+      const isCleared = (a: { status: string; metadata: Record<string, unknown> | null }) => {
         const meta = a.metadata ?? {};
-        // fully_paid means payment is complete — treat as reconciled.
-        // metadata flags allow explicit reconciliation for approved/partially-paid advances.
-        const isReconciled =
+        return (
           a.status === 'fully_paid' ||
+          a.status === 'paid' ||
           meta['reconciled'] === true ||
-          Boolean(meta['reconciled_at']);
-        return isTerminal && !isReconciled;
-      }).length;
+          Boolean(meta['reconciled_at'])
+        );
+      };
+
+      // Advances pending payment via report (approved, zero disbursement)
+      const pendingViaReport = advances.filter(
+        a => a.status === 'approved' && !isCleared(a),
+      ).length;
+
+      // Blocking: partially paid but not reconciled
+      const unreconciledAdvances = advances.filter(
+        a => a.status === 'partially_paid' && !isCleared(a),
+      ).length;
+
+      const clearedAdvances = advances.filter(isCleared).length;
 
       // ── Withdrawal requests gate
       const withdrawalsError = Boolean(withdrawalsRes.error);
@@ -239,13 +253,19 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         },
         {
           id: 'transport_advances',
-          label: 'All transport advances settled',
-          description: 'Approved transport advances for this cycle must be fully paid or explicitly reconciled before closing.',
+          label: 'Transport advances settled',
+          description:
+            unreconciledAdvances > 0
+              ? `${unreconciledAdvances} partially-paid advance(s) must be completed or reconciled before closing.`
+              : pendingViaReport > 0
+              ? `${pendingViaReport} advance(s) not yet disbursed — include in the payment report (transport + enumerator fees) and mark as paid.`
+              : 'All transport advances for this cycle are cleared.',
           passed: advancesError || unreconciledAdvances === 0,
-          count: totalAdvances - unreconciledAdvances,
+          count: clearedAdvances,
           total: totalAdvances,
           link: '/down-payment-approval',
           notConfigured: advancesError,
+          pendingViaReport,
         },
         {
           id: 'withdrawal_requests',

@@ -1490,25 +1490,13 @@ const MMPCycleClose = () => {
   const checkFinanceReadinessForClose = async (mmpId: string): Promise<{ ok: boolean; issues: string[] }> => {
     let advancesRes, withdrawalsRes, costSubsRes;
     try {
-      const mmpMeta = await supabase
-        .from('mmp_files')
-        .select('month, year')
-        .eq('id', mmpId)
-        .single();
-      const month = mmpMeta.data?.month ?? null;
-      const year = mmpMeta.data?.year ?? null;
-
-      let costSubsQuery = supabase
+      // Filter cost submissions by mmp_id FK directly — avoids counting
+      // submissions from other MMPs in the same calendar month.
+      const costSubsQuery = supabase
         .from('operational_cost_submissions')
-        .select('id, tier1_status, tier2_status, expense_date')
+        .select('id, tier1_status, tier2_status')
+        .eq('mmp_id', mmpId)
         .or('tier1_status.eq.pending,tier2_status.eq.pending');
-
-      if (year !== null && month !== null) {
-        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-        const lastDay = new Date(year, month, 0).getDate();
-        const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-        costSubsQuery = costSubsQuery.gte('expense_date', startDate).lte('expense_date', endDate);
-      }
 
       [advancesRes, withdrawalsRes, costSubsRes] = await Promise.all([
         supabase.from('down_payment_requests').select('id, status, metadata').eq('mmp_id', mmpId),
@@ -1537,11 +1525,15 @@ const MMPCycleClose = () => {
     }
 
     // advances: treat query error as empty (optional table, server RPC handles gracefully)
+    // Gate logic:
+    //   - fully_paid / paid / reconciled → cleared (no issue)
+    //   - approved (zero disbursement) → "pending payment via report" — NOT blocking
+    //   - partially_paid and not reconciled → blocking
     const advances = (!advancesRes.error && advancesRes.data || []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
     const unreconciledAdvances = advances.filter(a => {
-      const isTerminal = a.status === 'approved' || a.status === 'paid';
       const meta = a.metadata ?? {};
-      return isTerminal && meta['reconciled'] !== true && !meta['reconciled_at'];
+      const isCleared = a.status === 'fully_paid' || a.status === 'paid' || meta['reconciled'] === true || Boolean(meta['reconciled_at']);
+      return a.status === 'partially_paid' && !isCleared;
     }).length;
 
     // withdrawals: treat query error as empty (optional table, server RPC handles gracefully)
