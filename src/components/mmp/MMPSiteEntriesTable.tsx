@@ -174,6 +174,11 @@ const MMPSiteEntriesTable = ({
     const siteCode = site.siteCode || site.site_code || vd?.siteCode || ad['Site Code'] || ad['Site Code:'] || '—';
     const siteName = site.siteName || site.site_name || vd?.siteName || ad['Site Name'] || ad['Site Name:'] || '—';
     const cpName = site.cpName || site.cp_name || vd?.cpName || ad['CP Name'] || ad['CP name'] || ad['CP Name:'] || '—';
+    const phoneRaw = site.phone_number || ad.phone_number_raw || ad.phone_number || ad['Phone Number'] || ad['Phone'] || '';
+    const phoneNumbers = Array.isArray(ad.phone_numbers)
+      ? ad.phone_numbers.map((n: any) => String(n)).filter(Boolean)
+      : [];
+    const phoneDisplay = phoneNumbers.length > 0 ? phoneNumbers.join(' / ') : (phoneRaw || '—');
     const siteActivity = site.siteActivity || site.activity_at_site || site.activity || vd?.siteActivity || ad['Activity at the site'] || ad['Activity at Site'] || ad['Activity at the site:'] || '—';
     const monitoringBy = site.monitoringBy || site.monitoring_by || vd?.monitoringBy || ad['monitoring by'] || ad['monitoring by:'] || ad['Monitoring By'] || '—';
     const surveyTool = site.surveyTool || site.survey_tool || vd?.surveyTool || ad['Survey under Master tool'] || ad['Survey under Master tool:'] || ad['Survey Tool'] || '—';
@@ -240,6 +245,7 @@ const MMPSiteEntriesTable = ({
 
     return { 
       hubOffice, state, locality, siteCode, mmpName, siteName, cpName, siteActivity, 
+      phoneDisplay,
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       mainActivity, visitType, visitDate, comments, 
       enumeratorFee: enumeratorFee, transportFee: transportFee, cost: totalCost,
@@ -404,7 +410,7 @@ const MMPSiteEntriesTable = ({
     if (debouncedSearchQuery.trim() !== "") {
       const q = debouncedSearchQuery.toLowerCase();
       results = results.filter(({ norm }) => {
-        return [norm.hubOffice, norm.state, norm.locality, norm.mmpName, norm.siteName, norm.cpName, norm.siteActivity, norm.monitoringBy, norm.acceptedByName, norm.surveyTool, norm.visitDate, norm.comments]
+        return [norm.hubOffice, norm.state, norm.locality, norm.mmpName, norm.siteName, norm.cpName, norm.phoneDisplay, norm.siteActivity, norm.monitoringBy, norm.acceptedByName, norm.surveyTool, norm.visitDate, norm.comments]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(q));
       });
@@ -827,6 +833,9 @@ const MMPSiteEntriesTable = ({
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground">{row.siteCode || '—'} • {row.state || '—'}, {row.locality || '—'}</p>
+                            {row.phoneDisplay && row.phoneDisplay !== '—' && (
+                              <p className="text-sm text-muted-foreground">Phone: {row.phoneDisplay}</p>
+                            )}
                           </div>
                           {(() => {
                             const rawStatus = (row.status || '').toLowerCase();

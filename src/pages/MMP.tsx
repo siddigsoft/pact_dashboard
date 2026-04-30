@@ -4370,8 +4370,9 @@ const MMP = () => {
       if (status === 'dispatched') {
         return 'dispatched';
       }
-      // New sites - verified statuses before costing/dispatch
-      if (status === 'verified' || 
+      // New sites - pending/verified statuses before costing/dispatch
+      if (status === 'pending' ||
+          status === 'verified' || 
           status === 'cp_verified' || 
           status === 'permits_verified' || 
           status === 'locality_permit_verified' ||

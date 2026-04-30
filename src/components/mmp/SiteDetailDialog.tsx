@@ -87,6 +87,11 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const locality = site.locality || site.locality_name || vd?.locality || ad['Locality'] || ad['Locality:'] || '';
     const siteCode = site.siteCode || site.site_code || vd?.siteCode || ad['Site Code'] || ad['Site Code:'] || '';
     const siteName = site.siteName || site.site_name || vd?.siteName || ad['Site Name'] || ad['Site Name:'] || '';
+    const phoneRaw = site.phone_number || ad.phone_number_raw || ad.phone_number || ad['Phone Number'] || ad['Phone'] || '';
+    const phoneNumbers = Array.isArray(ad.phone_numbers)
+      ? ad.phone_numbers.map((n: any) => String(n)).filter(Boolean)
+      : [];
+    const phoneDisplay = phoneNumbers.length > 0 ? phoneNumbers.join(' / ') : phoneRaw;
     const cpName = site.cpName || site.cp_name || vd?.cpName || ad['CP Name'] || ad['CP name'] || ad['CP Name:'] || '';
     const siteActivity = site.siteActivity || site.activity_at_site || site.activity || vd?.siteActivity || ad['Activity at the site'] || ad['Activity at Site'] || ad['Activity at the site:'] || '';
     const monitoringBy = site.monitoringBy || site.monitoring_by || vd?.monitoringBy || ad['monitoring by'] || ad['monitoring by:'] || ad['Monitoring By'] || '';
@@ -223,7 +228,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const hasRegistryMatch = !!registrySiteId;
 
     return { 
-      hubOffice, state, locality, siteCode, siteName, cpName, siteActivity, 
+      hubOffice, state, locality, siteCode, siteName, phoneRaw, phoneDisplay, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       visitDate, comments, 
       enumeratorFee: displayedEnumeratorFee, transportFee: displayedTransportFee, cost: totalCost,
@@ -438,6 +443,12 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       ad['State'] = draft.state;
       ad['Locality'] = draft.locality;
       ad['Site Name'] = draft.siteName;
+      ad['Phone Number'] = draft.phoneRaw || '';
+      ad['phone_number_raw'] = draft.phoneRaw || null;
+      ad['phone_numbers'] = String(draft.phoneRaw || '')
+        .split(/\s*-\s*|\s*\/\s*|\s*,\s*|\s*;\s*/)
+        .map((part: string) => part.replace(/\s+/g, '').replace(/[^\d+]/g, '').trim())
+        .filter((part: string) => part.length >= 7);
       ad['CP Name'] = draft.cpName;
       ad['Activity at Site'] = draft.siteActivity;
       ad['Monitoring By'] = draft.monitoringBy;
@@ -535,6 +546,19 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     />
                   ) : (
                     <p className="font-medium text-gray-900 mt-1">{row.siteName || '—'}</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-gray-600">Phone Number</Label>
+                  {isEditing ? (
+                    <Input
+                      value={draft?.phoneRaw || ''}
+                      onChange={(e) => setDraft({ ...draft, phoneRaw: e.target.value })}
+                      className="mt-1"
+                      placeholder="e.g. 0912345678 - 0123456789"
+                    />
+                  ) : (
+                    <p className="font-medium text-gray-900 mt-1">{row.phoneDisplay || '—'}</p>
                   )}
                 </div>
                 <div>

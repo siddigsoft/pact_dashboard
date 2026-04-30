@@ -28,6 +28,7 @@ interface AdhocRow {
   siteCode: string;
   state: string;
   locality: string;
+  phoneNumber: string;
   transportFee: string;
   enumeratorFee: string;
   assignToId: string;
@@ -43,11 +44,13 @@ interface ExistingEntry {
   state?: string;
   locality?: string;
   status: string;
-  assigned_to?: string;
+  accepted_by?: string;
+  preferred_assignee_id?: string;
   assignedToName?: string;
+  phone_number?: string;
   transport_fee?: number;
   enumerator_fee?: number;
-  due_date?: string;
+  visit_date?: string;
   created_at?: string;
   dispatched_at?: string;
 }
@@ -62,19 +65,26 @@ const STATUS_COLORS: Record<string, string> = {
   recalled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
 };
 
-const FILTER_STATUSES = ['all', 'dispatched', 'assigned', 'claimed', 'completed'] as const;
+const FILTER_STATUSES = ['all', 'pending', 'dispatched', 'assigned', 'claimed', 'completed'] as const;
 
 const emptyRow = (): AdhocRow => ({
   siteName: '', siteCode: '', state: '', locality: '',
-  transportFee: '', enumeratorFee: '', assignToId: '', assignToName: '', dueDate: '',
+  phoneNumber: '', transportFee: '', enumeratorFee: '', assignToId: '', assignToName: '', dueDate: '',
 });
 
 const validateRow = (row: AdhocRow): string[] => {
   const errors: string[] = [];
   if (!row.siteName.trim()) errors.push('Site Name required');
   if (!row.state.trim()) errors.push('State required');
-  if (!row.locality.trim()) errors.push('Locality required');
   return errors;
+};
+
+const normalizePhoneNumbers = (raw: string): string[] => {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(/\s*-\s*|\s*\/\s*|\s*,\s*|\s*;\s*/)
+    .map((part) => part.replace(/\s+/g, '').replace(/[^\d+]/g, '').trim())
+    .filter((part) => part.length >= 7);
 };
 
 const getOrCreateAdhocMMPFile = async (): Promise<string> => {
@@ -96,10 +106,8 @@ const getOrCreateAdhocMMPFile = async (): Promise<string> => {
     .insert({
       mmp_id: mmpId,
       name: mmpName,
-      type: 'adhoc',
       status: 'Approved',
-      month: now.getMonth() + 1,
-      year: now.getFullYear(),
+      month: now.toISOString().slice(0, 7),
       uploaded_by: 'system',
       uploaded_at: now.toISOString(),
       approved_by: 'system',
@@ -117,8 +125,9 @@ const getOrCreateAdhocMMPFile = async (): Promise<string> => {
 interface ColumnMap {
   siteName: string;   // required
   state: string;      // required
-  locality: string;   // required
+  locality: string;   // optional (falls back to state when missing)
   siteCode: string;
+  phoneNumber: string;
   transportFee: string;
   enumeratorFee: string;
   assignTo: string;
@@ -128,9 +137,10 @@ interface ColumnMap {
 // Known column aliases for auto-detection (lowercase)
 const COL_ALIASES: Record<keyof ColumnMap, string[]> = {
   siteName:     ['site name','sitename','name','trdname','tradername','trader name','school name','market name','distribution point','site','market','location name','beneficiary site','pdm site','retailer name','retailer','trader'],
-  state:        ['state','admin1name','admin1 name','province','governorate','region','wilaya'],
-  locality:     ['locality','admin2name','admin2 name','district','county','sub-district','sub district','mahalia','locality name'],
+  state:        ['state','location','admin1name','admin1 name','province','governorate','region','wilaya'],
+  locality:     ['locality','location','admin2name','admin2 name','district','county','sub-district','sub district','mahalia','locality name'],
   siteCode:     ['site code','sitecode','code','id','site id','trdid','school code','pdm code','retailer code','site_code'],
+  phoneNumber:  ['phone number','phone','mobile','tel','telephone','contact number','contact'],
   transportFee: ['transport fee','transportfee','transport','transport cost','travel fee','travel cost'],
   enumeratorFee:['enumerator fee','enumeratorfee','fee','monitor fee','enumerator fee (sdg)','enum fee','data collector fee'],
   assignTo:     ['assign to','assignto','enumerator','monitor','data collector','collector','assigned to','assigned_to'],
@@ -169,7 +179,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   const [rawFileHeaders, setRawFileHeaders] = useState<string[]>([]);
   const [rawFileRows, setRawFileRows] = useState<(string | number)[][]>([]);
   const [showColumnMapper, setShowColumnMapper] = useState(false);
-  const [columnMap, setColumnMap] = useState<ColumnMap>({ siteName: '', state: '', locality: '', siteCode: '', transportFee: '', enumeratorFee: '', assignTo: '', dueDate: '' });
+  const [columnMap, setColumnMap] = useState<ColumnMap>({ siteName: '', state: '', locality: '', siteCode: '', phoneNumber: '', transportFee: '', enumeratorFee: '', assignTo: '', dueDate: '' });
 
   // Manual entry sub-tab state
   const [manualRows, setManualRows] = useState<AdhocRow[]>([]);
@@ -222,7 +232,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       const { data: adhocFiles } = await supabase
         .from('mmp_files')
         .select('id')
-        .eq('type', 'adhoc');
+        .ilike('mmp_id', 'adhoc-tasks-%');
 
       if (!adhocFiles || adhocFiles.length === 0) {
         setExistingEntries([]);
@@ -232,14 +242,18 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       const fileIds = adhocFiles.map(f => f.id);
       const { data: entries } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, assigned_to, transport_fee, enumerator_fee, due_date, created_at, dispatched_at')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, additional_data, transport_fee, enumerator_fee, visit_date, created_at, dispatched_at')
         .in('mmp_file_id', fileIds)
         .order('created_at', { ascending: false });
 
       if (!entries) { setExistingEntries([]); return; }
 
       // Resolve enumerator names
-      const assignedIds = [...new Set(entries.filter(e => e.assigned_to).map(e => e.assigned_to!))] as string[];
+      const assignedIds = [...new Set(entries.flatMap(e => {
+        const pref = (e as any).additional_data?.assigned_to;
+        const accepted = (e as any).accepted_by;
+        return [pref, accepted].filter(Boolean);
+      }))] as string[];
       let namesMap: Record<string, string> = {};
       if (assignedIds.length > 0) {
         const { data: profiles } = await supabase
@@ -254,8 +268,18 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       setExistingEntries(entries.map(e => ({
         ...e,
         site_name: e.site_name || '',
-        status: e.status || 'dispatched',
-        assignedToName: e.assigned_to ? (namesMap[e.assigned_to] || e.assigned_to) : undefined,
+        status: e.status || 'pending',
+        preferred_assignee_id: (e as any).additional_data?.assigned_to,
+        phone_number: (e as any).phone_number
+          || (e as any).additional_data?.phone_number_raw
+          || (e as any).additional_data?.phone_number
+          || (e as any).additional_data?.['Phone Number']
+          || undefined,
+        assignedToName: (e as any).accepted_by
+          ? (namesMap[(e as any).accepted_by] || (e as any).accepted_by)
+          : ((e as any).additional_data?.assigned_to
+              ? (namesMap[(e as any).additional_data.assigned_to] || (e as any).additional_data.assigned_to)
+              : undefined),
       })));
     } catch (err) {
       console.error('Failed to load adhoc entries:', err);
@@ -294,6 +318,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     };
     return rows.map(row => {
       const assignToName = getByHeader(row, map.assignTo);
+      const stateRaw = getByHeader(row, map.state);
+      const localityRaw = getByHeader(row, map.locality);
       const matchedCollector = collectors.find(c =>
         (c.full_name || '').toLowerCase() === assignToName.toLowerCase() ||
         (c.email || '').toLowerCase() === assignToName.toLowerCase()
@@ -302,8 +328,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       const r: AdhocRow = {
         siteName:      getByHeader(row, map.siteName),
         siteCode:      getByHeader(row, map.siteCode),
-        state:         getByHeader(row, map.state),
-        locality:      getByHeader(row, map.locality),
+        state:         stateRaw,
+        locality:      localityRaw || stateRaw,
+        phoneNumber:   getByHeader(row, map.phoneNumber),
         transportFee:  getByHeader(row, map.transportFee),
         enumeratorFee: getByHeader(row, map.enumeratorFee),
         assignToId:    matchedCollector?.id || '',
@@ -340,13 +367,14 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           state:         autoDetectColumn(headers, 'state'),
           locality:      autoDetectColumn(headers, 'locality'),
           siteCode:      autoDetectColumn(headers, 'siteCode'),
+          phoneNumber:   autoDetectColumn(headers, 'phoneNumber'),
           transportFee:  autoDetectColumn(headers, 'transportFee'),
           enumeratorFee: autoDetectColumn(headers, 'enumeratorFee'),
           assignTo:      autoDetectColumn(headers, 'assignTo'),
           dueDate:       autoDetectColumn(headers, 'dueDate'),
         };
 
-        const requiredMissing = !detected.siteName || !detected.state || !detected.locality;
+        const requiredMissing = !detected.siteName || !detected.state;
 
         if (requiredMissing) {
           // Store raw data and open column mapper
@@ -366,8 +394,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
   };
 
   const applyColumnMap = () => {
-    if (!columnMap.siteName || !columnMap.state || !columnMap.locality) {
-      toast({ title: 'Required fields missing', description: 'Please map Site Name, State and Locality before continuing.', variant: 'destructive' });
+    if (!columnMap.siteName || !columnMap.state) {
+      toast({ title: 'Required fields missing', description: 'Please map Site Name and State/Location before continuing.', variant: 'destructive' });
       return;
     }
     setUploadedRows(buildRowsFromMap(rawFileHeaders, rawFileRows, columnMap));
@@ -389,7 +417,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Site Name', 'Site Code', 'State', 'Locality', 'Transport Fee', 'Enumerator Fee', 'Assign To', 'Due Date'],
+      ['Site Name', 'Site Code', 'State', 'Locality', 'Phone Number', 'Transport Fee', 'Enumerator Fee', 'Assign To', 'Due Date'],
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Ad-hoc Sites Template');
@@ -423,7 +451,6 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     setSubmitting(true);
     try {
       const mmpFileId = await getOrCreateAdhocMMPFile();
-      const now = new Date().toISOString();
       let assigned = 0, open = 0;
 
       const entries = validRows.map(row => {
@@ -434,13 +461,17 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           site_name: row.siteName.trim(),
           site_code: row.siteCode.trim() || null,
           state: row.state.trim(),
-          locality: row.locality.trim(),
+          locality: row.locality.trim() || row.state.trim(),
           transport_fee: row.transportFee ? Number(row.transportFee) : null,
           enumerator_fee: row.enumeratorFee ? Number(row.enumeratorFee) : null,
-          assigned_to: row.assignToId || null,
-          status: hasAssignee ? 'assigned' : 'dispatched',
-          dispatched_at: now,
-          due_date: row.dueDate || null,
+          accepted_by: null,
+          status: 'pending',
+          visit_date: row.dueDate || null,
+          additional_data: {
+            assigned_to: row.assignToId || null,
+            phone_number_raw: row.phoneNumber || null,
+            phone_numbers: normalizePhoneNumbers(row.phoneNumber || ''),
+          },
         };
       });
 
@@ -449,7 +480,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
       toast({
         title: `${validRows.length} site visit${validRows.length !== 1 ? 's' : ''} created`,
-        description: `${assigned} pre-assigned · ${open} open for claim`,
+        description: `${assigned} with preferred assignee · ${open} open`,
       });
       setLastResult({ assigned, open });
       if (createMode === 'upload') { setUploadedRows([]); setUploadedFileName(''); }
@@ -470,8 +501,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     setEditForm({
       transport_fee: entry.transport_fee,
       enumerator_fee: entry.enumerator_fee,
-      assigned_to: entry.assigned_to,
-      due_date: entry.due_date,
+      preferred_assignee_id: entry.preferred_assignee_id,
+      phone_number: entry.phone_number,
+      visit_date: entry.visit_date,
     });
     setCollectorSearch(entry.assignedToName || '');
   };
@@ -480,15 +512,26 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
     if (!editEntry) return;
     setSaving(true);
     try {
-      const hasAssignee = !!editForm.assigned_to;
+      const { data: currentRow } = await supabase
+        .from('mmp_site_entries')
+        .select('additional_data')
+        .eq('id', editEntry.id)
+        .single();
+
+      const nextAdditionalData = {
+        ...((currentRow as any)?.additional_data || {}),
+        assigned_to: editForm.preferred_assignee_id || null,
+        phone_number_raw: editForm.phone_number || null,
+        phone_numbers: normalizePhoneNumbers(String(editForm.phone_number || '')),
+      };
+
       const { error } = await supabase
         .from('mmp_site_entries')
         .update({
           transport_fee: editForm.transport_fee ?? null,
           enumerator_fee: editForm.enumerator_fee ?? null,
-          assigned_to: editForm.assigned_to || null,
-          due_date: editForm.due_date || null,
-          status: hasAssignee ? 'assigned' : 'dispatched',
+          visit_date: editForm.visit_date || null,
+          additional_data: nextAdditionalData,
         })
         .eq('id', editEntry.id);
       if (error) throw error;
@@ -537,7 +580,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
   const canEdit = (entry: ExistingEntry) => {
     const s = (entry.status || '').toLowerCase();
-    return s === 'dispatched' || s === 'assigned';
+    return s === 'pending' || s === 'dispatched' || s === 'assigned';
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -589,7 +632,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                   </div>
                   {/* Locality */}
                   <div className="space-y-1">
-                    <Label className="text-xs">Locality *</Label>
+                    <Label className="text-xs">Locality</Label>
                     <Select value={formRow.locality} onValueChange={v => setFormRow(r => ({ ...r, locality: v }))} disabled={!formRow.state}>
                       <SelectTrigger className="h-8 text-xs" data-testid="select-adhoc-locality">
                         <SelectValue placeholder="Select locality" />
@@ -614,6 +657,13 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                     <Input className="h-8 text-xs" placeholder="Optional" value={formRow.siteCode}
                       onChange={e => setFormRow(r => ({ ...r, siteCode: e.target.value }))}
                       data-testid="input-adhoc-site-code" />
+                  </div>
+                  {/* Phone Number */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Phone Number</Label>
+                    <Input className="h-8 text-xs" placeholder="e.g. 0912345678" value={formRow.phoneNumber}
+                      onChange={e => setFormRow(r => ({ ...r, phoneNumber: e.target.value }))}
+                      data-testid="input-adhoc-phone-number" />
                   </div>
                   {/* Transport Fee */}
                   <div className="space-y-1">
@@ -689,6 +739,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                             <span className="font-medium">{row.siteName}</span>
                             <span className="text-muted-foreground ml-2">{row.state} › {row.locality}</span>
                             {row.siteCode && <span className="text-muted-foreground ml-2">({row.siteCode})</span>}
+                            {row.phoneNumber && <span className="text-muted-foreground ml-2">📞 {row.phoneNumber}</span>}
                             {row.assignToName && <span className="ml-2 text-amber-600 dark:text-amber-400">→ {row.assignToName}</span>}
                             {row.transportFee && <span className="ml-2 text-muted-foreground">T: {row.transportFee} SDG</span>}
                             {row.enumeratorFee && <span className="ml-2 text-muted-foreground">E: {row.enumeratorFee} SDG</span>}
@@ -745,7 +796,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                       <table className="w-full text-xs">
                         <thead className="bg-gray-50 dark:bg-gray-800/30">
                           <tr>
-                            {['Site Name', 'Code', 'State', 'Locality', 'Transport', 'Enum. Fee', 'Assign To', 'Due Date', ''].map(h => (
+                            {['Site Name', 'Code', 'State', 'Locality', 'Phone', 'Transport', 'Enum. Fee', 'Assign To', 'Due Date', ''].map(h => (
                               <th key={h} className="px-2 py-1.5 text-left text-muted-foreground font-medium whitespace-nowrap">{h}</th>
                             ))}
                           </tr>
@@ -765,10 +816,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                                 </span>
                               </td>
                               <td className="px-2 py-1.5">
-                                <span className={row._errors?.includes('Locality required') ? 'text-red-500' : ''}>
-                                  {row.locality || <span className="text-red-400 italic">required</span>}
-                                </span>
+                                {row.locality || '—'}
                               </td>
+                              <td className="px-2 py-1.5 text-muted-foreground">{row.phoneNumber || '—'}</td>
                               <td className="px-2 py-1.5 text-muted-foreground">{row.transportFee}</td>
                               <td className="px-2 py-1.5 text-muted-foreground">{row.enumeratorFee}</td>
                               <td className="px-2 py-1.5 text-muted-foreground">{row.assignToName || '—'}</td>
@@ -856,7 +906,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
-                    {['Site Name', 'State', 'Locality', 'Status', 'Assigned To', 'Transport', 'Enum. Fee', 'Due Date', 'Created', ''].map(h => (
+                    {['Site Name', 'State', 'Locality', 'Phone', 'Status', 'Assigned To', 'Transport', 'Enum. Fee', 'Visit Date', 'Created', ''].map(h => (
                       <th key={h} className="px-2 py-2 text-left text-muted-foreground font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -872,6 +922,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                         <td className="px-2 py-2 font-medium max-w-[160px] truncate">{entry.site_name}</td>
                         <td className="px-2 py-2 text-muted-foreground">{entry.state || '—'}</td>
                         <td className="px-2 py-2 text-muted-foreground">{entry.locality || '—'}</td>
+                        <td className="px-2 py-2 text-muted-foreground max-w-[140px] truncate">{entry.phone_number || '—'}</td>
                         <td className="px-2 py-2">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${STATUS_COLORS[statusKey] || 'bg-gray-100 text-gray-600'}`}>
                             {entry.status}
@@ -886,7 +937,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                         <td className="px-2 py-2 text-muted-foreground">
                           {entry.enumerator_fee != null ? `${entry.enumerator_fee} SDG` : '—'}
                         </td>
-                        <td className="px-2 py-2 text-muted-foreground">{entry.due_date || '—'}</td>
+                        <td className="px-2 py-2 text-muted-foreground">{entry.visit_date || '—'}</td>
                         <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
                           {entry.created_at ? new Date(entry.created_at).toLocaleDateString() : '—'}
                         </td>
@@ -935,8 +986,9 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
               [
                 { field: 'siteName'      as keyof ColumnMap, label: 'Site Name',       required: true },
                 { field: 'state'         as keyof ColumnMap, label: 'State',            required: true },
-                { field: 'locality'      as keyof ColumnMap, label: 'Locality',         required: true },
+                { field: 'locality'      as keyof ColumnMap, label: 'Locality',         required: false },
                 { field: 'siteCode'      as keyof ColumnMap, label: 'Site Code',        required: false },
+                { field: 'phoneNumber'   as keyof ColumnMap, label: 'Phone Number',     required: false },
                 { field: 'transportFee'  as keyof ColumnMap, label: 'Transport Fee',    required: false },
                 { field: 'enumeratorFee' as keyof ColumnMap, label: 'Enumerator Fee',   required: false },
                 { field: 'assignTo'      as keyof ColumnMap, label: 'Assign To',        required: false },
@@ -975,7 +1027,7 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setShowColumnMapper(false)}>Cancel</Button>
             <Button size="sm" onClick={applyColumnMap}
-              disabled={!columnMap.siteName || !columnMap.state || !columnMap.locality}
+              disabled={!columnMap.siteName || !columnMap.state}
               className="bg-teal-600 hover:bg-teal-700 text-white"
               data-testid="button-apply-column-map">
               <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
@@ -1010,16 +1062,23 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                 data-testid="input-edit-enumerator-fee" />
             </div>
             <div className="space-y-1">
+              <Label className="text-xs">Phone Number</Label>
+              <Input className="h-8 text-xs"
+                value={editForm.phone_number || ''}
+                onChange={e => setEditForm(f => ({ ...f, phone_number: e.target.value }))}
+                data-testid="input-edit-phone-number" />
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs">Due Date</Label>
               <Input type="date" className="h-8 text-xs"
-                value={editForm.due_date || ''}
-                onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))}
+                value={editForm.visit_date || ''}
+                onChange={e => setEditForm(f => ({ ...f, visit_date: e.target.value }))}
                 data-testid="input-edit-due-date" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Assign To</Label>
-              <Select value={editForm.assigned_to || '__open__'}
-                onValueChange={v => setEditForm(f => ({ ...f, assigned_to: v === '__open__' ? undefined : v }))}>
+              <Select value={editForm.preferred_assignee_id || '__open__'}
+                onValueChange={v => setEditForm(f => ({ ...f, preferred_assignee_id: v === '__open__' ? undefined : v }))}>
                 <SelectTrigger className="h-8 text-xs" data-testid="select-edit-assign-to">
                   <SelectValue placeholder="Open for claim" />
                 </SelectTrigger>
