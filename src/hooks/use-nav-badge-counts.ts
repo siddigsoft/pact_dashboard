@@ -100,10 +100,14 @@ export function useNavBadgeCounts({
     };
 
     try {
+      const normalizedHubId =
+        hubId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(hubId)
+          ? hubId
+          : null;
       const { data: rpcData, error: rpcError } = await supabase.rpc(
         'get_nav_badge_counts',
         {
-          p_hub_id: hubId ?? null,
+          p_hub_id: normalizedHubId,
           p_role_supervisor: roleIsSupervisor,
           p_role_finance: roleIsFinance,
           p_role_coordinator: roleIsCoordinator,

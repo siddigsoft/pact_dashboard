@@ -90,7 +90,7 @@ export default function SafetyHub() {
     setSosActive(true);
     try {
       const { data: profile } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .select('full_name, phone')
         .eq('id', user?.id)
         .single();

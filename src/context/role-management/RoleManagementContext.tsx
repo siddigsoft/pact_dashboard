@@ -88,7 +88,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
                 .select('role')
                 .eq('id', uid)
                 .single();
-              if (['admin', 'ict', 'Admin', 'ICT'].includes(prof?.role || '')) {
+              if (['super_admin', 'Super Admin', 'superadmin', 'SuperAdmin'].includes(prof?.role || '')) {
                 isPrivileged = true;
               }
             }
