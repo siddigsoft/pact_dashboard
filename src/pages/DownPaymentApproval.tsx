@@ -492,7 +492,8 @@ export default function DownPaymentApproval() {
   const uniqueMmps = useMemo(() => [...new Set(requests.map(r => r.mmpName).filter(Boolean))].sort() as string[], [requests]);
   // Cascade Data Collector list against Hub → State → Locality → MMP so the
   // dropdown only shows collectors who actually appear in the currently
-  // narrowed slice. Mirrors the cascade already used by uniqueLocalities.
+  // narrowed slice. Uses the enriched requestedByName from each request
+  // directly so the list is always populated regardless of the users cache.
   const uniqueRequesters = useMemo(() => {
     let base = requests;
     if (filters.hubId) {
@@ -507,10 +508,18 @@ export default function DownPaymentApproval() {
     if (filters.mmpName) {
       base = base.filter(r => r.mmpName?.toLowerCase() === filters.mmpName!.toLowerCase());
     }
-    const ids = new Set(base.map(r => r.requestedBy).filter(Boolean));
-    return users
-      .filter(u => ids.has(u.id))
-      .map(u => ({ id: u.id, name: u.fullName || u.email || 'Unknown' }))
+    const seen = new Map<string, string>();
+    base.forEach(r => {
+      if (r.requestedBy && !seen.has(r.requestedBy as string)) {
+        const name = r.requestedByName
+          || users.find(u => u.id === r.requestedBy)?.fullName
+          || users.find(u => u.id === r.requestedBy)?.email
+          || 'Unknown';
+        seen.set(r.requestedBy as string, name);
+      }
+    });
+    return Array.from(seen.entries())
+      .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [requests, users, filters.hubId, filters.stateName, filters.localityName, filters.mmpName]);
 
