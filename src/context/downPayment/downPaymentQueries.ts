@@ -209,7 +209,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
 
   const [enrichResult, hubResult] = await Promise.allSettled([
     entryIds.length > 0
-      ? (supabase as any).rpc('get_entry_enrichment', { entry_ids: entryIds }).limit(10000)
+      ? (supabase as any).rpc('get_entry_enrichment', { entry_ids: entryIds }).limit(100000)
       : Promise.resolve({ data: [] }),
     hubIds.length > 0
       ? supabase.from('hubs').select('id, name, states').in('id', hubIds)
@@ -274,7 +274,7 @@ export function useDownPaymentRequestsQuery(user: UserForDownPayment | null) {
     queryFn: () =>
       withTimeout(
         fetchDownPaymentRequests(user!),
-        30000,
+        60000,
         'Failed to load requests. Please refresh the page.'
       ),
     staleTime: STALE_MS,
