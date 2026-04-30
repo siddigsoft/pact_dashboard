@@ -33,7 +33,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { CycleMMPCard } from '@/components/cycle/CycleMMPCard';
-import { CycleCoveragePredictor } from '@/components/cycle/CycleCoveragePredictor';
+import { CycleCoveragePredictor, MmpPredictionPanel } from '@/components/cycle/CycleCoveragePredictor';
 import { CycleReportsTab } from '@/components/cycle/CycleReportsTab';
 import { CycleComparisonTab } from '@/components/cycle/CycleComparisonTab';
 import { CycleScorecardTab } from '@/components/cycle/CycleScorecardTab';
@@ -2873,34 +2873,36 @@ const MMPCycleClose = () => {
                   const mmpUncovered = uncoveredSites.filter(s => s.mmp_id === mmp.id);
 
                   return (
-                    <CycleMMPCard
-                      key={mmp.id}
-                      mmp={mmp}
-                      uncoveredSites={mmpUncovered}
-                      cycleStatus={cycleStatus}
-                      canManageCycle={canManageCycle}
-                      isFOM={isFOM}
-                      isAdmin={isAdmin}
-                      closingCycle={closingCycle}
-                      finalizingCycle={finalizingCycle}
-                      siteVisitCounts={siteVisitCounts[mmp.id]}
-                      scopeOptions={mmpScopeOptions[mmp.id]}
-                      handleStartClosingCycle={(mmpId) => {
-                        if (cycleStatus === 'active' && canManageCycle) {
-                          setChecklistMmpId(mmpId);
-                        } else {
-                          handleStartClosingCycle(mmpId);
-                        }
-                      }}
-                      handleScopedClose={handleScopedClose}
-                      handleFinalizeCycleClose={handleFinalizeCycleClose}
-                      handleApproveCycle={handleApproveCycle}
-                      handleRejectCycle={handleRejectCycle}
-                      handleSendReminders={handleSendReminders}
-                      setSelectedMmpId={setSelectedMmpId}
-                      setActiveTab={setActiveTab}
-                      getReasonLabel={getReasonLabel}
-                    />
+                    <div key={mmp.id} className="space-y-0">
+                      <CycleMMPCard
+                        mmp={mmp}
+                        uncoveredSites={mmpUncovered}
+                        cycleStatus={cycleStatus}
+                        canManageCycle={canManageCycle}
+                        isFOM={isFOM}
+                        isAdmin={isAdmin}
+                        closingCycle={closingCycle}
+                        finalizingCycle={finalizingCycle}
+                        siteVisitCounts={siteVisitCounts[mmp.id]}
+                        scopeOptions={mmpScopeOptions[mmp.id]}
+                        handleStartClosingCycle={(mmpId) => {
+                          if (cycleStatus === 'active' && canManageCycle) {
+                            setChecklistMmpId(mmpId);
+                          } else {
+                            handleStartClosingCycle(mmpId);
+                          }
+                        }}
+                        handleScopedClose={handleScopedClose}
+                        handleFinalizeCycleClose={handleFinalizeCycleClose}
+                        handleApproveCycle={handleApproveCycle}
+                        handleRejectCycle={handleRejectCycle}
+                        handleSendReminders={handleSendReminders}
+                        setSelectedMmpId={setSelectedMmpId}
+                        setActiveTab={setActiveTab}
+                        getReasonLabel={getReasonLabel}
+                      />
+                      <MmpPredictionPanel mmp={mmp} counts={siteVisitCounts[mmp.id]} />
+                    </div>
                   );
                 })}
               </div>

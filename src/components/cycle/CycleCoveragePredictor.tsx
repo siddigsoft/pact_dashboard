@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, BarChart3, Calendar, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, BarChart3, Target } from 'lucide-react';
 
 interface SiteVisitCounts {
   total: number;
@@ -35,6 +35,85 @@ function getDaysElapsedInCycle(mmp: any): { daysElapsed: number; totalDays: numb
   return { daysElapsed, totalDays, daysRemaining };
 }
 
+// ─── Single-MMP inline prediction panel ──────────────────────────────────────
+export function MmpPredictionPanel({ mmp, counts }: { mmp: any; counts?: SiteVisitCounts }) {
+  const totalSites = counts?.total || 0;
+  const sc = counts?.statusCounts ?? {};
+  const completedSites = sc['completed'] ?? 0;
+  const coverageRate = totalSites > 0 ? Math.round((completedSites / totalSites) * 100) : 0;
+  const { daysElapsed, totalDays, daysRemaining } = getDaysElapsedInCycle(mmp);
+  const dailyRate = completedSites / Math.max(1, daysElapsed);
+  const projectedTotal = completedSites + dailyRate * daysRemaining;
+  const projectedCoverage = totalSites > 0 ? Math.min(100, Math.round((projectedTotal / totalSites) * 100)) : 0;
+  const isAtRisk = totalSites > 0 && projectedCoverage < 80;
+  const hasData = totalSites > 0;
+
+  if (!hasData) return null;
+
+  return (
+    <div
+      className={`rounded-lg border p-3 mt-1 ${isAtRisk
+        ? 'border-red-200 bg-red-50/50 dark:bg-red-950/30 dark:border-red-800'
+        : 'border-green-200 bg-green-50/50 dark:bg-green-950/30 dark:border-green-800'}`}
+      data-testid={`prediction-inline-${mmp.id}`}
+    >
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+          <TrendingUp className="h-3 w-3" />
+          Coverage Prediction <span dir="rtl" className="text-muted-foreground/70 font-normal">/ توقعات التغطية</span>
+        </span>
+        {isAtRisk ? (
+          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+            <TrendingDown className="h-2.5 w-2.5 mr-0.5" /> At Risk
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+            <TrendingUp className="h-2.5 w-2.5 mr-0.5" /> On Track
+          </Badge>
+        )}
+      </div>
+      <div className="space-y-2">
+        <div>
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-muted-foreground">
+              Current Coverage <span dir="rtl" className="text-muted-foreground/70">/ التغطية الحالية</span>
+            </span>
+            <span className="font-semibold">{coverageRate}%</span>
+          </div>
+          <Progress value={coverageRate} className="h-1.5" />
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-muted-foreground">Timeline <span dir="rtl" className="text-muted-foreground/70">الفترة</span>:</span>
+            <span className="font-medium">{daysElapsed}/{totalDays}d</span>
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-muted-foreground">Remaining <span dir="rtl" className="text-muted-foreground/70">متبقي</span>:</span>
+            <span className="font-medium">{daysRemaining}d</span>
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-muted-foreground">Done <span dir="rtl" className="text-muted-foreground/70">مكتمل</span>:</span>
+            <span className="font-medium">{completedSites}/{totalSites}</span>
+          </div>
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-muted-foreground">Rate <span dir="rtl" className="text-muted-foreground/70">المعدل</span>:</span>
+            <span className="font-medium">{dailyRate.toFixed(1)}/day</span>
+          </div>
+        </div>
+        <div className={`flex items-center justify-between text-xs rounded-md px-2 py-1 ${isAtRisk ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+          <span className="text-muted-foreground">
+            Projected <span dir="rtl" className="text-muted-foreground/70">/ متوقع</span>
+          </span>
+          <span className={`font-bold ${isAtRisk ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            {projectedCoverage}%
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full Coverage Predictor card (summary + per-MMP grid) ────────────────────
 export function CycleCoveragePredictor({ activeMmps, siteVisitCounts }: CycleCoveragePredictorProps) {
   const activeOnlyMmps = activeMmps.filter(m => {
     const cs = (m as any).cycle_status || 'active';
@@ -139,86 +218,10 @@ export function CycleCoveragePredictor({ activeMmps, siteVisitCounts }: CycleCov
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {predictions.map(pred => {
-            if (!pred.hasData) {
-              return (
-                <div key={pred.mmp.id} className="rounded-lg border p-3" data-testid={`prediction-${pred.mmp.id}`}>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-sm font-medium truncate">{pred.mmp.name}</span>
-                    <Badge variant="secondary">No Data <span dir="rtl" className="text-muted-foreground/70 mr-1">لا بيانات</span></Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <AlertTriangle className="h-3 w-3" />
-                    No site visits found for this MMP
-                    <span dir="rtl" className="text-muted-foreground/70">/ لا توجد زيارات</span>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={pred.mmp.id}
-                className={`rounded-lg border p-3 ${pred.isAtRisk ? 'border-red-200 bg-red-50/50 dark:bg-red-950/30 dark:border-red-800' : 'border-green-200 bg-green-50/50 dark:bg-green-950/30 dark:border-green-800'}`}
-                data-testid={`prediction-${pred.mmp.id}`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-sm font-medium truncate">{pred.mmp.name}</span>
-                  {pred.isAtRisk ? (
-                    <Badge variant="destructive">
-                      <TrendingDown className="h-3 w-3 mr-1" /> At Risk
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">
-                      <TrendingUp className="h-3 w-3 mr-1" /> On Track
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-muted-foreground">
-                        Current Coverage <span dir="rtl" className="text-muted-foreground/70">/ التغطية الحالية</span>
-                      </span>
-                      <span className="font-semibold">{pred.coverageRate}%</span>
-                    </div>
-                    <Progress value={pred.coverageRate} className="h-2" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-muted-foreground">Timeline <span dir="rtl" className="text-muted-foreground/70">الفترة</span>:</span>
-                      <span className="font-medium">{pred.daysElapsed}/{pred.totalDays}d</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-muted-foreground">Remaining <span dir="rtl" className="text-muted-foreground/70">متبقي</span>:</span>
-                      <span className="font-medium">{pred.daysRemaining}d</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-muted-foreground">Done <span dir="rtl" className="text-muted-foreground/70">مكتمل</span>:</span>
-                      <span className="font-medium">{pred.completedSites}/{pred.totalSites}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-muted-foreground">Rate <span dir="rtl" className="text-muted-foreground/70">المعدل</span>:</span>
-                      <span className="font-medium">{pred.dailyRate.toFixed(1)}/day</span>
-                    </div>
-                  </div>
-
-                  <div className={`flex items-center justify-between text-xs rounded-md px-2 py-1 ${pred.isAtRisk ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
-                    <span className="text-muted-foreground">
-                      Projected <span dir="rtl" className="text-muted-foreground/70">/ متوقع</span>
-                    </span>
-                    <span className={`font-bold ${pred.isAtRisk ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                      {pred.projectedCoverage}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Per-MMP prediction panels are shown inline under each MMP card above.
+          <span dir="rtl" className="block text-muted-foreground/70 mt-0.5">تفاصيل كل خطة تظهر تحت بطاقتها</span>
+        </p>
       </CardContent>
     </Card>
   );
