@@ -258,6 +258,78 @@ const MMPCycleClose = () => {
   const [comparisonCycle2, setComparisonCycle2] = useState<string>('');
   const [checklistMmpId, setChecklistMmpId] = useState<string | null>(null);
   const skipMmpResetRef = useRef(false);
+
+  // Defined early (right after its state deps) to prevent any temporal dead zone issues
+  const fetchCycleSummary = useCallback(async (mmpId: string) => {
+    setLoadingCycleSummary(true);
+    setCycleSummaryData(null);
+    try {
+      const { data: costRows } = await supabase
+        .from('operational_cost_submissions')
+        .select('expense_category, amount_cents, currency, tier1_status, tier2_status')
+        .eq('mmp_id', mmpId);
+      const catMap: Record<string, { count: number; approvedCents: number; pendingCents: number; currency: string }> = {};
+      (costRows || []).forEach((r: any) => {
+        const cat = r.expense_category || 'Other';
+        if (!catMap[cat]) catMap[cat] = { count: 0, approvedCents: 0, pendingCents: 0, currency: r.currency || 'SDG' };
+        catMap[cat].count++;
+        const cents = r.amount_cents ?? 0;
+        const fullyApproved = r.tier1_status === 'approved' && r.tier2_status === 'approved';
+        if (fullyApproved) catMap[cat].approvedCents += cents;
+        else catMap[cat].pendingCents += cents;
+      });
+      const costSubs = Object.entries(catMap).map(([category, v]) => ({ category, ...v }))
+        .sort((a, b) => (b.approvedCents + b.pendingCents) - (a.approvedCents + a.pendingCents));
+      const { data: entries } = await supabase
+        .from('mmp_site_entries')
+        .select('id')
+        .eq('mmp_file_id', mmpId)
+        .limit(10000);
+      const entryIds = (entries || []).map((e: any) => e.id);
+      let advances: AdvanceSummary[] = [];
+      if (entryIds.length > 0) {
+        const PAGE = 1000;
+        let allAdv: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data } = await supabase
+            .from('down_payment_requests')
+            .select('status, amount_cents, currency')
+            .in('mmp_site_entry_id', entryIds)
+            .range(from, from + PAGE - 1);
+          allAdv = [...allAdv, ...(data || [])];
+          if (!data || data.length < PAGE) break;
+        }
+        const advMap: Record<string, { count: number; totalCents: number; currency: string }> = {};
+        allAdv.forEach((a: any) => {
+          const s = a.status || 'unknown';
+          if (!advMap[s]) advMap[s] = { count: 0, totalCents: 0, currency: a.currency || 'SDG' };
+          advMap[s].count++;
+          advMap[s].totalCents += a.amount_cents ?? 0;
+        });
+        advances = Object.entries(advMap).map(([status, v]) => ({ status, ...v }));
+      }
+      const totalApprovedCents = costSubs.reduce((s, r) => s + r.approvedCents, 0);
+      const totalAdvancesCents = advances.reduce((s, r) => s + r.totalCents, 0);
+      const currency = costSubs[0]?.currency || advances[0]?.currency || 'SDG';
+      setCycleSummaryData({ costSubs, advances, totalApprovedCents, totalAdvancesCents, currency });
+    } catch {
+      // Non-critical — summary is informational only
+    } finally {
+      setLoadingCycleSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (checklistMmpId) {
+      const status = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status ?? 'active';
+      if (status === 'closing' || status === 'pending_approval') {
+        fetchCycleSummary(checklistMmpId);
+      }
+    } else {
+      setCycleSummaryData(null);
+    }
+  }, [checklistMmpId, mmpFiles, fetchCycleSummary]);
+
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
   const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
 
@@ -1938,85 +2010,6 @@ const MMPCycleClose = () => {
     return { ok: issues.length === 0, issues };
   };
 
-  const fetchCycleSummary = useCallback(async (mmpId: string) => {
-    setLoadingCycleSummary(true);
-    setCycleSummaryData(null);
-    try {
-      // 1. Cost submissions (all statuses)
-      const { data: costRows } = await supabase
-        .from('operational_cost_submissions')
-        .select('expense_category, amount_cents, currency, tier1_status, tier2_status')
-        .eq('mmp_id', mmpId);
-
-      // Group by category
-      const catMap: Record<string, { count: number; approvedCents: number; pendingCents: number; currency: string }> = {};
-      (costRows || []).forEach((r: any) => {
-        const cat = r.expense_category || 'Other';
-        if (!catMap[cat]) catMap[cat] = { count: 0, approvedCents: 0, pendingCents: 0, currency: r.currency || 'SDG' };
-        catMap[cat].count++;
-        const cents = r.amount_cents ?? 0;
-        const fullyApproved = r.tier1_status === 'approved' && r.tier2_status === 'approved';
-        if (fullyApproved) catMap[cat].approvedCents += cents;
-        else catMap[cat].pendingCents += cents;
-      });
-      const costSubs = Object.entries(catMap).map(([category, v]) => ({ category, ...v }))
-        .sort((a, b) => (b.approvedCents + b.pendingCents) - (a.approvedCents + a.pendingCents));
-
-      // 2. Transport advances via site entries
-      const { data: entries } = await supabase
-        .from('mmp_site_entries')
-        .select('id')
-        .eq('mmp_file_id', mmpId)
-        .limit(10000);
-      const entryIds = (entries || []).map((e: any) => e.id);
-
-      let advances: AdvanceSummary[] = [];
-      if (entryIds.length > 0) {
-        const PAGE = 1000;
-        let allAdv: any[] = [];
-        for (let from = 0; ; from += PAGE) {
-          const { data } = await supabase
-            .from('down_payment_requests')
-            .select('status, amount_cents, currency')
-            .in('mmp_site_entry_id', entryIds)
-            .range(from, from + PAGE - 1);
-          allAdv = [...allAdv, ...(data || [])];
-          if (!data || data.length < PAGE) break;
-        }
-        const advMap: Record<string, { count: number; totalCents: number; currency: string }> = {};
-        allAdv.forEach((a: any) => {
-          const s = a.status || 'unknown';
-          if (!advMap[s]) advMap[s] = { count: 0, totalCents: 0, currency: a.currency || 'SDG' };
-          advMap[s].count++;
-          advMap[s].totalCents += a.amount_cents ?? 0;
-        });
-        advances = Object.entries(advMap).map(([status, v]) => ({ status, ...v }));
-      }
-
-      const totalApprovedCents = costSubs.reduce((s, r) => s + r.approvedCents, 0);
-      const totalAdvancesCents = advances.reduce((s, r) => s + r.totalCents, 0);
-      const currency = costSubs[0]?.currency || advances[0]?.currency || 'SDG';
-
-      setCycleSummaryData({ costSubs, advances, totalApprovedCents, totalAdvancesCents, currency });
-    } catch {
-      // Non-critical — summary is informational only
-    } finally {
-      setLoadingCycleSummary(false);
-    }
-  }, []);
-
-  // Trigger financial summary fetch whenever the wizard opens a closing/pending_approval cycle
-  // Placed here (after fetchCycleSummary definition) to avoid temporal dead zone crash
-  useEffect(() => {
-    if (checklistMmpId) {
-      const status = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status ?? 'active';
-      if (status === 'closing' || status === 'pending_approval') {
-        fetchCycleSummary(checklistMmpId);
-      }
-    } else {
-      setCycleSummaryData(null);
-    }
-  }, [checklistMmpId, mmpFiles, fetchCycleSummary]);
 
   const exportCycleSummaryExcel = useCallback(async () => {
     if (!cycleSummaryData || !checklistMmpId) return;
