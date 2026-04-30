@@ -106,11 +106,10 @@ interface OperationalCostSubmission {
   expense_date: string | null;
   vendor: string | null;
   reference_number: string | null;
-  hub_id: string | null;
-  project_id: string | null;
-  mmp_file_id: string | null;
-  mmp_id: string | null;
-  submitted_by: string;
+   hub_id: string | null;
+   project_id: string | null;
+   mmp_file_id: string | null;
+   submitted_by: string;
   submitted_at: string | null;
   submitter_role: string | null;
   supporting_documents: any;
@@ -255,10 +254,10 @@ const CostSubmission = () => {
   const [mmpFilter, setMmpFilter] = useState<string>('all');
   const [mmpOptions, setMmpOptions] = useState<{ id: string; name: string }[]>([]);
 
-  // Derive distinct MMP options from loaded cost data
-  useEffect(() => {
-    const ids = [...new Set(operationalCosts.map(o => o.mmp_id).filter(Boolean))] as string[];
-    if (ids.length === 0) { setMmpOptions([]); return; }
+   // Derive distinct MMP options from loaded cost data
+   useEffect(() => {
+     const ids = [...new Set(operationalCosts.map(o => o.mmp_file_id).filter(Boolean))] as string[];
+     if (ids.length === 0) { setMmpOptions([]); return; }
     supabase
       .from('mmp_files')
       .select('id, name')
@@ -605,14 +604,14 @@ const CostSubmission = () => {
         filtered = filtered.filter(o => !o.project_id || userProjectIds.includes(o.project_id));
       }
     }
-    // Cycle-close context: narrow to only this MMP's submissions
-    if (cycleContextMmpId) {
-      filtered = filtered.filter(o => o.mmp_id === cycleContextMmpId || (o as any).mmpFileId === cycleContextMmpId);
-    }
-    // Manual MMP filter
-    if (mmpFilter !== 'all') {
-      filtered = filtered.filter(o => o.mmp_id === mmpFilter);
-    }
+     // Cycle-close context: narrow to only this MMP's submissions
+     if (cycleContextMmpId) {
+       filtered = filtered.filter(o => o.mmp_file_id === cycleContextMmpId || (o as any).mmpFileId === cycleContextMmpId);
+     }
+     // Manual MMP filter
+     if (mmpFilter !== 'all') {
+       filtered = filtered.filter(o => o.mmp_file_id === mmpFilter);
+     }
     return filtered;
   }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId, mmpFilter]);
 
@@ -3643,7 +3642,7 @@ const CostSubmission = () => {
                                        </span>
                                      )}
                                      {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
-                                     <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
+                                      <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy h:mm a')}</span>
                                    </div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white">
@@ -4433,7 +4432,7 @@ const CostSubmission = () => {
                                    </span>
                                  )}
                                  {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{sSubmitter}</span>}
-                                 <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(soc.created_at), 'MMM d, yyyy')}</span>
+                                  <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(soc.created_at), 'MMM d, yyyy h:mm a')}</span>
                                </div>
                             </div>
                             <div className="flex-none text-right space-y-1">

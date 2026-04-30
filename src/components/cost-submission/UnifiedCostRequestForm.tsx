@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -192,45 +192,43 @@ export default function UnifiedCostRequestForm({
   const [requestDate, setRequestDate] = useState(editData?.expense_date || new Date().toISOString().split('T')[0]);
   const [requestTitle, setRequestTitle] = useState(editDefaults?.requestTitle || '');
    const [mmpId, setMmpId] = useState(editData?.mmp_file_id || '');
-  const [mmps, setMmps] = useState<MmpOption[]>([]);
-  const [mmpsLoading, setMmpsLoading] = useState(false);
+    const [mmps, setMmps] = useState<MmpOption[]>([]);
+    const [mmpsLoading, setMmpsLoading] = useState(false);
 
-  // Compute the hub name as a stable string so the fetch effect only reruns
-  // when the actual hub changes — not when the parent re-renders and hands us
-  // a new `hubs` array reference (which caused the "Loading MMPs…" flash).
-  const resolvedHubName = useMemo(() => {
-    const resolvedHubId = hubId || currentUser?.hubId;
-    return hubs.find(h => h.id === resolvedHubId)?.name ?? null;
-  }, [hubId, currentUser?.hubId, hubs]);
+    // Skip first render for the project→MMP reset effect so that editData's
+    // mmp_file_id isn't cleared immediately on mount.
+    const firstRenderRef = useRef(true);
 
-  // Load MMPs when project or hub changes — filter by both project_id and hub
-  useEffect(() => {
-    setMmpsLoading(true);
-    // If no project selected, clear MMP list and exit
-    if (!projectId) {
-      setMmps([]);
-      setMmpsLoading(false);
-      return;
-    }
-    let q = supabase
-      .from('mmp_files')
-      .select('id, name, month, hub, status')
-      .order('uploaded_at', { ascending: false })
-      .limit(100)
-      .eq('project_id', projectId);
-    if (resolvedHubName) q = q.eq('hub', resolvedHubName);
-    q.then(({ data }) => {
-      setMmps((data || []) as MmpOption[]);
-      setMmpsLoading(false);
-    }).catch(() => setMmpsLoading(false));
-  }, [resolvedHubName, projectId]);
+    // Load MMPs when project changes — filter by project_id (include unassigned)
+    useEffect(() => {
+     setMmpsLoading(true);
+     if (!projectId) {
+       setMmps([]);
+       setMmpsLoading(false);
+       return;
+     }
+     let q = supabase
+       .from('mmp_files')
+       .select('id, name, month, hub, status')
+       .order('uploaded_at', { ascending: false })
+       .limit(100)
+       .or(`project_id.eq.${projectId},project_id.is.null`);
+     q.then(({ data }) => {
+       setMmps((data || []) as MmpOption[]);
+       setMmpsLoading(false);
+     }).catch(() => setMmpsLoading(false));
+   }, [projectId]);
 
-  // Reset selected MMP when project changes (but not on initial mount with editData)
-  useEffect(() => {
-    if (projectId) {
-      setMmpId('');
-    }
-  }, [projectId]);
+   // Reset selected MMP when project changes (skip initial mount so edits keep their MMP)
+   useEffect(() => {
+     if (firstRenderRef.current) {
+       firstRenderRef.current = false;
+       return;
+     }
+     if (projectId) {
+       setMmpId('');
+     }
+   }, [projectId]);
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),

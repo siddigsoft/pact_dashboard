@@ -1046,10 +1046,11 @@ const MobileCostSubmission = () => {
                 expense_date: editingSubmission.expense_date,
                 vendor: editingSubmission.vendor,
                 reference_number: editingSubmission.reference_number,
-                hub_id: editingSubmission.hub_id,
-                project_id: editingSubmission.project_id,
-                supporting_documents: editingSubmission.supporting_documents,
-                status: editingSubmission.status,
+                 hub_id: editingSubmission.hub_id,
+                 project_id: editingSubmission.project_id,
+                 mmp_file_id: editingSubmission.mmp_file_id,
+                 supporting_documents: editingSubmission.supporting_documents,
+                 status: editingSubmission.status,
               } : null}
               onCancelEdit={() => { setEditingSubmission(null); setActiveTab("history"); }}
               onSuccess={() => { setEditingSubmission(null); fetchOperationalCosts(); setActiveTab("history"); }}
