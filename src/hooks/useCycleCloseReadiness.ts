@@ -320,9 +320,10 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         {
           id: 'cost_recovery',
           label: 'All not-covered cost recoveries addressed',
-          description:
-            'Every not-covered site that received an advance payment must have a recovery decision: Roll to Next MMP, Return Required, or Write-Off.',
-          passed: costRecoveryError || costRecoveryPending === 0,
+          description: costRecoveryError
+            ? 'Could not check cost recovery status — please retry. Do not close the cycle until this is confirmed.'
+            : 'Every not-covered site that received an advance payment must have a recovery decision: Roll to Next MMP, Return Required, or Write-Off.',
+          passed: !costRecoveryError && costRecoveryPending === 0,
           count: 0,
           total: costRecoveryPending,
           link: '/mmp/cycle-close?tab=exceptions',
@@ -331,9 +332,10 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         {
           id: 'wfp_confirmation',
           label: 'WFP confirmation file applied',
-          description:
-            'Upload and apply the WFP cleaned Excel to confirm or reject each submitted site visit before closing the cycle.',
-          passed: wfpError || submittedCount === 0 || wfpApplied,
+          description: wfpError
+            ? 'Could not check WFP confirmation status — please retry. Do not close the cycle until this is confirmed.'
+            : 'Upload and apply the WFP cleaned Excel to confirm or reject each submitted site visit before closing the cycle.',
+          passed: !wfpError && (submittedCount === 0 || wfpApplied),
           count: wfpApplied ? submittedCount : 0,
           total: submittedCount,
           link: '/mmp/cycle-close?tab=wfp',

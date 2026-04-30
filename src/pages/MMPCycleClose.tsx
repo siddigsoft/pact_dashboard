@@ -762,8 +762,8 @@ const MMPCycleClose = () => {
             ? 'You have approval authority. Use the Approve or Reject buttons below to take action.'
             : 'The FOM, Admin, or Super Admin will review and approve or reject the cycle close.'
           : 'This step is unlocked after submission.',
-        passed: false,
-        blocked: checklistMmpStatus !== 'pending_approval',
+        passed: checklistMmpStatus === 'closed',
+        blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed',
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
@@ -2089,10 +2089,24 @@ const MMPCycleClose = () => {
     }
   };
 
-  const checkFinanceReadinessForClose = async (mmpId: string): Promise<{ ok: boolean; issues: string[] }> => {
+  const checkFinanceReadinessForClose = async (mmpId: string): Promise<{ ok: boolean; issues: string[]; pendingViaReport: number }> => {
+    let siteEntryIds: string[] = [];
     let advancesRes, withdrawalsRes, costSubsRes;
     try {
-      // Filter cost submissions by mmp_id FK directly — avoids counting
+      // Step 1: fetch all site entry IDs for this MMP so advances are scoped
+      // via mmp_site_entry_id — the same join used by the readiness checklist hook.
+      // This prevents the count mismatch that occurs when advances carry mmp_id but
+      // the hook sources them through site entries.
+      const { data: entries, error: entriesErr } = await supabase
+        .from('mmp_site_entries')
+        .select('id')
+        .eq('mmp_file_id', mmpId);
+      if (!entriesErr && entries) {
+        siteEntryIds = entries.map((e: any) => e.id);
+      }
+
+      // Step 2: fetch advances, withdrawals, and cost submissions in parallel.
+      // Cost submissions filter by mmp_id FK directly — avoids counting
       // submissions from other MMPs in the same calendar month.
       const costSubsQuery = supabase
         .from('operational_cost_submissions')
@@ -2100,8 +2114,12 @@ const MMPCycleClose = () => {
         .eq('mmp_id', mmpId)
         .or('tier1_status.eq.pending,tier2_status.eq.pending');
 
+      const advancesQuery = siteEntryIds.length > 0
+        ? supabase.from('down_payment_requests').select('id, status, metadata').in('mmp_site_entry_id', siteEntryIds)
+        : supabase.from('down_payment_requests').select('id, status, metadata').eq('mmp_id', mmpId);
+
       [advancesRes, withdrawalsRes, costSubsRes] = await Promise.all([
-        supabase.from('down_payment_requests').select('id, status, metadata').eq('mmp_id', mmpId),
+        advancesQuery,
         supabase.from('withdrawal_requests').select('id, status').eq('mmp_id', mmpId),
         costSubsQuery,
       ]);
@@ -2111,26 +2129,23 @@ const MMPCycleClose = () => {
         description: 'Unable to verify finance readiness. Please retry or contact support.',
         variant: 'destructive',
       });
-      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'] };
+      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'], pendingViaReport: 0 };
     }
 
-    // Only block on cost submissions error (required table).
-    // advances/withdrawals tables are optional — gracefully treat errors as empty
-    // to match server RPC behavior which also handles missing tables gracefully.
+    // Cost submissions error is blocking (required table).
     if (costSubsRes.error) {
       toast({
         title: 'Finance Gate — Close Blocked',
         description: 'Unable to verify cost submission readiness. Please retry or contact support.',
         variant: 'destructive',
       });
-      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'] };
+      return { ok: false, issues: ['Finance readiness check failed — cannot proceed'], pendingViaReport: 0 };
     }
 
-    // advances: treat query error as empty (optional table, server RPC handles gracefully)
-    // Gate logic:
-    //   - fully_paid / paid / reconciled → cleared (no issue)
-    //   - approved (zero disbursement) → "pending payment via report" — NOT blocking
-    //   - partially_paid and not reconciled → blocking
+    // Advances gate logic (matches server RPC gate 2 after Fix 3 SQL):
+    //   - fully_paid / paid / reconciled → cleared
+    //   - partially_paid + unreconciled → BLOCKING
+    //   - approved (zero disbursement) → "pending payment via report" — NOT blocking but counted
     const advances = (!advancesRes.error && advancesRes.data || []) as Array<{ id: string; status: string; metadata: Record<string, unknown> | null }>;
     const unreconciledAdvances = advances.filter(a => {
       const meta = a.metadata ?? {};
@@ -2138,7 +2153,13 @@ const MMPCycleClose = () => {
       return a.status === 'partially_paid' && !isCleared;
     }).length;
 
-    // withdrawals: treat query error as empty (optional table, server RPC handles gracefully)
+    const pendingViaReport = advances.filter(a => {
+      const meta = a.metadata ?? {};
+      const isCleared = a.status === 'fully_paid' || a.status === 'paid' || meta['reconciled'] === true || Boolean(meta['reconciled_at']);
+      return a.status === 'approved' && !isCleared;
+    }).length;
+
+    // Withdrawals: treat query error as empty
     const pendingWithdrawals = ((!withdrawalsRes.error && withdrawalsRes.data || []) as Array<{ id: string; status: string }>).filter(
       w => !['approved', 'rejected', 'completed', 'paid'].includes(w.status ?? ''),
     ).length;
@@ -2146,11 +2167,11 @@ const MMPCycleClose = () => {
     const pendingCostSubs = (costSubsRes.data || []).length;
 
     const issues: string[] = [];
-    if (unreconciledAdvances > 0) issues.push(`${unreconciledAdvances} unreconciled transport advance(s)`);
+    if (unreconciledAdvances > 0) issues.push(`${unreconciledAdvances} partially-paid transport advance(s) not yet reconciled`);
     if (pendingWithdrawals > 0) issues.push(`${pendingWithdrawals} pending withdrawal request(s)`);
     if (pendingCostSubs > 0) issues.push(`${pendingCostSubs} pending cost submission(s) (tier 1 or tier 2 pending)`);
 
-    return { ok: issues.length === 0, issues };
+    return { ok: issues.length === 0, issues, pendingViaReport };
   };
 
 
@@ -2442,7 +2463,7 @@ const MMPCycleClose = () => {
       return;
     }
 
-    const { ok: financeOk, issues: financeIssues } = await checkFinanceReadinessForClose(mmpId);
+    const { ok: financeOk, issues: financeIssues, pendingViaReport } = await checkFinanceReadinessForClose(mmpId);
     if (!financeOk) {
       if (isSuperAdmin) {
         setFinanceOverrideJustification('');
@@ -2455,6 +2476,15 @@ const MMPCycleClose = () => {
         variant: 'destructive',
       });
       return;
+    }
+
+    if (pendingViaReport > 0) {
+      toast({
+        title: `${pendingViaReport} Advance(s) Pending Payment via Report`,
+        description:
+          'These approved advances have not been disbursed yet. They are non-blocking, but must be settled in the next payment report after close.',
+        variant: 'default',
+      });
     }
 
     setFinalizingCycle(true);
@@ -2495,7 +2525,7 @@ const MMPCycleClose = () => {
 
   const handleApproveCycle = async (mmpId: string, skipFinanceCheck = false, overrideJustification?: string) => {
     if (!skipFinanceCheck) {
-      const { ok: financeOk, issues: financeIssues } = await checkFinanceReadinessForClose(mmpId);
+      const { ok: financeOk, issues: financeIssues } = await checkFinanceReadinessForClose(mmpId).then(r => r);
       if (!financeOk) {
         if (isSuperAdmin) {
           setFinanceOverrideJustification('');
@@ -2546,12 +2576,8 @@ const MMPCycleClose = () => {
 
       if (error) throw error;
 
-      await supabase
-        .from('mmp_site_entries')
-        .update({ status: 'cancelled' })
-        .eq('mmp_file_id', mmpId)
-        .eq('not_covered_flag', true)
-        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+      // Note: not_covered site entry cancellation is now handled atomically inside
+      // the cycle_approve_close RPC (Fix 3 — prevents race condition on disconnect).
 
       const mmp = mmpFiles?.find(m => m.id === mmpId);
       await logMMPAudit({
@@ -2580,6 +2606,9 @@ const MMPCycleClose = () => {
         .update({
           cycle_status: 'closing',
           cycle_approval_note: note,
+          // Clear stale records so re-submission starts clean and doesn't
+          // accumulate a growing list of rejected close snapshots.
+          cycle_close_records: [],
         } as any)
         .eq('id', mmpId);
 
