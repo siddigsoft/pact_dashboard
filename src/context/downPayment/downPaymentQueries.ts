@@ -128,15 +128,46 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   // Always fetch without a join so RLS on mmp_site_entries never silently
   // drops down_payment_requests rows.  Geographic fields (state/locality/mmpName)
   // are populated from metadata first, then filled in by the enrichment RPC below.
-  console.log('[DownPayment] Fetching — role:', userRole, '| hubId:', user.hubId, '| userId:', user.id);
+  // Try the SECURITY DEFINER RPC first (bypasses RLS, applies role filter in SQL).
+  // Falls back to a direct query if the migration hasn't been applied yet.
   let allData: any[] = [];
   let error: any = null;
+  let useRpc = true;
+
   for (let _dpf = 0; ; _dpf += 1000) {
-    const { data: _dpp, error: _dpe } = await applyRoleFilter(supabase.from('down_payment_requests').select(DP_SELECT_PLAIN)).order('created_at', { ascending: false }).range(_dpf, _dpf + 999);
+    let _dpp: any[] | null = null;
+    let _dpe: any = null;
+
+    if (useRpc) {
+      const res = await (supabase as any)
+        .rpc('get_dp_requests_for_user', {
+          p_user_id: user.id,
+          p_role: userRole || '',
+          p_hub_id: user.hubId ?? null,
+          p_secondary_hub_id: user.secondaryHubId ?? null,
+        })
+        .range(_dpf, _dpf + 999);
+      _dpp = res.data;
+      _dpe = res.error;
+      // If RPC doesn't exist yet, fall back to direct query for this and all remaining pages
+      if (_dpe?.code === 'PGRST202' || _dpe?.message?.includes('Could not find')) {
+        console.warn('[DownPayment] RPC not available, falling back to direct query');
+        useRpc = false;
+        _dpe = null;
+      }
+    }
+
+    if (!useRpc) {
+      const res = await applyRoleFilter(
+        supabase.from('down_payment_requests').select(DP_SELECT_PLAIN)
+      ).order('created_at', { ascending: false }).range(_dpf, _dpf + 999);
+      _dpp = res.data;
+      _dpe = res.error;
+    }
+
     if (_dpe) { error = _dpe; break; }
     if (!_dpp) break;
     allData = [...allData, ..._dpp];
-    console.log('[DownPayment] Page', _dpf / 1000, '— rows in page:', _dpp.length, '| total so far:', allData.length);
     if (_dpp.length < 1000) break;
   }
   let data: any[] | null = allData.length > 0 ? allData : null;
