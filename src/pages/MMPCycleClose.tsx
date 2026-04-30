@@ -249,57 +249,90 @@ const MMPCycleClose = () => {
   const [financeAdvances, setFinanceAdvances] = useState<FinanceAdvance[]>([]);
   const [financeLoading, setFinanceLoading] = useState(false);
   const [financeApproving, setFinanceApproving] = useState<Set<string>>(new Set());
+  const [financeRejecting, setFinanceRejecting] = useState<Set<string>>(new Set());
   const [financeApprovingAll, setFinanceApprovingAll] = useState(false);
+  const [financeRejectDialog, setFinanceRejectDialog] = useState<{ open: boolean; costId: string | null; reason: string }>({ open: false, costId: null, reason: '' });
+
+  // Build correct update payload mirroring CostSubmission.tsx approval logic
+  const buildCostApproveUpdate = (cost: FinanceCost, userId: string): Record<string, string | null> => {
+    const now = new Date().toISOString();
+    const hasThreeTiers = cost.tier3_status !== null;
+    if (cost.tier1_status === 'pending') {
+      return { tier1_status: 'approved', tier1_approved_by: userId, tier1_approved_at: now, status: 'under_review' };
+    } else if (cost.tier2_status === 'pending') {
+      if (hasThreeTiers) {
+        return { tier2_status: 'approved', tier2_approved_by: userId, tier2_approved_at: now, status: 'under_review', tier3_status: 'pending' };
+      }
+      return { tier2_status: 'approved', tier2_approved_by: userId, tier2_approved_at: now, status: 'approved' };
+    } else if (cost.tier3_status === 'pending') {
+      return { tier3_status: 'approved', tier3_approved_by: userId, tier3_approved_at: now, status: 'approved' };
+    }
+    return {};
+  };
+
+  const buildCostRejectUpdate = (cost: FinanceCost, userId: string, reason: string): Record<string, string | null> => {
+    const now = new Date().toISOString();
+    const msg = reason || 'Rejected from MMP Cycle Close';
+    if (cost.tier1_status === 'pending') {
+      return { tier1_status: 'rejected', tier1_approved_by: userId, tier1_approved_at: now, tier1_notes: msg, status: 'rejected', rejection_reason: msg };
+    } else if (cost.tier2_status === 'pending') {
+      return { tier2_status: 'rejected', tier2_approved_by: userId, tier2_approved_at: now, tier2_notes: msg, status: 'rejected', rejection_reason: msg };
+    } else if (cost.tier3_status === 'pending') {
+      return { tier3_status: 'rejected', tier3_approved_by: userId, tier3_approved_at: now, tier3_notes: msg, status: 'rejected', rejection_reason: msg };
+    }
+    return {};
+  };
 
   const handleApproveCost = useCallback(async (costId: string) => {
     const cost = financeCosts.find(c => c.id === costId);
     if (!cost || !currentUser?.id) return;
-    const now = new Date().toISOString();
-    let update: Record<string, string> = {};
-    if (cost.tier1_status === 'pending') {
-      update = { tier1_status: 'approved', tier1_approved_by: currentUser.id, tier1_approved_at: now };
-    } else if (cost.tier2_status === 'pending') {
-      update = { tier2_status: 'approved', tier2_approved_by: currentUser.id, tier2_approved_at: now };
-    } else if (cost.tier3_status === 'pending') {
-      update = { tier3_status: 'approved', tier3_approved_by: currentUser.id, tier3_approved_at: now };
-    } else return;
+    const update = buildCostApproveUpdate(cost, currentUser.id);
+    if (Object.keys(update).length === 0) return;
     setFinanceApproving(prev => new Set(prev).add(costId));
     try {
       const { error } = await supabase.from('operational_cost_submissions').update(update).eq('id', costId);
       if (error) throw error;
-      setFinanceCosts(prev => prev.filter(c => {
-        if (c.id !== costId) return true;
-        const updated = { ...c, ...update };
-        return updated.tier1_status === 'pending' || updated.tier2_status === 'pending' || updated.tier3_status === 'pending';
-      }));
+      setFinanceCosts(prev => prev.filter(c => c.id !== costId));
       toast({ title: 'Approved', description: 'Cost submission approved.' });
     } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      toast({ title: 'Approval Failed', description: e.message || 'Could not update the record.', variant: 'destructive' });
     } finally {
       setFinanceApproving(prev => { const s = new Set(prev); s.delete(costId); return s; });
+    }
+  }, [financeCosts, currentUser?.id, toast]);
+
+  const handleRejectCost = useCallback(async (costId: string, reason: string) => {
+    const cost = financeCosts.find(c => c.id === costId);
+    if (!cost || !currentUser?.id) return;
+    const update = buildCostRejectUpdate(cost, currentUser.id, reason);
+    if (Object.keys(update).length === 0) return;
+    setFinanceRejecting(prev => new Set(prev).add(costId));
+    try {
+      const { error } = await supabase.from('operational_cost_submissions').update(update).eq('id', costId);
+      if (error) throw error;
+      setFinanceCosts(prev => prev.filter(c => c.id !== costId));
+      toast({ title: 'Rejected', description: 'Cost submission rejected.' });
+    } catch (e: any) {
+      toast({ title: 'Rejection Failed', description: e.message || 'Could not update the record.', variant: 'destructive' });
+    } finally {
+      setFinanceRejecting(prev => { const s = new Set(prev); s.delete(costId); return s; });
     }
   }, [financeCosts, currentUser?.id, toast]);
 
   const handleApproveAllCosts = useCallback(async () => {
     if (!currentUser?.id || financeCosts.length === 0) return;
     setFinanceApprovingAll(true);
-    const now = new Date().toISOString();
     try {
       await Promise.all(financeCosts.map(async cost => {
-        let update: Record<string, string> = {};
-        if (cost.tier1_status === 'pending') {
-          update = { tier1_status: 'approved', tier1_approved_by: currentUser.id!, tier1_approved_at: now };
-        } else if (cost.tier2_status === 'pending') {
-          update = { tier2_status: 'approved', tier2_approved_by: currentUser.id!, tier2_approved_at: now };
-        } else if (cost.tier3_status === 'pending') {
-          update = { tier3_status: 'approved', tier3_approved_by: currentUser.id!, tier3_approved_at: now };
-        } else return;
-        await supabase.from('operational_cost_submissions').update(update).eq('id', cost.id);
+        const update = buildCostApproveUpdate(cost, currentUser.id!);
+        if (Object.keys(update).length === 0) return;
+        const { error } = await supabase.from('operational_cost_submissions').update(update).eq('id', cost.id);
+        if (error) throw error;
       }));
       setFinanceCosts([]);
       toast({ title: 'All Approved', description: `${financeCosts.length} cost submissions approved.` });
     } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+      toast({ title: 'Error', description: e.message || 'One or more approvals failed.', variant: 'destructive' });
     } finally {
       setFinanceApprovingAll(false);
     }
@@ -3608,7 +3641,7 @@ const MMPCycleClose = () => {
                             <th className="px-3 py-2 text-right font-medium">Amount</th>
                             <th className="px-3 py-2 text-left font-medium hidden md:table-cell">Date</th>
                             <th className="px-3 py-2 text-center font-medium">Stage</th>
-                            <th className="px-3 py-2 text-center font-medium">Action</th>
+                            <th className="px-3 py-2 text-center font-medium">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -3631,16 +3664,28 @@ const MMPCycleClose = () => {
                                   )}
                                 </td>
                                 <td className="px-3 py-2 text-center">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-6 text-[11px] px-2 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-600 dark:text-green-400 dark:hover:bg-green-900/20"
-                                    onClick={() => handleApproveCost(c.id)}
-                                    disabled={isApproving || !pendingTier}
-                                    data-testid={`button-approve-cost-${c.id}`}
-                                  >
-                                    {isApproving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Approve'}
-                                  </Button>
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-[11px] px-2 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-600 dark:text-green-400 dark:hover:bg-green-900/20"
+                                      onClick={() => handleApproveCost(c.id)}
+                                      disabled={isApproving || financeRejecting.has(c.id) || !pendingTier}
+                                      data-testid={`button-approve-cost-${c.id}`}
+                                    >
+                                      {isApproving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Approve'}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-[11px] px-2 border-red-400 text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-900/20"
+                                      onClick={() => setFinanceRejectDialog({ open: true, costId: c.id, reason: '' })}
+                                      disabled={isApproving || financeRejecting.has(c.id) || !pendingTier}
+                                      data-testid={`button-reject-cost-${c.id}`}
+                                    >
+                                      {financeRejecting.has(c.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Reject'}
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -3651,6 +3696,43 @@ const MMPCycleClose = () => {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Rejection reason dialog */}
+              <Dialog open={financeRejectDialog.open} onOpenChange={open => !open && setFinanceRejectDialog(d => ({ ...d, open: false }))}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-red-500" /> Reject Cost Submission
+                    </DialogTitle>
+                    <DialogDescription>Provide a rejection reason. The submitter will be notified.</DialogDescription>
+                  </DialogHeader>
+                  <Textarea
+                    placeholder="Reason for rejection (optional)..."
+                    value={financeRejectDialog.reason}
+                    onChange={e => setFinanceRejectDialog(d => ({ ...d, reason: e.target.value }))}
+                    className="min-h-[80px] text-sm"
+                    data-testid="textarea-reject-reason"
+                  />
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="ghost" size="sm" onClick={() => setFinanceRejectDialog(d => ({ ...d, open: false }))}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={async () => {
+                        const { costId, reason } = financeRejectDialog;
+                        if (!costId) return;
+                        setFinanceRejectDialog(d => ({ ...d, open: false }));
+                        await handleRejectCost(costId, reason);
+                      }}
+                      data-testid="button-confirm-reject-cost"
+                    >
+                      Confirm Reject
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Stuck Transport Advances */}
               <Card>
