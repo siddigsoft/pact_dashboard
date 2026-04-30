@@ -116,11 +116,13 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       }
       return q.eq('requested_by', user.id);
     }
+    // Normalise role: strip spaces/underscores/dashes so
+    // "Super Admin", "super_admin", "superadmin" all match the same bucket
+    const normalizedRole = (userRole || '').replace(/[^a-z]/g, '');
     const isAdmin = [
-      'admin', 'financialadmin', 'superadmin', 'super_admin',
-      'ict', 'fom', 'field operation manager',
-      'countrydirector', 'country_director', 'datateam', 'data_team',
-    ].includes(userRole || '');
+      'superadmin', 'admin', 'financialadmin', 'ict', 'fom',
+      'fieldoperationmanager', 'countrydirector', 'datateam',
+    ].includes(normalizedRole);
     if (!isAdmin) return q.eq('requested_by', user.id);
     return q;
   };
