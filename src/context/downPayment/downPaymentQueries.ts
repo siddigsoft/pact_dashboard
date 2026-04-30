@@ -150,63 +150,56 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     return true;
   });
 
-  // With plain-select (no join), geographic fields come from metadata only.
-  // Enrich all records that have an mmpSiteEntryId so the RPC can fill/correct
-  // state, locality, and mmpName even when metadata already has values.
-  const needsEnrichment = transformed.filter(r => r.mmpSiteEntryId);
-  if (needsEnrichment.length > 0) {
-    const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))] as string[];
-    try {
-      // Use an RPC function that does a server-side SQL JOIN — avoids GET
-      // URL-length limits that silently fail when passing 600+ UUIDs as query params.
-      const { data: entries } = await (supabase as any).rpc('get_entry_enrichment', { entry_ids: entryIds });
+  // Run geographic enrichment and hub-name normalisation IN PARALLEL to
+  // minimise total wait time.  Both are non-critical — failures are logged
+  // but do not prevent the page from loading.
+  const entryIds = [
+    ...new Set(transformed.map(r => r.mmpSiteEntryId).filter(Boolean)),
+  ] as string[];
+  const hubIds = [
+    ...new Set(transformed.map(r => r.hubId).filter(Boolean)),
+  ] as string[];
 
-      if (entries && entries.length > 0) {
-        const entryMap = new Map<string, { state: string; locality: string; mmp_name: string }>(
-          (entries as any[]).map(e => [e.id, e])
-        );
-        transformed.forEach(r => {
-          if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
-            const e = entryMap.get(r.mmpSiteEntryId)!;
-            if (e.state) r.stateName = cleanStr(e.state) ?? e.state;
-            if (e.locality) r.localityName = cleanStr(e.locality) ?? e.locality;
-            if (e.mmp_name) r.mmpName = cleanStr(e.mmp_name) ?? e.mmp_name;
-          }
-        });
+  const [enrichResult, hubResult] = await Promise.allSettled([
+    entryIds.length > 0
+      ? (supabase as any).rpc('get_entry_enrichment', { entry_ids: entryIds })
+      : Promise.resolve({ data: [] }),
+    hubIds.length > 0
+      ? supabase.from('hubs').select('id, name').in('id', hubIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  if (enrichResult.status === 'fulfilled' && enrichResult.value?.data?.length > 0) {
+    const entryMap = new Map<string, { state: string; locality: string; mmp_name: string }>(
+      (enrichResult.value.data as any[]).map((e: any) => [e.id, e])
+    );
+    transformed.forEach(r => {
+      if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
+        const e = entryMap.get(r.mmpSiteEntryId)!;
+        if (e.state) r.stateName = cleanStr(e.state) ?? e.state;
+        if (e.locality) r.localityName = cleanStr(e.locality) ?? e.locality;
+        if (e.mmp_name) r.mmpName = cleanStr(e.mmp_name) ?? e.mmp_name;
       }
-    } catch (enrichErr) {
-      console.warn('[DownPayment] Enrichment failed (non-critical):', enrichErr);
-    }
+    });
+  } else if (enrichResult.status === 'rejected') {
+    console.warn('[DownPayment] Enrichment failed (non-critical):', enrichResult.reason);
   }
 
-  // Normalize hub names from the hubs table using hub_id.
-  // The hub_name stored in down_payment_requests can be stale or inconsistent
-  // (e.g. "Country Office (CO) KHT", "Read Sea (CO)") — always prefer the
-  // official name from the hubs master table.
-  try {
-    const hubIds = [...new Set(transformed.map(r => r.hubId).filter(Boolean))] as string[];
-    if (hubIds.length > 0) {
-      const { data: hubs } = await supabase
-        .from('hubs')
-        .select('id, name')
-        .in('id', hubIds);
-      if (hubs && hubs.length > 0) {
-        const hubMap = new Map(hubs.map(h => [h.id, h.name]));
-        transformed.forEach(r => {
-          if (r.hubId && hubMap.has(r.hubId)) {
-            r.hubName = hubMap.get(r.hubId) as string;
-          }
-        });
-      }
-    }
-  } catch (hubEnrichErr) {
-    console.warn('[DownPayment] Hub name enrichment failed (non-critical):', hubEnrichErr);
+  if (hubResult.status === 'fulfilled' && hubResult.value?.data?.length > 0) {
+    const hubMap = new Map((hubResult.value.data as any[]).map((h: any) => [h.id, h.name]));
+    transformed.forEach(r => {
+      if (r.hubId && hubMap.has(r.hubId)) r.hubName = hubMap.get(r.hubId) as string;
+    });
+  } else if (hubResult.status === 'rejected') {
+    console.warn('[DownPayment] Hub name enrichment failed (non-critical):', hubResult.reason);
   }
 
   return transformed;
 }
 
-const STALE_MS = 60 * 1000;
+// 5-minute cache — down-payment data changes infrequently; avoids
+// re-running the expensive enrichment round-trip on every navigation.
+const STALE_MS = 5 * 60 * 1000;
 
 /**
  * Fetches down payment requests for the current user with role-based filtering.
@@ -220,10 +213,11 @@ export function useDownPaymentRequestsQuery(user: UserForDownPayment | null) {
     queryFn: () =>
       withTimeout(
         fetchDownPaymentRequests(user!),
-        20000,
+        30000,
         'Failed to load requests. Please refresh the page.'
       ),
     staleTime: STALE_MS,
+    gcTime: 10 * 60 * 1000,
     placeholderData: (previousData) => previousData,
     enabled,
   });
