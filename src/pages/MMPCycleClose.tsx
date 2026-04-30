@@ -518,9 +518,13 @@ const MMPCycleClose = () => {
       {
         id: 'submit', number: 5,
         title: 'Submit for Approval', titleAr: 'تقديم للموافقة',
-        desc: cycleReadiness.allPassed ? 'All gates are green — you can now submit.' : 'Complete all steps above first.',
-        passed: false,
-        blocked: !cycleReadiness.allPassed,
+        desc: checklistMmpStatus === 'pending_approval'
+          ? 'Submitted — waiting for FOM / Director approval.'
+          : cycleReadiness.allPassed
+            ? 'All gates are green — you can now submit.'
+            : 'Complete all steps above first.',
+        passed: checklistMmpStatus === 'pending_approval',
+        blocked: checklistMmpStatus !== 'pending_approval' && !cycleReadiness.allPassed,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
@@ -530,8 +534,26 @@ const MMPCycleClose = () => {
           'The FOM and Country Director will be notified for review.',
         ],
       },
+      {
+        id: 'approval', number: 6,
+        title: 'Awaiting Final Approval', titleAr: 'في انتظار الموافقة',
+        desc: checklistMmpStatus === 'pending_approval'
+          ? 'The FOM or Country Director will review and approve or reject the cycle close.'
+          : 'This step is unlocked after submission.',
+        passed: false,
+        blocked: checklistMmpStatus !== 'pending_approval',
+        tab: null, actionLabel: null,
+        sub: [],
+        remaining: 0,
+        howTo: [
+          'Wait for the FOM or Country Director to log in and approve.',
+          'You will receive a notification when the cycle is approved or sent back.',
+          'If approved, the cycle status becomes "Closed" and is archived.',
+          'If rejected, the cycle returns to "Closing" state and you can make corrections.',
+        ],
+      },
     ];
-  }, [cycleReadiness.items, cycleReadiness.allPassed]);
+  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus]);
 
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
@@ -1944,6 +1966,8 @@ const MMPCycleClose = () => {
         metadata: { cycleAction: 'submit_for_approval' },
       });
 
+      setReconciliationAcknowledged(false);
+      setPendingScopedClose(null);
       toast({ title: 'Submitted for Approval', description: 'The cycle has been submitted for FOM/Director approval.' });
       await refreshMMPFiles();
       await fetchUncoveredSites();
@@ -3108,8 +3132,15 @@ const MMPCycleClose = () => {
                           <>
                             {/* Progress bar + check-again */}
                             <div className="flex items-center gap-3 mb-4">
-                              <Progress value={Math.round((guideSteps.filter(s => s.passed).length / guideSteps.length) * 100)} className="h-2 flex-1" />
-                              <span className="text-xs text-muted-foreground shrink-0">{guideSteps.filter(s => s.passed).length} / {guideSteps.length - 1} done</span>
+                              {(() => {
+                                const actionable = guideSteps.filter(s => s.id !== 'start' && s.id !== 'approval');
+                                const done = actionable.filter(s => s.passed).length;
+                                const pct = actionable.length > 0 ? Math.round((done / actionable.length) * 100) : 0;
+                                return (<>
+                                  <Progress value={pct} className="h-2 flex-1" />
+                                  <span className="text-xs text-muted-foreground shrink-0">{done} / {actionable.length} done</span>
+                                </>);
+                              })()}
                               <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0" onClick={() => cycleReadiness.refresh()} data-testid="button-guide-refresh">
                                 <RefreshCw className="h-3 w-3" /> Check again
                               </Button>
@@ -3126,30 +3157,36 @@ const MMPCycleClose = () => {
                                   className={`rounded-xl border transition-all ${
                                     isDone
                                       ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20 p-4'
-                                      : isCurrentStep
-                                        ? 'border-amber-400 bg-amber-50/60 dark:border-amber-600 dark:bg-amber-950/30 shadow-md p-4'
-                                        : isLocked
-                                          ? 'border-muted bg-muted/20 opacity-60 p-4'
-                                          : 'border-muted bg-card p-4'
+                                      : isCurrentStep && step.id === 'approval'
+                                        ? 'border-purple-400 bg-purple-50/60 dark:border-purple-600 dark:bg-purple-950/30 shadow-md p-4'
+                                        : isCurrentStep
+                                          ? 'border-amber-400 bg-amber-50/60 dark:border-amber-600 dark:bg-amber-950/30 shadow-md p-4'
+                                          : isLocked
+                                            ? 'border-muted bg-muted/20 opacity-60 p-4'
+                                            : 'border-muted bg-card p-4'
                                   }`}
                                   data-testid={`guide-step-${step.id}`}
                                 >
                                   <div className="flex items-start gap-3">
                                     {/* Step number / icon */}
                                     <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                      isDone ? 'bg-green-500 text-white' : isCurrentStep ? 'bg-amber-500 text-white animate-pulse' : isLocked ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'
+                                      isDone ? 'bg-green-500 text-white'
+                                        : isCurrentStep && step.id === 'approval' ? 'bg-purple-600 text-white animate-pulse'
+                                        : isCurrentStep ? 'bg-amber-500 text-white animate-pulse'
+                                        : 'bg-muted text-muted-foreground'
                                     }`}>
                                       {isDone ? <CheckCircle2 className="h-4 w-4" /> : step.number}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`font-semibold text-sm ${isDone ? 'text-green-700 dark:text-green-300' : isCurrentStep ? 'text-amber-800 dark:text-amber-200' : 'text-foreground'}`}>
+                                        <span className={`font-semibold text-sm ${isDone ? 'text-green-700 dark:text-green-300' : isCurrentStep && step.id === 'approval' ? 'text-purple-800 dark:text-purple-200' : isCurrentStep ? 'text-amber-800 dark:text-amber-200' : 'text-foreground'}`}>
                                           {step.title}
                                         </span>
                                         <span dir="rtl" className="text-xs text-muted-foreground/70">{step.titleAr}</span>
                                         {isDone && <Badge className="text-[10px] px-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300">Done ✓</Badge>}
-                                        {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-amber-500 text-white border-amber-500 animate-pulse">👉 Do this now</Badge>}
-                                        {!isDone && !isLocked && !isCurrentStep && step.id !== 'submit' && <Badge variant="outline" className="text-[10px] px-1.5 text-orange-600 border-orange-300">Needs attention</Badge>}
+                                        {isCurrentStep && step.id !== 'approval' && <Badge className="text-[10px] px-1.5 bg-amber-500 text-white border-amber-500 animate-pulse">👉 Do this now</Badge>}
+                                        {isCurrentStep && step.id === 'approval' && <Badge className="text-[10px] px-1.5 bg-purple-600 text-white border-purple-600 animate-pulse">⏳ Awaiting approval</Badge>}
+                                        {!isDone && !isLocked && !isCurrentStep && step.id !== 'submit' && step.id !== 'approval' && <Badge variant="outline" className="text-[10px] px-1.5 text-orange-600 border-orange-300">Needs attention</Badge>}
                                         {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">Complete steps above first</Badge>}
                                         {!isDone && step.remaining > 0 && (
                                           <Badge variant="destructive" className="text-[10px] px-1.5">{step.remaining} remaining</Badge>
@@ -3217,19 +3254,14 @@ const MMPCycleClose = () => {
                                           <Button
                                             size="sm"
                                             className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                                            onClick={() => {
-                                              const mmpId = checklistMmpId!;
-                                              setChecklistMmpId(null);
-                                              setPendingScopedClose(null);
-                                              setReconciliationAcknowledged(false);
-                                              // Cycle is already in 'closing' state — submit for final approval
-                                              handleFinalizeCycleClose(mmpId);
-                                            }}
+                                            onClick={() => handleFinalizeCycleClose(checklistMmpId!)}
                                             disabled={finalizingCycle || !reconciliationAcknowledged}
                                             data-testid="button-proceed-close-cycle-guide"
                                           >
-                                            <CheckCircle2 className="h-4 w-4" />
-                                            {finalizingCycle ? 'Submitting…' : 'Submit Cycle for Final Approval'}
+                                            {finalizingCycle
+                                              ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</>
+                                              : <><CheckCircle2 className="h-4 w-4" /> Submit Cycle for Final Approval</>
+                                            }
                                           </Button>
                                         </div>
                                       )}
