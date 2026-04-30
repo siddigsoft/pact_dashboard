@@ -53,6 +53,8 @@ interface CoordinatorInfo {
   sitesReturned: number;
   sitesInProgress: number;
   sitesPending: number;
+  /** Per-status counts for this coordinator (exact status values, lowercase) */
+  statusCounts: Record<string, number>;
   receivedAt?: string;
   siteDetails: SiteStatusDetail[];
 }
@@ -63,6 +65,54 @@ interface StateCoordinatorGroup {
   totalSites: number;
   verifiedSites: number;
   returnedSites: number;
+  /** Per-status counts for the whole state */
+  statusCounts: Record<string, number>;
+}
+
+// ─── Status display helpers ───────────────────────────────────────────────────
+const STATUS_DISPLAY_CFG: Record<string, { label: string; color: string }> = {
+  completed:                  { label: 'Completed',        color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  verified:                   { label: 'Verified',         color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  approved:                   { label: 'Approved',         color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+  'approved and costed':      { label: 'Approved & Costed',color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
+  wfp_confirmed:              { label: 'WFP Confirmed',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  submitted:                  { label: 'Submitted',        color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
+  accepted:                   { label: 'Accepted',         color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  dispatched:                 { label: 'Dispatched',       color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
+  assigned:                   { label: 'Assigned',         color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  in_progress:                { label: 'In Progress',      color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  permits_attached:           { label: 'Permits Attached', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
+  forwarded_to_coordinator:   { label: 'With Coordinator', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  forwarded_to_coordinators:  { label: 'With Coordinators',color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  pending:                    { label: 'Pending',          color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  not_covered:                { label: 'Not Covered',      color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  returned_to_fom:            { label: 'Returned',         color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  returned:                   { label: 'Returned',         color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  recalled:                   { label: 'Recalled',         color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  rejected:                   { label: 'Rejected',         color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  cancelled:                  { label: 'Cancelled',        color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+};
+const STATUS_DISPLAY_ORDER = [
+  'completed','verified','approved','approved and costed','wfp_confirmed','submitted',
+  'accepted','dispatched','assigned','in_progress','permits_attached',
+  'forwarded_to_coordinator','forwarded_to_coordinators',
+  'pending','not_covered','returned_to_fom','returned','recalled','rejected','cancelled',
+];
+function getStatusCfg(s: string) {
+  return STATUS_DISPLAY_CFG[s] ?? {
+    label: s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
+  };
+}
+/** Returns [ [status, count], ... ] sorted by STATUS_DISPLAY_ORDER then alphabetically */
+function sortedStatusEntries(counts: Record<string, number>): [string, number][] {
+  const ordered = STATUS_DISPLAY_ORDER
+    .filter(s => (counts[s] ?? 0) > 0)
+    .map(s => [s, counts[s]] as [string, number]);
+  const extra = Object.entries(counts)
+    .filter(([s, n]) => n > 0 && !STATUS_DISPLAY_ORDER.includes(s))
+    .sort(([a], [b]) => a.localeCompare(b));
+  return [...ordered, ...extra];
 }
 
 interface CoordinatorSummaryCardProps {
@@ -450,11 +500,14 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           totalSites: 0,
           verifiedSites: 0,
           returnedSites: 0,
+          statusCounts: {},
         });
       }
 
       const stateData = stateMap.get(stateName)!;
       stateData.totalSites++;
+      // Increment per-status count for this state
+      stateData.statusCounts[entryStatus] = (stateData.statusCounts[entryStatus] ?? 0) + 1;
 
       const coordId = entry.additional_data?.assigned_to || 
                      entry.additionalData?.assigned_to ||
@@ -523,6 +576,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
           if (isReturned || isRejected) existingCoord.sitesReturned++;
           if (isInProgress) existingCoord.sitesInProgress++;
           if (!isVerified && !isReturned && !isRejected && !isInProgress) existingCoord.sitesPending++;
+          existingCoord.statusCounts[entryStatus] = (existingCoord.statusCounts[entryStatus] ?? 0) + 1;
           existingCoord.siteDetails.push(siteDetail);
         } else {
           stateData.coordinators.push({ 
@@ -533,6 +587,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
             sitesReturned: (isReturned || isRejected) ? 1 : 0,
             sitesInProgress: isInProgress ? 1 : 0,
             sitesPending: (!isVerified && !isReturned && !isRejected && !isInProgress) ? 1 : 0,
+            statusCounts: { [entryStatus]: 1 },
             receivedAt: receivedAt,
             siteDetails: [siteDetail],
           });
@@ -765,16 +820,16 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                     <MapPin className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                     <span className="font-medium text-sm">{stateData.state}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {stateData.verifiedSites}/{stateData.totalSites} verified
-                    </Badge>
-                    {stateData.returnedSites > 0 && (
-                      <Badge className="text-xs bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                        {stateData.returnedSites} returned
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className="text-xs">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {sortedStatusEntries(stateData.statusCounts).map(([status, count]) => {
+                      const cfg = getStatusCfg(status);
+                      return (
+                        <Badge key={status} variant="secondary" className={`text-[10px] px-1.5 py-0 ${cfg.color}`}>
+                          {cfg.label}: {count}
+                        </Badge>
+                      );
+                    })}
+                    <Badge variant="outline" className="text-xs ml-1">
                       {stateData.coordinators.length} coordinator{stateData.coordinators.length !== 1 ? 's' : ''}
                     </Badge>
                   </div>
@@ -837,27 +892,15 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
                             </div>
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                              {coord.sitesVerified > 0 && (
-                                <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                                  {coord.sitesVerified} verified
-                                </Badge>
-                              )}
-                              {coord.sitesInProgress > 0 && (
-                                <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                                  {coord.sitesInProgress} active
-                                </Badge>
-                              )}
-                              {coord.sitesPending > 0 && (
-                                <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                  {coord.sitesPending} pending
-                                </Badge>
-                              )}
-                              {coord.sitesReturned > 0 && (
-                                <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                  {coord.sitesReturned} returned
-                                </Badge>
-                              )}
+                            <div className="flex items-center gap-1 flex-wrap justify-end max-w-[280px]">
+                              {sortedStatusEntries(coord.statusCounts).map(([status, count]) => {
+                                const cfg = getStatusCfg(status);
+                                return (
+                                  <Badge key={status} variant="secondary" className={`text-[10px] px-1.5 py-0 ${cfg.color}`}>
+                                    {count} {cfg.label}
+                                  </Badge>
+                                );
+                              })}
                             </div>
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {coord.sitesAssigned} sites
