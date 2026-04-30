@@ -220,10 +220,22 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     return results.flatMap((r: any) => r.data || []);
   }
 
-  const [enrichResult, hubResult] = await Promise.allSettled([
+  // Collect requester UUIDs that still need a display name resolved
+  const missingNameIds = [
+    ...new Set(
+      transformed
+        .filter(r => !r.requestedByName && r.requestedBy)
+        .map(r => r.requestedBy as string)
+    ),
+  ];
+
+  const [enrichResult, hubResult, profileResult] = await Promise.allSettled([
     fetchEnrichmentBatched(entryIds),
     hubIds.length > 0
       ? supabase.from('hubs').select('id, name, states').in('id', hubIds)
+      : Promise.resolve({ data: [] }),
+    missingNameIds.length > 0
+      ? supabase.from('profiles').select('id, full_name, username, email').in('id', missingNameIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -241,6 +253,23 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     });
   } else if (enrichResult.status === 'rejected') {
     console.warn('[DownPayment] Enrichment failed (non-critical):', enrichResult.reason);
+  }
+
+  if (profileResult.status === 'fulfilled' && profileResult.value?.data?.length > 0) {
+    const profileMap = new Map<string, string>(
+      (profileResult.value.data as any[]).map((p: any) => [
+        p.id,
+        p.full_name || p.username || p.email || '',
+      ])
+    );
+    transformed.forEach(r => {
+      if (!r.requestedByName && r.requestedBy && profileMap.has(r.requestedBy as string)) {
+        const resolved = profileMap.get(r.requestedBy as string);
+        if (resolved) r.requestedByName = resolved;
+      }
+    });
+  } else if (profileResult.status === 'rejected') {
+    console.warn('[DownPayment] Profile name enrichment failed (non-critical):', profileResult.reason);
   }
 
   if (hubResult.status === 'fulfilled' && hubResult.value?.data?.length > 0) {
