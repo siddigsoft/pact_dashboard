@@ -149,9 +149,17 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
         .range(_dpf, _dpf + 999);
       _dpp = res.data;
       _dpe = res.error;
-      // If RPC doesn't exist yet, fall back to direct query for this and all remaining pages
-      if (_dpe?.code === 'PGRST202' || _dpe?.message?.includes('Could not find')) {
-        console.warn('[DownPayment] RPC not available, falling back to direct query');
+      // If RPC doesn't exist or has any schema error, fall back to direct query
+      if (_dpe && (
+        _dpe.code === 'PGRST202' ||
+        _dpe.code === 'PGRST301' ||
+        _dpe.code === '42883' ||   // undefined_function
+        _dpe.code === '42P01' ||   // undefined_table
+        _dpe.message?.includes('Could not find') ||
+        _dpe.message?.includes('function') ||
+        _dpe.message?.includes('does not exist')
+      )) {
+        console.warn('[DownPayment] RPC not available, falling back to direct query. Error:', _dpe.code, _dpe.message);
         useRpc = false;
         _dpe = null;
       }
