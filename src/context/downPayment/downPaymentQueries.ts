@@ -207,18 +207,29 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     ...new Set(transformed.map(r => r.hubId).filter(Boolean)),
   ] as string[];
 
+  // Batch enrichment in chunks of 800 to stay well within PostgREST's
+  // default 1,000-row cap — guaranteed to work regardless of server config.
+  async function fetchEnrichmentBatched(ids: string[]) {
+    if (ids.length === 0) return [];
+    const CHUNK = 800;
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK));
+    const results = await Promise.all(
+      chunks.map(chunk => (supabase as any).rpc('get_entry_enrichment', { entry_ids: chunk }))
+    );
+    return results.flatMap((r: any) => r.data || []);
+  }
+
   const [enrichResult, hubResult] = await Promise.allSettled([
-    entryIds.length > 0
-      ? (supabase as any).rpc('get_entry_enrichment', { entry_ids: entryIds }).limit(100000)
-      : Promise.resolve({ data: [] }),
+    fetchEnrichmentBatched(entryIds),
     hubIds.length > 0
       ? supabase.from('hubs').select('id, name, states').in('id', hubIds)
       : Promise.resolve({ data: [] }),
   ]);
 
-  if (enrichResult.status === 'fulfilled' && enrichResult.value?.data?.length > 0) {
+  if (enrichResult.status === 'fulfilled' && (enrichResult.value as any[]).length > 0) {
     const entryMap = new Map<string, { state: string; locality: string; mmp_name: string }>(
-      (enrichResult.value.data as any[]).map((e: any) => [e.id, e])
+      (enrichResult.value as any[]).map((e: any) => [e.id, e])
     );
     transformed.forEach(r => {
       if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
