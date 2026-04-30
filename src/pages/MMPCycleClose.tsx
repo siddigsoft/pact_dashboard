@@ -2867,7 +2867,7 @@ const MMPCycleClose = () => {
                 </div>
               )}
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4">
                 {filteredActiveMmps.map(mmp => {
                   const cycleStatus = (mmp as any).cycle_status || 'active';
                   const mmpUncovered = uncoveredSites.filter(s => s.mmp_id === mmp.id);
