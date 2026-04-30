@@ -96,12 +96,12 @@ interface EditSubmissionData {
   expense_date: string | null;
   vendor: string | null;
   reference_number: string | null;
-  hub_id: string | null;
-  project_id: string | null;
-  mmp_id: string | null;
-  supporting_documents: any;
-  status: string;
-}
+   hub_id: string | null;
+   project_id: string | null;
+   mmp_file_id: string | null;
+   supporting_documents: any;
+   status: string;
+ }
 
 interface MmpOption {
   id: string;
@@ -191,7 +191,7 @@ export default function UnifiedCostRequestForm({
   const [hubId, setHubId] = useState(editData?.hub_id || currentUser?.hubId || '');
   const [requestDate, setRequestDate] = useState(editData?.expense_date || new Date().toISOString().split('T')[0]);
   const [requestTitle, setRequestTitle] = useState(editDefaults?.requestTitle || '');
-  const [mmpId, setMmpId] = useState(editData?.mmp_id || '');
+   const [mmpId, setMmpId] = useState(editData?.mmp_file_id || '');
   const [mmps, setMmps] = useState<MmpOption[]>([]);
   const [mmpsLoading, setMmpsLoading] = useState(false);
 

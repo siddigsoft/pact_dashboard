@@ -1280,7 +1280,7 @@ const CostSubmission = () => {
       if (isNaN(amountCents) || amountCents <= 0) {
         toast({ title: 'Invalid amount', variant: 'destructive' }); return;
       }
-      const changeNote = `[Admin edit by ${currentUser?.full_name || currentUser?.email || 'Admin'} on ${format(new Date(), 'dd MMM yyyy HH:mm')}: ${editItemFields.reason}]`;
+       const changeNote = `[Admin edit by ${currentUser?.fullName || currentUser?.email || 'Admin'} on ${format(new Date(), 'dd MMM yyyy HH:mm')}: ${editItemFields.reason}]`;
       const prevNotes = editingItem.tier1_notes || '';
       const { error } = await supabase.from('operational_cost_submissions').update({
         expense_category: editItemFields.expense_category,
@@ -1307,7 +1307,7 @@ const CostSubmission = () => {
     setSendBackSubmitting(true);
     try {
       const oc = sendBackDialog.item;
-      const commentNote = `[Sent back by ${currentUser?.full_name || currentUser?.email || 'Approver'} on ${format(new Date(), 'dd MMM yyyy HH:mm')}: ${sendBackComment}]`;
+       const commentNote = `[Sent back by ${currentUser?.fullName || currentUser?.email || 'Approver'} on ${format(new Date(), 'dd MMM yyyy HH:mm')}: ${sendBackComment}]`;
       const allGroupIds = oc.request_group_id
         ? operationalCosts.filter(o => o.request_group_id === oc.request_group_id).map(o => o.id)
         : [oc.id];
@@ -2700,6 +2700,7 @@ const CostSubmission = () => {
                 reference_number: editingSubmission.reference_number,
                 hub_id: editingSubmission.hub_id,
                 project_id: editingSubmission.project_id,
+                mmp_file_id: editingSubmission.mmp_file_id,
                 supporting_documents: editingSubmission.supporting_documents,
                 status: editingSubmission.status,
               } : null}
@@ -4853,11 +4854,11 @@ const CostSubmission = () => {
                   <section>
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Submission Info / معلومات الطلب</p>
                     <div className="rounded-lg border divide-y text-sm">
-                      <div className="px-3 py-2">
-                        <p className="text-xs text-muted-foreground mb-0.5">Submitted By / مقدم الطلب</p>
-                        <p className="font-medium">{submitter?.name || submitter?.email || resolvedProfiles[oc.submitted_by]?.name || resolvedProfiles[oc.submitted_by]?.email || `User ${oc.submitted_by.slice(0, 8)}`}</p>
-                        {oc.submitter_role && <p className="text-xs text-muted-foreground capitalize">{oc.submitter_role.replace(/_/g, ' ')}</p>}
-                      </div>
+                       <div className="px-3 py-2">
+                         <p className="text-xs text-muted-foreground mb-0.5">Submitted By / مقدم الطلب</p>
+                          <p className="font-medium">{submitter?.fullName || submitter?.name || submitter?.email || resolvedProfiles[oc.submitted_by]?.name || `User ${oc.submitted_by.slice(0, 8)}`}</p>
+                         {oc.submitter_role && <p className="text-xs text-muted-foreground capitalize">{oc.submitter_role.replace(/_/g, ' ')}</p>}
+                       </div>
                       {oc.submitted_at && (
                         <div className="px-3 py-2">
                           <p className="text-xs text-muted-foreground mb-0.5">Submitted At / وقت التقديم</p>
