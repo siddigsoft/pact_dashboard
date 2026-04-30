@@ -3400,7 +3400,7 @@ const MMPCycleClose = () => {
                             {/* Progress bar + check-again */}
                             <div className="flex items-center gap-3 mb-4">
                               {(() => {
-                                const actionable = guideSteps.filter(s => s.id !== 'start' && s.id !== 'approval');
+                                const actionable = guideSteps.filter(s => s.id !== 'approval');
                                 const done = actionable.filter(s => s.passed).length;
                                 const pct = actionable.length > 0 ? Math.round((done / actionable.length) * 100) : 0;
                                 return (<>
