@@ -96,12 +96,12 @@ interface EditSubmissionData {
   expense_date: string | null;
   vendor: string | null;
   reference_number: string | null;
-  hub_id: string | null;
-  project_id: string | null;
-  mmp_id: string | null;
-  supporting_documents: any;
-  status: string;
-}
+   hub_id: string | null;
+   project_id: string | null;
+   mmp_file_id: string | null;
+   supporting_documents: any;
+   status: string;
+ }
 
 interface MmpOption {
   id: string;
@@ -191,10 +191,11 @@ export default function UnifiedCostRequestForm({
   const [hubId, setHubId] = useState(editData?.hub_id || currentUser?.hubId || '');
   const [requestDate, setRequestDate] = useState(editData?.expense_date || new Date().toISOString().split('T')[0]);
   const [requestTitle, setRequestTitle] = useState(editDefaults?.requestTitle || '');
-  const [mmpId, setMmpId] = useState(editData?.mmp_id || '');
+   const [mmpId, setMmpId] = useState(editData?.mmp_file_id || '');
   const [mmps, setMmps] = useState<MmpOption[]>([]);
   const [mmpsLoading, setMmpsLoading] = useState(false);
 
+<<<<<<< HEAD
   // Compute the hub name as a stable string so the fetch effect only reruns
   // when the actual hub changes — not when the parent re-renders and hands us
   // a new `hubs` array reference (which caused the "Loading MMPs…" flash).
@@ -205,17 +206,44 @@ export default function UnifiedCostRequestForm({
 
   useEffect(() => {
     setMmpsLoading(true);
+=======
+  // Load MMPs when the selected project changes (filter by project_id)
+  useEffect(() => {
+    setMmpsLoading(true);
+    // If no project selected, clear MMP list and exit
+    if (!projectId) {
+      setMmps([]);
+      setMmpsLoading(false);
+      return;
+    }
+>>>>>>> 26f45617aed8020ed44291e0a4031e2734a3e1da
     let q = supabase
       .from('mmp_files')
       .select('id, name, month, hub, status')
       .order('uploaded_at', { ascending: false })
+<<<<<<< HEAD
       .limit(100);
     if (resolvedHubName) q = q.eq('hub', resolvedHubName);
+=======
+      .limit(100)
+      .eq('project_id', projectId);
+>>>>>>> 26f45617aed8020ed44291e0a4031e2734a3e1da
     q.then(({ data }) => {
       setMmps((data || []) as MmpOption[]);
       setMmpsLoading(false);
     }).catch(() => setMmpsLoading(false));
+<<<<<<< HEAD
   }, [resolvedHubName]);
+=======
+  }, [projectId]);
+
+  // Reset selected MMP when project changes (but not on initial mount with editData)
+  useEffect(() => {
+    if (projectId) {
+      setMmpId('');
+    }
+  }, [projectId]);
+>>>>>>> 26f45617aed8020ed44291e0a4031e2734a3e1da
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
@@ -460,11 +488,11 @@ export default function UnifiedCostRequestForm({
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
-          hub_id: resolvedHubId,
-          project_id: resolvedProjectId,
-          mmp_id: mmpId || null,
-          supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
-          updated_at: new Date().toISOString(),
+           hub_id: resolvedHubId,
+           project_id: resolvedProjectId,
+           mmp_file_id: mmpId || null,
+           supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
+           updated_at: new Date().toISOString(),
         };
 
         if (isResubmit) {
@@ -526,6 +554,7 @@ export default function UnifiedCostRequestForm({
         const groupId = uuidv4();
         const cleanRequestTitle = requestTitle.trim();
         const resolvedMmpId = mmpId || null;
+        console.log('[UnifiedCostRequestForm] Submitting:', { projectId, mmpId, resolvedMmpId, hubId, lineItemsCount: lineItems.length });
         const insertRows = lineItems.map(item => ({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100).toString(),
@@ -534,11 +563,11 @@ export default function UnifiedCostRequestForm({
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
-          hub_id: resolvedHubId,
-          project_id: resolvedProjectId,
-          mmp_id: resolvedMmpId,
-          supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
-          submitted_by: currentUser.id,
+           hub_id: resolvedHubId,
+           project_id: resolvedProjectId,
+           mmp_file_id: resolvedMmpId,
+           supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
+           submitted_by: currentUser.id,
           submitter_role: currentUser.role || 'user',
           status: 'pending',
           tier1_status: 'pending',
@@ -827,31 +856,26 @@ export default function UnifiedCostRequestForm({
                   !mmpId ? "border-rose-300 bg-rose-50/40 focus:ring-rose-300/40 focus:border-rose-400" : "border-input"
                 )}
               >
-                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : mmps.length === 0 ? "No MMPs available for your hub" : "Select the MMP this cost relates to…"} />
+                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : mmps.length === 0 ? "No MMPs available for selected project" : "Select the MMP this cost relates to…"} />
               </SelectTrigger>
               <SelectContent>
-                {mmps.map((mmp) => (
-                  <SelectItem key={mmp.id} value={mmp.id}>
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {mmp.month ? `${mmp.month} — ` : ''}{mmp.name}
-                      </span>
-                      {mmp.status && (
-                        <span className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded-full font-semibold capitalize",
-                          mmp.status === 'active' || mmp.status === 'open' ? "bg-green-100 text-green-700" :
-                          mmp.status === 'closed' ? "bg-slate-100 text-slate-500" :
-                          "bg-amber-100 text-amber-700"
-                        )}>
-                          {mmp.status}
-                        </span>
-                      )}
-                    </span>
+                {mmpsLoading ? (
+                  <SelectItem value="__LOADING__" disabled>
+                    Loading MMPs...
                   </SelectItem>
-                ))}
+                ) : mmps.length === 0 ? (
+                  <SelectItem value="__NONE__" disabled>
+                    No MMPs available for selected project
+                  </SelectItem>
+                ) : (
+                  mmps.map((mmp) => (
+                    <SelectItem key={mmp.id} value={mmp.id}>
+                      {mmp.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground mt-1">Select which MMP cycle these field costs are associated with</p>
           </div>
 
           <div>

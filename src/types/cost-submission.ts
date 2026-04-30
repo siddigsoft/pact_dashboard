@@ -149,13 +149,14 @@ export interface SiteVisitCostSubmission {
   reviewerNotes?: string;
   approvalNotes?: string;
 
-  // Payment tracking
-  walletTransactionId?: string;
-  paidAt?: string;
-  paidAmountCents?: number;
-  paymentNotes?: string;
+   // Payment tracking
+   walletTransactionId?: string;
+   paidAt?: string;
+   paidAmountCents?: number;
+   paymentNotes?: string;
+   fund_receipt_confirmed?: boolean | null;
 
-  // Classification reference
+   // Classification reference
   classificationLevel?: string;
   roleScope?: string;
 

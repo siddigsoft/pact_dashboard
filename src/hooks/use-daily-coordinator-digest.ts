@@ -238,7 +238,7 @@ async function fetchHubNames(): Promise<Map<string, string>> {
 async function fetchCoordinators(): Promise<CoordRow[]> {
   let data: any[] = [];
   for (let _cf = 0; ; _cf += 1000) {
-    const { data: _cp, error: _ce } = await supabase.from('mmp_site_entries').select('id, accepted_by, status, hub_office, verified_at, completed_at, updated_at, dispatched_at').not('accepted_by', 'is', null).range(_cf, _cf + 999);
+    const { data: _cp, error: _ce } = await supabase.from('mmp_site_entries').select('id, accepted_by, status, hub_office, verified_at, visit_completed_at, updated_at, dispatched_at').not('accepted_by', 'is', null).range(_cf, _cf + 999);
     if (_ce || !_cp) break;
     data = [...data, ..._cp];
     if (_cp.length < 1000) break;
@@ -284,7 +284,7 @@ async function fetchCoordinators(): Promise<CoordRow[]> {
   const ids = [...map.keys()];
   if (ids.length) {
     const { data: profs } = await supabase
-      .from('user_profiles').select('id, full_name, email').in('id', ids);
+      .from('profiles').select('id, full_name, email').in('id', ids);
     profs?.forEach((p: any) => {
       const r = map.get(p.id);
       if (r) r.coordinatorName = p.full_name || p.email || p.id.slice(0, 8);
@@ -367,7 +367,7 @@ async function fetchStaleMmps(): Promise<StaleMmpRow[]> {
     const nameMap = new Map<string, string>();
     if (coordIds.length) {
       const { data: profs } = await supabase
-        .from('user_profiles').select('id, full_name, email').in('id', coordIds);
+        .from('profiles').select('id, full_name, email').in('id', coordIds);
       profs?.forEach((p: any) => nameMap.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
     }
 
@@ -403,7 +403,7 @@ async function fetchReturnedSites(): Promise<ReturnedSiteRow[]> {
     const nameMap = new Map<string, string>();
     if (coordIds.length) {
       const { data: profs } = await supabase
-        .from('user_profiles').select('id, full_name, email').in('id', coordIds);
+        .from('profiles').select('id, full_name, email').in('id', coordIds);
       profs?.forEach((p: any) => nameMap.set(p.id, p.full_name || p.email || p.id.slice(0, 8)));
     }
 
@@ -438,7 +438,7 @@ async function fetchFundReceipts(hubNameCache: Map<string, string>): Promise<Fun
     const hubIdByUser = new Map<string, string | null>();
     if (userIds.length) {
       const { data: profs } = await supabase
-        .from('user_profiles').select('id, full_name, email, hub_id').in('id', userIds);
+        .from('profiles').select('id, full_name, email, hub_id').in('id', userIds);
       profs?.forEach((p: any) => {
         nameMap.set(p.id, p.full_name || p.email || p.id.slice(0, 8));
         hubIdByUser.set(p.id, p.hub_id ?? null);
@@ -979,7 +979,7 @@ type DigestDataExt = DigestData & { escalatedCoords?: number };
 // ─── fan-out ──────────────────────────────────────────────────────────────────
 async function dispatchAll(data: DigestData) {
   const { data: allProfiles } = await supabase
-    .from('user_profiles')
+    .from('profiles')
     .select('id, full_name, email, role, hub_id')
     .not('role', 'is', null)
     .limit(500);
