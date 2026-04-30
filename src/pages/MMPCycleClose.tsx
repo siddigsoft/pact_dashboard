@@ -228,6 +228,18 @@ const MMPCycleClose = () => {
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
   const [selectedMmpId, setSelectedMmpId] = useState<string>('all');
+
+  interface CostSubSummary { category: string; count: number; approvedCents: number; pendingCents: number; currency: string; }
+  interface AdvanceSummary { status: string; count: number; totalCents: number; currency: string; }
+  interface CycleSummaryData {
+    costSubs: CostSubSummary[];
+    advances: AdvanceSummary[];
+    totalApprovedCents: number;
+    totalAdvancesCents: number;
+    currency: string;
+  }
+  const [cycleSummaryData, setCycleSummaryData] = useState<CycleSummaryData | null>(null);
+  const [loadingCycleSummary, setLoadingCycleSummary] = useState(false);
   const [siteVisitCounts, setSiteVisitCounts] = useState<Record<string, { total: number; statusCounts: Record<string, number> }>>({});
   const followUps = useMemo<FollowUpRecord[]>(() => {
     return uncoveredSites
@@ -426,6 +438,17 @@ const MMPCycleClose = () => {
     }
     skipMmpResetRef.current = false;
   }, [checklistMmpId]);
+
+  useEffect(() => {
+    if (checklistMmpId) {
+      const status = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status ?? 'active';
+      if (status === 'closing' || status === 'pending_approval') {
+        fetchCycleSummary(checklistMmpId);
+      }
+    } else {
+      setCycleSummaryData(null);
+    }
+  }, [checklistMmpId, mmpFiles, fetchCycleSummary]);
 
   // Derive the first actionable blocker from the readiness checklist
   const nextBlocker = useMemo(() => {
@@ -1919,6 +1942,117 @@ const MMPCycleClose = () => {
     return { ok: issues.length === 0, issues };
   };
 
+  const fetchCycleSummary = useCallback(async (mmpId: string) => {
+    setLoadingCycleSummary(true);
+    setCycleSummaryData(null);
+    try {
+      // 1. Cost submissions (all statuses)
+      const { data: costRows } = await supabase
+        .from('operational_cost_submissions')
+        .select('expense_category, amount_cents, currency, tier1_status, tier2_status')
+        .eq('mmp_id', mmpId);
+
+      // Group by category
+      const catMap: Record<string, { count: number; approvedCents: number; pendingCents: number; currency: string }> = {};
+      (costRows || []).forEach((r: any) => {
+        const cat = r.expense_category || 'Other';
+        if (!catMap[cat]) catMap[cat] = { count: 0, approvedCents: 0, pendingCents: 0, currency: r.currency || 'SDG' };
+        catMap[cat].count++;
+        const cents = r.amount_cents ?? 0;
+        const fullyApproved = r.tier1_status === 'approved' && r.tier2_status === 'approved';
+        if (fullyApproved) catMap[cat].approvedCents += cents;
+        else catMap[cat].pendingCents += cents;
+      });
+      const costSubs = Object.entries(catMap).map(([category, v]) => ({ category, ...v }))
+        .sort((a, b) => (b.approvedCents + b.pendingCents) - (a.approvedCents + a.pendingCents));
+
+      // 2. Transport advances via site entries
+      const { data: entries } = await supabase
+        .from('mmp_site_entries')
+        .select('id')
+        .eq('mmp_file_id', mmpId)
+        .limit(10000);
+      const entryIds = (entries || []).map((e: any) => e.id);
+
+      let advances: AdvanceSummary[] = [];
+      if (entryIds.length > 0) {
+        const PAGE = 1000;
+        let allAdv: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data } = await supabase
+            .from('down_payment_requests')
+            .select('status, amount_cents, currency')
+            .in('mmp_site_entry_id', entryIds)
+            .range(from, from + PAGE - 1);
+          allAdv = [...allAdv, ...(data || [])];
+          if (!data || data.length < PAGE) break;
+        }
+        const advMap: Record<string, { count: number; totalCents: number; currency: string }> = {};
+        allAdv.forEach((a: any) => {
+          const s = a.status || 'unknown';
+          if (!advMap[s]) advMap[s] = { count: 0, totalCents: 0, currency: a.currency || 'SDG' };
+          advMap[s].count++;
+          advMap[s].totalCents += a.amount_cents ?? 0;
+        });
+        advances = Object.entries(advMap).map(([status, v]) => ({ status, ...v }));
+      }
+
+      const totalApprovedCents = costSubs.reduce((s, r) => s + r.approvedCents, 0);
+      const totalAdvancesCents = advances.reduce((s, r) => s + r.totalCents, 0);
+      const currency = costSubs[0]?.currency || advances[0]?.currency || 'SDG';
+
+      setCycleSummaryData({ costSubs, advances, totalApprovedCents, totalAdvancesCents, currency });
+    } catch {
+      // Non-critical — summary is informational only
+    } finally {
+      setLoadingCycleSummary(false);
+    }
+  }, []);
+
+  const exportCycleSummaryExcel = useCallback(async () => {
+    if (!cycleSummaryData || !checklistMmpId) return;
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    const mmpName = mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'Cycle';
+    const fmt = (cents: number, cur: string) => `${(cents / 100).toLocaleString()} ${cur}`;
+
+    // Sheet 1: Cost Submissions
+    const costRows = cycleSummaryData.costSubs.map(r => ({
+      'Category': r.category,
+      'Submissions': r.count,
+      'Approved Amount': fmt(r.approvedCents, r.currency),
+      'Pending Amount': fmt(r.pendingCents, r.currency),
+      'Total Amount': fmt(r.approvedCents + r.pendingCents, r.currency),
+    }));
+    costRows.push({
+      'Category': 'TOTAL',
+      'Submissions': cycleSummaryData.costSubs.reduce((s, r) => s + r.count, 0),
+      'Approved Amount': fmt(cycleSummaryData.totalApprovedCents, cycleSummaryData.currency),
+      'Pending Amount': fmt(cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0), cycleSummaryData.currency),
+      'Total Amount': fmt(cycleSummaryData.costSubs.reduce((s, r) => s + r.approvedCents + r.pendingCents, 0), cycleSummaryData.currency),
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(costRows), 'Cost Submissions');
+
+    // Sheet 2: Transport Advances
+    const advRows = cycleSummaryData.advances.map(r => ({
+      'Status': r.status,
+      'Count': r.count,
+      'Total Amount': fmt(r.totalCents, r.currency),
+    }));
+    advRows.push({ 'Status': 'TOTAL', 'Count': cycleSummaryData.advances.reduce((s, r) => s + r.count, 0), 'Total Amount': fmt(cycleSummaryData.totalAdvancesCents, cycleSummaryData.currency) });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(advRows), 'Transport Advances');
+
+    // Sheet 3: Coverage snapshot from siteVisitCounts
+    const counts = siteVisitCounts[checklistMmpId];
+    if (counts) {
+      const covRows = Object.entries(counts.statusCounts).map(([status, count]) => ({ 'Status': status, 'Count': count }));
+      covRows.push({ 'Status': 'TOTAL SITES', 'Count': counts.total });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(covRows), 'Site Coverage');
+    }
+
+    XLSX.writeFile(wb, `${mmpName}-cycle-summary-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }, [cycleSummaryData, checklistMmpId, mmpFiles, siteVisitCounts]);
+
   const handleFinalizeCycleClose = async (mmpId: string) => {
     if (!canManageCycle) return;
     const unreasoned = uncoveredSites.filter(s => s.mmp_id === mmpId && !s.not_covered_reason);
@@ -3271,6 +3405,130 @@ const MMPCycleClose = () => {
                                 </div>
                               );
                             })}
+
+                            {/* ── Cycle Financial Summary (collapsible) ── */}
+                            <Collapsible>
+                              <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full pt-2" data-testid="button-toggle-cycle-summary">
+                                <ChevronDown className="h-3.5 w-3.5" />
+                                📊 Cycle Financial Summary &amp; Export
+                                {cycleSummaryData && (
+                                  <Badge variant="secondary" className="ml-auto text-[10px]">
+                                    {(cycleSummaryData.totalApprovedCents / 100).toLocaleString()} {cycleSummaryData.currency} approved
+                                  </Badge>
+                                )}
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-3 space-y-3">
+                                {loadingCycleSummary ? (
+                                  <div className="flex items-center gap-2 py-4 justify-center text-muted-foreground text-xs">
+                                    <Loader2 className="h-4 w-4 animate-spin" /> Loading financial data…
+                                  </div>
+                                ) : !cycleSummaryData ? (
+                                  <p className="text-xs text-muted-foreground text-center py-2">No financial data found for this cycle.</p>
+                                ) : (
+                                  <>
+                                    {/* Coverage snapshot */}
+                                    {siteVisitCounts[checklistMmpId!] && (() => {
+                                      const c = siteVisitCounts[checklistMmpId!];
+                                      const completed = c.statusCounts?.['completed'] ?? 0;
+                                      const notCovered = c.statusCounts?.['not_covered'] ?? 0;
+                                      return (
+                                        <div className="rounded-lg border bg-muted/30 p-3">
+                                          <p className="text-xs font-semibold mb-2">Site Coverage Snapshot</p>
+                                          <div className="grid grid-cols-3 gap-2 text-center">
+                                            <div><div className="text-lg font-bold text-green-600">{completed}</div><div className="text-[10px] text-muted-foreground">Completed</div></div>
+                                            <div><div className="text-lg font-bold text-red-500">{notCovered}</div><div className="text-[10px] text-muted-foreground">Not Covered</div></div>
+                                            <div><div className="text-lg font-bold">{c.total}</div><div className="text-[10px] text-muted-foreground">Total Sites</div></div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* Cost Submissions */}
+                                    {cycleSummaryData.costSubs.length > 0 && (
+                                      <div className="rounded-lg border overflow-hidden">
+                                        <div className="px-3 py-2 bg-muted/40 text-xs font-semibold">Operational Cost Submissions</div>
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="border-b bg-muted/20">
+                                              <th className="px-3 py-1.5 text-left font-medium">Category</th>
+                                              <th className="px-3 py-1.5 text-right font-medium">Count</th>
+                                              <th className="px-3 py-1.5 text-right font-medium text-green-700">Approved</th>
+                                              <th className="px-3 py-1.5 text-right font-medium text-orange-600">Pending</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {cycleSummaryData.costSubs.map(r => (
+                                              <tr key={r.category} className="border-b last:border-0 hover:bg-muted/10">
+                                                <td className="px-3 py-1.5 font-medium">{r.category}</td>
+                                                <td className="px-3 py-1.5 text-right text-muted-foreground">{r.count}</td>
+                                                <td className="px-3 py-1.5 text-right text-green-700 font-mono">{r.approvedCents > 0 ? `${(r.approvedCents / 100).toLocaleString()} ${r.currency}` : '—'}</td>
+                                                <td className="px-3 py-1.5 text-right text-orange-600 font-mono">{r.pendingCents > 0 ? `${(r.pendingCents / 100).toLocaleString()} ${r.currency}` : '—'}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                          <tfoot>
+                                            <tr className="bg-muted/30 font-semibold">
+                                              <td className="px-3 py-1.5">Total</td>
+                                              <td className="px-3 py-1.5 text-right">{cycleSummaryData.costSubs.reduce((s, r) => s + r.count, 0)}</td>
+                                              <td className="px-3 py-1.5 text-right text-green-700 font-mono">{(cycleSummaryData.totalApprovedCents / 100).toLocaleString()} {cycleSummaryData.currency}</td>
+                                              <td className="px-3 py-1.5 text-right text-orange-600 font-mono">{(cycleSummaryData.costSubs.reduce((s, r) => s + r.pendingCents, 0) / 100).toLocaleString()} {cycleSummaryData.currency}</td>
+                                            </tr>
+                                          </tfoot>
+                                        </table>
+                                      </div>
+                                    )}
+
+                                    {/* Transport Advances */}
+                                    {cycleSummaryData.advances.length > 0 && (
+                                      <div className="rounded-lg border overflow-hidden">
+                                        <div className="px-3 py-2 bg-muted/40 text-xs font-semibold">Transport Advances (Down-Payments)</div>
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="border-b bg-muted/20">
+                                              <th className="px-3 py-1.5 text-left font-medium">Status</th>
+                                              <th className="px-3 py-1.5 text-right font-medium">Count</th>
+                                              <th className="px-3 py-1.5 text-right font-medium">Total Amount</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {cycleSummaryData.advances.map(r => (
+                                              <tr key={r.status} className="border-b last:border-0 hover:bg-muted/10">
+                                                <td className="px-3 py-1.5"><Badge variant="outline" className="text-[10px]">{r.status}</Badge></td>
+                                                <td className="px-3 py-1.5 text-right text-muted-foreground">{r.count}</td>
+                                                <td className="px-3 py-1.5 text-right font-mono">{(r.totalCents / 100).toLocaleString()} {r.currency}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                          <tfoot>
+                                            <tr className="bg-muted/30 font-semibold">
+                                              <td className="px-3 py-1.5">Total</td>
+                                              <td className="px-3 py-1.5 text-right">{cycleSummaryData.advances.reduce((s, r) => s + r.count, 0)}</td>
+                                              <td className="px-3 py-1.5 text-right font-mono">{(cycleSummaryData.totalAdvancesCents / 100).toLocaleString()} {cycleSummaryData.currency}</td>
+                                            </tr>
+                                          </tfoot>
+                                        </table>
+                                      </div>
+                                    )}
+
+                                    {cycleSummaryData.costSubs.length === 0 && cycleSummaryData.advances.length === 0 && (
+                                      <p className="text-xs text-muted-foreground text-center py-2">No cost submissions or transport advances found for this cycle.</p>
+                                    )}
+
+                                    {/* Export button */}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="w-full gap-1.5"
+                                      onClick={exportCycleSummaryExcel}
+                                      data-testid="button-export-cycle-summary"
+                                    >
+                                      <FileSpreadsheet className="h-4 w-4" />
+                                      Export Full Summary to Excel
+                                    </Button>
+                                  </>
+                                )}
+                              </CollapsibleContent>
+                            </Collapsible>
 
                             {/* Collapsible technical checklist */}
                             <Collapsible>
