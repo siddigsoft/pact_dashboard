@@ -55,11 +55,12 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       // ── Phase 1: Fetch MMP metadata + site entries + cost submissions in parallel
       const mmpRes = await supabase
         .from('mmp_files')
-        .select('id, month, year')
+        .select('id, name, month, year')
         .eq('id', mmpId)
         .single();
 
-      const mmpRow = mmpRes.data as { id: string; month: number | null; year: number | null } | null;
+      const mmpRow = mmpRes.data as { id: string; name: string | null; month: number | null; year: number | null } | null;
+      const mmpName = mmpRow?.name ?? '';
       const month = mmpRow?.month ?? null;
       const year = mmpRow?.year ?? null;
       setCycleMonth(month);
@@ -240,7 +241,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           passed: unresolvedSites === 0,
           count: resolvedSites,
           total: totalSites,
-          link: '/mmp/cycle-close?tab=uncovered',
+          link: `/mmp/cycle-close?tab=uncovered&mmpId=${mmpId}`,
         },
         {
           id: 'cost_submissions',
@@ -250,7 +251,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           passed: pendingCostSubs === 0,
           count: 0,
           total: pendingCostSubs,
-          link: '/finance',
+          link: `/cost-submission?mmpId=${mmpId}&mmpName=${encodeURIComponent(mmpName)}`,
         },
         {
           id: 'transport_advances',
@@ -268,7 +269,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           // rather than showing only the fully-cleared subset.
           count: clearedAdvances + pendingViaReport,
           total: totalAdvances,
-          link: '/down-payment-approval',
+          link: `/down-payment-approval?mmpName=${encodeURIComponent(mmpName)}`,
           notConfigured: advancesError,
           pendingViaReport,
         },

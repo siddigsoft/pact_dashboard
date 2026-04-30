@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
@@ -426,8 +426,14 @@ export default function DownPaymentApproval() {
   const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
   const [viewTab, setViewTab] = useState('approval');
 
+  const [searchParams] = useSearchParams();
+  const cycleContextMmpName = searchParams.get('mmpName') || undefined;
+
   // ── shared full filter (applied to all tabs + approval panel) ───────────
-  const [filters, setFilters] = useState<DownPaymentFilter>({});
+  // Pre-seed from URL param when arriving from cycle-close readiness "Resolve"
+  const [filters, setFilters] = useState<DownPaymentFilter>(() => ({
+    mmpName: cycleContextMmpName,
+  }));
   const [showFilters, setShowFilters] = useState(true);
 
   // ── disbursement tracker specific filters ─────────────────────────────────
@@ -647,6 +653,13 @@ export default function DownPaymentApproval() {
 
   return (
     <div className="p-6 space-y-6">
+      {cycleContextMmpName && (
+        <div className="flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
+          <span>🔍</span>
+          <span>Showing transport advances for <strong>{cycleContextMmpName}</strong> — filtered from Cycle Close readiness.</span>
+          <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={() => setFilters({})} data-testid="button-clear-cycle-filter">Clear filter</Button>
+        </div>
+      )}
       {/* ── Page header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

@@ -206,6 +206,12 @@ const MMPCycleClose = () => {
     if (tabParam && tabParam !== activeTab) {
       setActiveTab(tabParam);
     }
+    // When arriving from the readiness checklist "Resolve" button the URL
+    // carries ?mmpId=X — pre-select that MMP in the Uncovered Sites dropdown.
+    const mmpIdParam = searchParams.get('mmpId');
+    if (mmpIdParam) {
+      setSelectedMmpId(mmpIdParam);
+    }
   }, [searchParams]);
   const [closedCycles, setClosedCycles] = useState<ClosedCycleRecord[]>([]);
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null);

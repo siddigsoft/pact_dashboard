@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { StatusHistoryPanel } from "@/components/audit/StatusHistoryPanel";
 import { REJECTION_REASONS, APPROVAL_REASONS } from "@/config/rejectionReasons";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -147,6 +147,10 @@ interface OperationalCostSubmission {
 
 const CostSubmission = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Cycle-close context: when arriving from the readiness checklist "Resolve" button
+  const cycleContextMmpId   = searchParams.get('mmpId')   || null;
+  const cycleContextMmpName = searchParams.get('mmpName') || null;
   const { currentUser, roles } = useAppContext();
   const { users } = useUser();
   const { projects: allProjects } = useProjectContext();
@@ -568,8 +572,12 @@ const CostSubmission = () => {
         filtered = filtered.filter(o => !o.project_id || userProjectIds.includes(o.project_id));
       }
     }
+    // Cycle-close context: narrow to only this MMP's submissions
+    if (cycleContextMmpId) {
+      filtered = filtered.filter(o => (o as any).mmp_id === cycleContextMmpId || (o as any).mmpFileId === cycleContextMmpId);
+    }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isFOM, isCountryDirector, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds, cycleContextMmpId]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase();
@@ -2120,6 +2128,13 @@ const CostSubmission = () => {
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
+      {cycleContextMmpId && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
+          <Info className="h-4 w-4 shrink-0" />
+          <span>Showing cost submissions for <strong>{cycleContextMmpName || 'this MMP'}</strong> — filtered from Cycle Close readiness.</span>
+          <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={() => navigate('/cost-submission')} data-testid="button-clear-cycle-filter">Clear filter</Button>
+        </div>
+      )}
       {/* Header */}
       <div className="mb-6">
         <Button
