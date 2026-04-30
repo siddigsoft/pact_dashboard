@@ -5070,7 +5070,7 @@ const MMP = () => {
                     {t('mmpPage.tabs.mmpTracker')}
                   </TabsTrigger>
                 )}
-                {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+                {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam) && (
                   <TabsTrigger value="adhoc" className="flex items-center gap-1.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[32px] text-xs flex-shrink-0 whitespace-nowrap rounded-md px-3 text-blue-100 hover:text-white transition-all"
                     data-testid="tab-adhoc-visits">
                     <FilePlus className="h-3.5 w-3.5" />
@@ -5492,7 +5492,7 @@ const MMP = () => {
 
             {!canClaimSites && (
               <TabsContent value="forwarded">
-                {(isAdmin || isICT || isFOM) && (
+                {(isAdmin || isICT || isFOM || isDataTeam) && (
                   <div className="mb-3">
                     <div className="text-xs font-medium text-muted-foreground mb-2">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-1.5 flex-wrap">
@@ -5898,7 +5898,7 @@ const MMP = () => {
                   )}
                   <VerifiedSitesDisplay 
                     verifiedSites={filteredVerifiedCategorySiteRows} 
-                    showApproveButton={isAdmin || isICT || isFOM || isDataTeam}
+                    showApproveButton={isAdmin || isICT || isFOM}
                     onFilteredSiteIdsChange={(ids, count, hasFilter, entries) => {
                       setTableFilteredSiteIds(ids);
                       setTableFilteredCount(hasFilter ? count : 0);
@@ -5988,7 +5988,7 @@ const MMP = () => {
                         <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
                         <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
                       </div>
-                      {(isAdmin || isICT || isDataTeam) && approvedCostedSiteEntries.length > 0 && (
+                      {(isAdmin || isICT) && approvedCostedSiteEntries.length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           <Button
                             variant="default"
@@ -6956,7 +6956,7 @@ const MMP = () => {
             )}
 
             {/* Ad-hoc Site Visits Tab */}
-            {(isSuperAdmin || isAdmin || isFOM || isCoordinator) && (
+            {(isSuperAdmin || isAdmin || isFOM || isCoordinator || isDataTeam) && (
               <TabsContent value="adhoc">
                 <AdhocSiteVisitsTab canManage={isSuperAdmin || isAdmin || isFOM || isCoordinator} />
               </TabsContent>
