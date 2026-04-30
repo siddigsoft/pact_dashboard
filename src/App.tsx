@@ -202,6 +202,7 @@ import { GlobalBroadcastAlert } from './components/GlobalBroadcastAlert';
 import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useFCM } from './hooks/useFCM';
+import { useAuthorization } from './hooks/use-authorization';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
@@ -239,6 +240,14 @@ const PageWrapper = ({ children }: { children: React.ReactNode }) => (
     {children}
   </ErrorBoundary>
 );
+
+const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isSuperAdmin } = useAuthorization();
+  if (!isSuperAdmin()) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
 
 // Notification display component
 const AppNotifications = () => {
@@ -494,24 +503,24 @@ const AppRoutes = () => {
         <Route path="/positions" element={<PageWrapper><PositionsPage /></PageWrapper>} />
         <Route path="/training-certifications" element={<PageWrapper><TrainingCertificationsPage /></PageWrapper>} />
         <Route path="/hierarchy-audit" element={<PageWrapper><HierarchyAuditLogPage /></PageWrapper>} />
-        <Route path="/accounting/coa" element={<PageWrapper><AccountingCOA /></PageWrapper>} />
-        <Route path="/accounting/journals" element={<PageWrapper><AccountingJournals /></PageWrapper>} />
-        <Route path="/accounting/trial-balance" element={<PageWrapper><AccountingTrialBalance /></PageWrapper>} />
-        <Route path="/accounting/ledger" element={<PageWrapper><AccountingGeneralLedger /></PageWrapper>} />
-        <Route path="/accounting/reports" element={<PageWrapper><AccountingFinancialStatements /></PageWrapper>} />
-        <Route path="/accounting/bank-recon" element={<PageWrapper><AccountingBankRecon /></PageWrapper>} />
-        <Route path="/accounting/fiscal-years" element={<PageWrapper><AccountingFiscalYears /></PageWrapper>} />
-        <Route path="/accounting/funds" element={<PageWrapper><AccountingFunds /></PageWrapper>} />
-        <Route path="/accounting/settings" element={<PageWrapper><AccountingSettings /></PageWrapper>} />
-        <Route path="/accounting/budget-variance" element={<PageWrapper><AccountingBudgetVsActual /></PageWrapper>} />
-        <Route path="/accounting/vendors" element={<PageWrapper><AccountingVendors /></PageWrapper>} />
-        <Route path="/accounting/finance-dashboard" element={<PageWrapper><AccountingFinanceDashboard /></PageWrapper>} />
-        <Route path="/accounting/purchase-orders" element={<PageWrapper><AccountingPurchaseOrders /></PageWrapper>} />
-        <Route path="/accounting/ap-aging" element={<PageWrapper><AccountingAPAging /></PageWrapper>} />
-        <Route path="/accounting/cash-flow" element={<PageWrapper><AccountingCashFlow /></PageWrapper>} />
-        <Route path="/accounting/fixed-assets" element={<PageWrapper><AccountingFixedAssets /></PageWrapper>} />
-        <Route path="/accounting/gl-bridge"   element={<PageWrapper><AccountingGLBridge /></PageWrapper>} />
-        <Route path="/finance/audit-trail" element={<PageWrapper><FinanceAuditTrail /></PageWrapper>} />
+        <Route path="/accounting/coa" element={<SuperAdminRoute><PageWrapper><AccountingCOA /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/journals" element={<SuperAdminRoute><PageWrapper><AccountingJournals /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/trial-balance" element={<SuperAdminRoute><PageWrapper><AccountingTrialBalance /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/ledger" element={<SuperAdminRoute><PageWrapper><AccountingGeneralLedger /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/reports" element={<SuperAdminRoute><PageWrapper><AccountingFinancialStatements /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/bank-recon" element={<SuperAdminRoute><PageWrapper><AccountingBankRecon /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/fiscal-years" element={<SuperAdminRoute><PageWrapper><AccountingFiscalYears /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/funds" element={<SuperAdminRoute><PageWrapper><AccountingFunds /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/settings" element={<SuperAdminRoute><PageWrapper><AccountingSettings /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/budget-variance" element={<SuperAdminRoute><PageWrapper><AccountingBudgetVsActual /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/vendors" element={<SuperAdminRoute><PageWrapper><AccountingVendors /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/finance-dashboard" element={<SuperAdminRoute><PageWrapper><AccountingFinanceDashboard /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/purchase-orders" element={<SuperAdminRoute><PageWrapper><AccountingPurchaseOrders /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/ap-aging" element={<SuperAdminRoute><PageWrapper><AccountingAPAging /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/cash-flow" element={<SuperAdminRoute><PageWrapper><AccountingCashFlow /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/fixed-assets" element={<SuperAdminRoute><PageWrapper><AccountingFixedAssets /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/gl-bridge" element={<SuperAdminRoute><PageWrapper><AccountingGLBridge /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/finance/audit-trail" element={<SuperAdminRoute><PageWrapper><FinanceAuditTrail /></PageWrapper></SuperAdminRoute>} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />
         <Route path="/my-expenses" element={<PageWrapper><MyExpenses /></PageWrapper>} />
