@@ -470,7 +470,7 @@ export function getDownPaymentStats(requests: DownPaymentRequest[]) {
     .reduce((sum, r) => sum + (r.approvedAmount || r.requestedAmount), 0);
   const paidStatuses = ['partially_paid', 'fully_paid', 'completed'];
   const totalPaid = requests.filter(r => paidStatuses.includes(r.status)).reduce((sum, r) => sum + r.totalPaidAmount, 0);
-  const totalRemaining = requests.filter(r => paidStatuses.includes(r.status)).reduce((sum, r) => sum + r.remainingAmount, 0);
+  const totalRemaining = totalApproved - totalPaid;
   const totalPendingAmount = requests
     .filter(r => r.status === 'pending_supervisor' || r.status === 'pending_admin')
     .reduce((sum, r) => sum + r.requestedAmount, 0);
