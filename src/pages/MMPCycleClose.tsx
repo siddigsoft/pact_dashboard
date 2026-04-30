@@ -2444,8 +2444,8 @@ const MMPCycleClose = () => {
     let totalSites = 0;
     let completedSites = 0;
     Object.values(siteVisitCounts).forEach(c => {
-      totalSites += c.total;
-      completedSites += c.completed;
+      totalSites += c.total ?? 0;
+      completedSites += c.statusCounts?.['completed'] ?? 0;
     });
     const overallCoverage = totalSites > 0 ? Math.round((completedSites / totalSites) * 100) : 0;
     const totalUncovered = uncoveredSites.length;
@@ -3219,21 +3219,17 @@ const MMPCycleClose = () => {
                                             className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
                                             onClick={() => {
                                               const mmpId = checklistMmpId!;
-                                              const pending = pendingScopedClose;
                                               setChecklistMmpId(null);
                                               setPendingScopedClose(null);
                                               setReconciliationAcknowledged(false);
-                                              if (pending) {
-                                                executeScopedClose(mmpId, pending.scope, pending.scopeValue);
-                                              } else {
-                                                handleStartClosingCycle(mmpId);
-                                              }
+                                              // Cycle is already in 'closing' state — submit for final approval
+                                              handleFinalizeCycleClose(mmpId);
                                             }}
-                                            disabled={closingCycle || !reconciliationAcknowledged}
+                                            disabled={finalizingCycle || !reconciliationAcknowledged}
                                             data-testid="button-proceed-close-cycle-guide"
                                           >
                                             <CheckCircle2 className="h-4 w-4" />
-                                            Submit Cycle for Final Approval
+                                            {finalizingCycle ? 'Submitting…' : 'Submit Cycle for Final Approval'}
                                           </Button>
                                         </div>
                                       )}
