@@ -1,6 +1,6 @@
--- SECURITY DEFINER function: returns down_payment_requests with role-based
--- filtering applied in SQL, bypassing the overly-restrictive RLS on the table.
--- Parameters are TEXT (not uuid) because requested_by / hub_id columns are text.
+-- SECURITY DEFINER function: bypasses RLS on down_payment_requests.
+-- Column types confirmed: requested_by = UUID, hub_id = TEXT
+-- Parameters are TEXT so JS can pass user.id (string) directly.
 
 DROP FUNCTION IF EXISTS public.get_dp_requests_for_user(uuid, text, uuid, uuid);
 DROP FUNCTION IF EXISTS public.get_dp_requests_for_user(text, text, text, text);
@@ -19,19 +19,23 @@ AS $$
   SELECT *
   FROM public.down_payment_requests
   WHERE CASE
+    -- Admins / directors see everything
     WHEN REGEXP_REPLACE(lower(p_role), '[^a-z]', '', 'g') = ANY(ARRAY[
            'superadmin', 'admin', 'financialadmin', 'ict',
-           'fom', 'fieldoperationmanager',
-           'countrydirector', 'datateam'
+           'fom', 'fieldoperationmanager', 'countrydirector', 'datateam'
          ])
       THEN true
+
+    -- Supervisors see their hub + their own requests
     WHEN REGEXP_REPLACE(lower(p_role), '[^a-z]', '', 'g') = ANY(ARRAY['supervisor', 'hubsupervisor'])
       THEN (
-        requested_by = p_user_id
-        OR hub_id = p_hub_id
+        requested_by::text = p_user_id                                          -- own requests (uuid → text)
+        OR hub_id           = p_hub_id                                          -- hub_id is already TEXT
         OR (p_secondary_hub_id IS NOT NULL AND hub_id = p_secondary_hub_id)
       )
-    ELSE requested_by = p_user_id
+
+    -- Everyone else sees only their own requests
+    ELSE requested_by::text = p_user_id
   END
   ORDER BY created_at DESC;
 $$;
