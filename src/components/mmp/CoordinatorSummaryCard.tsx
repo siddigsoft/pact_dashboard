@@ -413,16 +413,10 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
         });
       }
       setFundDialog({ open: false, site: null, editMode: false, existingAdvance: null });
-      // Refresh advance map — use pagination to bypass any PostgREST max-rows setting
+      // Refresh advance map using the SECURITY DEFINER helper
       const entryIds = siteEntries.map((e: any) => e.id).filter((id: any) => typeof id === 'string' && id.length > 0);
       if (entryIds.length > 0) {
-        const PAGE = 1000;
-        let allAdv: any[] = [];
-        for (let from = 0; ; from += PAGE) {
-          const { data } = await supabase.from('down_payment_requests').select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification').in('mmp_site_entry_id', entryIds).range(from, from + PAGE - 1);
-          allAdv = [...allAdv, ...(data || [])];
-          if (!data || data.length < PAGE) break;
-        }
+        const allAdv = await fetchAdvancesByEntryIds(entryIds);
         if (allAdv.length > 0) {
           const map: Record<string, AdvanceInfo> = {};
           allAdv.forEach((row: any) => {
@@ -668,6 +662,33 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
     }
   }, [siteEntries]);
 
+  // Helper: fetch advance data for a list of entry IDs via SECURITY DEFINER
+  // RPC (bypasses RLS on down_payment_requests so all advances are visible).
+  // Falls back to a direct query if the RPC doesn't exist yet.
+  const fetchAdvancesByEntryIds = async (entryIds: string[]): Promise<any[]> => {
+    const { data: rpcData, error: rpcErr } = await (supabase as any).rpc(
+      'get_advances_by_entry_ids',
+      { entry_ids: entryIds },
+    );
+    if (!rpcErr && rpcData) return rpcData as any[];
+
+    // Fallback: direct query (subject to RLS — use until migration is applied)
+    console.warn('[CoordCard] RPC get_advances_by_entry_ids not available, falling back:', rpcErr?.message);
+    const PAGE = 1000;
+    let allData: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('down_payment_requests')
+        .select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification')
+        .in('mmp_site_entry_id', entryIds)
+        .range(from, from + PAGE - 1);
+      if (error) break;
+      allData = [...allData, ...(data || [])];
+      if (!data || data.length < PAGE) break;
+    }
+    return allData;
+  };
+
   // Fetch advance/down-payment status for all site entries in this MMP
   useEffect(() => {
     const fetchAdvanceStatus = async () => {
@@ -677,20 +698,7 @@ export default function CoordinatorSummaryCard({ siteEntries, mmpId }: Coordinat
 
       if (entryIds.length === 0) return;
 
-      // Paginate in chunks of 1000 to bypass any PostgREST max-rows setting
-      const PAGE = 1000;
-      let allData: any[] = [];
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await supabase
-          .from('down_payment_requests')
-          .select('id, mmp_site_entry_id, status, requested_amount, approved_amount, total_paid_amount, justification')
-          .in('mmp_site_entry_id', entryIds)
-          .range(from, from + PAGE - 1);
-        if (error) break;
-        allData = [...allData, ...(data || [])];
-        if (!data || data.length < PAGE) break;
-      }
-      const data = allData;
+      const data = await fetchAdvancesByEntryIds(entryIds);
       if (data.length === 0) return;
 
       // Build a map: site_entry_id → most-relevant advance record
