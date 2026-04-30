@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
-import type { DownPaymentRequest, DownPaymentFilter } from '@/types/down-payment';
+import type { DownPaymentRequest, DownPaymentFilter, DownPaymentStatus } from '@/types/down-payment';
 import { filterDownPayments } from '@/utils/downPaymentExport';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -836,6 +836,25 @@ export default function DownPaymentApproval() {
                 <div>
                   <Label className="text-xs">Date To</Label>
                   <Input type="date" value={filters.dateTo || ''} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value || undefined }))} data-testid="input-page-filter-date-to" />
+                </div>
+                <div>
+                  <Label className="text-xs">Status</Label>
+                  <Select
+                    value={(filters.status && filters.status.length === 1) ? filters.status[0] : 'all'}
+                    onValueChange={v => setFilters(f => ({ ...f, status: v === 'all' ? undefined : [v as DownPaymentStatus] }))}
+                  >
+                    <SelectTrigger data-testid="select-page-filter-status"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="pending_supervisor">Pending Supervisor</SelectItem>
+                      <SelectItem value="pending_admin">Pending Admin</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                      <SelectItem value="fully_paid">Fully Paid</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
