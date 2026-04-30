@@ -195,7 +195,6 @@ export default function UnifiedCostRequestForm({
   const [mmps, setMmps] = useState<MmpOption[]>([]);
   const [mmpsLoading, setMmpsLoading] = useState(false);
 
-<<<<<<< HEAD
   // Compute the hub name as a stable string so the fetch effect only reruns
   // when the actual hub changes — not when the parent re-renders and hands us
   // a new `hubs` array reference (which caused the "Loading MMPs…" flash).
@@ -204,10 +203,7 @@ export default function UnifiedCostRequestForm({
     return hubs.find(h => h.id === resolvedHubId)?.name ?? null;
   }, [hubId, currentUser?.hubId, hubs]);
 
-  useEffect(() => {
-    setMmpsLoading(true);
-=======
-  // Load MMPs when the selected project changes (filter by project_id)
+  // Load MMPs when project or hub changes — filter by both project_id and hub
   useEffect(() => {
     setMmpsLoading(true);
     // If no project selected, clear MMP list and exit
@@ -216,26 +212,18 @@ export default function UnifiedCostRequestForm({
       setMmpsLoading(false);
       return;
     }
->>>>>>> 26f45617aed8020ed44291e0a4031e2734a3e1da
     let q = supabase
       .from('mmp_files')
       .select('id, name, month, hub, status')
       .order('uploaded_at', { ascending: false })
-<<<<<<< HEAD
-      .limit(100);
-    if (resolvedHubName) q = q.eq('hub', resolvedHubName);
-=======
       .limit(100)
       .eq('project_id', projectId);
->>>>>>> 26f45617aed8020ed44291e0a4031e2734a3e1da
+    if (resolvedHubName) q = q.eq('hub', resolvedHubName);
     q.then(({ data }) => {
       setMmps((data || []) as MmpOption[]);
       setMmpsLoading(false);
     }).catch(() => setMmpsLoading(false));
-<<<<<<< HEAD
-  }, [resolvedHubName]);
-=======
-  }, [projectId]);
+  }, [resolvedHubName, projectId]);
 
   // Reset selected MMP when project changes (but not on initial mount with editData)
   useEffect(() => {
@@ -243,7 +231,6 @@ export default function UnifiedCostRequestForm({
       setMmpId('');
     }
   }, [projectId]);
->>>>>>> 26f45617aed8020ed44291e0a4031e2734a3e1da
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
