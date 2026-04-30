@@ -2507,6 +2507,7 @@ const MMP = () => {
 
   const [hasClosingCycle, setHasClosingCycle] = useState(false);
   const [closingCycleName, setClosingCycleName] = useState<string | null>(null);
+  const [closingCycleId, setClosingCycleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -2518,6 +2519,7 @@ const MMP = () => {
         .limit(1);
       setHasClosingCycle(!!data && data.length > 0);
       setClosingCycleName(data?.[0]?.name ?? null);
+      setClosingCycleId(data?.[0]?.id ?? null);
     };
     checkClosingCycles();
   }, [isAdmin]);
@@ -4881,7 +4883,7 @@ const MMP = () => {
           <Button
             size="sm"
             className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white gap-1.5 text-xs"
-            onClick={() => navigate('/mmp/cycle-close')}
+            onClick={() => navigate(`/mmp/cycle-close${closingCycleId ? `?wizardFor=${closingCycleId}` : ''}`)}
             data-testid="button-go-to-cycle-close"
           >
             <ArrowRight className="h-3.5 w-3.5" />

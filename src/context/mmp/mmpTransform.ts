@@ -190,5 +190,12 @@ export function transformDBToMMPFile(dbRecord: any): MMPFile {
     cpVerification: dbRecord.cp_verification || dbRecord.cpverification,
     comprehensiveVerification: dbRecord.comprehensive_verification,
     activities: dbRecord.activities,
+    // Cycle-close fields — must be passed through so MMPCycleClose.tsx can read them
+    cycle_status: dbRecord.cycle_status,
+    cycle_closed_at: dbRecord.cycle_closed_at,
+    cycle_close_records: dbRecord.cycle_close_records,
+    cycle_closing_started_at: dbRecord.cycle_closing_started_at,
+    cycle_closing_started_by: dbRecord.cycle_closing_started_by,
+    cycle_close_deadline: dbRecord.cycle_close_deadline,
   } as MMPFile;
 }

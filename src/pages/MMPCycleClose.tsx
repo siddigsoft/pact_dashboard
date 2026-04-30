@@ -215,7 +215,13 @@ const MMPCycleClose = () => {
     if (mmpIdParam) {
       setSelectedMmpId(mmpIdParam);
     }
-  }, [searchParams]);
+    // When arriving from the "Go to Cycle Close" banner in MMP Management,
+    // ?wizardFor=X auto-opens the guided wizard for that specific MMP.
+    const wizardForParam = searchParams.get('wizardFor');
+    if (wizardForParam && mmpFiles && mmpFiles.length > 0) {
+      setChecklistMmpId(wizardForParam);
+    }
+  }, [searchParams, mmpFiles]);
   const [closedCycles, setClosedCycles] = useState<ClosedCycleRecord[]>([]);
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
