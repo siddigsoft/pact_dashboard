@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { 
   Upload, ChevronLeft, ChevronRight, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity,
-  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck, Filter, X, RefreshCw, User
+  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck, Filter, X, RefreshCw, User, ArrowRight
 } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
@@ -2506,16 +2506,18 @@ const MMP = () => {
   const canCreate = isAdmin || isICT;
 
   const [hasClosingCycle, setHasClosingCycle] = useState(false);
+  const [closingCycleName, setClosingCycleName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
     const checkClosingCycles = async () => {
       const { data } = await supabase
         .from('mmp_files')
-        .select('id')
+        .select('id, name')
         .eq('cycle_status', 'closing')
         .limit(1);
       setHasClosingCycle(!!data && data.length > 0);
+      setClosingCycleName(data?.[0]?.name ?? null);
     };
     checkClosingCycles();
   }, [isAdmin]);
@@ -4858,6 +4860,35 @@ const MMP = () => {
           <DataFreshnessBadge className="bg-white/10 rounded-full px-2.5 py-0.5" />
         </div>
       </div>
+
+      {/* Upload blocked banner — shown when a cycle is in closing state */}
+      {hasClosingCycle && canCreate && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3 mb-2" data-testid="banner-upload-blocked">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                Upload blocked — a cycle is being closed
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                {closingCycleName
+                  ? <>The MMP <strong>"{closingCycleName}"</strong> is currently in the closing process. Complete all closing steps first, then the upload button will unlock automatically.</>
+                  : <>An MMP cycle is currently being closed. Complete all closing steps first, then the upload button will unlock automatically.</>
+                }
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white gap-1.5 text-xs"
+            onClick={() => navigate('/mmp/cycle-close')}
+            data-testid="button-go-to-cycle-close"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+            Go to Cycle Close → finish closing first
+          </Button>
+        </div>
+      )}
 
       {/* Body - Show tabs immediately with loading states per section for faster perceived loading */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
