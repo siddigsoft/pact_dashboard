@@ -21,6 +21,7 @@ import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
 import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
+import { useMMP } from "@/context/mmp/MMPContext";
 import { AppRole } from "@/types";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
 import UnifiedCostRequestForm from "@/components/cost-submission/UnifiedCostRequestForm";
@@ -150,8 +151,20 @@ const CostSubmission = () => {
   const { currentUser, roles } = useAppContext();
   const { users } = useUser();
   const { projects: allProjects } = useProjectContext();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
-  const { toast } = useToast();
+   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+   const { mmpFiles } = useMMP();
+   const { toast } = useToast();
+
+   // Build MMP lookup map: mmp_file_id -> mmp name
+   const mmpNameMap = useMemo(() => {
+     const map = new Map<string, string>();
+     mmpFiles?.forEach(mmp => {
+       if (mmp.id) {
+         map.set(mmp.id, mmp.name || 'Unnamed MMP');
+       }
+     });
+     return map;
+   }, [mmpFiles]);
   
   // Check if user is admin or supervisor
   const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
@@ -3523,13 +3536,14 @@ const CostSubmission = () => {
                       groupItems.some(o => canTier3Approve(o)) ? 3 : null
                     ) : null;
 
-                    // GROUP HEADER (only for multi-item groups) — navy gradient with collapse/expand
-                    const GroupHeader = isMultiItem ? (() => {
-                      const totalCents = groupItems.reduce((s, o) => s + o.amount_cents, 0);
-                      const currency = groupItems[0].currency;
-                      const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
-                      const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
-                      const projPalette = getProjectPalette(groupItems[0].project_id);
+                     // GROUP HEADER (only for multi-item groups) — navy gradient with collapse/expand
+                     const GroupHeader = isMultiItem ? (() => {
+                       const totalCents = groupItems.reduce((s, o) => s + o.amount_cents, 0);
+                       const currency = groupItems[0].currency;
+                       const submitterName = users.find(u => u.id === groupItems[0].submitted_by)?.name || 'Unknown';
+                       const linkedProjectName = groupItems[0].project_id ? allProjects.find(p => p.id === groupItems[0].project_id)?.name : null;
+                       const linkedMmpName = groupItems[0].mmp_file_id ? mmpNameMap.get(groupItems[0].mmp_file_id) || null : null;
+                       const projPalette = getProjectPalette(groupItems[0].project_id);
                       const approvedCnt = grpApprovedCnt;
                       const rejectedCnt = grpRejectedCnt;
                       const pendingCnt = grpPendingCnt;
@@ -3554,18 +3568,23 @@ const CostSubmission = () => {
                                 </div>
                                 <div className="flex-1 min-w-0 space-y-1.5">
                                   <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{groupTitle}</p>
-                                  <div className="flex items-center gap-2 flex-wrap text-[11px]">
-                                    {linkedProjectName && (
-                                      <span
-                                        className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
-                                        style={{ backgroundColor: projPalette.bg, color: projPalette.text, border: `1px solid ${projPalette.border}40` }}
-                                      >
-                                        <Briefcase className="h-3 w-3" />{linkedProjectName}
-                                      </span>
-                                    )}
-                                    {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
-                                    <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
-                                  </div>
+                                   <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                     {linkedProjectName && (
+                                       <span
+                                         className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
+                                         style={{ backgroundColor: projPalette.bg, color: projPalette.text, border: `1px solid ${projPalette.border}40` }}
+                                       >
+                                         <Briefcase className="h-3 w-3" />{linkedProjectName}
+                                       </span>
+                                     )}
+                                     {linkedMmpName && (
+                                       <span className="flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold">
+                                         <ClipboardCheck className="h-3 w-3" />{linkedMmpName}
+                                       </span>
+                                     )}
+                                     {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
+                                     <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy')}</span>
+                                   </div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white">
                                       <Layers className="h-2.5 w-2.5" /> {groupItems.length} expense items
@@ -4312,14 +4331,15 @@ const CostSubmission = () => {
                       );
                     }
 
-                    // Standalone item — navy header matching grouped style
-                    const soc = groupItems[0];
-                    const sTitle = soc.request_title
-                      || soc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')
-                      || 'Cost Request';
-                    const sSubmitter = users.find(u => u.id === soc.submitted_by)?.name || 'Unknown';
-                    const sProject = soc.project_id ? allProjects.find(p => p.id === soc.project_id)?.name : null;
-                    const sPalette = getProjectPalette(soc.project_id);
+                     // Standalone item — navy header matching grouped style
+                     const soc = groupItems[0];
+                     const sTitle = soc.request_title
+                       || soc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')
+                       || 'Cost Request';
+                     const sSubmitter = users.find(u => u.id === soc.submitted_by)?.name || 'Unknown';
+                     const sProject = soc.project_id ? allProjects.find(p => p.id === soc.project_id)?.name : null;
+                     const sMmpName = soc.mmp_file_id ? mmpNameMap.get(soc.mmp_file_id) || null : null;
+                     const sPalette = getProjectPalette(soc.project_id);
                     const sDs = getOperationalDerivedStatus(soc);
                     const sBarColor = (sDs === 'approved' || sDs === 'paid' || sDs === 'reconciled')
                       ? 'bg-green-400'
@@ -4338,18 +4358,23 @@ const CostSubmission = () => {
                             </div>
                             <div className="flex-1 min-w-0 space-y-1.5">
                               <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{sTitle}</p>
-                              <div className="flex items-center gap-2 flex-wrap text-[11px]">
-                                {sProject && (
-                                  <span
-                                    className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
-                                    style={{ backgroundColor: sPalette.bg, color: sPalette.text, border: `1px solid ${sPalette.border}40` }}
-                                  >
-                                    <Briefcase className="h-3 w-3" />{sProject}
-                                  </span>
-                                )}
-                                {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{sSubmitter}</span>}
-                                <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(soc.created_at), 'MMM d, yyyy')}</span>
-                              </div>
+                               <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                 {sProject && (
+                                   <span
+                                     className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
+                                     style={{ backgroundColor: sPalette.bg, color: sPalette.text, border: `1px solid ${sPalette.border}40` }}
+                                   >
+                                     <Briefcase className="h-3 w-3" />{sProject}
+                                   </span>
+                                 )}
+                                 {sMmpName && (
+                                   <span className="flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold">
+                                     <ClipboardCheck className="h-3 w-3" />{sMmpName}
+                                   </span>
+                                 )}
+                                 {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{sSubmitter}</span>}
+                                 <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(soc.created_at), 'MMM d, yyyy')}</span>
+                               </div>
                             </div>
                             <div className="flex-none text-right space-y-1">
                               <p className="font-bold text-base tabular-nums text-white">{soc.currency} {(soc.amount_cents / 100).toLocaleString()}</p>
@@ -4839,21 +4864,30 @@ const CostSubmission = () => {
                           <p>{format(new Date(oc.submitted_at), 'dd MMM yyyy, h:mm a')}</p>
                         </div>
                       )}
-                      {linkedProject && (
-                        <div className="px-3 py-2">
-                          <p className="text-xs text-muted-foreground mb-0.5">Project / المشروع</p>
-                          <button
-                            onClick={() => { setViewingSubmission(null); navigate(`/projects/${linkedProject.id}`); }}
-                            className="text-blue-600 dark:text-blue-400 hover:underline text-left"
-                          >
-                            {linkedProject.name}
-                          </button>
-                        </div>
-                      )}
-                      <div className="px-3 py-2">
-                        <p className="text-xs text-muted-foreground mb-0.5">Submission ID</p>
-                        <p className="font-mono text-xs opacity-60">{oc.id}</p>
-                      </div>
+                       {linkedProject && (
+                         <div className="px-3 py-2">
+                           <p className="text-xs text-muted-foreground mb-0.5">Project / المشروع</p>
+                           <button
+                             onClick={() => { setViewingSubmission(null); navigate(`/projects/${linkedProject.id}`); }}
+                             className="text-blue-600 dark:text-blue-400 hover:underline text-left"
+                           >
+                             {linkedProject.name}
+                           </button>
+                         </div>
+                       )}
+                       {oc.mmp_file_id && mmpNameMap.get(oc.mmp_file_id) && (
+                         <div className="px-3 py-2">
+                           <p className="text-xs text-muted-foreground mb-0.5">Monthly Monitoring Plan (MMP)</p>
+                           <p className="font-medium flex items-center gap-1.5">
+                             <ClipboardCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                             {mmpNameMap.get(oc.mmp_file_id)}
+                           </p>
+                         </div>
+                       )}
+                       <div className="px-3 py-2">
+                         <p className="text-xs text-muted-foreground mb-0.5">Submission ID</p>
+                         <p className="font-mono text-xs opacity-60">{oc.id}</p>
+                       </div>
                     </div>
                   </section>
 

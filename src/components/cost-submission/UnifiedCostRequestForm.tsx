@@ -216,9 +216,11 @@ export default function UnifiedCostRequestForm({
     }).catch(() => setMmpsLoading(false));
   }, [projectId]);
 
-  // Reset selected MMP when project changes
+  // Reset selected MMP when project changes (but not on initial mount with editData)
   useEffect(() => {
-    setMmpId('');
+    if (projectId) {
+      setMmpId('');
+    }
   }, [projectId]);
 
   const initialItem: LineItem = editData ? {
@@ -464,11 +466,11 @@ export default function UnifiedCostRequestForm({
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
-          hub_id: resolvedHubId,
-          project_id: resolvedProjectId,
-          mmp_id: mmpId || null,
-          supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
-          updated_at: new Date().toISOString(),
+           hub_id: resolvedHubId,
+           project_id: resolvedProjectId,
+           mmp_file_id: mmpId || null,
+           supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
+           updated_at: new Date().toISOString(),
         };
 
         if (isResubmit) {
@@ -530,6 +532,7 @@ export default function UnifiedCostRequestForm({
         const groupId = uuidv4();
         const cleanRequestTitle = requestTitle.trim();
         const resolvedMmpId = mmpId || null;
+        console.log('[UnifiedCostRequestForm] Submitting:', { projectId, mmpId, resolvedMmpId, hubId, lineItemsCount: lineItems.length });
         const insertRows = lineItems.map(item => ({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100).toString(),
@@ -538,11 +541,11 @@ export default function UnifiedCostRequestForm({
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
-          hub_id: resolvedHubId,
-          project_id: resolvedProjectId,
-          mmp_id: resolvedMmpId,
-          supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
-          submitted_by: currentUser.id,
+           hub_id: resolvedHubId,
+           project_id: resolvedProjectId,
+           mmp_file_id: resolvedMmpId,
+           supporting_documents: safeSupportingDocuments.length > 0 ? safeSupportingDocuments : [],
+           submitted_by: currentUser.id,
           submitter_role: currentUser.role || 'user',
           status: 'pending',
           tier1_status: 'pending',
