@@ -189,8 +189,6 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   }
 
   const rawMapped = (data || []).map(transformFromDB);
-  const deletedCount = rawMapped.filter(r => r.status === 'deleted' || (r.status === 'cancelled' && r.metadata?.deleted)).length;
-  console.log('[DownPayment] raw from DB:', rawMapped.length, '| filtered-out (deleted/cancelled+deleted):', deletedCount);
   const transformed = rawMapped.filter(r => {
     if (r.status === 'deleted') return false;
     if (r.status === 'cancelled' && r.metadata?.deleted) return false;

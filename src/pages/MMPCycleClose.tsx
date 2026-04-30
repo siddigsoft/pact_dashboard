@@ -757,11 +757,13 @@ const MMPCycleClose = () => {
       {
         id: 'approval', number: 6,
         title: 'Awaiting Final Approval', titleAr: 'في انتظار الموافقة',
-        desc: checklistMmpStatus === 'pending_approval'
-          ? (isFOM || isAdmin || isSuperAdmin)
-            ? 'You have approval authority. Use the Approve or Reject buttons below to take action.'
-            : 'The FOM, Admin, or Super Admin will review and approve or reject the cycle close.'
-          : 'This step is unlocked after submission.',
+        desc: checklistMmpStatus === 'closed'
+          ? 'Cycle approved and closed. It is now permanently archived.'
+          : checklistMmpStatus === 'pending_approval'
+            ? (isFOM || isAdmin || isSuperAdmin)
+              ? 'You have approval authority. Use the Approve or Reject buttons below to take action.'
+              : 'The FOM, Admin, or Super Admin will review and approve or reject the cycle close.'
+            : 'This step is unlocked after submission.',
         passed: checklistMmpStatus === 'closed',
         blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed',
         tab: null, actionLabel: null,
