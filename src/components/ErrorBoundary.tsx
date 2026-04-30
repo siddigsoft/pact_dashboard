@@ -50,8 +50,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     // Uses a timestamp so multiple rapid HMR cycles can each trigger one
     // reload, but no more than once every 4 seconds (prevents infinite loops).
     const msg = error?.message ?? '';
-    const isProviderRace = /must be used within/i.test(msg);
-    if (isProviderRace) {
+    // Auto-reload for HMR race conditions:
+    //   1. "must be used within" — context provider not yet mounted
+    //   2. "Cannot access '...' before initialization" — temporal dead zone from
+    //      module hot-swap reordering declarations mid-session
+    const isHmrRace = /must be used within/i.test(msg) ||
+                      /cannot access .+ before initialization/i.test(msg);
+    if (isHmrRace) {
       const key = 'eb_provider_race_ts';
       const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
       const now = Date.now();
