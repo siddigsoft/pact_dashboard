@@ -23,6 +23,11 @@ interface DataCollector {
   email?: string | null;
 }
 
+interface ProjectOption {
+  id: string;
+  name: string;
+}
+
 interface AdhocRow {
   siteName: string;
   siteCode: string;
@@ -87,11 +92,15 @@ const normalizePhoneNumbers = (raw: string): string[] => {
     .filter((part) => part.length >= 7);
 };
 
-const getOrCreateAdhocMMPFile = async (): Promise<string> => {
+const getOrCreateAdhocMMPFile = async (
+  projectId: string,
+  projectName: string
+): Promise<string> => {
   const now = new Date();
   const monthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  const mmpId = `adhoc-tasks-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const mmpName = `Ad-hoc Tasks — ${monthYear}`;
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const mmpId = `adhoc-tasks-${projectId}-${monthKey}`;
+  const mmpName = `Ad-hoc Tasks — ${projectName} — ${monthYear}`;
 
   const { data: existing } = await supabase
     .from('mmp_files')
@@ -108,6 +117,7 @@ const getOrCreateAdhocMMPFile = async (): Promise<string> => {
       name: mmpName,
       status: 'Approved',
       month: now.toISOString().slice(0, 7),
+      project_id: projectId,
       uploaded_by: 'system',
       uploaded_at: now.toISOString(),
       approved_by: 'system',
@@ -166,6 +176,8 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
 
   // Collectors
   const [collectors, setCollectors] = useState<DataCollector[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   // Create mode
   const [createMode, setCreateMode] = useState<'upload' | 'manual'>('manual');
@@ -222,6 +234,22 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
           })
         );
       }
+    })();
+  }, []);
+
+  // Load projects for adhoc assignment
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Failed to load projects for ad-hoc sites:', error);
+        return;
+      }
+      setProjects((data || []).map((p: any) => ({ id: p.id, name: p.name || p.id })));
     })();
   }, []);
 
@@ -448,9 +476,17 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
       toast({ title: 'No valid rows', description: 'Please fix validation errors before submitting.', variant: 'destructive' });
       return;
     }
+    if (!selectedProjectId) {
+      toast({ title: 'Project required', description: 'Please select the project for these ad-hoc sites.', variant: 'destructive' });
+      return;
+    }
     setSubmitting(true);
     try {
-      const mmpFileId = await getOrCreateAdhocMMPFile();
+      const selectedProject = projects.find((p) => p.id === selectedProjectId);
+      const mmpFileId = await getOrCreateAdhocMMPFile(
+        selectedProjectId,
+        selectedProject?.name || 'Project'
+      );
       let assigned = 0, open = 0;
 
       const entries = validRows.map(row => {
@@ -612,6 +648,22 @@ export default function AdhocSiteVisitsTab({ canManage }: AdhocSiteVisitsTabProp
                   Upload File
                 </TabsTrigger>
               </TabsList>
+
+              <div className="mb-4 max-w-sm space-y-1">
+                <Label className="text-xs">Project *</Label>
+                <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-adhoc-project">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               {/* ── MANUAL ENTRY ── */}
               <TabsContent value="manual" className="mt-0 space-y-4">
