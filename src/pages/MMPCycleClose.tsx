@@ -439,6 +439,13 @@ const MMPCycleClose = () => {
     const financeIds = ['cost_submissions', 'transport_advances', 'withdrawal_requests', 'cost_recovery'];
     const financePassed = financeIds.every(id => get(id)?.passed !== false || get(id) === undefined);
     const financeIssues = financeIds.map(id => get(id)).filter(i => i && !i.passed) as typeof ri;
+
+    const svItem = get('site_visits');
+    const svRemaining = svItem && !svItem.passed ? (svItem.total - svItem.count) : 0;
+    const csItem = get('cost_submissions');
+    const csRemaining = csItem && !csItem.passed ? csItem.total : 0;
+    const wfpItem = get('wfp_confirmation');
+
     return [
       {
         id: 'start', number: 1,
@@ -447,42 +454,75 @@ const MMPCycleClose = () => {
         passed: true, blocked: false,
         tab: null as string | null, actionLabel: null as string | null,
         sub: [] as typeof ri,
+        remaining: 0,
+        howTo: [] as string[],
       },
       {
         id: 'reasons', number: 2,
         title: 'Assign Reasons — Uncovered Sites', titleAr: 'أسباب المواقع غير المغطاة',
-        desc: get('site_visits')?.description || 'Every unvisited site needs a reason before the cycle can close.',
-        passed: get('site_visits')?.passed ?? false,
+        desc: svItem?.description || 'Every unvisited site needs a reason before the cycle can close.',
+        passed: svItem?.passed ?? false,
         blocked: false,
-        tab: 'uncovered', actionLabel: 'Go to Uncovered Sites →',
-        sub: get('site_visits') ? [get('site_visits')!] : [],
+        tab: 'uncovered', actionLabel: 'Open Uncovered Sites tab →',
+        sub: svItem ? [svItem] : [],
+        remaining: svRemaining,
+        howTo: [
+          'Click "Open Uncovered Sites tab →" button below.',
+          'In the list, find every site showing an orange "No Reason" badge.',
+          'Click the orange badge to open a small popup.',
+          'Pick the correct reason from the dropdown and press Save.',
+          'Repeat for every site until no orange badges remain.',
+          'Come back here and click "Check again" to confirm.',
+        ],
       },
       {
         id: 'finance', number: 3,
         title: 'Clear Finance', titleAr: 'تسوية المالية',
-        desc: financePassed ? 'All financial items are cleared.' : `${financeIssues.length} financial item(s) still pending.`,
+        desc: financePassed ? 'All financial items are cleared.' : `${financeIssues.length} financial gate(s) still need attention.`,
         passed: financePassed,
         blocked: false,
-        tab: 'finance', actionLabel: 'Go to Pending Finance →',
+        tab: 'finance', actionLabel: 'Open Pending Finance tab →',
         sub: financeIssues,
+        remaining: csRemaining,
+        howTo: [
+          'Click "Open Pending Finance tab →" button below.',
+          'For each cost submission in the list: click Approve ✓ or Reject ✗.',
+          'If transport advances appear: click the advance row, then mark it as Reconciled or Paid.',
+          'If withdrawal requests appear: go to Finance and set each to Approved or Rejected.',
+          'Come back here and click "Check again" when the list is empty.',
+        ],
       },
       {
         id: 'wfp', number: 4,
         title: 'WFP Confirmation', titleAr: 'تأكيد WFP',
-        desc: get('wfp_confirmation')?.description || 'Upload and apply the WFP monthly monitoring Excel file.',
-        passed: get('wfp_confirmation')?.passed ?? false,
+        desc: wfpItem?.description || 'Upload and apply the WFP monthly monitoring Excel file.',
+        passed: wfpItem?.passed ?? false,
         blocked: false,
-        tab: 'wfp', actionLabel: 'Go to WFP Confirmation →',
-        sub: get('wfp_confirmation') ? [get('wfp_confirmation')!] : [],
+        tab: 'wfp', actionLabel: 'Open WFP Confirmation tab →',
+        sub: wfpItem ? [wfpItem] : [],
+        remaining: 0,
+        howTo: [
+          'Click "Open WFP Confirmation tab →" button below.',
+          'Upload the WFP cleaned Excel file for this month.',
+          'Review the matching results shown in the table.',
+          'Click "Apply" to confirm the matched visits.',
+          'Come back here and click "Check again" to confirm.',
+        ],
       },
       {
         id: 'submit', number: 5,
         title: 'Submit for Approval', titleAr: 'تقديم للموافقة',
-        desc: cycleReadiness.allPassed ? 'All gates are green. Proceed to submit this cycle for final approval.' : 'Complete all steps above to unlock submission.',
+        desc: cycleReadiness.allPassed ? 'All gates are green — you can now submit.' : 'Complete all steps above first.',
         passed: false,
         blocked: !cycleReadiness.allPassed,
         tab: null, actionLabel: null,
         sub: [],
+        remaining: 0,
+        howTo: [
+          'Tick the confirmation checkbox below.',
+          'Click the green "Submit Cycle for Final Approval" button.',
+          'The FOM and Country Director will be notified for review.',
+        ],
       },
     ];
   }, [cycleReadiness.items, cycleReadiness.allPassed]);
@@ -3060,10 +3100,13 @@ const MMPCycleClose = () => {
                           </div>
                         ) : (
                           <>
-                            {/* Progress bar */}
-                            <div className="flex items-center gap-3 mb-2">
+                            {/* Progress bar + check-again */}
+                            <div className="flex items-center gap-3 mb-4">
                               <Progress value={Math.round((guideSteps.filter(s => s.passed).length / guideSteps.length) * 100)} className="h-2 flex-1" />
                               <span className="text-xs text-muted-foreground shrink-0">{guideSteps.filter(s => s.passed).length} / {guideSteps.length - 1} done</span>
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 shrink-0" onClick={() => cycleReadiness.refresh()} data-testid="button-guide-refresh">
+                                <RefreshCw className="h-3 w-3" /> Check again
+                              </Button>
                             </div>
 
                             {/* Step cards */}
@@ -3074,21 +3117,21 @@ const MMPCycleClose = () => {
                               return (
                                 <div
                                   key={step.id}
-                                  className={`rounded-xl border p-4 transition-all ${
+                                  className={`rounded-xl border transition-all ${
                                     isDone
-                                      ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20'
+                                      ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20 p-4'
                                       : isCurrentStep
-                                        ? 'border-amber-400 bg-amber-50/60 dark:border-amber-600 dark:bg-amber-950/30 shadow-sm'
+                                        ? 'border-amber-400 bg-amber-50/60 dark:border-amber-600 dark:bg-amber-950/30 shadow-md p-4'
                                         : isLocked
-                                          ? 'border-muted bg-muted/20 opacity-60'
-                                          : 'border-muted bg-card'
+                                          ? 'border-muted bg-muted/20 opacity-60 p-4'
+                                          : 'border-muted bg-card p-4'
                                   }`}
                                   data-testid={`guide-step-${step.id}`}
                                 >
                                   <div className="flex items-start gap-3">
                                     {/* Step number / icon */}
                                     <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                      isDone ? 'bg-green-500 text-white' : isCurrentStep ? 'bg-amber-500 text-white' : isLocked ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'
+                                      isDone ? 'bg-green-500 text-white' : isCurrentStep ? 'bg-amber-500 text-white animate-pulse' : isLocked ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'
                                     }`}>
                                       {isDone ? <CheckCircle2 className="h-4 w-4" /> : step.number}
                                     </div>
@@ -3099,10 +3142,30 @@ const MMPCycleClose = () => {
                                         </span>
                                         <span dir="rtl" className="text-xs text-muted-foreground/70">{step.titleAr}</span>
                                         {isDone && <Badge className="text-[10px] px-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300">Done ✓</Badge>}
-                                        {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border-amber-300">← Do this now</Badge>}
-                                        {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">Locked</Badge>}
+                                        {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-amber-500 text-white border-amber-500 animate-pulse">👉 Do this now</Badge>}
+                                        {!isDone && !isLocked && !isCurrentStep && step.id !== 'submit' && <Badge variant="outline" className="text-[10px] px-1.5 text-orange-600 border-orange-300">Needs attention</Badge>}
+                                        {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">Complete steps above first</Badge>}
+                                        {!isDone && step.remaining > 0 && (
+                                          <Badge variant="destructive" className="text-[10px] px-1.5">{step.remaining} remaining</Badge>
+                                        )}
                                       </div>
                                       <p className="text-xs text-muted-foreground mt-1">{step.desc}</p>
+
+                                      {/* Exact how-to instructions — shown for current step */}
+                                      {isCurrentStep && step.howTo.length > 0 && (
+                                        <div className="mt-3 rounded-lg bg-white dark:bg-amber-950/40 border border-amber-300/60 px-3 py-2.5">
+                                          <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 mb-1.5">What to do:</p>
+                                          <ol className="space-y-1">
+                                            {step.howTo.map((instruction, i) => (
+                                              <li key={i} className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+                                                <span className="shrink-0 font-bold text-amber-600">{i + 1}.</span>
+                                                <span>{instruction}</span>
+                                              </li>
+                                            ))}
+                                          </ol>
+                                        </div>
+                                      )}
+
                                       {/* Sub-item detail for failed items */}
                                       {!isDone && step.sub.length > 0 && (
                                         <ul className="mt-2 space-y-0.5">
@@ -3114,12 +3177,11 @@ const MMPCycleClose = () => {
                                           ))}
                                         </ul>
                                       )}
-                                      {/* Action button */}
-                                      {(isCurrentStep || (!isDone && !isLocked && step.tab)) && step.tab && (
+                                      {/* Action button — visible for current step and all unfinished steps */}
+                                      {!isDone && !isLocked && step.tab && (
                                         <Button
                                           size="sm"
-                                          className={`mt-3 gap-1.5 text-xs h-8 ${isCurrentStep ? 'bg-amber-600 hover:bg-amber-700 text-white' : ''}`}
-                                          variant={isCurrentStep ? 'default' : 'outline'}
+                                          className={`mt-3 gap-1.5 text-xs h-8 ${isCurrentStep ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
                                           onClick={() => {
                                             setChecklistMmpId(null);
                                             setActiveTab(step.tab!);
