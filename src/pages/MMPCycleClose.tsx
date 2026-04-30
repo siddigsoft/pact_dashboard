@@ -33,6 +33,7 @@ import {
   ReceiptText, ExternalLink,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { CycleMMPCard } from '@/components/cycle/CycleMMPCard';
 import { CycleCoveragePredictor, MmpPredictionPanel } from '@/components/cycle/CycleCoveragePredictor';
@@ -3277,14 +3278,13 @@ const MMPCycleClose = () => {
                   <span>Status</span>
                   <span>Reason</span>
                 </div>
-                <div className="w-8 flex justify-center">
+                <div className="w-8 flex justify-center shrink-0">
                   <Checkbox
                     checked={filteredSites.length > 0 && filteredSites.every(s => selectedSites.has(s.id))}
                     onCheckedChange={toggleAllFiltered}
                     data-testid="checkbox-select-all"
                   />
                 </div>
-                <div className="w-6" />
               </div>
               {filteredSites.map(site => (
                 <SiteRow
@@ -4228,82 +4228,109 @@ interface SiteRowProps {
 const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }: SiteRowProps) => {
   const [localReason, setLocalReason] = useState<NotCoveredReason | ''>(site.not_covered_reason || '');
   const [localOther, setLocalOther] = useState(site.not_covered_reason_other || '');
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  // keep local state in sync when parent refreshes site data
+  useEffect(() => {
+    setLocalReason(site.not_covered_reason || '');
+    setLocalOther(site.not_covered_reason_other || '');
+  }, [site.not_covered_reason, site.not_covered_reason_other]);
 
   const handleSaveReason = () => {
     if (!localReason) return;
     onAssignReason(site.id, localReason as NotCoveredReason, localReason === 'other' ? localOther : undefined);
+    setOpen(false);
   };
+
+  const reasonBadge = (
+    <Badge
+      variant={getReasonBadgeVariant(site.not_covered_reason)}
+      className={canAssign ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}
+      data-testid={`badge-reason-${site.id}`}
+    >
+      {site.not_covered_reason ? (
+        <span className="flex items-center gap-1">
+          {getReasonLabel(site.not_covered_reason)}
+          <span dir="rtl" className="text-muted-foreground/70 text-[10px] hidden sm:inline">{getReasonLabelAr(site.not_covered_reason)}</span>
+        </span>
+      ) : (
+        <span className="flex items-center gap-1">
+          No Reason
+          {canAssign && <ChevronDown className="h-3 w-3" />}
+        </span>
+      )}
+    </Badge>
+  );
 
   return (
     <div className={`border rounded-lg px-3 py-2 ${selected ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800' : 'bg-card'}`} data-testid={`row-site-${site.id}`}>
-      <div className="flex items-center">
-        <div className="flex-1 grid grid-cols-6 gap-2 items-center text-sm cursor-pointer" onClick={() => setExpanded(!expanded)}>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 grid grid-cols-6 gap-2 items-center text-sm">
           <div className="col-span-2">
             <div className="font-medium truncate">{site.site_name}</div>
             <div className="text-xs text-muted-foreground">{site.site_code}</div>
           </div>
-          <div className="text-muted-foreground truncate">{site.state}</div>
-          <div className="text-muted-foreground truncate">{site.hub || '—'}</div>
+          <div className="text-muted-foreground truncate text-xs">{site.state}</div>
+          <div className="text-muted-foreground truncate text-xs">{site.hub || '—'}</div>
           <div>
-            <Badge variant="outline">{site.status}</Badge>
+            <Badge variant="outline" className="text-[11px]">{site.status}</Badge>
           </div>
-          <div>
-            <Badge variant={getReasonBadgeVariant(site.not_covered_reason)} data-testid={`badge-reason-${site.id}`}>
-              {site.not_covered_reason ? (<>{getReasonLabel(site.not_covered_reason)} <span dir="rtl" className="text-muted-foreground/70 text-[10px]">{getReasonLabelAr(site.not_covered_reason)}</span></>) : 'No Reason'}
-            </Badge>
+          <div onClick={e => e.stopPropagation()}>
+            {canAssign ? (
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>{reasonBadge}</PopoverTrigger>
+                <PopoverContent className="w-72 p-3 space-y-2" align="start" side="bottom">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Reason for Not Covered</p>
+                  <Select value={localReason} onValueChange={v => setLocalReason(v as NotCoveredReason)}>
+                    <SelectTrigger className="w-full text-xs h-8" data-testid={`select-reason-${site.id}`}>
+                      <SelectValue placeholder="Select reason..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {NOT_COVERED_REASONS.map(r => (
+                        <SelectItem key={r.value} value={r.value} className="text-xs">
+                          <span>{r.label}</span>
+                          <span dir="rtl" className="text-muted-foreground/70 text-[10px] ml-1">{r.labelAr}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {localReason === 'other' && (
+                    <Textarea
+                      value={localOther}
+                      onChange={e => setLocalOther(e.target.value)}
+                      placeholder="Specify reason..."
+                      className="min-h-[56px] text-xs"
+                      data-testid={`input-other-reason-${site.id}`}
+                    />
+                  )}
+                  {site.not_covered_at && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Last updated: {new Date(site.not_covered_at).toLocaleString()}
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={handleSaveReason}
+                      disabled={!localReason || saving || (localReason === 'other' && !localOther.trim())}
+                      data-testid={`button-save-reason-${site.id}`}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : reasonBadge}
           </div>
         </div>
-        <div className="w-8 flex justify-center" onClick={e => e.stopPropagation()}>
+        <div className="w-8 flex justify-center shrink-0" onClick={e => e.stopPropagation()}>
           <Checkbox checked={selected} onCheckedChange={onToggle} data-testid={`checkbox-site-${site.id}`} />
         </div>
-        <div className="w-6 cursor-pointer" onClick={() => setExpanded(!expanded)}>
-          {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-        </div>
       </div>
-
-      {expanded && canAssign && (
-        <div className="mt-3 pt-3 border-t pl-2">
-          <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
-            <div className="space-y-1 flex-1">
-              <label className="text-xs text-muted-foreground">Reason for Not Covered</label>
-              <Select value={localReason} onValueChange={v => setLocalReason(v as NotCoveredReason)}>
-                <SelectTrigger className="w-full" data-testid={`select-reason-${site.id}`}>
-                  <SelectValue placeholder="Select reason..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label} <span dir="rtl" className="text-muted-foreground/70 text-xs ml-1">{r.labelAr}</span></SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {localReason === 'other' && (
-              <div className="space-y-1 flex-1">
-                <label className="text-xs text-muted-foreground">Details</label>
-                <Textarea
-                  value={localOther}
-                  onChange={e => setLocalOther(e.target.value)}
-                  placeholder="Specify reason..."
-                  className="min-h-[32px] h-8"
-                  data-testid={`input-other-reason-${site.id}`}
-                />
-              </div>
-            )}
-            <Button
-              size="sm"
-              onClick={handleSaveReason}
-              disabled={!localReason || saving || (localReason === 'other' && !localOther.trim())}
-              data-testid={`button-save-reason-${site.id}`}
-            >
-              Save
-            </Button>
-          </div>
-          {site.not_covered_at && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Last updated: {new Date(site.not_covered_at).toLocaleString()}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 };
