@@ -234,8 +234,9 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         {
           id: 'site_visits',
           label: 'All site visits resolved',
-          description:
-            'Every site must be completed, approved, cancelled, or officially marked as not covered.',
+          description: unresolvedSites > 0
+            ? `${unresolvedSites} site${unresolvedSites !== 1 ? 's' : ''} still pending — each must be visited (submitted/approved) or officially marked as Not Covered before closing. Go to Uncovered Sites tab to act on them.`
+            : 'All sites are completed, approved, cancelled, or officially marked as not covered.',
           passed: unresolvedSites === 0,
           count: resolvedSites,
           total: totalSites,
@@ -256,12 +257,16 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           label: 'Transport advances settled',
           description:
             unreconciledAdvances > 0
-              ? `${unreconciledAdvances} partially-paid advance(s) must be completed or reconciled before closing.`
+              ? `${unreconciledAdvances} advance${unreconciledAdvances !== 1 ? 's' : ''} partially paid — complete or reconcile each one before closing.`
               : pendingViaReport > 0
-              ? `${pendingViaReport} advance(s) not yet disbursed — include in the payment report (transport + enumerator fees) and mark as paid.`
-              : 'All transport advances for this cycle are cleared.',
+              ? `${clearedAdvances} advance${clearedAdvances !== 1 ? 's' : ''} fully cleared. ${pendingViaReport} advance${pendingViaReport !== 1 ? 's' : ''} not yet disbursed — include in the payment report (transport + enumerator fees) and mark as paid.`
+              : totalAdvances === 0
+              ? 'No transport advances recorded for this cycle.'
+              : `All ${totalAdvances} advance${totalAdvances !== 1 ? 's' : ''} fully cleared.`,
           passed: advancesError || unreconciledAdvances === 0,
-          count: clearedAdvances,
+          // count = cleared + via-report so the fraction reads as "all on track"
+          // rather than showing only the fully-cleared subset.
+          count: clearedAdvances + pendingViaReport,
           total: totalAdvances,
           link: '/down-payment-approval',
           notConfigured: advancesError,

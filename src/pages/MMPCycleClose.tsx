@@ -346,6 +346,12 @@ const MMPCycleClose = () => {
       const PAGE = 1000;
 
       // ── Query helper: paginate a filtered mmp_site_entries query
+      // For closing MMPs we need to surface BOTH:
+      //   a) sites explicitly flagged as not-covered (not_covered_flag = true)
+      //   b) sites that are still unresolved (pending / assigned / dispatched / accepted)
+      //      — these are the sites the user must still act on during cycle close
+      // Previously only (a) was fetched, so unresolved sites of a closing MMP
+      // were invisible in the Uncovered Sites tab.
       const fetchClosingPages = async (ids: string[]): Promise<any[]> => {
         if (ids.length === 0) return [];
         let all: any[] = [];
@@ -354,7 +360,7 @@ const MMPCycleClose = () => {
             .from('mmp_site_entries')
             .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
             .in('mmp_file_id', ids)
-            .eq('not_covered_flag', true)
+            .or('not_covered_flag.eq.true,status.in.(pending,assigned,dispatched,accepted)')
             .range(from, from + PAGE - 1);
           if (error) throw error;
           all = [...all, ...(pageData || [])];
@@ -1072,7 +1078,12 @@ const MMPCycleClose = () => {
       }).map(m => m.id);
       if (mmpIds.length === 0) return;
       try {
-        const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified'];
+        // "Done" includes every terminal-success state:
+        //   submitted / wfp_confirmed / completed / verified / approved
+        // "approved" was previously missing — visits in that state appeared as
+        // ghost counts (counted as resolved in the readiness check but invisible
+        // in the coverage card).
+        const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified', 'approved'];
         const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number; accepted: number; notCovered: number }> = {};
         await Promise.all(mmpIds.map(async (mmpId) => {
           const [totalRes, completedRes, pendingRes, assignedRes, dispatchedRes, acceptedRes, notCoveredRes] = await Promise.all([
