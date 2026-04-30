@@ -1078,36 +1078,46 @@ const MMPCycleClose = () => {
       }).map(m => m.id);
       if (mmpIds.length === 0) return;
       try {
-        // "Done" includes every terminal-success state:
-        //   submitted / wfp_confirmed / completed / verified / approved
-        // "approved" was previously missing — visits in that state appeared as
-        // ghost counts (counted as resolved in the readiness check but invisible
-        // in the coverage card).
-        const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified', 'approved'];
+        // Fetch ALL site entries for all relevant MMPs in a single paginated
+        // round-trip, then compute bucket counts in JS using the same
+        // .toLowerCase().trim() normalisation that useCycleCloseReadiness uses.
+        //
+        // Why this matters: PostgreSQL's IN() does exact-match comparisons, so
+        // a status stored as e.g. 'Submitted' (capital S) or ' pending ' (with
+        // spaces) would be missed by SQL filters but correctly handled here.
+        const PAGE = 1000;
+        let allSites: Array<{ mmp_file_id: string; status: string | null; not_covered_flag: boolean | null }> = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await supabase
+            .from('mmp_site_entries')
+            .select('mmp_file_id, status, not_covered_flag')
+            .in('mmp_file_id', mmpIds)
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          allSites = [...allSites, ...(data || [])];
+          if (!data || data.length < PAGE) break;
+        }
+
+        const DONE = new Set(['submitted', 'wfp_confirmed', 'completed', 'verified', 'approved']);
+        const NOT_VISITED = new Set(['cancelled', 'rejected', 'not_covered']);
+
         const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number; accepted: number; notCovered: number }> = {};
-        await Promise.all(mmpIds.map(async (mmpId) => {
-          const [totalRes, completedRes, pendingRes, assignedRes, dispatchedRes, acceptedRes, notCoveredRes] = await Promise.all([
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).in('status', coveredStatuses),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'pending'),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'assigned'),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'dispatched'),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'accepted'),
-            // Not Covered bucket = explicitly flagged + status-based terminal non-visits
-            // (cancelled, rejected, not_covered) so the 6 stat boxes together always sum to total.
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId)
-              .or('not_covered_flag.eq.true,status.in.(cancelled,rejected,not_covered)'),
-          ]);
-          counts[mmpId] = {
-            total: totalRes.count ?? 0,
-            completed: completedRes.count ?? 0,
-            pending: pendingRes.count ?? 0,
-            assigned: assignedRes.count ?? 0,
-            dispatched: dispatchedRes.count ?? 0,
-            accepted: acceptedRes.count ?? 0,
-            notCovered: notCoveredRes.count ?? 0,
-          };
-        }));
+        mmpIds.forEach(id => { counts[id] = { total: 0, completed: 0, pending: 0, assigned: 0, dispatched: 0, accepted: 0, notCovered: 0 }; });
+
+        allSites.forEach(site => {
+          const c = counts[site.mmp_file_id];
+          if (!c) return;
+          const s = (site.status ?? '').toLowerCase().trim();
+          c.total++;
+          if (DONE.has(s))             c.completed++;
+          else if (s === 'accepted')   c.accepted++;
+          else if (s === 'dispatched') c.dispatched++;
+          else if (s === 'assigned')   c.assigned++;
+          else if (s === 'pending')    c.pending++;
+          else if (site.not_covered_flag || NOT_VISITED.has(s)) c.notCovered++;
+          // Any unrecognised status still contributes to the total
+        });
+
         setSiteVisitCounts(counts);
       } catch (err) {
         console.error('Error fetching site visit counts:', err);
