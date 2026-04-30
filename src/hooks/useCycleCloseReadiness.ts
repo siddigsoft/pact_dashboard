@@ -290,15 +290,16 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         {
           id: 'transport_advances',
           label: 'Transport advances settled',
-          description:
-            unreconciledAdvances > 0
-              ? `${unreconciledAdvances} advance${unreconciledAdvances !== 1 ? 's' : ''} partially paid — complete or reconcile each one before closing.`
-              : pendingViaReport > 0
-              ? `${clearedAdvances} advance${clearedAdvances !== 1 ? 's' : ''} fully cleared. ${pendingViaReport} advance${pendingViaReport !== 1 ? 's' : ''} not yet disbursed — include in the payment report (transport + enumerator fees) and mark as paid.`
-              : totalAdvances === 0
-              ? 'No transport advances recorded for this cycle.'
-              : `All ${totalAdvances} advance${totalAdvances !== 1 ? 's' : ''} fully cleared.`,
-          passed: advancesError || unreconciledAdvances === 0,
+          description: advancesError
+            ? 'Could not check transport advance status — please retry. Do not close the cycle until this is confirmed.'
+            : unreconciledAdvances > 0
+            ? `${unreconciledAdvances} advance${unreconciledAdvances !== 1 ? 's' : ''} partially paid — complete or reconcile each one before closing.`
+            : pendingViaReport > 0
+            ? `${clearedAdvances} advance${clearedAdvances !== 1 ? 's' : ''} fully cleared. ${pendingViaReport} advance${pendingViaReport !== 1 ? 's' : ''} not yet disbursed — include in the payment report (transport + enumerator fees) and mark as paid.`
+            : totalAdvances === 0
+            ? 'No transport advances recorded for this cycle.'
+            : `All ${totalAdvances} advance${totalAdvances !== 1 ? 's' : ''} fully cleared.`,
+          passed: !advancesError && unreconciledAdvances === 0,
           // count = cleared + via-report so the fraction reads as "all on track"
           // rather than showing only the fully-cleared subset.
           count: clearedAdvances + pendingViaReport,
@@ -310,8 +311,10 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
         {
           id: 'withdrawal_requests',
           label: 'All withdrawal requests processed',
-          description: 'All withdrawal requests must be approved, rejected, or completed.',
-          passed: withdrawalsError || pendingWithdrawals === 0,
+          description: withdrawalsError
+            ? 'Could not check withdrawal request status — please retry. Do not close the cycle until this is confirmed.'
+            : 'All withdrawal requests must be approved, rejected, or completed.',
+          passed: !withdrawalsError && pendingWithdrawals === 0,
           count: totalWithdrawals - pendingWithdrawals,
           total: totalWithdrawals,
           link: '/finance',
