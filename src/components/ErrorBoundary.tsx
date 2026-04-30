@@ -45,14 +45,18 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     console.error("Error caught by ErrorBoundary:", error, errorInfo);
     this.setState({ errorInfo });
 
-    // Hot-reload / provider initialization race: auto-reload once so the user
+    // Hot-reload / provider initialization race: auto-reload so the user
     // never sees a broken screen after Vite HMR injects updated modules.
+    // Uses a timestamp so multiple rapid HMR cycles can each trigger one
+    // reload, but no more than once every 4 seconds (prevents infinite loops).
     const msg = error?.message ?? '';
     const isProviderRace = /must be used within/i.test(msg);
     if (isProviderRace) {
-      const key = 'eb_provider_race_reloaded';
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
+      const key = 'eb_provider_race_ts';
+      const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
+      const now = Date.now();
+      if (now - last > 4000) {
+        sessionStorage.setItem(key, String(now));
         window.location.reload();
       }
     }
