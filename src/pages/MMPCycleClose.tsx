@@ -758,22 +758,29 @@ const MMPCycleClose = () => {
         id: 'approval', number: 6,
         title: 'Awaiting Final Approval', titleAr: 'في انتظار الموافقة',
         desc: checklistMmpStatus === 'pending_approval'
-          ? 'The FOM or Country Director will review and approve or reject the cycle close.'
+          ? (isFOM || isAdmin || isSuperAdmin)
+            ? 'You have approval authority. Use the Approve or Reject buttons below to take action.'
+            : 'The FOM, Admin, or Super Admin will review and approve or reject the cycle close.'
           : 'This step is unlocked after submission.',
         passed: false,
         blocked: checklistMmpStatus !== 'pending_approval',
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
-        howTo: [
-          'Wait for the FOM or Country Director to log in and approve.',
+        howTo: (isFOM || isAdmin || isSuperAdmin) ? [
+          'Review the Cycle Financial Summary above — check enumerator costs, advances, and obligations.',
+          'Click "Approve & Close Cycle" to archive the cycle, or "Reject & Send Back" to return it for corrections.',
+          'If rejecting, you must enter a reason so the admin knows what to fix.',
+          'Approved cycles are permanently archived and the MMP is unlocked for the next cycle.',
+        ] : [
+          'Wait for the FOM, Admin, or Super Admin to log in and approve.',
           'You will receive a notification when the cycle is approved or sent back.',
           'If approved, the cycle status becomes "Closed" and is archived.',
           'If rejected, the cycle returns to "Closing" state and you can make corrections.',
         ],
       },
     ];
-  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus]);
+  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus, isFOM, isAdmin, isSuperAdmin]);
 
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
@@ -3898,6 +3905,38 @@ const MMPCycleClose = () => {
                                               : <><CheckCircle2 className="h-4 w-4" /> Submit Cycle for Final Approval</>
                                             }
                                           </Button>
+                                        </div>
+                                      )}
+                                      {/* Approve / Reject buttons for step 6 — shown inline for FOM, Admin, and Super Admin */}
+                                      {step.id === 'approval' && checklistMmpStatus === 'pending_approval' && (isFOM || isAdmin || isSuperAdmin) && (
+                                        <div className="mt-3 space-y-2">
+                                          <p className="text-xs text-purple-700 dark:text-purple-300 font-medium">
+                                            You have approval authority. Review the financial summary above, then take action:
+                                          </p>
+                                          <div className="flex gap-2">
+                                            <Button
+                                              size="sm"
+                                              className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                                              onClick={() => handleApproveCycle(checklistMmpId!)}
+                                              disabled={closingCycle}
+                                              data-testid="button-approve-cycle-wizard"
+                                            >
+                                              {closingCycle
+                                                ? <><Loader2 className="h-4 w-4 animate-spin" /> Approving…</>
+                                                : <><CheckCircle2 className="h-4 w-4" /> Approve &amp; Close Cycle</>
+                                              }
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="flex-1 border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30 gap-1.5"
+                                              onClick={() => setBannerRejectMmpId(checklistMmpId!)}
+                                              data-testid="button-reject-cycle-wizard"
+                                            >
+                                              <XCircle className="h-4 w-4" />
+                                              Reject &amp; Send Back
+                                            </Button>
+                                          </div>
                                         </div>
                                       )}
                                     </div>
