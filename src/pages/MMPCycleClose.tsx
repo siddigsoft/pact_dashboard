@@ -326,32 +326,73 @@ const MMPCycleClose = () => {
   const fetchUncoveredSites = useCallback(async () => {
     setLoading(true);
     try {
-      const mmpIds = closingMmps.length > 0
-        ? closingMmps.map(m => m.id)
-        : activeMmps.map(m => m.id);
+      const closingIds = closingMmps.map(m => m.id);
+      // Active MMPs that are NOT already counted in the closing set
+      const activeOnlyIds = activeMmps
+        .map(m => m.id)
+        .filter(id => !closingIds.includes(id));
 
-      if (mmpIds.length === 0) {
+      const allRelevantIds = [...closingIds, ...activeOnlyIds];
+      if (allRelevantIds.length === 0) {
         setUncoveredSites([]);
         setLoading(false);
         return;
       }
 
+      // Run two targeted queries in parallel:
+      //   Query A — closing MMPs: sites explicitly marked not_covered
+      //   Query B — active MMPs: sites still pending resolution
+      // This ensures ALL relevant MMPs are represented regardless of mix.
       const PAGE = 1000;
-      let allData: any[] = [];
-      for (let from = 0; ; from += PAGE) {
-        let q = supabase
-          .from('mmp_site_entries')
-          .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
-          .in('mmp_file_id', mmpIds);
-        if (closingMmps.length > 0) {
-          q = q.eq('not_covered_flag', true);
-        } else {
-          q = q.in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+
+      // ── Query helper: paginate a filtered mmp_site_entries query
+      const fetchClosingPages = async (ids: string[]): Promise<any[]> => {
+        if (ids.length === 0) return [];
+        let all: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data: pageData, error } = await supabase
+            .from('mmp_site_entries')
+            .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
+            .in('mmp_file_id', ids)
+            .eq('not_covered_flag', true)
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          all = [...all, ...(pageData || [])];
+          if (!pageData || pageData.length < PAGE) break;
         }
-        const { data: pageData, error } = await q.range(from, from + PAGE - 1);
-        if (error) throw error;
-        allData = [...allData, ...(pageData || [])];
-        if (!pageData || pageData.length < PAGE) break;
+        return all;
+      };
+
+      const fetchActivePages = async (ids: string[]): Promise<any[]> => {
+        if (ids.length === 0) return [];
+        let all: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data: pageData, error } = await supabase
+            .from('mmp_site_entries')
+            .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
+            .in('mmp_file_id', ids)
+            .in('status', ['pending', 'assigned', 'dispatched', 'accepted'])
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          all = [...all, ...(pageData || [])];
+          if (!pageData || pageData.length < PAGE) break;
+        }
+        return all;
+      };
+
+      const [closingData, activeData] = await Promise.all([
+        fetchClosingPages(closingIds),
+        fetchActivePages(activeOnlyIds),
+      ]);
+
+      // Deduplicate by id in case any entry appears in both sets
+      const seen = new Set<string>();
+      const allData: any[] = [];
+      for (const row of [...closingData, ...activeData]) {
+        if (!seen.has(row.id)) {
+          seen.add(row.id);
+          allData.push(row);
+        }
       }
 
       const sites: UncoveredSite[] = allData.map(s => {
@@ -2175,8 +2216,12 @@ const MMPCycleClose = () => {
 
   const uncoveredMmpOptions = useMemo(() => {
     const mmpIds = new Set(uncoveredSites.map(s => s.mmp_id));
-    return activeMmps.filter(m => mmpIds.has(m.id));
-  }, [uncoveredSites, activeMmps]);
+    // Include both active and closing MMPs that have entries in the list
+    const allRelevant = [...activeMmps, ...closingMmps.filter(
+      m => !activeMmps.some(a => a.id === m.id),
+    )];
+    return allRelevant.filter(m => mmpIds.has(m.id));
+  }, [uncoveredSites, activeMmps, closingMmps]);
 
   if (!canManageCycle && !canAssignReasons) {
     return (
