@@ -101,6 +101,7 @@ interface CycleMMPCardProps {
   setSelectedMmpId: (id: string) => void;
   setActiveTab: (tab: string) => void;
   getReasonLabel: (reason: string | null) => string;
+  onOpenGuide?: () => void;
 }
 
 function formatDate(dateStr: string | undefined | null): string {
@@ -214,6 +215,7 @@ export function CycleMMPCard({
   setSelectedMmpId,
   setActiveTab,
   getReasonLabel,
+  onOpenGuide,
 }: CycleMMPCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [closeScope, setCloseScope] = useState<CloseScope>('full');
@@ -395,6 +397,18 @@ export function CycleMMPCard({
                 <StatBox count={mmpUncovered.length - mmpReasoned} label="Pending" labelAr="معلق" colorClass="bg-amber-500/10" testId={`text-pending-reason-count-${mmp.id}`} />
                 <StatBox count={mmpReasoned} label="Reasoned" labelAr="مسبب" colorClass="bg-emerald-500/10" testId={`text-reasoned-count-${mmp.id}`} />
               </div>
+              {onOpenGuide && (
+                <Button
+                  size="sm"
+                  className="w-full mt-1 bg-amber-600 hover:bg-amber-700 text-white text-xs h-8 gap-1.5"
+                  onClick={onOpenGuide}
+                  data-testid={`button-open-guide-${mmp.id}`}
+                >
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  View Closing Guide — What to do next
+                  <span dir="rtl" className="text-[10px] font-normal opacity-80">/ دليل الإغلاق</span>
+                </Button>
+              )}
             </div>
 
             {(mmp as any).cycle_close_deadline && (

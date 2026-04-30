@@ -426,6 +426,67 @@ const MMPCycleClose = () => {
     return cycleReadiness.items.find(i => !i.passed && !i.notConfigured) ?? null;
   }, [cycleReadiness.items]);
 
+  // Cycle status of the MMP currently in the checklist dialog
+  const checklistMmpStatus = useMemo(() => {
+    if (!checklistMmpId) return 'active';
+    return (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status || 'active';
+  }, [checklistMmpId, mmpFiles]);
+
+  // Five-step guided close flow derived from readiness items
+  const guideSteps = useMemo(() => {
+    const ri = cycleReadiness.items;
+    const get = (id: string) => ri.find(i => i.id === id);
+    const financeIds = ['cost_submissions', 'transport_advances', 'withdrawal_requests', 'cost_recovery'];
+    const financePassed = financeIds.every(id => get(id)?.passed !== false || get(id) === undefined);
+    const financeIssues = financeIds.map(id => get(id)).filter(i => i && !i.passed) as typeof ri;
+    return [
+      {
+        id: 'start', number: 1,
+        title: 'Start Closing', titleAr: 'بدء الإغلاق',
+        desc: 'Closing process initiated. Uncovered sites have been flagged and supervisors notified.',
+        passed: true, blocked: false,
+        tab: null as string | null, actionLabel: null as string | null,
+        sub: [] as typeof ri,
+      },
+      {
+        id: 'reasons', number: 2,
+        title: 'Assign Reasons — Uncovered Sites', titleAr: 'أسباب المواقع غير المغطاة',
+        desc: get('site_visits')?.description || 'Every unvisited site needs a reason before the cycle can close.',
+        passed: get('site_visits')?.passed ?? false,
+        blocked: false,
+        tab: 'uncovered', actionLabel: 'Go to Uncovered Sites →',
+        sub: get('site_visits') ? [get('site_visits')!] : [],
+      },
+      {
+        id: 'finance', number: 3,
+        title: 'Clear Finance', titleAr: 'تسوية المالية',
+        desc: financePassed ? 'All financial items are cleared.' : `${financeIssues.length} financial item(s) still pending.`,
+        passed: financePassed,
+        blocked: false,
+        tab: 'finance', actionLabel: 'Go to Pending Finance →',
+        sub: financeIssues,
+      },
+      {
+        id: 'wfp', number: 4,
+        title: 'WFP Confirmation', titleAr: 'تأكيد WFP',
+        desc: get('wfp_confirmation')?.description || 'Upload and apply the WFP monthly monitoring Excel file.',
+        passed: get('wfp_confirmation')?.passed ?? false,
+        blocked: false,
+        tab: 'wfp', actionLabel: 'Go to WFP Confirmation →',
+        sub: get('wfp_confirmation') ? [get('wfp_confirmation')!] : [],
+      },
+      {
+        id: 'submit', number: 5,
+        title: 'Submit for Approval', titleAr: 'تقديم للموافقة',
+        desc: cycleReadiness.allPassed ? 'All gates are green. Proceed to submit this cycle for final approval.' : 'Complete all steps above to unlock submission.',
+        passed: false,
+        blocked: !cycleReadiness.allPassed,
+        tab: null, actionLabel: null,
+        sub: [],
+      },
+    ];
+  }, [cycleReadiness.items, cycleReadiness.allPassed]);
+
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
     issues: string[];
@@ -2933,16 +2994,178 @@ const MMPCycleClose = () => {
                 }}
               >
                 <DialogContent className="max-w-none w-screen h-screen m-0 rounded-none flex flex-col overflow-hidden p-0" data-testid="section-cycle-close-checklist">
-                  <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-                    <DialogTitle className="flex items-center gap-2 text-lg">
-                      <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
-                      Pre-Close Checklist
-                    </DialogTitle>
+                  <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
+                    <div className="flex items-center justify-between gap-4">
+                      <DialogTitle className="flex items-center gap-2 text-lg">
+                        {checklistMmpStatus === 'active'
+                          ? <><CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" /> Pre-Close Requirements</>
+                          : <><ArrowRight className="h-5 w-5 text-amber-500 shrink-0" /> Cycle Close — Step by Step Guide</>
+                        }
+                      </DialogTitle>
+                      <div className="text-sm font-semibold text-muted-foreground">{mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}</div>
+                    </div>
                     <DialogDescription>
-                      {mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'} — review all requirements before starting the close process
+                      {checklistMmpStatus === 'active'
+                        ? 'Review all requirements before starting the close process.'
+                        : 'Follow each step in order. Your progress is saved automatically — you can close this and return any time.'}
                     </DialogDescription>
                   </DialogHeader>
 
+                  {/* ── GUIDED WIZARD (cycle already in closing / pending_approval state) ── */}
+                  {checklistMmpStatus !== 'active' ? (
+                    <div className="flex-1 overflow-y-auto px-6 py-6">
+                      <div className="max-w-2xl mx-auto space-y-3">
+                        {cycleReadiness.loading ? (
+                          <div className="flex items-center gap-3 py-12 justify-center text-muted-foreground">
+                            <Loader2 className="h-5 w-5 animate-spin" /> Loading progress…
+                          </div>
+                        ) : (
+                          <>
+                            {/* Progress bar */}
+                            <div className="flex items-center gap-3 mb-2">
+                              <Progress value={Math.round((guideSteps.filter(s => s.passed).length / guideSteps.length) * 100)} className="h-2 flex-1" />
+                              <span className="text-xs text-muted-foreground shrink-0">{guideSteps.filter(s => s.passed).length} / {guideSteps.length - 1} done</span>
+                            </div>
+
+                            {/* Step cards */}
+                            {guideSteps.map((step, idx) => {
+                              const isCurrentStep = !step.passed && !step.blocked && guideSteps.slice(0, idx).every(s => s.passed);
+                              const isLocked = step.blocked;
+                              const isDone = step.passed;
+                              return (
+                                <div
+                                  key={step.id}
+                                  className={`rounded-xl border p-4 transition-all ${
+                                    isDone
+                                      ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20'
+                                      : isCurrentStep
+                                        ? 'border-amber-400 bg-amber-50/60 dark:border-amber-600 dark:bg-amber-950/30 shadow-sm'
+                                        : isLocked
+                                          ? 'border-muted bg-muted/20 opacity-60'
+                                          : 'border-muted bg-card'
+                                  }`}
+                                  data-testid={`guide-step-${step.id}`}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    {/* Step number / icon */}
+                                    <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                      isDone ? 'bg-green-500 text-white' : isCurrentStep ? 'bg-amber-500 text-white' : isLocked ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'
+                                    }`}>
+                                      {isDone ? <CheckCircle2 className="h-4 w-4" /> : step.number}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`font-semibold text-sm ${isDone ? 'text-green-700 dark:text-green-300' : isCurrentStep ? 'text-amber-800 dark:text-amber-200' : 'text-foreground'}`}>
+                                          {step.title}
+                                        </span>
+                                        <span dir="rtl" className="text-xs text-muted-foreground/70">{step.titleAr}</span>
+                                        {isDone && <Badge className="text-[10px] px-1.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-300">Done ✓</Badge>}
+                                        {isCurrentStep && <Badge className="text-[10px] px-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border-amber-300">← Do this now</Badge>}
+                                        {isLocked && <Badge variant="outline" className="text-[10px] px-1.5">Locked</Badge>}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-1">{step.desc}</p>
+                                      {/* Sub-item detail for failed items */}
+                                      {!isDone && step.sub.length > 0 && (
+                                        <ul className="mt-2 space-y-0.5">
+                                          {step.sub.map(s => (
+                                            <li key={s.id} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                              <XCircle className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
+                                              <span>{s.description}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                      {/* Action button */}
+                                      {(isCurrentStep || (!isDone && !isLocked && step.tab)) && step.tab && (
+                                        <Button
+                                          size="sm"
+                                          className={`mt-3 gap-1.5 text-xs h-8 ${isCurrentStep ? 'bg-amber-600 hover:bg-amber-700 text-white' : ''}`}
+                                          variant={isCurrentStep ? 'default' : 'outline'}
+                                          onClick={() => {
+                                            setChecklistMmpId(null);
+                                            setActiveTab(step.tab!);
+                                            if (checklistMmpId) setSelectedMmpId(checklistMmpId);
+                                          }}
+                                          data-testid={`button-guide-go-${step.id}`}
+                                        >
+                                          <ArrowRight className="h-3.5 w-3.5" />
+                                          {step.actionLabel}
+                                        </Button>
+                                      )}
+                                      {/* Submit button for step 5 */}
+                                      {step.id === 'submit' && cycleReadiness.allPassed && !cycleReadiness.loading && (
+                                        <div className="mt-3 space-y-3">
+                                          <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack-guide">
+                                            <input
+                                              type="checkbox"
+                                              checked={reconciliationAcknowledged}
+                                              onChange={e => setReconciliationAcknowledged(e.target.checked)}
+                                              className="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
+                                              data-testid="checkbox-reconciliation-ack-guide"
+                                            />
+                                            <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">
+                                              I confirm all financial obligations for this cycle are accounted for.
+                                            </span>
+                                          </label>
+                                          <Button
+                                            size="sm"
+                                            className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                                            onClick={() => {
+                                              const mmpId = checklistMmpId!;
+                                              const pending = pendingScopedClose;
+                                              setChecklistMmpId(null);
+                                              setPendingScopedClose(null);
+                                              setReconciliationAcknowledged(false);
+                                              if (pending) {
+                                                executeScopedClose(mmpId, pending.scope, pending.scopeValue);
+                                              } else {
+                                                handleStartClosingCycle(mmpId);
+                                              }
+                                            }}
+                                            disabled={closingCycle || !reconciliationAcknowledged}
+                                            data-testid="button-proceed-close-cycle-guide"
+                                          >
+                                            <CheckCircle2 className="h-4 w-4" />
+                                            Submit Cycle for Final Approval
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Collapsible technical checklist */}
+                            <Collapsible>
+                              <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-full pt-2" data-testid="button-toggle-technical-checklist">
+                                <ChevronDown className="h-3.5 w-3.5" />
+                                Technical Checklist Details
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-2 space-y-3">
+                                <CloseReadinessChecklist
+                                  title="Cycle Close Readiness"
+                                  items={cycleReadiness.items}
+                                  score={cycleReadiness.score}
+                                  allPassed={cycleReadiness.allPassed}
+                                  loading={cycleReadiness.loading}
+                                  isSuperAdmin={isSuperAdmin}
+                                  onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
+                                  onResolveItem={handleChecklistResolveItem}
+                                  overrideLabel="Override & Force Close"
+                                />
+                                <ReconciliationSummary
+                                  mmpId={checklistMmpId ?? undefined}
+                                  mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
+                                />
+                              </CollapsibleContent>
+                            </Collapsible>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                  /* ── PRE-CLOSE CHECKLIST (cycle still active, user about to start) ── */
                   <div className="flex-1 overflow-y-auto px-6 py-5">
                   <div className="max-w-2xl mx-auto space-y-3">
                     {/* Next-step guide card */}
@@ -3053,6 +3276,7 @@ const MMPCycleClose = () => {
                     )}
                   </div>
                   </div>
+                  )}
                 </DialogContent>
               </Dialog>
 
@@ -3081,6 +3305,7 @@ const MMPCycleClose = () => {
                             handleStartClosingCycle(mmpId);
                           }
                         }}
+                        onOpenGuide={() => setChecklistMmpId(mmp.id)}
                         handleScopedClose={handleScopedClose}
                         handleFinalizeCycleClose={handleFinalizeCycleClose}
                         handleApproveCycle={handleApproveCycle}
