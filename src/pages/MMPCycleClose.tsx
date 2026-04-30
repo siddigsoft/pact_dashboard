@@ -1587,9 +1587,10 @@ const MMPCycleClose = () => {
         metadata: { cycleAction: 'start_close' },
       });
 
-      toast({ title: 'Cycle Closing Started', description: 'Uncovered sites have been flagged. Supervisors and FOMs have been notified to provide reasons.' });
       await refreshMMPFiles();
       await fetchUncoveredSites();
+      // Immediately open the guided closing wizard so the user starts the process in one flow
+      setChecklistMmpId(mmpId);
     } catch (err: any) {
       console.error('Error starting cycle close:', err);
       toast({ title: 'Error', description: err.message || 'Failed to start cycle close', variant: 'destructive' });
