@@ -658,6 +658,15 @@ const MMPCycleClose = () => {
     return (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status || 'active';
   }, [checklistMmpId, mmpFiles]);
 
+  // Role flags — declared here (before guideSteps) to avoid temporal dead zone.
+  // Previously declared after guideSteps which caused "Cannot access before initialization".
+  const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
+  const isSuperAdmin = hasAnyRole(['super_admin', 'Super Admin']);
+  const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
+  const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
+  const canManageCycle = isAdmin || isSuperAdmin;
+  const canAssignReasons = isAdmin || isSupervisor || isFOM;
+
   // Five-step guided close flow derived from readiness items
   const guideSteps = useMemo(() => {
     const ri = cycleReadiness.items;
@@ -818,13 +827,6 @@ const MMPCycleClose = () => {
   const [wfpSaving, setWfpSaving] = useState(false);
   const [loadingWFP, setLoadingWFP] = useState(false);
   const [wfpAppliedUpload, setWfpAppliedUpload] = useState<{ filename: string; applied_at: string } | null>(null);
-
-  const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
-  const isSuperAdmin = hasAnyRole(['super_admin', 'Super Admin']);
-  const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
-  const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
-  const canManageCycle = isAdmin || isSuperAdmin;
-  const canAssignReasons = isAdmin || isSupervisor || isFOM;
 
   const [userHubName, setUserHubName] = useState<string>('');
 
