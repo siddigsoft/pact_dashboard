@@ -2759,18 +2759,19 @@ const MMPCycleClose = () => {
                   if (!open) { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }
                 }}
               >
-                <DialogContent className="max-w-lg w-full max-h-[90vh] overflow-y-auto" data-testid="section-cycle-close-checklist">
-                  <DialogHeader className="pb-1">
-                    <DialogTitle className="flex items-center gap-2 text-base">
-                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                <DialogContent className="max-w-none w-screen h-screen m-0 rounded-none flex flex-col overflow-hidden p-0" data-testid="section-cycle-close-checklist">
+                  <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+                    <DialogTitle className="flex items-center gap-2 text-lg">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
                       Pre-Close Checklist
                     </DialogTitle>
-                    <DialogDescription className="text-xs">
+                    <DialogDescription>
                       {mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'} — review all requirements before starting the close process
                     </DialogDescription>
                   </DialogHeader>
 
-                  <div className="space-y-3">
+                  <div className="flex-1 overflow-y-auto px-6 py-5">
+                  <div className="max-w-2xl mx-auto space-y-3">
                     {/* Next-step guide card */}
                     {!cycleReadiness.loading && nextBlocker && (
                       <div className="flex items-start gap-3 rounded-lg border border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3" data-testid="banner-next-step">
@@ -2876,6 +2877,7 @@ const MMPCycleClose = () => {
                         </div>
                       </div>
                     )}
+                  </div>
                   </div>
                 </DialogContent>
               </Dialog>
