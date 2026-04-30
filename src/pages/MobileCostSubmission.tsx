@@ -42,6 +42,7 @@ import { generateFinancialStatementPdf, type StatementRow, type StatementConfig 
 import { generateFinancialStatementExcel } from "@/utils/financialStatementExcel";
 import type { SupportingDocument } from "@/types/cost-submission";
 import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, ChevronDown, ChevronUp, Eye } from "lucide-react";
+import { hubs } from "@/data/sudanStates";
 
 const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   permits: { label: 'Permits & Licenses', icon: Ticket },
@@ -1035,6 +1036,7 @@ const MobileCostSubmission = () => {
             <UnifiedCostRequestForm
               key={editingSubmission?.id || 'new'}
               projects={projectsForForm}
+              hubs={hubs}
               editData={editingSubmission ? {
                 id: editingSubmission.id,
                 expense_category: editingSubmission.expense_category,

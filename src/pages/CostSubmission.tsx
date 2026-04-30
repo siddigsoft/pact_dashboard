@@ -60,7 +60,7 @@ import { generateFinancialStatementPdf, type StatementRow, type StatementConfig 
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 import { generateBulkCostPDFBase64, generateBulkCostExcelBase64, type BulkSubmission, type BulkUserMap, type BulkProjectMap } from '@/utils/bulkCostEmailAttachments';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
-import { getStatesInHub, normalizeHubId } from '@/data/sudanStates';
+import { getStatesInHub, normalizeHubId, hubs } from '@/data/sudanStates';
 import { getHubAccessInfo, isStateInAnyHub } from '@/utils/hubAccessControl';
 
 const PROJECT_PALETTE = [
@@ -2672,9 +2672,10 @@ const CostSubmission = () => {
                 </AlertDescription>
               </Alert>
             )}
-            <UnifiedCostRequestForm 
+            <UnifiedCostRequestForm
               key={editingSubmission?.id || 'new'}
               projects={projectsForForm}
+              hubs={hubs}
               editData={editingSubmission ? {
                 id: editingSubmission.id,
                 expense_category: editingSubmission.expense_category,
