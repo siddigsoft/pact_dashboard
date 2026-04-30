@@ -6,10 +6,7 @@ import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, BarChart3, Calen
 
 interface SiteVisitCounts {
   total: number;
-  completed: number;
-  pending: number;
-  assigned: number;
-  dispatched: number;
+  statusCounts: Record<string, number>;
 }
 
 interface CycleCoveragePredictorProps {
@@ -48,10 +45,11 @@ export function CycleCoveragePredictor({ activeMmps, siteVisitCounts }: CycleCov
     return activeOnlyMmps.map(mmp => {
       const counts = siteVisitCounts[mmp.id];
       const totalSites = counts?.total || 0;
-      const completedSites = counts?.completed || 0;
-      const pendingSites = counts?.pending || 0;
-      const assignedSites = counts?.assigned || 0;
-      const dispatchedSites = counts?.dispatched || 0;
+      const sc = counts?.statusCounts ?? {};
+      const completedSites = sc['completed'] ?? 0;
+      const pendingSites = sc['pending'] ?? 0;
+      const assignedSites = sc['assigned'] ?? 0;
+      const dispatchedSites = sc['dispatched'] ?? 0;
       const coverageRate = totalSites > 0 ? Math.round((completedSites / totalSites) * 100) : 0;
 
       const { daysElapsed, totalDays, daysRemaining } = getDaysElapsedInCycle(mmp);

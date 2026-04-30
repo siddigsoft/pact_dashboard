@@ -32,12 +32,34 @@ interface UncoveredSite {
 
 interface SiteVisitCounts {
   total: number;
-  completed: number;
-  pending: number;
-  assigned: number;
-  dispatched: number;
-  accepted: number;
-  notCovered: number;
+  /** One entry per unique status value found in the data. */
+  statusCounts: Record<string, number>;
+}
+
+// Display metadata for known statuses — unknown ones get auto-prettified.
+const STATUS_META: Record<string, { label: string; labelAr: string; colorClass: string }> = {
+  completed:     { label: 'Completed',     labelAr: 'مكتمل',     colorClass: 'bg-emerald-500/10' },
+  verified:      { label: 'Verified',      labelAr: 'مُتحقق',    colorClass: 'bg-green-500/10' },
+  approved:      { label: 'Approved',      labelAr: 'مُعتمد',    colorClass: 'bg-teal-600/10' },
+  wfp_confirmed: { label: 'WFP Confirmed', labelAr: 'مُؤكَّد',   colorClass: 'bg-blue-500/10' },
+  submitted:     { label: 'Submitted',     labelAr: 'مُقدَّم',   colorClass: 'bg-cyan-500/10' },
+  accepted:      { label: 'Accepted',      labelAr: 'مقبول',     colorClass: 'bg-sky-500/10' },
+  dispatched:    { label: 'Dispatched',    labelAr: 'مُرسَل',    colorClass: 'bg-purple-500/10' },
+  assigned:      { label: 'Assigned',      labelAr: 'معيَّن',    colorClass: 'bg-indigo-500/10' },
+  pending:       { label: 'Pending',       labelAr: 'معلق',      colorClass: 'bg-yellow-500/10' },
+  not_covered:   { label: 'Not Covered',   labelAr: 'غير مغطى', colorClass: 'bg-red-500/10' },
+  cancelled:     { label: 'Cancelled',     labelAr: 'ملغى',      colorClass: 'bg-red-400/10' },
+  rejected:      { label: 'Rejected',      labelAr: 'مرفوض',    colorClass: 'bg-orange-500/10' },
+};
+// Preferred display order — statuses not in this list appear after, sorted alphabetically.
+const STATUS_ORDER = ['completed','verified','approved','wfp_confirmed','submitted','accepted','dispatched','assigned','pending','not_covered','cancelled','rejected'];
+
+function getStatusMeta(s: string) {
+  return STATUS_META[s] ?? {
+    label: s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    labelAr: s,
+    colorClass: 'bg-gray-500/10',
+  };
 }
 
 type CloseScope = 'full' | 'hub' | 'state' | 'activity';
@@ -211,13 +233,17 @@ export function CycleMMPCard({
   const projectName = mmp.projectName || (mmp as any).project?.name || '';
 
   const totalSiteCount = siteVisitCounts?.total || 0;
-  const completedCount = siteVisitCounts?.completed || 0;
-  const pendingCount = siteVisitCounts?.pending || 0;
-  const assignedCount = siteVisitCounts?.assigned || 0;
-  const dispatchedCount = siteVisitCounts?.dispatched || 0;
-  const acceptedCount = siteVisitCounts?.accepted || 0;
-  const notCoveredCount = siteVisitCounts?.notCovered || 0;
+  const sc = siteVisitCounts?.statusCounts ?? {};
+  const completedCount = sc['completed'] ?? 0;
   const coveragePercent = totalSiteCount > 0 ? Math.round((completedCount / totalSiteCount) * 100) : 0;
+
+  // Build ordered list of all status entries that have count > 0
+  const statusEntries = [
+    ...STATUS_ORDER.filter(s => sc[s] > 0).map(s => [s, sc[s]] as [string, number]),
+    ...Object.entries(sc)
+      .filter(([s, n]) => n > 0 && !STATUS_ORDER.includes(s))
+      .sort(([a], [b]) => a.localeCompare(b)),
+  ];
 
   const mmpStatus = mmp.status || 'pending';
   const statusLabel: Record<string, string> = {
@@ -330,13 +356,23 @@ export function CycleMMPCard({
                     </span>
                   </div>
                   <Progress value={coveragePercent} className="h-2 mb-2.5" />
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <StatBox count={completedCount} label="Done" labelAr="مكتمل" colorClass="bg-emerald-500/10" testId={`text-completed-count-${mmp.id}`} />
-                    <StatBox count={acceptedCount} label="Accepted" labelAr="مقبول" colorClass="bg-teal-500/10" testId={`text-accepted-count-${mmp.id}`} />
-                    <StatBox count={dispatchedCount} label="Sent" labelAr="مرسل" colorClass="bg-purple-500/10" testId={`text-dispatched-count-${mmp.id}`} />
-                    <StatBox count={assignedCount} label="Assigned" labelAr="معين" colorClass="bg-blue-500/10" testId={`text-assigned-count-${mmp.id}`} />
-                    <StatBox count={pendingCount} label="Pending" labelAr="معلق" colorClass="bg-yellow-500/10" testId={`text-pending-count-${mmp.id}`} />
-                    <StatBox count={notCoveredCount} label="Not Visited" labelAr="لم يُزَر" colorClass="bg-red-500/10" testId={`text-not-covered-count-${mmp.id}`} />
+                  <div className="flex flex-wrap gap-1.5">
+                    {statusEntries.map(([status, count]) => {
+                      const meta = getStatusMeta(status);
+                      return (
+                        <StatBox
+                          key={status}
+                          count={count}
+                          label={meta.label}
+                          labelAr={meta.labelAr}
+                          colorClass={meta.colorClass}
+                          testId={`text-status-count-${status}-${mmp.id}`}
+                        />
+                      );
+                    })}
+                    {statusEntries.length === 0 && (
+                      <span className="text-xs text-muted-foreground">No site data yet</span>
+                    )}
                   </div>
                 </div>
               </div>

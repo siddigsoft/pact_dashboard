@@ -219,7 +219,7 @@ const MMPCycleClose = () => {
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
   const [selectedMmpId, setSelectedMmpId] = useState<string>('all');
-  const [siteVisitCounts, setSiteVisitCounts] = useState<Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number; accepted: number; notCovered: number }>>({});
+  const [siteVisitCounts, setSiteVisitCounts] = useState<Record<string, { total: number; statusCounts: Record<string, number> }>>({});
   const followUps = useMemo<FollowUpRecord[]>(() => {
     return uncoveredSites
       .filter(s => s.not_covered_reason && HIGH_PRIORITY_REASONS.includes(s.not_covered_reason))
@@ -1104,24 +1104,20 @@ const MMPCycleClose = () => {
           if (!data || data.length < PAGE) break;
         }
 
-        const DONE = new Set(['submitted', 'wfp_confirmed', 'completed', 'verified', 'approved']);
-        const NOT_VISITED = new Set(['cancelled', 'rejected', 'not_covered']);
-
-        const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number; accepted: number; notCovered: number }> = {};
-        mmpIds.forEach(id => { counts[id] = { total: 0, completed: 0, pending: 0, assigned: 0, dispatched: 0, accepted: 0, notCovered: 0 }; });
+        // Collect per-status counts dynamically — no hardcoded buckets.
+        // Sites with not_covered_flag=true but a non-terminal status are counted
+        // under their actual status value so the user can see the full picture.
+        const counts: Record<string, { total: number; statusCounts: Record<string, number> }> = {};
+        mmpIds.forEach(id => { counts[id] = { total: 0, statusCounts: {} }; });
 
         allSites.forEach(site => {
           const c = counts[site.mmp_file_id];
           if (!c) return;
-          const s = (site.status ?? '').toLowerCase().trim();
+          // Normalise: lowercase + trim, fall back to 'not_covered' for flagged entries
+          let s = (site.status ?? '').toLowerCase().trim();
+          if (!s || (site.not_covered_flag && s === 'pending')) s = 'not_covered';
           c.total++;
-          if (DONE.has(s))             c.completed++;
-          else if (s === 'accepted')   c.accepted++;
-          else if (s === 'dispatched') c.dispatched++;
-          else if (s === 'assigned')   c.assigned++;
-          else if (s === 'pending')    c.pending++;
-          else if (site.not_covered_flag || NOT_VISITED.has(s)) c.notCovered++;
-          // Any unrecognised status still contributes to the total
+          c.statusCounts[s] = (c.statusCounts[s] ?? 0) + 1;
         });
 
         setSiteVisitCounts(counts);
@@ -2202,8 +2198,8 @@ const MMPCycleClose = () => {
       if (activeSort === 'name') {
         cmp = (a.name || '').localeCompare(b.name || '');
       } else if (activeSort === 'coverage') {
-        const aCov = siteVisitCounts[a.id] ? (siteVisitCounts[a.id].completed / (siteVisitCounts[a.id].total || 1)) : 0;
-        const bCov = siteVisitCounts[b.id] ? (siteVisitCounts[b.id].completed / (siteVisitCounts[b.id].total || 1)) : 0;
+        const aCov = siteVisitCounts[a.id] ? ((siteVisitCounts[a.id].statusCounts?.['completed'] ?? 0) / (siteVisitCounts[a.id].total || 1)) : 0;
+        const bCov = siteVisitCounts[b.id] ? ((siteVisitCounts[b.id].statusCounts?.['completed'] ?? 0) / (siteVisitCounts[b.id].total || 1)) : 0;
         cmp = aCov - bCov;
       } else {
         const statusOrder: Record<string, number> = { closing: 0, pending_approval: 1, active: 2 };
@@ -2225,7 +2221,7 @@ const MMPCycleClose = () => {
       const counts = siteVisitCounts[m.id];
       if (counts) {
         hubMap[hub].total += counts.total;
-        hubMap[hub].completed += counts.completed;
+        hubMap[hub].completed += counts.statusCounts?.['completed'] ?? 0;
       }
     });
     uncoveredSites.forEach(s => {
