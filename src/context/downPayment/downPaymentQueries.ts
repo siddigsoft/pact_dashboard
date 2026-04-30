@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { withTimeout } from '@/utils/promise-with-timeout';
 import type { DownPaymentRequest } from '@/types/down-payment';
+import { sudanStates } from '@/data/sudanStates';
 
 /** Minimal user shape needed for role-based filtering */
 export interface UserForDownPayment {
@@ -170,7 +171,7 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
       ? (supabase as any).rpc('get_entry_enrichment', { entry_ids: entryIds })
       : Promise.resolve({ data: [] }),
     hubIds.length > 0
-      ? supabase.from('hubs').select('id, name').in('id', hubIds)
+      ? supabase.from('hubs').select('id, name, states').in('id', hubIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -191,9 +192,23 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   }
 
   if (hubResult.status === 'fulfilled' && hubResult.value?.data?.length > 0) {
-    const hubMap = new Map((hubResult.value.data as any[]).map((h: any) => [h.id, h.name]));
+    // Build hub → name map AND hub → first-state-name map for records
+    // that have no mmpSiteEntryId (and therefore no enrichment state).
+    const hubNameMap = new Map<string, string>();
+    const hubStateMap = new Map<string, string>();
+    (hubResult.value.data as any[]).forEach((h: any) => {
+      hubNameMap.set(h.id, h.name);
+      if (Array.isArray(h.states) && h.states.length > 0) {
+        const stateObj = sudanStates.find(s => s.id === h.states[0]);
+        if (stateObj) hubStateMap.set(h.id, stateObj.name);
+      }
+    });
     transformed.forEach(r => {
-      if (r.hubId && hubMap.has(r.hubId)) r.hubName = hubMap.get(r.hubId) as string;
+      if (r.hubId && hubNameMap.has(r.hubId)) r.hubName = hubNameMap.get(r.hubId) as string;
+      // Backfill stateName from the hub's primary state for records without one
+      if (!r.stateName && r.hubId && hubStateMap.has(r.hubId)) {
+        r.stateName = hubStateMap.get(r.hubId);
+      }
     });
   } else if (hubResult.status === 'rejected') {
     console.warn('[DownPayment] Hub name enrichment failed (non-critical):', hubResult.reason);
@@ -202,9 +217,9 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
   return transformed;
 }
 
-// 5-minute cache — down-payment data changes infrequently; avoids
-// re-running the expensive enrichment round-trip on every navigation.
-const STALE_MS = 5 * 60 * 1000;
+// 90-second cache — balances avoiding unnecessary re-fetches on rapid
+// navigation with picking up newly-created records promptly.
+const STALE_MS = 90 * 1000;
 
 /**
  * Fetches down payment requests for the current user with role-based filtering.
