@@ -952,50 +952,46 @@ const Finance: React.FC = () => {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 gap-2 p-1 h-auto">
-          <TabsTrigger value="financial-tracking" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              <span className="hidden sm:inline">Site Visit Finances</span>
-              <span className="sm:hidden">Finances</span>
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="dashboard" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <FileBarChart className="h-4 w-4" />
-              <span className="hidden sm:inline">Financial Dashboard</span>
-              <span className="sm:hidden">Dashboard</span>
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="budget" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <BadgePercent className="h-4 w-4" />
-              <span className="hidden sm:inline">Budget Management</span>
-              <span className="sm:hidden">Budget</span>
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="payments" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
-              <span className="hidden sm:inline">Payment Processing</span>
-              <span className="sm:hidden">Payments</span>
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="reports" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Reports & Audit</span>
-              <span className="sm:hidden">Reports</span>
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="consolidated-statement" className="py-2 data-[state=active]:bg-blue-50" data-testid="tab-consolidated-statement">
-            <span className="flex items-center gap-2">
-              <FileSpreadsheet className="h-4 w-4" />
-              <span className="hidden sm:inline">Statement</span>
-              <span className="sm:hidden">Statement</span>
-            </span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto pb-px -mx-1 px-1">
+          <TabsList className="flex w-max min-w-full h-auto p-1 gap-1">
+            <TabsTrigger value="financial-tracking" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-financial-tracking">
+              <span className="flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5 shrink-0" />
+                Site Visit Finances
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="dashboard" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-dashboard">
+              <span className="flex items-center gap-1.5">
+                <FileBarChart className="h-3.5 w-3.5 shrink-0" />
+                Financial Dashboard
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="budget" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-budget">
+              <span className="flex items-center gap-1.5">
+                <BadgePercent className="h-3.5 w-3.5 shrink-0" />
+                Budget
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-payments">
+              <span className="flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                Payments
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-reports">
+              <span className="flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                Reports & Audit
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="consolidated-statement" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-consolidated-statement">
+              <span className="flex items-center gap-1.5">
+                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                Statement
+              </span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
         
         <TabsContent value="financial-tracking" className="mt-4">
           <div className="grid gap-6">
