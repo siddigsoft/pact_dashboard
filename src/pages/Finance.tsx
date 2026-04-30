@@ -17,7 +17,8 @@ import {
   BadgePercent, ClipboardList, DollarSign, ReceiptText, ShieldCheck, 
   CreditCard, ArrowUpDown, FileBarChart, AlertTriangle, FileText,
   DatabaseBackup, ChevronDown, ArrowLeft, TrendingUp, TrendingDown, RefreshCw,
-  Wallet, Clock, CheckCircle2, Info, Download, Loader2, FileSpreadsheet, Activity
+  Wallet, Clock, CheckCircle2, Info, Download, Loader2, FileSpreadsheet, Activity,
+  ChevronRight
 } from "lucide-react";
 import { FraudDetection } from "@/components/FraudDetection";
 import { ApprovalTierAnalytics } from "@/components/ApprovalTierAnalytics";
@@ -794,103 +795,65 @@ const Finance: React.FC = () => {
   const totalExpenseCents = expenseCategories.reduce((s, c) => s + c.total_cents, 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+    <div className="space-y-5">
+
+      {/* ── Top nav bar ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={() => navigate('/dashboard')}
+          className="text-muted-foreground hover:text-foreground -ml-1"
           data-testid="button-back-to-dashboard"
         >
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="h-4 w-4 mr-1.5" />
           Back
         </Button>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/budget')}
-            data-testid="button-goto-budget"
-          >
-            <BadgePercent className="h-4 w-4 mr-2" />
-            Budget
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/cost-submission')}
-            data-testid="button-goto-cost-submissions"
-          >
-            <ReceiptText className="h-4 w-4 mr-2" />
-            Cost Submissions
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/wallet')}
-            data-testid="button-goto-wallet"
-          >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Wallet
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/admin/wallets')}
-            data-testid="button-goto-admin-wallets"
-          >
-            <DollarSign className="h-4 w-4 mr-2" />
-            Admin Wallets
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/down-payment-approval')}
-            data-testid="button-goto-down-payment"
-          >
-            <ArrowUpDown className="h-4 w-4 mr-2" />
-            Down-Payments
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/financial-operations')}
-            data-testid="button-financial-operations"
-          >
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Financial Operations
-          </Button>
-          {canAccessReconciliation && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/reconciliation-dashboard')}
-              data-testid="button-reconciliation-dashboard"
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { label: 'Budget', icon: BadgePercent, href: '/budget', testId: 'button-goto-budget' },
+            { label: 'Cost Submissions', icon: ReceiptText, href: '/cost-submission', testId: 'button-goto-cost-submissions' },
+            { label: 'Wallet', icon: CreditCard, href: '/wallet', testId: 'button-goto-wallet' },
+            { label: 'Admin Wallets', icon: DollarSign, href: '/admin/wallets', testId: 'button-goto-admin-wallets' },
+            { label: 'Down-Payments', icon: ArrowUpDown, href: '/down-payment-approval', testId: 'button-goto-down-payment' },
+            { label: 'Financial Operations', icon: TrendingUp, href: '/financial-operations', testId: 'button-financial-operations' },
+            ...(canAccessReconciliation ? [{ label: 'Reconciliation', icon: ClipboardList, href: '/reconciliation-dashboard', testId: 'button-reconciliation-dashboard' }] : []),
+          ].map(({ label, icon: Icon, href, testId }) => (
+            <button
+              key={href}
+              onClick={() => navigate(href)}
+              data-testid={testId}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:border-muted-foreground/40 transition-colors"
             >
-              <ClipboardList className="h-4 w-4 mr-2" />
-              Reconciliation
-            </Button>
-          )}
+              <Icon className="h-3 w-3" />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="bg-blue-50 p-6 rounded-lg shadow-sm border animate-fade-in">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-blue-700">
-              Financial Management
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Track site visit finances, manage budgets, and view financial reports
-            </p>
+      {/* ── Hero card ── */}
+      <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 dark:from-blue-700 dark:via-blue-800 dark:to-blue-900 text-white shadow-md">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,0.1),_transparent_60%)]" />
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-white/10" />
+        <div className="relative flex items-start justify-between gap-4 flex-wrap px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-white/15 p-2.5 shrink-0">
+              <DollarSign className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Financial Management</h1>
+              <p className="text-blue-100 text-sm mt-0.5">Track site visit finances, manage budgets, and view financial reports</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <CurrencySwitcher mode="split" />
             <DataFreshnessBadge />
           </div>
         </div>
       </div>
 
+      {/* ── Cycle context banner ── */}
       {cycleContextMmpId && (
         <div className="flex items-center gap-3 rounded-lg border border-blue-300/60 bg-blue-50/60 dark:bg-blue-950/20 px-4 py-2.5" data-testid="banner-cycle-context-finance">
           <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -909,87 +872,102 @@ const Finance: React.FC = () => {
         </div>
       )}
 
-      {/* Finance Officer Inbox */}
+      {/* ── Finance Officer Inbox ── */}
       {financeInbox && (financeInbox.pendingCosts + financeInbox.pendingWithdrawalCount + financeInbox.stuckAdvances > 0) && (
-        <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="finance-officer-inbox">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
-            <Wallet className="h-3.5 w-3.5" />
-            Finance Inbox — Pending Your Action
-          </p>
-          <div className="flex flex-wrap gap-2">
+        <div data-testid="finance-officer-inbox">
+          <div className="flex items-center gap-2 mb-3">
+            <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Finance Inbox — Pending Your Action</span>
+            <Badge variant="secondary" className="text-xs h-5 px-1.5">
+              {financeInbox.pendingCosts + financeInbox.pendingWithdrawalCount + financeInbox.stuckAdvances}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {financeInbox.pendingCosts > 0 && (
               <button
                 onClick={() => navigate('/cost-submission')}
-                className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
+                className="group flex items-center gap-3 rounded-xl border border-amber-200/70 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/20 p-4 text-left hover:border-amber-400/70 hover:shadow-sm transition-all"
                 data-testid="inbox-pending-costs"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold">{financeInbox.pendingCosts}</span>
-                Cost submissions pending review
+                <div className="rounded-lg bg-amber-100 dark:bg-amber-900/50 p-2.5 shrink-0">
+                  <ReceiptText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-bold text-amber-900 dark:text-amber-100 leading-none">{financeInbox.pendingCosts}</span>
+                    <span className="text-xs text-amber-600 dark:text-amber-400">pending</span>
+                  </div>
+                  <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mt-0.5 truncate">Cost submissions</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-amber-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             )}
             {financeInbox.pendingWithdrawalCount > 0 && (
               <button
                 onClick={() => navigate('/withdrawal-approval')}
-                className="flex items-center gap-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-1.5 text-xs font-medium text-blue-800 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors"
+                className="group flex items-center gap-3 rounded-xl border border-blue-200/70 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-left hover:border-blue-400/70 hover:shadow-sm transition-all"
                 data-testid="inbox-pending-withdrawals"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[10px] font-bold">{financeInbox.pendingWithdrawalCount}</span>
-                Withdrawal requests awaiting approval
+                <div className="rounded-lg bg-blue-100 dark:bg-blue-900/50 p-2.5 shrink-0">
+                  <ArrowUpDown className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-bold text-blue-900 dark:text-blue-100 leading-none">{financeInbox.pendingWithdrawalCount}</span>
+                    <span className="text-xs text-blue-600 dark:text-blue-400">pending</span>
+                  </div>
+                  <p className="text-xs font-medium text-blue-800 dark:text-blue-200 mt-0.5 truncate">Withdrawal requests</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-blue-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             )}
             {financeInbox.stuckAdvances > 0 && (
               <button
                 onClick={() => navigate('/down-payment-approval?tab=tracker')}
-                className="flex items-center gap-2 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 px-3 py-1.5 text-xs font-medium text-orange-800 dark:text-orange-200 hover:bg-orange-100 dark:hover:bg-orange-950/50 transition-colors"
+                className="group flex items-center gap-3 rounded-xl border border-orange-200/70 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-950/20 p-4 text-left hover:border-orange-400/70 hover:shadow-sm transition-all"
                 data-testid="inbox-stuck-advances"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">{financeInbox.stuckAdvances}</span>
-                Transport advances approved but not marked paid
+                <div className="rounded-lg bg-orange-100 dark:bg-orange-900/50 p-2.5 shrink-0">
+                  <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-bold text-orange-900 dark:text-orange-100 leading-none">{financeInbox.stuckAdvances}</span>
+                    <span className="text-xs text-orange-600 dark:text-orange-400">awaiting</span>
+                  </div>
+                  <p className="text-xs font-medium text-orange-800 dark:text-orange-200 mt-0.5 truncate">Transport advances</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-orange-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             )}
           </div>
         </div>
       )}
 
+      {/* ── Tabs ── */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="overflow-x-auto pb-px -mx-1 px-1">
-          <TabsList className="flex w-max min-w-full h-auto p-1 gap-1">
-            <TabsTrigger value="financial-tracking" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-financial-tracking">
-              <span className="flex items-center gap-1.5">
-                <DollarSign className="h-3.5 w-3.5 shrink-0" />
-                Site Visit Finances
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="dashboard" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-dashboard">
-              <span className="flex items-center gap-1.5">
-                <FileBarChart className="h-3.5 w-3.5 shrink-0" />
-                Financial Dashboard
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="budget" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-budget">
-              <span className="flex items-center gap-1.5">
-                <BadgePercent className="h-3.5 w-3.5 shrink-0" />
-                Budget
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="payments" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-payments">
-              <span className="flex items-center gap-1.5">
-                <CreditCard className="h-3.5 w-3.5 shrink-0" />
-                Payments
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-reports">
-              <span className="flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 shrink-0" />
-                Reports & Audit
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="consolidated-statement" className="shrink-0 whitespace-nowrap py-2 px-3 text-xs sm:text-sm data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-950/40" data-testid="tab-consolidated-statement">
-              <span className="flex items-center gap-1.5">
-                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
-                Statement
-              </span>
-            </TabsTrigger>
+        <div className="overflow-x-auto pb-px border-b border-border">
+          <TabsList className="flex w-max min-w-full h-auto bg-transparent p-0 gap-0">
+            {[
+              { value: 'financial-tracking', label: 'Site Visit Finances', icon: DollarSign, testId: 'tab-financial-tracking' },
+              { value: 'dashboard', label: 'Financial Dashboard', icon: FileBarChart, testId: 'tab-dashboard' },
+              { value: 'budget', label: 'Budget', icon: BadgePercent, testId: 'tab-budget' },
+              { value: 'payments', label: 'Payments', icon: CreditCard, testId: 'tab-payments' },
+              { value: 'reports', label: 'Reports & Audit', icon: FileText, testId: 'tab-reports' },
+              { value: 'consolidated-statement', label: 'Statement', icon: FileSpreadsheet, testId: 'tab-consolidated-statement' },
+            ].map(({ value, label, icon: Icon, testId }) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                data-testid={testId}
+                className="relative shrink-0 whitespace-nowrap rounded-none border-b-2 border-transparent bg-transparent px-4 py-2.5 text-xs sm:text-sm font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-blue-600 data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-400 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {label}
+                </span>
+              </TabsTrigger>
+            ))}
           </TabsList>
         </div>
         
