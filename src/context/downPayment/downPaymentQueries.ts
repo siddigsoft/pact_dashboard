@@ -46,7 +46,7 @@ function transformFromDB(data: any): DownPaymentRequest {
     wfpProjectName: cleanStr(mmpEntry?.mmp_files?.projects?.name || data.metadata?.project_name),
     activityType: data.metadata?.activity_type || undefined,
     requestedBy: data.requested_by,
-    requestedByName: data.metadata?.requested_by_name || undefined,
+    requestedByName: undefined,
     requestedAt: data.requested_at,
     requesterRole: data.requester_role,
     hubId: data.hub_id,
