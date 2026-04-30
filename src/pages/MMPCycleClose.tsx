@@ -1093,7 +1093,10 @@ const MMPCycleClose = () => {
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'assigned'),
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'dispatched'),
             supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('status', 'accepted'),
-            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId).eq('not_covered_flag', true),
+            // Not Covered bucket = explicitly flagged + status-based terminal non-visits
+            // (cancelled, rejected, not_covered) so the 6 stat boxes together always sum to total.
+            supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).eq('mmp_file_id', mmpId)
+              .or('not_covered_flag.eq.true,status.in.(cancelled,rejected,not_covered)'),
           ]);
           counts[mmpId] = {
             total: totalRes.count ?? 0,

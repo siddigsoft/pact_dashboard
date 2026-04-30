@@ -336,7 +336,7 @@ export function CycleMMPCard({
                     <StatBox count={dispatchedCount} label="Sent" labelAr="مرسل" colorClass="bg-purple-500/10" testId={`text-dispatched-count-${mmp.id}`} />
                     <StatBox count={assignedCount} label="Assigned" labelAr="معين" colorClass="bg-blue-500/10" testId={`text-assigned-count-${mmp.id}`} />
                     <StatBox count={pendingCount} label="Pending" labelAr="معلق" colorClass="bg-yellow-500/10" testId={`text-pending-count-${mmp.id}`} />
-                    <StatBox count={notCoveredCount} label="Not Covered" labelAr="غير مغطى" colorClass="bg-red-500/10" testId={`text-not-covered-count-${mmp.id}`} />
+                    <StatBox count={notCoveredCount} label="Not Visited" labelAr="لم يُزَر" colorClass="bg-red-500/10" testId={`text-not-covered-count-${mmp.id}`} />
                   </div>
                 </div>
               </div>
