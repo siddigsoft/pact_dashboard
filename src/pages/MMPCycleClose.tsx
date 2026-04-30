@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, MapPin,
@@ -2751,121 +2752,133 @@ const MMPCycleClose = () => {
                 </CardContent>
               </Card>
 
-              {checklistMmpId && (
-                <div className="space-y-3" data-testid="section-cycle-close-checklist">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                      Pre-Close Checklist — {mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'}
-                    </h3>
-                    <Button variant="ghost" size="sm" onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }} data-testid="button-dismiss-checklist">
-                      Dismiss
-                    </Button>
-                  </div>
-
-                  {/* Next-step guide card */}
-                  {!cycleReadiness.loading && nextBlocker && (
-                    <div className="flex items-start gap-3 rounded-lg border border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3" data-testid="banner-next-step">
-                      <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Next step to unblock</p>
-                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">{nextBlocker.label}</p>
-                      </div>
-                      {nextBlocker.link && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0 text-xs border-amber-500/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950"
-                          onClick={() => {
-                            if (nextBlocker.link!.startsWith('/mmp/cycle-close')) {
-                              const url = new URL(nextBlocker.link!, window.location.origin);
-                              const tab = url.searchParams.get('tab');
-                              if (tab) setActiveTab(tab);
-                            } else {
-                              const activeMmpName = checklistMmpId ? (mmpFiles?.find(m => m.id === checklistMmpId)?.name || '') : '';
-                              let dest = nextBlocker.link!;
-                              if (dest === '/finance' && checklistMmpId) {
-                                dest = `/finance?mmpId=${checklistMmpId}&mmpName=${encodeURIComponent(activeMmpName)}`;
-                              }
-                              navigate(dest);
-                            }
-                          }}
-                          data-testid="button-next-step-resolve"
-                        >
-                          Resolve <ArrowRight className="h-3 w-3 ml-1" />
-                        </Button>
-                      )}
-                    </div>
-                  )}
-
-                  {!cycleReadiness.loading && cycleReadiness.allPassed && (
-                    <div className="flex items-center gap-2 rounded-lg border border-green-400/40 bg-green-50/50 dark:bg-green-950/20 px-4 py-3 text-sm text-green-800 dark:text-green-200" data-testid="banner-all-clear">
+              {/* Pre-Close Checklist Dialog — opens when user clicks Close on an MMP card */}
+              <Dialog
+                open={!!checklistMmpId}
+                onOpenChange={(open) => {
+                  if (!open) { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }
+                }}
+              >
+                <DialogContent className="max-w-lg w-full max-h-[90vh] overflow-y-auto" data-testid="section-cycle-close-checklist">
+                  <DialogHeader className="pb-1">
+                    <DialogTitle className="flex items-center gap-2 text-base">
                       <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                      All requirements met — you can proceed to close this cycle.
-                    </div>
-                  )}
+                      Pre-Close Checklist
+                    </DialogTitle>
+                    <DialogDescription className="text-xs">
+                      {mmpFiles?.find(m => m.id === checklistMmpId)?.name || 'MMP'} — review all requirements before starting the close process
+                    </DialogDescription>
+                  </DialogHeader>
 
-                  <CloseReadinessChecklist
-                    title="Cycle Close Readiness"
-                    items={cycleReadiness.items}
-                    score={cycleReadiness.score}
-                    allPassed={cycleReadiness.allPassed}
-                    loading={cycleReadiness.loading}
-                    isSuperAdmin={isSuperAdmin}
-                    onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
-                    overrideLabel="Override & Start Closing"
-                  />
-                  <ReconciliationSummary
-                    mmpId={checklistMmpId ?? undefined}
-                    mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
-                  />
-                  {cycleReadiness.allPassed && !cycleReadiness.loading && (
-                    <div className="space-y-3 pt-1">
-                      <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack">
-                        <input
-                          type="checkbox"
-                          checked={reconciliationAcknowledged}
-                          onChange={e => setReconciliationAcknowledged(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
-                          data-testid="checkbox-reconciliation-ack"
-                        />
-                        <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">
-                          I have reviewed the reconciliation summary above and confirm that all financial obligations for this cycle are accounted for.
-                        </span>
-                      </label>
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }}
-                          data-testid="button-cancel-close-gate"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                          onClick={() => {
-                            const mmpId = checklistMmpId!;
-                            const pending = pendingScopedClose;
-                            setChecklistMmpId(null);
-                            setPendingScopedClose(null);
-                            setReconciliationAcknowledged(false);
-                            if (pending) {
-                              executeScopedClose(mmpId, pending.scope, pending.scopeValue);
-                            } else {
-                              handleStartClosingCycle(mmpId);
-                            }
-                          }}
-                          disabled={closingCycle || !reconciliationAcknowledged}
-                          data-testid="button-proceed-close-cycle"
-                        >
-                          {pendingScopedClose ? `Proceed to Close (${pendingScopedClose.scope})` : 'Proceed to Close Cycle'}
-                        </Button>
+                  <div className="space-y-3">
+                    {/* Next-step guide card */}
+                    {!cycleReadiness.loading && nextBlocker && (
+                      <div className="flex items-start gap-3 rounded-lg border border-amber-400/40 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3" data-testid="banner-next-step">
+                        <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Next step to unblock</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">{nextBlocker.label}</p>
+                        </div>
+                        {nextBlocker.link && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0 text-xs border-amber-500/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950"
+                            onClick={() => {
+                              setChecklistMmpId(null);
+                              setPendingScopedClose(null);
+                              setReconciliationAcknowledged(false);
+                              if (nextBlocker.link!.startsWith('/mmp/cycle-close')) {
+                                const url = new URL(nextBlocker.link!, window.location.origin);
+                                const tab = url.searchParams.get('tab');
+                                if (tab) setActiveTab(tab);
+                              } else {
+                                const activeMmpName = checklistMmpId ? (mmpFiles?.find(m => m.id === checklistMmpId)?.name || '') : '';
+                                let dest = nextBlocker.link!;
+                                if (dest === '/finance' && checklistMmpId) {
+                                  dest = `/finance?mmpId=${checklistMmpId}&mmpName=${encodeURIComponent(activeMmpName)}`;
+                                }
+                                navigate(dest);
+                              }
+                            }}
+                            data-testid="button-next-step-resolve"
+                          >
+                            Resolve <ArrowRight className="h-3 w-3 ml-1" />
+                          </Button>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+
+                    {!cycleReadiness.loading && cycleReadiness.allPassed && (
+                      <div className="flex items-center gap-2 rounded-lg border border-green-400/40 bg-green-50/50 dark:bg-green-950/20 px-4 py-3 text-sm text-green-800 dark:text-green-200" data-testid="banner-all-clear">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                        All requirements met — you can proceed to close this cycle.
+                      </div>
+                    )}
+
+                    <CloseReadinessChecklist
+                      title="Cycle Close Readiness"
+                      items={cycleReadiness.items}
+                      score={cycleReadiness.score}
+                      allPassed={cycleReadiness.allPassed}
+                      loading={cycleReadiness.loading}
+                      isSuperAdmin={isSuperAdmin}
+                      onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
+                      overrideLabel="Override & Start Closing"
+                    />
+                    <ReconciliationSummary
+                      mmpId={checklistMmpId ?? undefined}
+                      mmpContextLabel={mmpFiles?.find(m => m.id === checklistMmpId)?.name}
+                    />
+                    {cycleReadiness.allPassed && !cycleReadiness.loading && (
+                      <div className="space-y-3 pt-1">
+                        <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack">
+                          <input
+                            type="checkbox"
+                            checked={reconciliationAcknowledged}
+                            onChange={e => setReconciliationAcknowledged(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 accent-blue-600 shrink-0"
+                            data-testid="checkbox-reconciliation-ack"
+                          />
+                          <span className="text-sm text-blue-900 dark:text-blue-200 font-medium">
+                            I have reviewed the reconciliation summary above and confirm that all financial obligations for this cycle are accounted for.
+                          </span>
+                        </label>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setChecklistMmpId(null); setPendingScopedClose(null); setReconciliationAcknowledged(false); }}
+                            data-testid="button-cancel-close-gate"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => {
+                              const mmpId = checklistMmpId!;
+                              const pending = pendingScopedClose;
+                              setChecklistMmpId(null);
+                              setPendingScopedClose(null);
+                              setReconciliationAcknowledged(false);
+                              if (pending) {
+                                executeScopedClose(mmpId, pending.scope, pending.scopeValue);
+                              } else {
+                                handleStartClosingCycle(mmpId);
+                              }
+                            }}
+                            disabled={closingCycle || !reconciliationAcknowledged}
+                            data-testid="button-proceed-close-cycle"
+                          >
+                            {pendingScopedClose ? `Proceed to Close (${pendingScopedClose.scope})` : 'Proceed to Close Cycle'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               <div className="grid gap-4">
                 {filteredActiveMmps.map(mmp => {
