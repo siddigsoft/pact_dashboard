@@ -439,17 +439,6 @@ const MMPCycleClose = () => {
     skipMmpResetRef.current = false;
   }, [checklistMmpId]);
 
-  useEffect(() => {
-    if (checklistMmpId) {
-      const status = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status ?? 'active';
-      if (status === 'closing' || status === 'pending_approval') {
-        fetchCycleSummary(checklistMmpId);
-      }
-    } else {
-      setCycleSummaryData(null);
-    }
-  }, [checklistMmpId, mmpFiles, fetchCycleSummary]);
-
   // Derive the first actionable blocker from the readiness checklist
   const nextBlocker = useMemo(() => {
     return cycleReadiness.items.find(i => !i.passed && !i.notConfigured) ?? null;
@@ -2015,6 +2004,19 @@ const MMPCycleClose = () => {
       setLoadingCycleSummary(false);
     }
   }, []);
+
+  // Trigger financial summary fetch whenever the wizard opens a closing/pending_approval cycle
+  // Placed here (after fetchCycleSummary definition) to avoid temporal dead zone crash
+  useEffect(() => {
+    if (checklistMmpId) {
+      const status = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_status ?? 'active';
+      if (status === 'closing' || status === 'pending_approval') {
+        fetchCycleSummary(checklistMmpId);
+      }
+    } else {
+      setCycleSummaryData(null);
+    }
+  }, [checklistMmpId, mmpFiles, fetchCycleSummary]);
 
   const exportCycleSummaryExcel = useCallback(async () => {
     if (!cycleSummaryData || !checklistMmpId) return;
