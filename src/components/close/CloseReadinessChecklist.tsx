@@ -27,6 +27,7 @@ interface CloseReadinessChecklistProps {
   loading: boolean;
   isSuperAdmin: boolean;
   onOverride?: (justification: string) => void;
+  onResolveItem?: (itemId: string) => void;
   overrideLabel?: string;
   className?: string;
 }
@@ -39,6 +40,7 @@ export function CloseReadinessChecklist({
   loading,
   isSuperAdmin,
   onOverride,
+  onResolveItem,
   overrideLabel = 'Override Gate',
   className = '',
 }: CloseReadinessChecklistProps) {
@@ -151,10 +153,10 @@ export function CloseReadinessChecklist({
                         variant="link"
                         size="sm"
                         className="px-0 h-auto text-xs mt-1 text-red-700 dark:text-red-400"
-                        onClick={() => navigate(item.link!)}
+                        onClick={() => onResolveItem ? onResolveItem(item.id) : navigate(item.link!)}
                         data-testid={`link-resolve-${item.id}`}
                       >
-                        Resolve <ExternalLink className="h-3 w-3 ml-1" />
+                        Resolve {!onResolveItem && <ExternalLink className="h-3 w-3 ml-1" />}
                       </Button>
                     )}
                     {item.passed && (item.pendingViaReport ?? 0) > 0 && (

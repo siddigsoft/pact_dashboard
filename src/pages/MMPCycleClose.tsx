@@ -30,6 +30,7 @@ import {
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield, ShieldAlert,
   Activity, Target, Layers, SortAsc, SortDesc,
   BookOpen, RotateCcw, HelpCircle, Loader2, DollarSign, Lightbulb,
+  ReceiptText, ExternalLink,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -239,6 +240,67 @@ const MMPCycleClose = () => {
   const [checklistMmpId, setChecklistMmpId] = useState<string | null>(null);
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
   const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
+
+  // Finance tab state
+  type FinanceCost = { id: string; description: string | null; vendor: string | null; amount_cents: number; currency: string | null; expense_date: string | null; expense_category: string | null };
+  type FinanceAdvance = { id: string; status: string; amount_cents: number | null; currency: string | null };
+  const [financeCosts, setFinanceCosts] = useState<FinanceCost[]>([]);
+  const [financeAdvances, setFinanceAdvances] = useState<FinanceAdvance[]>([]);
+  const [financeLoading, setFinanceLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'finance' || !selectedMmpId || selectedMmpId === 'all') {
+      setFinanceCosts([]);
+      setFinanceAdvances([]);
+      return;
+    }
+    const fetchFinance = async () => {
+      setFinanceLoading(true);
+      try {
+        const { data: costs } = await supabase
+          .from('operational_cost_submissions')
+          .select('id, description, vendor, amount_cents, currency, expense_date, expense_category')
+          .eq('mmp_id', selectedMmpId)
+          .or('tier1_status.eq.pending,tier2_status.eq.pending');
+        setFinanceCosts((costs as FinanceCost[]) || []);
+
+        const { data: siteEntries } = await supabase
+          .from('mmp_site_entries')
+          .select('id')
+          .eq('mmp_file_id', selectedMmpId);
+        const siteIds = (siteEntries || []).map((s: { id: string }) => s.id);
+        if (siteIds.length > 0) {
+          const { data: advances } = await supabase
+            .from('down_payment_requests')
+            .select('id, status, amount_cents, currency')
+            .in('mmp_site_entry_id', siteIds)
+            .eq('status', 'approved');
+          setFinanceAdvances((advances as FinanceAdvance[]) || []);
+        } else {
+          setFinanceAdvances([]);
+        }
+      } catch { /* non-critical */ }
+      finally { setFinanceLoading(false); }
+    };
+    fetchFinance();
+  }, [activeTab, selectedMmpId]);
+
+  // Called from the Pre-Close Checklist to resolve an item without leaving the page
+  const handleChecklistResolveItem = (itemId: string) => {
+    const mmpId = checklistMmpId;
+    setChecklistMmpId(null);
+    setPendingScopedClose(null);
+    setReconciliationAcknowledged(false);
+    if (mmpId) setSelectedMmpId(mmpId);
+    if (itemId === 'cost_submissions' || itemId === 'transport_advances') {
+      setActiveTab('finance');
+    } else if (itemId === 'site_visits') {
+      setActiveTab('uncovered');
+    } else {
+      const item = cycleReadiness.items.find(i => i.id === itemId);
+      if (item?.link) navigate(item.link);
+    }
+  };
 
   // When user opens the checklist for an MMP, auto-sync the Uncovered Sites tab filter
   // so navigating there immediately shows only that MMP's sites.
@@ -2663,6 +2725,13 @@ const MMPCycleClose = () => {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="finance" data-testid="tab-finance" className="gap-1.5 px-3 py-2">
+            <DollarSign className="h-3.5 w-3.5 text-amber-500" />
+            <span>Pending Finance</span>
+            {(financeCosts.length + financeAdvances.length) > 0 && (
+              <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{financeCosts.length + financeAdvances.length}</Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="wfp" data-testid="tab-wfp" className="gap-1.5 px-3 py-2">
             <Shield className="h-3.5 w-3.5 text-blue-500" />
             <span>WFP Confirmation</span>
@@ -2821,6 +2890,7 @@ const MMPCycleClose = () => {
                       loading={cycleReadiness.loading}
                       isSuperAdmin={isSuperAdmin}
                       onOverride={(justification) => handleCycleCloseOverride(checklistMmpId, justification)}
+                      onResolveItem={handleChecklistResolveItem}
                       overrideLabel="Override & Start Closing"
                     />
                     <ReconciliationSummary
@@ -3366,6 +3436,145 @@ const MMPCycleClose = () => {
                 />
               )}
             </div>
+          )}
+        </TabsContent>
+
+        {/* ── PENDING FINANCE TAB ── */}
+        <TabsContent value="finance" className="space-y-4">
+          {selectedMmpId === 'all' ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                Select a specific MMP from the <strong>Active Cycles</strong> tab, then come back here to view its pending finance items.
+              </CardContent>
+            </Card>
+          ) : financeLoading ? (
+            <Card>
+              <CardContent className="py-10 flex justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Pending Cost Submissions */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <ReceiptText className="h-4 w-4 text-amber-500" />
+                    Pending Cost Submissions
+                    {financeCosts.length > 0 && (
+                      <Badge variant="destructive" className="ml-auto">{financeCosts.length}</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {mmpFiles?.find(m => m.id === selectedMmpId)?.name ?? 'This MMP'} — cost submissions waiting for approval
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {financeCosts.length === 0 ? (
+                    <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" /> All cost submissions are approved — no pending items.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="rounded-lg border overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b bg-muted/30">
+                              <th className="px-3 py-2 text-left font-medium">Description / Vendor</th>
+                              <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">Category</th>
+                              <th className="px-3 py-2 text-right font-medium">Amount</th>
+                              <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {financeCosts.map(c => (
+                              <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20">
+                                <td className="px-3 py-2 max-w-[200px] truncate">{c.description || c.vendor || '—'}</td>
+                                <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">{c.expense_category || '—'}</td>
+                                <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                                  {c.amount_cents != null ? `${(c.amount_cents / 100).toLocaleString()} ${c.currency ?? 'SDG'}` : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">{c.expense_date ?? '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/cost-submission?mmpId=${selectedMmpId}&mmpName=${encodeURIComponent(mmpFiles?.find(m => m.id === selectedMmpId)?.name ?? '')}&tab=pending`)}
+                          data-testid="button-open-cost-submission-from-finance-tab"
+                        >
+                          Approve in Cost Submission page
+                          <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Stuck Transport Advances */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-orange-500" />
+                    Transport Advances Pending Payment
+                    {financeAdvances.length > 0 && (
+                      <Badge variant="destructive" className="ml-auto">{financeAdvances.length}</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="text-xs">Advances approved but not yet marked as paid</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {financeAdvances.length === 0 ? (
+                    <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" /> All transport advances are settled.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="rounded-lg border overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b bg-muted/30">
+                              <th className="px-3 py-2 text-left font-medium">Advance ID</th>
+                              <th className="px-3 py-2 text-right font-medium">Amount</th>
+                              <th className="px-3 py-2 text-left font-medium">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {financeAdvances.map(a => (
+                              <tr key={a.id} className="border-b last:border-0 hover:bg-muted/20">
+                                <td className="px-3 py-2 font-mono text-muted-foreground truncate max-w-[160px]">{a.id}</td>
+                                <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                                  {a.amount_cents != null ? `${(a.amount_cents / 100).toLocaleString()} ${a.currency ?? 'SDG'}` : '—'}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Badge variant="outline" className="text-[10px] bg-orange-50 text-orange-700 border-orange-300">{a.status}</Badge>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate('/down-payment-approval?tab=tracker')}
+                          data-testid="button-open-advances-from-finance-tab"
+                        >
+                          Mark Paid in Down-Payments
+                          <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
 
