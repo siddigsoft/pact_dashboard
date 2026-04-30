@@ -124,31 +124,19 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     return q;
   };
 
+  // Always fetch without a join so RLS on mmp_site_entries never silently
+  // drops down_payment_requests rows.  Geographic fields (state/locality/mmpName)
+  // are populated from metadata first, then filled in by the enrichment RPC below.
   let allData: any[] = [];
   let error: any = null;
   for (let _dpf = 0; ; _dpf += 1000) {
-    const { data: _dpp, error: _dpe } = await applyRoleFilter(supabase.from('down_payment_requests').select(DP_SELECT_JOIN)).order('created_at', { ascending: false }).range(_dpf, _dpf + 999);
+    const { data: _dpp, error: _dpe } = await applyRoleFilter(supabase.from('down_payment_requests').select(DP_SELECT_PLAIN)).order('created_at', { ascending: false }).range(_dpf, _dpf + 999);
     if (_dpe) { error = _dpe; break; }
     if (!_dpp) break;
     allData = [...allData, ..._dpp];
     if (_dpp.length < 1000) break;
   }
   let data: any[] | null = allData.length > 0 ? allData : null;
-
-  if (error) {
-    console.warn('[DownPayment] Join query failed, retrying without join:', error.message);
-    let fallbackData: any[] = [];
-    let fallbackError: any = null;
-    for (let _ff = 0; ; _ff += 1000) {
-      const { data: _fp, error: _fe } = await applyRoleFilter(supabase.from('down_payment_requests').select(DP_SELECT_PLAIN)).order('created_at', { ascending: false }).range(_ff, _ff + 999);
-      if (_fe) { fallbackError = _fe; break; }
-      if (!_fp) break;
-      fallbackData = [...fallbackData, ..._fp];
-      if (_fp.length < 1000) break;
-    }
-    data = fallbackData.length > 0 ? fallbackData : null;
-    error = fallbackError;
-  }
 
   if (error) {
     const isPermErr = error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS');
@@ -162,7 +150,10 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
     return true;
   });
 
-  const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName || !r.mmpName) && r.mmpSiteEntryId);
+  // With plain-select (no join), geographic fields come from metadata only.
+  // Enrich all records that have an mmpSiteEntryId so the RPC can fill/correct
+  // state, locality, and mmpName even when metadata already has values.
+  const needsEnrichment = transformed.filter(r => r.mmpSiteEntryId);
   if (needsEnrichment.length > 0) {
     const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))] as string[];
     try {
@@ -177,9 +168,9 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
         transformed.forEach(r => {
           if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
             const e = entryMap.get(r.mmpSiteEntryId)!;
-            if (!r.stateName && e.state) r.stateName = cleanStr(e.state) ?? e.state;
-            if (!r.localityName && e.locality) r.localityName = cleanStr(e.locality) ?? e.locality;
-            if (!r.mmpName && e.mmp_name) r.mmpName = cleanStr(e.mmp_name) ?? e.mmp_name;
+            if (e.state) r.stateName = cleanStr(e.state) ?? e.state;
+            if (e.locality) r.localityName = cleanStr(e.locality) ?? e.locality;
+            if (e.mmp_name) r.mmpName = cleanStr(e.mmp_name) ?? e.mmp_name;
           }
         });
       }
