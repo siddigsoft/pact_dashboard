@@ -30,7 +30,7 @@ import {
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield, ShieldAlert,
   Activity, Target, Layers, SortAsc, SortDesc,
   BookOpen, RotateCcw, HelpCircle, Loader2, DollarSign, Lightbulb,
-  ReceiptText, ExternalLink, PlayCircle,
+  ReceiptText, ExternalLink, PlayCircle, Eye,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -651,6 +651,13 @@ const MMPCycleClose = () => {
   const closingMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => (m as any).cycle_status === 'closing');
   }, [mmpFiles]);
+
+  const pendingApprovalMmps = useMemo(() => {
+    return (mmpFiles || []).filter(m => (m as any).cycle_status === 'pending_approval');
+  }, [mmpFiles]);
+
+  const [bannerRejectMmpId, setBannerRejectMmpId] = useState<string | null>(null);
+  const [bannerRejectNote, setBannerRejectNote] = useState('');
 
   const fetchUncoveredSites = useCallback(async () => {
     setLoading(true);
@@ -2772,6 +2779,132 @@ const MMPCycleClose = () => {
           ))}
         </div>
       )}
+
+      {/* ── Purple "Awaiting Your Approval" banner — shown to FOM / Admin only ── */}
+      {(isFOM || isAdmin) && pendingApprovalMmps.length > 0 && (
+        <div className="mb-4 flex flex-col gap-2">
+          {pendingApprovalMmps.map(mmp => (
+            <div
+              key={mmp.id}
+              className="rounded-xl border border-purple-300 dark:border-purple-700 bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-950/40 dark:to-violet-950/30 px-4 py-4 shadow-sm"
+              data-testid={`banner-pending-approval-${mmp.id}`}
+            >
+              {/* Header row */}
+              <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                <span className="relative flex h-3 w-3 shrink-0 mt-1">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-purple-900 dark:text-purple-100">
+                    ⏳ Awaiting Your Approval — <span className="text-purple-700 dark:text-purple-300">{mmp.name}</span>
+                  </p>
+                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
+                    The admin has completed all closing steps and submitted this cycle for final approval. Review the summary below, then approve to close or reject to send back.
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick stats row */}
+              {siteVisitCounts[mmp.id] && (() => {
+                const c = siteVisitCounts[mmp.id];
+                const completed = c.statusCounts?.['completed'] ?? 0;
+                const notCovered = c.statusCounts?.['not_covered'] ?? 0;
+                const pct = c.total > 0 ? Math.round((completed / c.total) * 100) : 0;
+                return (
+                  <div className="mt-3 grid grid-cols-3 sm:grid-cols-3 gap-2 text-center bg-white/50 dark:bg-black/20 rounded-lg p-2">
+                    <div>
+                      <div className="text-base font-bold text-green-700">{completed}</div>
+                      <div className="text-[10px] text-muted-foreground">Sites Completed</div>
+                    </div>
+                    <div>
+                      <div className="text-base font-bold text-red-500">{notCovered}</div>
+                      <div className="text-[10px] text-muted-foreground">Not Covered</div>
+                    </div>
+                    <div>
+                      <div className="text-base font-bold text-purple-700">{pct}%</div>
+                      <div className="text-[10px] text-muted-foreground">Coverage Rate</div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Action buttons */}
+              <div className="mt-3 flex flex-wrap gap-2 items-center">
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold shadow"
+                  onClick={() => handleApproveCycle(mmp.id)}
+                  data-testid={`button-banner-approve-${mmp.id}`}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  ✓ Approve &amp; Close Cycle
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="gap-1.5 font-semibold shadow"
+                  onClick={() => { setBannerRejectMmpId(mmp.id); setBannerRejectNote(''); }}
+                  data-testid={`button-banner-reject-${mmp.id}`}
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject — Send Back
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs border-purple-300 text-purple-800 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900"
+                  onClick={() => setChecklistMmpId(mmp.id)}
+                  data-testid={`button-banner-review-${mmp.id}`}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  View Full Wizard &amp; Reports
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Reject dialog for banner */}
+      <AlertDialog open={!!bannerRejectMmpId} onOpenChange={open => { if (!open) setBannerRejectMmpId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Cycle Close</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will return the cycle to &quot;Closing&quot; status. The admin will need to resolve the issues and resubmit for approval.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 pb-2">
+            <label className="text-sm font-medium mb-1.5 block">Reason for rejection <span className="text-muted-foreground font-normal">(required)</span></label>
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              rows={3}
+              placeholder="Explain what the team needs to fix before resubmitting..."
+              value={bannerRejectNote}
+              onChange={e => setBannerRejectNote(e.target.value)}
+              data-testid="input-banner-reject-note"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBannerRejectMmpId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!bannerRejectNote.trim()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (bannerRejectMmpId && bannerRejectNote.trim()) {
+                  handleRejectCycle(bannerRejectMmpId, bannerRejectNote.trim());
+                  setBannerRejectMmpId(null);
+                  setBannerRejectNote('');
+                }
+              }}
+              data-testid="button-confirm-banner-reject"
+            >
+              Reject &amp; Send Back
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <PageInfoBanner
         title="MMP Cycle Close - Coverage Management"
