@@ -138,7 +138,7 @@ export function CloseReadinessChecklist({
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">
                       {item.description}
                       {isWarning && (
                         <span className="block mt-0.5 text-amber-700 dark:text-amber-400">

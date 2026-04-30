@@ -71,7 +71,7 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
       // share the same calendar month — giving inflated totals.
       const costSubsQuery = supabase
         .from('operational_cost_submissions')
-        .select('id, tier1_status, tier2_status')
+        .select('id, tier1_status, tier2_status, description, amount_cents, currency, expense_category, vendor, expense_date')
         .eq('mmp_id', mmpId)
         .or('tier1_status.eq.pending,tier2_status.eq.pending');
 
@@ -175,10 +175,25 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           s.not_covered_flag === true ||
           Boolean(s.not_covered_reason),
       ).length;
+      const completedSites = siteVisits.filter(
+        s => (s.status ?? '').toLowerCase().trim() === 'completed',
+      ).length;
       const unresolvedSites = totalSites - resolvedSites;
 
       // ── Cost submissions gate
-      const pendingCostSubs = (costSubsRes.data || []).length;
+      type PendingCostSub = {
+        id: string;
+        tier1_status: string | null;
+        tier2_status: string | null;
+        description: string | null;
+        amount_cents: number | null;
+        currency: string | null;
+        expense_category: string | null;
+        vendor: string | null;
+        expense_date: string | null;
+      };
+      const pendingCostSubRows = (costSubsRes.data || []) as PendingCostSub[];
+      const pendingCostSubs = pendingCostSubRows.length;
 
       // ── Transport advances gate
       const advancesError = Boolean(advancesRes.error);
@@ -231,23 +246,41 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           ? ` for ${new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}`
           : '';
 
+      // Build a human-readable list of pending cost submissions so the user
+      // can see exactly which one(s) are blocking close.
+      const costSubsDescription = (() => {
+        if (pendingCostSubs === 0) {
+          return 'All cost submissions (tier 1 & tier 2) for this cycle are approved or rejected.';
+        }
+        const lines = pendingCostSubRows.slice(0, 3).map(s => {
+          const label = s.vendor || s.description || s.expense_category || 'Unnamed submission';
+          const amt = s.amount_cents != null
+            ? `${(s.amount_cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.currency ?? ''}`.trim()
+            : '';
+          const date = s.expense_date ? new Date(s.expense_date).toLocaleDateString() : '';
+          const parts = [label, amt, date].filter(Boolean);
+          return `• ${parts.join(' — ')}`;
+        });
+        if (pendingCostSubs > 3) lines.push(`• …and ${pendingCostSubs - 3} more`);
+        return `${pendingCostSubs} submission${pendingCostSubs !== 1 ? 's' : ''} still pending approval:\n${lines.join('\n')}`;
+      })();
+
       const newItems: CycleChecklistItem[] = [
         {
           id: 'site_visits',
           label: 'All site visits resolved',
           description: unresolvedSites > 0
             ? `${unresolvedSites} site${unresolvedSites !== 1 ? 's' : ''} still pending — each must be visited (submitted/approved) or officially marked as Not Covered before closing. Go to Uncovered Sites tab to act on them.`
-            : 'All sites are completed, approved, cancelled, or officially marked as not covered.',
+            : `All sites are resolved. ${completedSites} visit${completedSites !== 1 ? 's' : ''} completed; remaining sites are approved, confirmed, or officially marked as not covered.`,
           passed: unresolvedSites === 0,
-          count: resolvedSites,
+          count: completedSites,
           total: totalSites,
           link: `/mmp/cycle-close?tab=uncovered&mmpId=${mmpId}`,
         },
         {
           id: 'cost_submissions',
           label: `No pending cost submissions${cycleLabel}`,
-          description:
-            'All cost submissions (tier 1 & tier 2) for this cycle month must be approved or rejected before closing.',
+          description: costSubsDescription,
           passed: pendingCostSubs === 0,
           count: 0,
           total: pendingCostSubs,
