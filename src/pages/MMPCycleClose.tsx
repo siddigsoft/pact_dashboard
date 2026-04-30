@@ -346,57 +346,53 @@ const MMPCycleClose = () => {
         return;
       }
 
-      // Run two targeted queries in parallel:
-      //   Query A — closing MMPs: sites explicitly marked not_covered
-      //   Query B — active MMPs: sites still pending resolution
-      // This ensures ALL relevant MMPs are represented regardless of mix.
+      // Fetch ALL site entries for relevant MMPs in one paginated pass,
+      // then filter in JavaScript with case-normalisation.
+      //
+      // WHY: PostgreSQL IN() is case-sensitive. Statuses stored as 'Pending',
+      // 'PENDING', or ' pending ' are silently missed by SQL status filters.
+      // Fetching all rows and normalising in JS (same approach as
+      // fetchSiteVisitCounts) is the safest way to catch every variant.
       const PAGE = 1000;
 
-      // ── Query helper: paginate a filtered mmp_site_entries query
-      // For closing MMPs we need to surface BOTH:
-      //   a) sites explicitly flagged as not-covered (not_covered_flag = true)
-      //   b) sites that are still unresolved (pending / assigned / dispatched / accepted)
-      //      — these are the sites the user must still act on during cycle close
-      // Previously only (a) was fetched, so unresolved sites of a closing MMP
-      // were invisible in the Uncovered Sites tab.
-      const fetchClosingPages = async (ids: string[]): Promise<any[]> => {
-        if (ids.length === 0) return [];
-        let all: any[] = [];
-        for (let from = 0; ; from += PAGE) {
-          const { data: pageData, error } = await supabase
-            .from('mmp_site_entries')
-            .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
-            .in('mmp_file_id', ids)
-            .or('not_covered_flag.eq.true,status.in.(pending,assigned,dispatched,accepted)')
-            .range(from, from + PAGE - 1);
-          if (error) throw error;
-          all = [...all, ...(pageData || [])];
-          if (!pageData || pageData.length < PAGE) break;
-        }
-        return all;
-      };
-
-      const fetchActivePages = async (ids: string[]): Promise<any[]> => {
-        if (ids.length === 0) return [];
-        let all: any[] = [];
-        for (let from = 0; ; from += PAGE) {
-          const { data: pageData, error } = await supabase
-            .from('mmp_site_entries')
-            .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
-            .in('mmp_file_id', ids)
-            .in('status', ['pending', 'assigned', 'dispatched', 'accepted'])
-            .range(from, from + PAGE - 1);
-          if (error) throw error;
-          all = [...all, ...(pageData || [])];
-          if (!pageData || pageData.length < PAGE) break;
-        }
-        return all;
-      };
-
-      const [closingData, activeData] = await Promise.all([
-        fetchClosingPages(closingIds),
-        fetchActivePages(activeOnlyIds),
+      const RESOLVED_STATUSES_NORM = new Set([
+        'submitted', 'wfp_confirmed', 'rejected', 'not_covered',
+        'approved', 'cancelled', 'completed', 'verified',
       ]);
+
+      const fetchAllPagesForIds = async (ids: string[]): Promise<any[]> => {
+        if (ids.length === 0) return [];
+        let all: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data: pageData, error } = await supabase
+            .from('mmp_site_entries')
+            .select('id, site_name, site_code, state, locality, status, mmp_file_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
+            .in('mmp_file_id', ids)
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          all = [...all, ...(pageData || [])];
+          if (!pageData || pageData.length < PAGE) break;
+        }
+        return all;
+      };
+
+      const [closingRaw, activeRaw] = await Promise.all([
+        fetchAllPagesForIds(closingIds),
+        fetchAllPagesForIds(activeOnlyIds),
+      ]);
+
+      // For closing MMPs: keep not_covered_flag=true OR any unresolved status
+      const closingData = closingRaw.filter(s => {
+        if (s.not_covered_flag === true) return true;
+        const norm = (s.status ?? '').toLowerCase().trim();
+        return !RESOLVED_STATUSES_NORM.has(norm);
+      });
+
+      // For active MMPs: keep only unresolved statuses
+      const activeData = activeRaw.filter(s => {
+        const norm = (s.status ?? '').toLowerCase().trim();
+        return !RESOLVED_STATUSES_NORM.has(norm);
+      });
 
       // Deduplicate by id in case any entry appears in both sets
       const seen = new Set<string>();
