@@ -175,9 +175,10 @@ export function useCycleCloseReadiness(mmpId: string | null): CycleCloseReadines
           s.not_covered_flag === true ||
           Boolean(s.not_covered_reason),
       ).length;
-      const completedSites = siteVisits.filter(
-        s => (s.status ?? '').toLowerCase().trim() === 'completed',
-      ).length;
+      const completedSites = siteVisits.filter(s => {
+        const st = (s.status ?? '').toLowerCase().trim();
+        return st === 'completed' || st === 'wfp_confirmed';
+      }).length;
       const unresolvedSites = totalSites - resolvedSites;
 
       // ── Cost submissions gate

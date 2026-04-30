@@ -236,7 +236,7 @@ export function CycleMMPCard({
 
   const totalSiteCount = siteVisitCounts?.total || 0;
   const sc = siteVisitCounts?.statusCounts ?? {};
-  const completedCount = sc['completed'] ?? 0;
+  const completedCount = (sc['completed'] ?? 0) + (sc['wfp_confirmed'] ?? 0);
   const coveragePercent = totalSiteCount > 0 ? Math.round((completedCount / totalSiteCount) * 100) : 0;
 
   // Build ordered list of all status entries that have count > 0

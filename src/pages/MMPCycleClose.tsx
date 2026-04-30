@@ -1039,7 +1039,7 @@ const MMPCycleClose = () => {
 
       for (const r of confirmed) {
         await supabase.from('mmp_site_entries')
-          .update({ status: 'wfp_confirmed' })
+          .update({ status: 'completed' })
           .eq('id', r.site_entry_id!);
 
         await logPaymentEvent({
@@ -2610,7 +2610,7 @@ const MMPCycleClose = () => {
     let completedSites = 0;
     Object.values(siteVisitCounts).forEach(c => {
       totalSites += c.total ?? 0;
-      completedSites += c.statusCounts?.['completed'] ?? 0;
+      completedSites += (c.statusCounts?.['completed'] ?? 0) + (c.statusCounts?.['wfp_confirmed'] ?? 0);
     });
     const overallCoverage = totalSites > 0 ? Math.round((completedSites / totalSites) * 100) : 0;
     const totalUncovered = uncoveredSites.length;
@@ -2638,8 +2638,8 @@ const MMPCycleClose = () => {
       if (activeSort === 'name') {
         cmp = (a.name || '').localeCompare(b.name || '');
       } else if (activeSort === 'coverage') {
-        const aCov = siteVisitCounts[a.id] ? ((siteVisitCounts[a.id].statusCounts?.['completed'] ?? 0) / (siteVisitCounts[a.id].total || 1)) : 0;
-        const bCov = siteVisitCounts[b.id] ? ((siteVisitCounts[b.id].statusCounts?.['completed'] ?? 0) / (siteVisitCounts[b.id].total || 1)) : 0;
+        const aCov = siteVisitCounts[a.id] ? (((siteVisitCounts[a.id].statusCounts?.['completed'] ?? 0) + (siteVisitCounts[a.id].statusCounts?.['wfp_confirmed'] ?? 0)) / (siteVisitCounts[a.id].total || 1)) : 0;
+        const bCov = siteVisitCounts[b.id] ? (((siteVisitCounts[b.id].statusCounts?.['completed'] ?? 0) + (siteVisitCounts[b.id].statusCounts?.['wfp_confirmed'] ?? 0)) / (siteVisitCounts[b.id].total || 1)) : 0;
         cmp = aCov - bCov;
       } else {
         const statusOrder: Record<string, number> = { closing: 0, pending_approval: 1, active: 2 };
@@ -2661,7 +2661,7 @@ const MMPCycleClose = () => {
       const counts = siteVisitCounts[m.id];
       if (counts) {
         hubMap[hub].total += counts.total;
-        hubMap[hub].completed += counts.statusCounts?.['completed'] ?? 0;
+        hubMap[hub].completed += (counts.statusCounts?.['completed'] ?? 0) + (counts.statusCounts?.['wfp_confirmed'] ?? 0);
       }
     });
     uncoveredSites.forEach(s => {
@@ -2808,7 +2808,7 @@ const MMPCycleClose = () => {
               {/* Quick stats row */}
               {siteVisitCounts[mmp.id] && (() => {
                 const c = siteVisitCounts[mmp.id];
-                const completed = c.statusCounts?.['completed'] ?? 0;
+                const completed = (c.statusCounts?.['completed'] ?? 0) + (c.statusCounts?.['wfp_confirmed'] ?? 0);
                 const notCovered = c.statusCounts?.['not_covered'] ?? 0;
                 const pct = c.total > 0 ? Math.round((completed / c.total) * 100) : 0;
                 return (
@@ -3562,7 +3562,7 @@ const MMPCycleClose = () => {
                                     {/* Coverage snapshot */}
                                     {siteVisitCounts[checklistMmpId!] && (() => {
                                       const c = siteVisitCounts[checklistMmpId!];
-                                      const completed = c.statusCounts?.['completed'] ?? 0;
+                                      const completed = (c.statusCounts?.['completed'] ?? 0) + (c.statusCounts?.['wfp_confirmed'] ?? 0);
                                       const notCovered = c.statusCounts?.['not_covered'] ?? 0;
                                       return (
                                         <div className="rounded-lg border bg-muted/30 p-3">
