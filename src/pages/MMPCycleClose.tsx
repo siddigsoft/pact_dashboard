@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
@@ -238,6 +238,7 @@ const MMPCycleClose = () => {
   const [comparisonCycle1, setComparisonCycle1] = useState<string>('');
   const [comparisonCycle2, setComparisonCycle2] = useState<string>('');
   const [checklistMmpId, setChecklistMmpId] = useState<string | null>(null);
+  const skipMmpResetRef = useRef(false);
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
   const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
 
@@ -288,6 +289,8 @@ const MMPCycleClose = () => {
   // Called from the Pre-Close Checklist to resolve an item without leaving the page
   const handleChecklistResolveItem = (itemId: string) => {
     const mmpId = checklistMmpId;
+    // Prevent the checklistMmpId→null effect from resetting selectedMmpId to 'all'
+    skipMmpResetRef.current = true;
     setChecklistMmpId(null);
     setPendingScopedClose(null);
     setReconciliationAcknowledged(false);
@@ -304,13 +307,15 @@ const MMPCycleClose = () => {
 
   // When user opens the checklist for an MMP, auto-sync the Uncovered Sites tab filter
   // so navigating there immediately shows only that MMP's sites.
+  // When the checklist is explicitly closed (not resolved), reset to 'all'.
   useEffect(() => {
     setReconciliationAcknowledged(false);
     if (checklistMmpId) {
       setSelectedMmpId(checklistMmpId);
-    } else {
+    } else if (!skipMmpResetRef.current) {
       setSelectedMmpId('all');
     }
+    skipMmpResetRef.current = false;
   }, [checklistMmpId]);
 
   // Derive the first actionable blocker from the readiness checklist
