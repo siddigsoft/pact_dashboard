@@ -195,21 +195,27 @@ export default function UnifiedCostRequestForm({
   const [mmps, setMmps] = useState<MmpOption[]>([]);
   const [mmpsLoading, setMmpsLoading] = useState(false);
 
+  // Compute the hub name as a stable string so the fetch effect only reruns
+  // when the actual hub changes — not when the parent re-renders and hands us
+  // a new `hubs` array reference (which caused the "Loading MMPs…" flash).
+  const resolvedHubName = useMemo(() => {
+    const resolvedHubId = hubId || currentUser?.hubId;
+    return hubs.find(h => h.id === resolvedHubId)?.name ?? null;
+  }, [hubId, currentUser?.hubId, hubs]);
+
   useEffect(() => {
     setMmpsLoading(true);
-    const resolvedHubId = hubId || currentUser?.hubId;
-    const hubName = hubs.find(h => h.id === resolvedHubId)?.name;
     let q = supabase
       .from('mmp_files')
       .select('id, name, month, hub, status')
       .order('uploaded_at', { ascending: false })
       .limit(100);
-    if (hubName) q = q.eq('hub', hubName);
+    if (resolvedHubName) q = q.eq('hub', resolvedHubName);
     q.then(({ data }) => {
       setMmps((data || []) as MmpOption[]);
       setMmpsLoading(false);
     }).catch(() => setMmpsLoading(false));
-  }, [hubId, currentUser?.hubId, hubs]);
+  }, [resolvedHubName]);
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
@@ -717,8 +723,13 @@ export default function UnifiedCostRequestForm({
           <div className="flex gap-2 p-1 bg-muted rounded-lg">
             <Button
               type="button"
-              variant={fundingType === 'advance' ? 'default' : 'ghost'}
-              className={cn("flex-1 gap-2 transition-all", fundingType === 'advance' && "shadow-md")}
+              variant="ghost"
+              className={cn(
+                "flex-1 gap-2 transition-all",
+                fundingType === 'advance'
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}
               onClick={() => setFundingType('advance')}
               data-testid="button-advance"
             >
@@ -729,8 +740,13 @@ export default function UnifiedCostRequestForm({
             </Button>
             <Button
               type="button"
-              variant={fundingType === 'reimbursement' ? 'default' : 'ghost'}
-              className={cn("flex-1 gap-2 transition-all", fundingType === 'reimbursement' && "shadow-md")}
+              variant="ghost"
+              className={cn(
+                "flex-1 gap-2 transition-all",
+                fundingType === 'reimbursement'
+                  ? "bg-green-600 hover:bg-green-700 text-white shadow-md"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}
               onClick={() => setFundingType('reimbursement')}
               data-testid="button-reimbursement"
             >
