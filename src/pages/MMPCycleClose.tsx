@@ -30,7 +30,7 @@ import {
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield, ShieldAlert,
   Activity, Target, Layers, SortAsc, SortDesc,
   BookOpen, RotateCcw, HelpCircle, Loader2, DollarSign, Lightbulb,
-  ReceiptText, ExternalLink,
+  ReceiptText, ExternalLink, PlayCircle,
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -2530,6 +2530,44 @@ const MMPCycleClose = () => {
           )}
         </div>
       </div>
+
+      {/* ── Persistent "Resume Closing" banner ── shown whenever at least one MMP is in closing state */}
+      {closingMmps.length > 0 && (
+        <div className="mb-4 flex flex-col gap-2">
+          {closingMmps.map(mmp => (
+            <div
+              key={mmp.id}
+              className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 dark:border-amber-700 px-4 py-3 shadow-sm"
+              data-testid={`banner-cycle-closing-${mmp.id}`}
+            >
+              {/* Pulsing dot */}
+              <span className="relative flex h-3 w-3 shrink-0 mt-0.5 sm:mt-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500" />
+              </span>
+
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 truncate">
+                  Cycle closing in progress: <span className="text-amber-700 dark:text-amber-300">{mmp.name}</span>
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  You have unfinished closing steps. Open the wizard to see exactly what to do next.
+                </p>
+              </div>
+
+              <Button
+                size="sm"
+                className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white gap-1.5 text-xs font-semibold shadow"
+                onClick={() => setChecklistMmpId(mmp.id)}
+                data-testid={`button-resume-wizard-${mmp.id}`}
+              >
+                <PlayCircle className="h-3.5 w-3.5" />
+                Resume — see what to do next
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <PageInfoBanner
         title="MMP Cycle Close - Coverage Management"
