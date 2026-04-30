@@ -177,9 +177,9 @@ async function fetchDownPaymentRequests(user: UserForDownPayment): Promise<DownP
         transformed.forEach(r => {
           if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
             const e = entryMap.get(r.mmpSiteEntryId)!;
-            if (!r.stateName && e.state) r.stateName = e.state;
-            if (!r.localityName && e.locality) r.localityName = e.locality;
-            if (!r.mmpName && e.mmp_name) r.mmpName = e.mmp_name;
+            if (!r.stateName && e.state) r.stateName = cleanStr(e.state) ?? e.state;
+            if (!r.localityName && e.locality) r.localityName = cleanStr(e.locality) ?? e.locality;
+            if (!r.mmpName && e.mmp_name) r.mmpName = cleanStr(e.mmp_name) ?? e.mmp_name;
           }
         });
       }
