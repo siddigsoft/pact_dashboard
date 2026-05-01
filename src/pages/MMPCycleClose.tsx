@@ -412,6 +412,7 @@ const MMPCycleClose = () => {
         .not('enumerator_fee', 'is', null)
         .order('site_name');
       if (siteEntries && siteEntries.length > 0) {
+        // Build name map by UUID (accepted_by)
         const enumeratorIds = [...new Set((siteEntries as any[]).map((e: any) => e.accepted_by).filter(Boolean))];
         const enumNameMap: Record<string, string> = {};
         if (enumeratorIds.length > 0) {
@@ -423,9 +424,25 @@ const MMPCycleClose = () => {
             enumNameMap[p.id] = p.display_name || p.full_name || 'Unknown';
           });
         }
+        // Build name map by email (monitoring_by stores email)
+        const monitoringEmails = [...new Set((siteEntries as any[]).map((e: any) => e.monitoring_by).filter(Boolean))];
+        const enumByEmailMap: Record<string, string> = {};
+        if (monitoringEmails.length > 0) {
+          const { data: emailProfiles } = await supabase
+            .from('profiles')
+            .select('email, full_name, display_name')
+            .in('email', monitoringEmails);
+          (emailProfiles || []).forEach((p: any) => {
+            if (p.email) enumByEmailMap[p.email] = p.display_name || p.full_name || p.email;
+          });
+        }
         enumeratorCosts = (siteEntries as any[]).map((e: any) => ({
           id: e.id,
-          enumeratorName: enumNameMap[e.accepted_by] || e.monitoring_by || 'Unassigned',
+          enumeratorName:
+            enumNameMap[e.accepted_by] ||
+            enumByEmailMap[e.monitoring_by] ||
+            e.monitoring_by ||
+            'Unassigned',
           siteName: e.site_name || '—',
           siteCode: e.site_code || '—',
           state: e.state || '—',
@@ -4230,53 +4247,96 @@ const MMPCycleClose = () => {
                                     })()}
 
                                     {/* Enumerator Costs */}
-                                    {cycleSummaryData.enumeratorCosts.length > 0 && (
-                                      <div className="rounded-lg border overflow-hidden">
-                                        <div className="px-3 py-2 bg-green-50 dark:bg-green-950/40 text-xs font-semibold flex items-center gap-2">
-                                          <span>👤 Enumerator & Transport Costs (Site Visits)</span>
-                                          <Badge variant="secondary" className="ml-auto text-[10px]">
-                                            {cycleSummaryData.enumeratorCosts.length} sites
-                                          </Badge>
-                                        </div>
-                                        <div className="overflow-x-auto">
-                                          <table className="w-full text-xs">
-                                            <thead>
-                                              <tr className="border-b bg-muted/20">
-                                                <th className="px-3 py-1.5 text-left font-medium">Enumerator</th>
-                                                <th className="px-3 py-1.5 text-left font-medium">Site</th>
-                                                <th className="px-3 py-1.5 text-left font-medium">State / Locality</th>
-                                                <th className="px-3 py-1.5 text-right font-medium text-blue-700">Enum. Fee</th>
-                                                <th className="px-3 py-1.5 text-right font-medium text-indigo-700">Transport</th>
-                                                <th className="px-3 py-1.5 text-right font-medium font-semibold">Total</th>
-                                                <th className="px-3 py-1.5 text-center font-medium">Ack.</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {cycleSummaryData.enumeratorCosts.map(e => (
-                                                <tr key={e.id} className="border-b last:border-0 hover:bg-muted/10">
-                                                  <td className="px-3 py-1.5 font-medium">{e.enumeratorName}</td>
-                                                  <td className="px-3 py-1.5 text-muted-foreground max-w-[110px] truncate">{e.siteName}</td>
-                                                  <td className="px-3 py-1.5 text-muted-foreground text-[11px]">{e.state}{e.locality && e.locality !== '—' ? ` / ${e.locality}` : ''}</td>
-                                                  <td className="px-3 py-1.5 text-right font-mono text-blue-700">{e.enumeratorFee > 0 ? `${e.enumeratorFee.toLocaleString()} ${e.currency}` : '—'}</td>
-                                                  <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{e.transportFee > 0 ? `${e.transportFee.toLocaleString()} ${e.currency}` : '—'}</td>
-                                                  <td className="px-3 py-1.5 text-right font-mono font-semibold">{e.totalCost.toLocaleString()} {e.currency}</td>
-                                                  <td className="px-3 py-1.5 text-center">{e.costAcknowledged ? <span className="text-green-600">✓</span> : <span className="text-muted-foreground">—</span>}</td>
+                                    {cycleSummaryData.enumeratorCosts.length > 0 && (() => {
+                                      const statusMeta: Record<string, { label: string; cls: string; action: string }> = {
+                                        pending:       { label: 'Pending',       cls: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',     action: 'Needs to be assigned to an enumerator' },
+                                        assigned:      { label: 'Assigned',      cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',      action: 'Awaiting dispatch to the field' },
+                                        dispatched:    { label: 'Dispatched',    cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300', action: 'Awaiting enumerator acceptance' },
+                                        accepted:      { label: 'In Progress',   cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',   action: 'Visit ongoing — awaiting completion' },
+                                        completed:     { label: 'Completed',     cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',       action: 'Awaiting WFP confirmation' },
+                                        wfp_confirmed: { label: 'WFP Confirmed', cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',   action: '' },
+                                        cancelled:     { label: 'Cancelled',     cls: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',           action: 'Site visit cancelled' },
+                                        not_covered:   { label: 'Not Covered',   cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300', action: 'Requires justification / reason' },
+                                        unknown:       { label: 'Unknown',       cls: 'bg-gray-100 text-gray-500',                                            action: 'Status unclear — check site entry' },
+                                      };
+                                      const getAction = (e: EnumeratorCostDetail) => {
+                                        const base = statusMeta[e.status]?.action || statusMeta.unknown.action;
+                                        if (e.status === 'wfp_confirmed') {
+                                          return e.costAcknowledged ? '✓ Done — cost acknowledged' : 'Cost not yet acknowledged by enumerator';
+                                        }
+                                        if (e.status === 'completed' && e.costAcknowledged) return 'Cost acknowledged — awaiting WFP confirmation';
+                                        return base;
+                                      };
+                                      const ackCount = cycleSummaryData.enumeratorCosts.filter(e => e.costAcknowledged).length;
+                                      const doneCount = cycleSummaryData.enumeratorCosts.filter(e => e.status === 'wfp_confirmed').length;
+                                      return (
+                                        <div className="rounded-lg border overflow-hidden">
+                                          <div className="px-3 py-2 bg-green-50 dark:bg-green-950/40 text-xs font-semibold flex items-center gap-2 flex-wrap">
+                                            <span>👤 Enumerator & Transport Costs (Site Visits)</span>
+                                            <Badge variant="secondary" className="text-[10px]">{cycleSummaryData.enumeratorCosts.length} sites</Badge>
+                                            <span className="ml-auto flex gap-1.5">
+                                              <span className="rounded-full px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px] font-medium">{doneCount} WFP Confirmed</span>
+                                              <span className="rounded-full px-2 py-0.5 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 text-[10px] font-medium">{ackCount} Cost Ack.</span>
+                                            </span>
+                                          </div>
+                                          <div className="overflow-x-auto">
+                                            <table className="w-full text-xs">
+                                              <thead>
+                                                <tr className="border-b bg-muted/20">
+                                                  <th className="px-3 py-1.5 text-left font-medium">Enumerator</th>
+                                                  <th className="px-3 py-1.5 text-left font-medium">Site</th>
+                                                  <th className="px-3 py-1.5 text-left font-medium">State / Locality</th>
+                                                  <th className="px-3 py-1.5 text-right font-medium text-blue-700">Enum. Fee</th>
+                                                  <th className="px-3 py-1.5 text-right font-medium text-indigo-700">Transport</th>
+                                                  <th className="px-3 py-1.5 text-right font-semibold">Total</th>
+                                                  <th className="px-3 py-1.5 text-center font-medium">Status</th>
+                                                  <th className="px-3 py-1.5 text-left font-medium">Action / Notes</th>
                                                 </tr>
-                                              ))}
-                                            </tbody>
-                                            <tfoot>
-                                              <tr className="bg-muted/30 font-semibold">
-                                                <td className="px-3 py-1.5" colSpan={3}>Total</td>
-                                                <td className="px-3 py-1.5 text-right font-mono text-blue-700">{cycleSummaryData.totalEnumeratorFee.toLocaleString()} {cycleSummaryData.currency}</td>
-                                                <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{cycleSummaryData.totalTransportFee.toLocaleString()} {cycleSummaryData.currency}</td>
-                                                <td className="px-3 py-1.5 text-right font-mono">{(cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee).toLocaleString()} {cycleSummaryData.currency}</td>
-                                                <td />
-                                              </tr>
-                                            </tfoot>
-                                          </table>
+                                              </thead>
+                                              <tbody>
+                                                {cycleSummaryData.enumeratorCosts.map(e => {
+                                                  const meta = statusMeta[e.status] || statusMeta.unknown;
+                                                  const action = getAction(e);
+                                                  const isDone = e.status === 'wfp_confirmed' && e.costAcknowledged;
+                                                  return (
+                                                    <tr key={e.id} className={`border-b last:border-0 hover:bg-muted/10 ${isDone ? '' : 'bg-amber-50/30 dark:bg-amber-950/10'}`}>
+                                                      <td className="px-3 py-1.5 font-medium whitespace-nowrap">
+                                                        {e.enumeratorName === 'Unassigned'
+                                                          ? <span className="text-muted-foreground italic">Unassigned</span>
+                                                          : e.enumeratorName}
+                                                      </td>
+                                                      <td className="px-3 py-1.5 text-muted-foreground max-w-[110px] truncate">{e.siteName}</td>
+                                                      <td className="px-3 py-1.5 text-muted-foreground text-[11px] whitespace-nowrap">{e.state}{e.locality && e.locality !== '—' ? ` / ${e.locality}` : ''}</td>
+                                                      <td className="px-3 py-1.5 text-right font-mono text-blue-700">{e.enumeratorFee > 0 ? `${e.enumeratorFee.toLocaleString()} ${e.currency}` : '—'}</td>
+                                                      <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{e.transportFee > 0 ? `${e.transportFee.toLocaleString()} ${e.currency}` : '—'}</td>
+                                                      <td className="px-3 py-1.5 text-right font-mono font-semibold">{e.totalCost.toLocaleString()} {e.currency}</td>
+                                                      <td className="px-3 py-1.5 text-center">
+                                                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${meta.cls}`}>{meta.label}</span>
+                                                      </td>
+                                                      <td className="px-3 py-1.5 text-[11px] max-w-[180px]">
+                                                        {isDone
+                                                          ? <span className="text-green-600 font-medium">✓ Complete</span>
+                                                          : <span className={e.status === 'wfp_confirmed' ? 'text-amber-600' : 'text-muted-foreground'}>{action}</span>
+                                                        }
+                                                      </td>
+                                                    </tr>
+                                                  );
+                                                })}
+                                              </tbody>
+                                              <tfoot>
+                                                <tr className="bg-muted/30 font-semibold">
+                                                  <td className="px-3 py-1.5" colSpan={3}>Total</td>
+                                                  <td className="px-3 py-1.5 text-right font-mono text-blue-700">{cycleSummaryData.totalEnumeratorFee.toLocaleString()} {cycleSummaryData.currency}</td>
+                                                  <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{cycleSummaryData.totalTransportFee.toLocaleString()} {cycleSummaryData.currency}</td>
+                                                  <td className="px-3 py-1.5 text-right font-mono">{(cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee).toLocaleString()} {cycleSummaryData.currency}</td>
+                                                  <td colSpan={2} />
+                                                </tr>
+                                              </tfoot>
+                                            </table>
+                                          </div>
                                         </div>
-                                      </div>
-                                    )}
+                                      );
+                                    })()}
 
                                     {cycleSummaryData.costSubs.length === 0 && cycleSummaryData.advances.length === 0 && cycleSummaryData.withdrawals.length === 0 && cycleSummaryData.enumeratorCosts.length === 0 && (
                                       <p className="text-xs text-muted-foreground text-center py-2">No cost submissions, advances, withdrawal requests, or enumerator costs found for this cycle.</p>
