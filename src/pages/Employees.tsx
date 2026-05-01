@@ -27,6 +27,7 @@ import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
 import { useGlobalPresence } from "@/context/presence/GlobalPresenceContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/context/user/UserContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { PageInfoBanner } from "@/components/financial/PageInfoBanner";
 import {
@@ -1257,7 +1258,8 @@ export default function Employees() {
     }
   }, []);
 
-  const canEdit = !!(currentUser?.role && ['super_admin', 'admin', 'country_director', 'fom', 'financial_auditor'].includes(currentUser.role));
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const canEdit = isSuperAdmin() || hasAnyRole(['admin', 'countryDirector', 'fom', 'financialAdmin', 'hrManager', 'hr']);
 
   const [profiles, setProfiles] = useState<EmployeeProfile[]>([]);
   const [dbHubs, setDbHubs]     = useState<{ id: string; name: string }[]>([]);
