@@ -276,6 +276,16 @@ export const navigationConfig: NavigationGroup[] = [
         priority: 30,
         roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
         description: 'Budget management'
+      },
+      {
+        id: 'enumerator-fees-report',
+        icon: Receipt,
+        label: 'Enumerator Fees',
+        path: '/enumerator-fees-report',
+        category: 'tertiary',
+        priority: 29,
+        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
+        description: 'Track and report enumerator fees across MMP cycles'
       }
     ],
     roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole, 'Coordinator' as AppRole, 'DataCollector' as AppRole]

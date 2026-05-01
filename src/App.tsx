@@ -75,6 +75,7 @@ const WithdrawalApproval = lazy(() => import('./pages/WithdrawalApproval'));
 const FinanceApproval = lazy(() => import('./pages/FinanceApproval'));
 const DownPaymentApproval = lazy(() => import('./pages/DownPaymentApproval'));
 const AdvanceRequestsReport = lazy(() => import('./pages/AdvanceRequestsReport'));
+const EnumeratorFeesReport = lazy(() => import('./pages/EnumeratorFeesReport'));
 const SupervisorApprovals = lazy(() => import('./pages/SupervisorApprovals'));
 const WalletReports = lazy(() => import('./pages/WalletReports'));
 const BudgetPage = lazy(() => import('./pages/Budget'));
@@ -407,6 +408,7 @@ const AppRoutes = () => {
         <Route path="/finance-approval" element={<FinanceApproval />} />
         <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
         <Route path="/advance-requests-report" element={<AdvanceRequestsReport />} />
+        <Route path="/enumerator-fees-report" element={<EnumeratorFeesReport />} />
         <Route path="/down-payment-advance-report" element={<Navigate to="/advance-requests-report" replace />} />
         <Route path="/cost-predictions" element={<CostPredictions />} />
         <Route path="/exchange-rates" element={<ExchangeRates />} />
