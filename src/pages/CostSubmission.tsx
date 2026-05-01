@@ -182,7 +182,7 @@ const CostSubmission = () => {
   const isFinanceAdmin    = hasAnyRole(['financialAdmin']);
   const isDataTeam        = hasAnyRole(['dataTeam']);
 
-  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam;
+  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
   
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;

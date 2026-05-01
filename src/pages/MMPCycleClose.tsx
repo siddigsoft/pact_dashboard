@@ -189,7 +189,7 @@ const FOLLOW_UP_ACTIONS: Record<string, string> = {
 const MMPCycleClose = () => {
   const { currentUser } = useAppContext();
   const { mmpFiles, refreshMMPFiles } = useMMP();
-  const { hasAnyRole } = useAuthorization();
+  const { hasAnyRole, isSuperAdmin: isSuperAdminCheck } = useAuthorization();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -660,10 +660,10 @@ const MMPCycleClose = () => {
 
   // Role flags — declared here (before guideSteps) to avoid temporal dead zone.
   // Previously declared after guideSteps which caused "Cannot access before initialization".
-  const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
-  const isSuperAdmin = hasAnyRole(['super_admin', 'Super Admin']);
-  const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
-  const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
+  const isSuperAdmin = isSuperAdminCheck();
+  const isAdmin = isSuperAdmin || hasAnyRole(['admin']);
+  const isSupervisor = hasAnyRole(['supervisor']);
+  const isFOM = hasAnyRole(['fom']);
   const canManageCycle = isAdmin || isSuperAdmin;
   const canAssignReasons = isAdmin || isSupervisor || isFOM;
 

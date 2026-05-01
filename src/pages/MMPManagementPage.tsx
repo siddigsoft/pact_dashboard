@@ -9,11 +9,8 @@ import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
-// Use the correct AppRole value for field operation manager (per schema)
-const FIELD_OP_ROLE = 'Field Operation Manager (FOM)';
-
 const FieldOperationManagerPage = () => {
-  const { currentUser, roles } = useAppContext();
+  const { currentUser } = useAppContext();
   const { mmpFiles, deleteMMPFile } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
   const [deleteId, setDeleteId] = useState<string|null>(null);
@@ -21,10 +18,10 @@ const FieldOperationManagerPage = () => {
   const navigate = useNavigate();
 
   // Check if user can delete MMPs (only admin and ICT can delete)
-  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['Admin', 'ICT']);
+  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['admin', 'ict']);
 
   // Use the correct role value
-  const allowed = roles?.includes('Admin') || roles?.includes(FIELD_OP_ROLE);
+  const allowed = hasAnyRole(['admin', 'ict', 'fom', 'superAdmin']);
   if (!allowed) {
     return (
       <div className="max-w-xl mx-auto mt-20 p-8 bg-white rounded-xl shadow text-center">

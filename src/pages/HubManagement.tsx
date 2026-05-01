@@ -85,7 +85,7 @@ export default function HubManagement() {
   });
 
   const userRole = currentUser?.role?.toLowerCase() || '';
-  const canManage = isSuperAdmin || userRole === 'admin' || userRole === 'superadmin' || userRole === 'super_admin';
+  const canManage = isSuperAdmin || userRole === 'admin';
 
   useEffect(() => {
     loadData();

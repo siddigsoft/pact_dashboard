@@ -237,7 +237,7 @@ export default function CostPredictions() {
   const isSupervisor = useMemo(() => {
     if (!currentUser) return false;
     const role = (currentUser.role || '').toLowerCase();
-    const isAdmin = hasAnyRole(['admin', 'ict', 'super_admin', 'superadmin', 'fom', 'finance', 'financialadmin']);
+    const isAdmin = hasAnyRole(['admin', 'ict', 'superAdmin', 'fom', 'financialAdmin']);
     return (hasAnyRole(['supervisor', 'Supervisor', 'hubsupervisor']) || role === 'supervisor' || role === 'hubsupervisor') && !isAdmin;
   }, [currentUser, hasAnyRole]);
   

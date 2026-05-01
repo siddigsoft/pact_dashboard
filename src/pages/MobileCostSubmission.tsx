@@ -126,7 +126,7 @@ const MobileCostSubmission = () => {
   const isSuperAdmin = isAdminOrSuperUser || isSuperAdminFn();
   const isFinanceAdmin = hasAnyRole(['financialAdmin']);
 
-  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser;
+  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataCollector;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
   const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser || isFOM || isCountryDirector;
 
