@@ -4070,22 +4070,25 @@ const MMPCycleClose = () => {
                                     {/* ── Settlement Card — accounting obligations at a glance ── */}
                                     {(() => {
                                       const cur = cycleSummaryData.currency;
-                                      // WFP-confirmed site fees
-                                      const wfpEntries = cycleSummaryData.enumeratorCosts.filter(e => e.status === 'wfp_confirmed');
+                                      // ALL payable statuses — fees are owed once a visit is done,
+                                      // regardless of whether WFP confirmation has been applied yet
+                                      const PAYABLE = ['wfp_confirmed','verified','completed','approved'];
+                                      const payableEntries  = cycleSummaryData.enumeratorCosts.filter(e => PAYABLE.includes(e.status));
+                                      const payableEnumFee  = payableEntries.reduce((s, e) => s + (e.enumeratorFee  ?? 0), 0);
+                                      const payableTransport= payableEntries.reduce((s, e) => s + (e.transportFee   ?? 0), 0);
+                                      // WFP-confirmed subset — for the impact line only
+                                      const wfpEntries   = cycleSummaryData.enumeratorCosts.filter(e => e.status === 'wfp_confirmed');
                                       const wfpEnumFee   = wfpEntries.reduce((s, e) => s + (e.enumeratorFee  ?? 0), 0);
                                       const wfpTransport = wfpEntries.reduce((s, e) => s + (e.transportFee   ?? 0), 0);
                                       const wfpSiteCount = wfpEntries.length;
-                                      // All terminal-status enumerator+transport (wfp_confirmed + verified)
-                                      const confirmedEntries = cycleSummaryData.enumeratorCosts.filter(e => ['wfp_confirmed','verified'].includes(e.status));
-                                      const confirmedEnumFee   = confirmedEntries.reduce((s, e) => s + (e.enumeratorFee  ?? 0), 0);
-                                      const confirmedTransport = confirmedEntries.reduce((s, e) => s + (e.transportFee   ?? 0), 0);
-                                      // Pending (completed but awaiting WFP)
-                                      const pendingEntries = cycleSummaryData.enumeratorCosts.filter(e => ['completed','approved'].includes(e.status));
-                                      const pendingFees = pendingEntries.reduce((s, e) => s + (e.totalCost ?? 0), 0);
+                                      // How many payable sites are still awaiting WFP confirmation
+                                      const awaitingWfpFees = payableEntries
+                                        .filter(e => ['completed','approved'].includes(e.status))
+                                        .reduce((s, e) => s + (e.totalCost ?? 0), 0);
                                       // Approved operational costs
                                       const approvedOp = cycleSummaryData.totalApprovedCents / 100;
-                                      // Total to pay out (confirmed site fees + approved op costs)
-                                      const totalPayOut = confirmedEnumFee + confirmedTransport + approvedOp;
+                                      // Total to pay out = all payable site fees + approved op costs
+                                      const totalPayOut = payableEnumFee + payableTransport + approvedOp;
                                       // Outstanding advances to recover
                                       const totalRecover = cycleSummaryData.advanceDetails.reduce((s, a) => s + Math.max(0, a.remainingAmount ?? 0), 0);
                                       // Net
@@ -4113,21 +4116,21 @@ const MMPCycleClose = () => {
                                               <p className="text-[11px] font-bold text-green-800 dark:text-green-300 uppercase tracking-wide">➕ Pay to Field Staff</p>
                                               <div className="space-y-1 text-xs">
                                                 <div className="flex justify-between">
-                                                  <span className="text-muted-foreground">Enumerator fees (confirmed)</span>
-                                                  <span className="font-mono font-semibold">{confirmedEnumFee.toLocaleString()} {cur}</span>
+                                                  <span className="text-muted-foreground">Enumerator fees (visited sites)</span>
+                                                  <span className="font-mono font-semibold">{payableEnumFee.toLocaleString()} {cur}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                  <span className="text-muted-foreground">Transport (confirmed)</span>
-                                                  <span className="font-mono font-semibold">{confirmedTransport.toLocaleString()} {cur}</span>
+                                                  <span className="text-muted-foreground">Transport (visited sites)</span>
+                                                  <span className="font-mono font-semibold">{payableTransport.toLocaleString()} {cur}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                   <span className="text-muted-foreground">Approved op. costs</span>
                                                   <span className="font-mono font-semibold">{approvedOp.toLocaleString()} {cur}</span>
                                                 </div>
-                                                {pendingFees > 0 && (
+                                                {awaitingWfpFees > 0 && (
                                                   <div className="flex justify-between text-amber-700 dark:text-amber-400">
-                                                    <span className="italic">Pending WFP confirmation</span>
-                                                    <span className="font-mono">({pendingFees.toLocaleString()} {cur})</span>
+                                                    <span className="italic">↳ incl. awaiting WFP confirm</span>
+                                                    <span className="font-mono">{awaitingWfpFees.toLocaleString()} {cur}</span>
                                                   </div>
                                                 )}
                                                 <div className="flex justify-between border-t border-green-200 dark:border-green-800 pt-1 mt-1 font-semibold text-green-800 dark:text-green-300">
