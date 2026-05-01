@@ -3617,57 +3617,62 @@ const CostSubmission = () => {
                       return (
                         <div>
                           {/* Clickable navy header */}
-                          <button
-                            className="w-full text-left focus:outline-none"
-                            onClick={() => toggleGroup(groupId!)}
-                            data-testid={`button-group-toggle-${groupId}`}
+                          {/* Navy header row: checkbox + collapse button side-by-side */}
+                          <div
+                            className="flex items-stretch bg-gradient-to-r from-[#0F2041] to-[#1D3461]"
+                            style={{ borderLeft: `4px solid ${projPalette.border}` }}
                           >
-                            <div
-                              className="bg-gradient-to-r from-[#0F2041] to-[#1D3461] px-4 py-3"
-                              style={{ borderLeft: `4px solid ${projPalette.border}` }}
+                            {/* ── Group-level checkbox (outside the toggle button) ── */}
+                            {groupPayableItems.length > 0 && (
+                              <div
+                                className="flex-none flex flex-col items-center justify-center px-3 cursor-pointer hover:bg-white/10 border-r border-white/10 gap-1"
+                                onClick={handleGroupCheckbox}
+                                data-testid={`checkbox-group-${groupId}`}
+                                title="Select all payable items in this group for batch payment"
+                              >
+                                <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                  groupAllSelected
+                                    ? 'bg-green-500 border-green-400'
+                                    : groupSomeSelected
+                                      ? 'bg-green-500/50 border-green-400'
+                                      : 'bg-white/15 border-white/50 hover:border-white'
+                                }`}>
+                                  {groupAllSelected && <Check className="h-3 w-3 text-white" />}
+                                  {groupSomeSelected && !groupAllSelected && <div className="h-2 w-2 rounded-sm bg-white" />}
+                                </div>
+                                <span className="text-[9px] text-white/50 leading-none">All</span>
+                              </div>
+                            )}
+
+                            {/* ── Collapse / expand toggle button ── */}
+                            <button
+                              className="flex-1 text-left focus:outline-none px-4 py-3"
+                              onClick={() => toggleGroup(groupId!)}
+                              data-testid={`button-group-toggle-${groupId}`}
                             >
                               <div className="flex items-start gap-3">
-                                {groupPayableItems.length > 0 && (
-                                  <div
-                                    className="flex-none mt-0.5 cursor-pointer"
-                                    onClick={handleGroupCheckbox}
-                                    data-testid={`checkbox-group-${groupId}`}
-                                    title="Select all payable items in this group"
-                                  >
-                                    <div className={`h-4 w-4 rounded border-2 flex items-center justify-center transition-colors ${
-                                      groupAllSelected
-                                        ? 'bg-green-500 border-green-400'
-                                        : groupSomeSelected
-                                          ? 'bg-green-500/50 border-green-400'
-                                          : 'bg-white/10 border-white/40 hover:border-white/70'
-                                    }`}>
-                                      {groupAllSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                                      {groupSomeSelected && !groupAllSelected && <div className="h-1.5 w-1.5 rounded-sm bg-white" />}
-                                    </div>
-                                  </div>
-                                )}
                                 <div className="flex-none mt-0.5">
                                   <Layers className="h-4 w-4 text-white/70" />
                                 </div>
                                 <div className="flex-1 min-w-0 space-y-1.5">
                                   <p className="font-semibold text-[14px] leading-snug text-white line-clamp-2">{groupTitle}</p>
-                                   <div className="flex items-center gap-2 flex-wrap text-[11px]">
-                                     {linkedProjectName && (
-                                       <span
-                                         className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
-                                         style={{ backgroundColor: projPalette.bg, color: projPalette.text, border: `1px solid ${projPalette.border}40` }}
-                                       >
-                                         <Briefcase className="h-3 w-3" />{linkedProjectName}
-                                       </span>
-                                     )}
-                                     {linkedMmpName && (
-                                       <span className="flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold">
-                                         <ClipboardCheck className="h-3 w-3" />{linkedMmpName}
-                                       </span>
-                                     )}
-                                     {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
-                                      <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy h:mm a')}</span>
-                                   </div>
+                                  <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                    {linkedProjectName && (
+                                      <span
+                                        className="flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
+                                        style={{ backgroundColor: projPalette.bg, color: projPalette.text, border: `1px solid ${projPalette.border}40` }}
+                                      >
+                                        <Briefcase className="h-3 w-3" />{linkedProjectName}
+                                      </span>
+                                    )}
+                                    {linkedMmpName && (
+                                      <span className="flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-semibold">
+                                        <ClipboardCheck className="h-3 w-3" />{linkedMmpName}
+                                      </span>
+                                    )}
+                                    {canViewTeamSubmissions && <span className="flex items-center gap-1 text-white/60"><Users className="h-3 w-3" />{submitterName}</span>}
+                                    <span className="flex items-center gap-1 text-white/60"><Calendar className="h-3 w-3" />{format(new Date(groupItems[0].created_at), 'MMM d, yyyy h:mm a')}</span>
+                                  </div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white">
                                       <Layers className="h-2.5 w-2.5" /> {groupItems.length} expense items
@@ -3700,14 +3705,14 @@ const CostSubmission = () => {
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                            {/* Progress bar */}
-                            <div className="h-1 bg-[#0F2041] flex">
-                              <div className="bg-green-400 transition-all duration-300" style={{ width: `${(approvedCnt / groupItems.length) * 100}%` }} />
-                              <div className="bg-amber-400 transition-all duration-300" style={{ width: `${(pendingCnt / groupItems.length) * 100}%` }} />
-                              <div className="bg-red-400 transition-all duration-300" style={{ width: `${(rejectedCnt / groupItems.length) * 100}%` }} />
-                            </div>
-                          </button>
+                            </button>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="h-1 bg-[#0F2041] flex">
+                            <div className="bg-green-400 transition-all duration-300" style={{ width: `${(approvedCnt / groupItems.length) * 100}%` }} />
+                            <div className="bg-amber-400 transition-all duration-300" style={{ width: `${(pendingCnt / groupItems.length) * 100}%` }} />
+                            <div className="bg-red-400 transition-all duration-300" style={{ width: `${(rejectedCnt / groupItems.length) * 100}%` }} />
+                          </div>
 
                           {/* Send to Finance / Mark Paid All — visible when approved items exist in this group */}
                           {approvedCnt > 0 && (
