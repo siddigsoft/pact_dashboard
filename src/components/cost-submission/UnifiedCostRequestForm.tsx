@@ -199,20 +199,18 @@ export default function UnifiedCostRequestForm({
     // mmp_file_id isn't cleared immediately on mount.
     const firstRenderRef = useRef(true);
 
-    // Load MMPs when project changes — filter by project_id (include unassigned)
+    // Load MMPs when project changes — filter by project_id (include unassigned).
+    // When no project is selected, load all MMPs so the user is never blocked.
     useEffect(() => {
      setMmpsLoading(true);
-     if (!projectId) {
-       setMmps([]);
-       setMmpsLoading(false);
-       return;
-     }
      let q = supabase
        .from('mmp_files')
        .select('id, name, month, hub, status')
        .order('uploaded_at', { ascending: false })
-       .limit(100)
-       .or(`project_id.eq.${projectId},project_id.is.null`);
+       .limit(200);
+     if (projectId) {
+       q = (q as any).or(`project_id.eq.${projectId},project_id.is.null`);
+     }
      q.then(({ data }) => {
        setMmps((data || []) as MmpOption[]);
        setMmpsLoading(false);
@@ -433,7 +431,9 @@ export default function UnifiedCostRequestForm({
       toast({ title: "Title Required", description: "Please enter a request title (at least 3 characters).", variant: "destructive" });
       return;
     }
-    if (!mmpId) {
+    // MMP is required only when the list is populated — if no MMPs exist for the
+    // selected project we should not block submission entirely.
+    if (!mmpId && mmps.length > 0) {
       toast({ title: "MMP Required", description: "Please select the Monthly Monitoring Plan (MMP) this cost is related to.", variant: "destructive" });
       return;
     }
@@ -825,23 +825,33 @@ export default function UnifiedCostRequestForm({
             </div>
           </div>
 
-          {/* MMP — mandatory */}
-          <div className="border-l-[3px] border-rose-400 pl-3 rounded-r-xl">
-            <Label className="text-sm font-semibold text-rose-600 mb-1.5 flex items-center gap-1.5">
+          {/* MMP — required when MMPs are available, optional otherwise */}
+          <div className={cn("border-l-[3px] pl-3 rounded-r-xl", mmps.length > 0 ? "border-rose-400" : "border-muted-foreground/30")}>
+            <Label className={cn("text-sm font-semibold mb-1.5 flex items-center gap-1.5", mmps.length > 0 ? "text-rose-600" : "text-muted-foreground")}>
               <ClipboardList className="h-4 w-4" />
               Monthly Monitoring Plan (MMP)
-              <span className="text-rose-500 font-bold">*</span>
-              <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold">Required</span>
+              {mmps.length > 0 ? (
+                <>
+                  <span className="text-rose-500 font-bold">*</span>
+                  <span className="ml-auto text-[9px] bg-rose-100 text-rose-500 px-1.5 py-0.5 rounded-full font-semibold">Required</span>
+                </>
+              ) : (
+                <span className="ml-auto text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-semibold">Optional</span>
+              )}
             </Label>
-            <Select onValueChange={setMmpId} value={mmpId} disabled={mmpsLoading}>
+            <Select onValueChange={setMmpId} value={mmpId} disabled={mmpsLoading || mmps.length === 0}>
               <SelectTrigger
                 data-testid="select-mmp"
                 className={cn(
                   "transition-colors",
-                  !mmpId ? "border-rose-300 bg-rose-50/40 focus:ring-rose-300/40 focus:border-rose-400" : "border-input"
+                  mmps.length > 0 && !mmpId ? "border-rose-300 bg-rose-50/40 focus:ring-rose-300/40 focus:border-rose-400" : "border-input"
                 )}
               >
-                <SelectValue placeholder={mmpsLoading ? "Loading MMPs…" : mmps.length === 0 ? "No MMPs available for selected project" : "Select the MMP this cost relates to…"} />
+                <SelectValue placeholder={
+                  mmpsLoading ? "Loading MMPs…" :
+                  mmps.length === 0 ? "No MMPs available — you may submit without one" :
+                  "Select the MMP this cost relates to…"
+                } />
               </SelectTrigger>
               <SelectContent>
                 {mmpsLoading ? (
@@ -850,7 +860,7 @@ export default function UnifiedCostRequestForm({
                   </SelectItem>
                 ) : mmps.length === 0 ? (
                   <SelectItem value="__NONE__" disabled>
-                    No MMPs available for selected project
+                    No MMPs available
                   </SelectItem>
                 ) : (
                   mmps.map((mmp) => (
@@ -861,6 +871,9 @@ export default function UnifiedCostRequestForm({
                 )}
               </SelectContent>
             </Select>
+            {mmps.length === 0 && !mmpsLoading && (
+              <p className="text-xs text-muted-foreground mt-1">No MMPs found — your request will still be submitted and can be linked to an MMP later by an admin.</p>
+            )}
           </div>
 
           <div>
