@@ -173,7 +173,6 @@ const RetainerManagement = () => {
           .select('*')
           .eq('has_retainer', true)
           .eq('is_active', true)
-          .ilike('role_scope', '%coordinator%')
       ]);
 
       if (txResult.data) {
