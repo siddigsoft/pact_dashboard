@@ -407,7 +407,7 @@ const MMPCycleClose = () => {
       let enumeratorCosts: EnumeratorCostDetail[] = [];
       const { data: siteEntries } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, enumerator_fee, transport_fee, cost, cost_acknowledged')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged')
         .eq('mmp_file_id', mmpId)
         .not('enumerator_fee', 'is', null)
         .order('site_name');
@@ -425,7 +425,7 @@ const MMPCycleClose = () => {
         }
         enumeratorCosts = (siteEntries as any[]).map((e: any) => ({
           id: e.id,
-          enumeratorName: enumNameMap[e.accepted_by] || 'Unassigned',
+          enumeratorName: enumNameMap[e.accepted_by] || e.monitoring_by || 'Unassigned',
           siteName: e.site_name || '—',
           siteCode: e.site_code || '—',
           state: e.state || '—',
@@ -4051,13 +4051,50 @@ const MMPCycleClose = () => {
                                     )}
 
                                     {/* Transport Advances — per person */}
-                                    {cycleSummaryData.advanceDetails.length > 0 && (
-                                      <div className="rounded-lg border overflow-hidden">
-                                        <div className="px-3 py-2 bg-blue-50 dark:bg-blue-950/40 text-xs font-semibold flex items-center gap-2">
-                                          <span>🚗 Transport Advances (Down-Payments)</span>
-                                          <Badge variant="secondary" className="ml-auto text-[10px]">
-                                            {cycleSummaryData.advanceDetails.length} advance{cycleSummaryData.advanceDetails.length !== 1 ? 's' : ''}
-                                          </Badge>
+                                    {cycleSummaryData.advanceDetails.length > 0 && (() => {
+                                      const totalAdv = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.requestedAmount, 0);
+                                      const totalPaid = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.paidAmount, 0);
+                                      const totalRem = cycleSummaryData.advanceDetails.reduce((s, a) => s + a.remainingAmount, 0);
+                                      const fullyPaidCount = cycleSummaryData.advanceDetails.filter(a => a.remainingAmount <= 0).length;
+                                      const unpaidCount = cycleSummaryData.advanceDetails.length - fullyPaidCount;
+                                      const allSettled = totalRem <= 0;
+                                      return (
+                                        <>
+                                          {/* Advance Payment Status Summary Card */}
+                                          <div className={`rounded-lg border-2 p-3 ${allSettled ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950/30' : 'border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30'}`}>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className="text-sm font-bold">{allSettled ? '✅' : '⚠️'} Transport Advance Payment Status</span>
+                                              <Badge className={`ml-auto text-xs ${allSettled ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200'}`}>
+                                                {allSettled ? 'All Settled' : `${unpaidCount} Outstanding`}
+                                              </Badge>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                              <div className="rounded bg-white/60 dark:bg-black/20 p-2">
+                                                <div className="text-base font-bold text-blue-700 dark:text-blue-300">{totalAdv.toLocaleString()}</div>
+                                                <div className="text-muted-foreground mt-0.5">Total Issued ({cycleSummaryData.currency})</div>
+                                              </div>
+                                              <div className="rounded bg-white/60 dark:bg-black/20 p-2">
+                                                <div className="text-base font-bold text-green-700 dark:text-green-300">{totalPaid.toLocaleString()}</div>
+                                                <div className="text-muted-foreground mt-0.5">Paid Back ({cycleSummaryData.currency})</div>
+                                              </div>
+                                              <div className={`rounded p-2 ${totalRem > 0 ? 'bg-orange-100/80 dark:bg-orange-900/30' : 'bg-green-100/80 dark:bg-green-900/30'}`}>
+                                                <div className={`text-base font-bold ${totalRem > 0 ? 'text-orange-700 dark:text-orange-300' : 'text-green-700 dark:text-green-300'}`}>{totalRem > 0 ? totalRem.toLocaleString() : '✓ 0'}</div>
+                                                <div className="text-muted-foreground mt-0.5">Remaining ({cycleSummaryData.currency})</div>
+                                              </div>
+                                            </div>
+                                            <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
+                                              <span className="text-green-700 dark:text-green-400 font-medium">✓ {fullyPaidCount} fully paid</span>
+                                              {unpaidCount > 0 && <span className="text-orange-700 dark:text-orange-400 font-medium">⚠ {unpaidCount} still outstanding — must settle before cycle closes</span>}
+                                            </div>
+                                          </div>
+
+                                          {/* Advance detail table */}
+                                          <div className="rounded-lg border overflow-hidden">
+                                            <div className="px-3 py-2 bg-blue-50 dark:bg-blue-950/40 text-xs font-semibold flex items-center gap-2">
+                                              <span>🚗 Transport Advances — Per Person Breakdown</span>
+                                              <Badge variant="secondary" className="ml-auto text-[10px]">
+                                                {cycleSummaryData.advanceDetails.length} advance{cycleSummaryData.advanceDetails.length !== 1 ? 's' : ''}
+                                              </Badge>
                                         </div>
                                         <div className="overflow-x-auto">
                                           <table className="w-full text-xs">
@@ -4109,7 +4146,9 @@ const MMPCycleClose = () => {
                                           </table>
                                         </div>
                                       </div>
-                                    )}
+                                    </>
+                                  );
+                                })()}
 
                                     {/* Withdrawal Requests */}
                                     {cycleSummaryData.withdrawals.length > 0 && (
