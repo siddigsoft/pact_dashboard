@@ -3892,6 +3892,129 @@ const CostSubmission = () => {
                               </button>
                             </div>
                           </div>
+
+                          {/* ── Action bar for compact row ─────────────────────────────────── */}
+                          <div className="flex items-center gap-2 px-4 py-2 border-t border-[#1D3461]/10 flex-wrap bg-gray-50/50 dark:bg-gray-900/20">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setViewingSubmission(oc)}
+                              data-testid={`button-view-details-${oc.id}`}
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View Details
+                            </Button>
+                            {getOperationalDerivedStatus(oc) === 'approved' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={() => handleDownloadCertificate(oc)}
+                                data-testid={`button-download-certificate-${oc.id}`}
+                              >
+                                <Download className="h-3 w-3 mr-1" />
+                                PDF
+                              </Button>
+                            )}
+                            {canRequestPayment(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                                onClick={() => openPaymentRequestDialog(oc)}
+                                disabled={actionProcessing}
+                                data-testid={`button-request-payment-${oc.id}`}
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                Request Payment
+                              </Button>
+                            )}
+                            {canMarkAsPaid(oc) && (
+                              <Button
+                                size="sm"
+                                className="h-7 px-2.5 text-xs bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => handleMarkAsPaid(oc)}
+                                disabled={actionProcessing}
+                                data-testid={`button-mark-paid-${oc.id}`}
+                              >
+                                <Wallet className="h-3 w-3 mr-1" />
+                                Mark Paid
+                              </Button>
+                            )}
+                            {derivedStatus === 'paid' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={() => { setActiveReconciliation(oc); setActiveTab('reconciliation'); }}
+                                data-testid={`button-reconcile-${oc.id}`}
+                              >
+                                <Receipt className="h-3 w-3 mr-1" />
+                                Reconcile
+                              </Button>
+                            )}
+                            {(isSuperAdmin || isAdmin) && !['rejected', 'cancelled', 'reconciled'].includes(derivedStatus) && !canRequestPayment(oc) && !canMarkAsPaid(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
+                                onClick={() => openBulkCostEmailDialog(oc)}
+                                data-testid={`button-send-finance-${oc.id}`}
+                              >
+                                <Mail className="h-3 w-3 mr-1" />
+                                Send to Finance
+                              </Button>
+                            )}
+                            <div className="flex-1" />
+                            {canEditSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={() => handleEditSubmission(oc)}
+                                data-testid={`button-edit-submission-${oc.id}`}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
+                            )}
+                            {canResubmitSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={() => handleEditSubmission(oc)}
+                                data-testid={`button-resubmit-submission-${oc.id}`}
+                              >
+                                <SendHorizonal className="h-3 w-3 mr-1" />
+                                Resubmit
+                              </Button>
+                            )}
+                            {canDeleteSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={() => setDeleteConfirm(oc)}
+                                data-testid={`button-delete-submission-${oc.id}`}
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Delete
+                              </Button>
+                            )}
+                            {canRecallSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={() => setRecallConfirm(oc)}
+                                data-testid={`button-recall-submission-${oc.id}`}
+                              >
+                                <RotateCcw className="h-3 w-3 mr-1" />
+                                Recall
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       );
                     }
