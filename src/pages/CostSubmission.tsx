@@ -3754,11 +3754,20 @@ const CostSubmission = () => {
                       const isRejected = derivedStatus === 'rejected';
                       return (
                         <div key={oc.id} data-testid={`operational-cost-${oc.id}`}
-                          className={`border-b border-[#1D3461]/10 last:border-b-0 ${isApproved ? 'bg-green-50/60 dark:bg-green-950/20' : isRejected ? 'bg-red-50/40 dark:bg-red-950/20' : 'bg-white dark:bg-background'}`}>
+                          className={`border-b border-[#1D3461]/10 last:border-b-0 ${selectedCostIds.has(oc.id) ? 'bg-emerald-50/40 dark:bg-emerald-950/15' : isApproved ? 'bg-green-50/60 dark:bg-green-950/20' : isRejected ? 'bg-red-50/40 dark:bg-red-950/20' : 'bg-white dark:bg-background'}`}>
                           <div className="flex items-start gap-2.5 px-4 py-3">
-                            {/* Row number */}
+                            {/* Row number / select checkbox */}
                             <div className="w-5 flex-none text-center pt-1">
-                              <span className="text-[10px] font-bold text-gray-400">{idx + 1}</span>
+                              {canMarkAsPaid(oc) ? (
+                                <Checkbox
+                                  id={`select-cost-${oc.id}`}
+                                  checked={selectedCostIds.has(oc.id)}
+                                  onCheckedChange={() => toggleCostSelection(oc.id)}
+                                  data-testid={`checkbox-select-cost-${oc.id}`}
+                                />
+                              ) : (
+                                <span className="text-[10px] font-bold text-gray-400">{idx + 1}</span>
+                              )}
                             </div>
                             {/* Category icon */}
                             <div className="flex-none h-7 w-7 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
