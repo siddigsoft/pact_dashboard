@@ -20,7 +20,7 @@ import {
   FileText, FileDown, GitBranch, UserX,
   TrendingDown, Banknote, ChevronDown, ChevronUp, AlertTriangle,
   Landmark, LayoutGrid, List, Shield, Layers, Briefcase,
-  Download, FileSpreadsheet,
+  Download, FileSpreadsheet, Wand2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
@@ -245,6 +245,21 @@ function EmployeeDetail({
   /* ── Employment registration (admin-only) ── */
   const [empIdDraft, setEmpIdDraft]         = useState(profile.employee_id || '');
   const [savingEmp, setSavingEmp]           = useState(false);
+  const [generatingId, setGeneratingId]     = useState(false);
+
+  const generateEmpId = async () => {
+    setGeneratingId(true);
+    const { data, error } = await supabase.rpc('generate_next_employee_id');
+    if (!error && data) setEmpIdDraft(data as string);
+    setGeneratingId(false);
+  };
+
+  useEffect(() => {
+    if (!profile.is_employee && !profile.employee_id) {
+      generateEmpId();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
 
   const saveEmployment = async (markAsEmployee: boolean) => {
     setSavingEmp(true);
@@ -510,13 +525,26 @@ function EmployeeDetail({
               </div>
               <div className="flex items-center gap-2 mb-2.5">
                 <div className="flex-1">
-                  <p className="text-[10px] text-muted-foreground mb-1">Employee ID</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[10px] text-muted-foreground">Employee ID</p>
+                    <button
+                      type="button"
+                      onClick={generateEmpId}
+                      disabled={generatingId || savingEmp}
+                      title="Auto-generate next PACT ID"
+                      className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 disabled:opacity-40 transition-colors"
+                      data-testid="button-generate-employee-id"
+                    >
+                      {generatingId ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                      Auto-generate
+                    </button>
+                  </div>
                   <div className="flex gap-1.5">
                     <input
                       type="text"
                       value={empIdDraft}
                       onChange={e => setEmpIdDraft(e.target.value)}
-                      placeholder="e.g. EMP-001"
+                      placeholder="PACT-0001"
                       className="flex-1 text-xs border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring font-mono"
                       data-testid="input-employee-id"
                     />
