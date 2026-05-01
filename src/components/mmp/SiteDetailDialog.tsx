@@ -1128,11 +1128,11 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{new Date(row.createdAt).toLocaleString()}</p>
                   </div>
                 )}
-                {row.completedAt && (
-                  <div data-testid="block-completed-on">
-                    <Label className="text-xs font-medium text-gray-600">Completed On</Label>
+                {(row.completedAt || row.updatedAt) && (
+                  <div data-testid="block-first-completed-on">
+                    <Label className="text-xs font-medium text-gray-600">First Completed On</Label>
                     <p className="font-medium text-gray-900 mt-1">
-                      {new Date(row.completedAt).toLocaleString()}
+                      {new Date(row.completedAt || row.updatedAt!).toLocaleString()}
                       {row.isLegacyFallbackCompleted && (
                         <span className="text-[11px] text-amber-600 dark:text-amber-400 font-normal ml-1" data-testid="badge-legacy-completion">
                           (legacy record)
@@ -1146,19 +1146,6 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     </p>
                   </div>
                 )}
-                {row.updatedAt && (() => {
-                  if (row.completedAt) {
-                    const diffMs = Math.abs(new Date(row.updatedAt).getTime() - new Date(row.completedAt).getTime());
-                    if (diffMs < 60_000) return null;
-                  }
-                  return (
-                    <div data-testid="block-last-edited">
-                      <Label className="text-xs font-medium text-gray-600">Last Edited</Label>
-                      <p className="font-medium text-gray-900 mt-1">{new Date(row.updatedAt).toLocaleString()}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">Bumps on every edit (notes, fees, status)</p>
-                    </div>
-                  );
-                })()}
                 {row.verificationNotes && (
                   <div className="sm:col-span-2">
                     <Label className="text-xs font-medium text-gray-600">Verification Notes</Label>

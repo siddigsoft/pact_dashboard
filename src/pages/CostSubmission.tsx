@@ -634,9 +634,9 @@ const CostSubmission = () => {
   };
 
   const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
-    // Supervisors and Coordinators now share the same 2-tier flow (FOM → Admin).
-    // Tier 3 only applies to legacy records that already have tier3_status set.
-    return oc.tier3_status !== null && oc.tier3_status !== undefined;
+    // Coordinators use a 3-tier flow; Supervisors use 2-tier.
+    // Also activates for any record that already has tier3_status set (legacy).
+    return isCoordinatorSubmission(oc) || (oc.tier3_status !== null && oc.tier3_status !== undefined);
   };
 
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
@@ -664,7 +664,10 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    // Supervisor and Coordinator share the same hierarchy: FOM or Country Director reviews Tier 1
+    // Coordinator submissions: Supervisor reviews Tier 1
+    if (isCoordinatorSubmission(oc)) return isSupervisor;
+    // Supervisor submissions: FOM or Country Director reviews Tier 1
+    if (isSupervisorSubmission(oc)) return isFOM || isCountryDirector;
     return isFOM || isCountryDirector;
   };
 
@@ -674,7 +677,9 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    // Supervisor and Coordinator: Admin/Super Admin approves Tier 2 (handled above)
+    // Coordinator submissions: FOM/Country Director reviews Tier 2
+    if (isCoordinatorSubmission(oc)) return isFOM || isCountryDirector;
+    // Supervisor submissions: Admin/Super Admin is Tier 2 (already handled above)
     return false;
   };
 
@@ -1109,28 +1114,76 @@ const CostSubmission = () => {
           });
         }
 
-        // Notify the submitter of the outcome
+        // 1️⃣ Notify the submitter on EVERY tier action (email + WhatsApp always)
         if (submission.submitted_by) {
           const approverName = (currentUser as any)?.name || (currentUser as any)?.fullName || 'Reviewer';
+          const tierArMap2: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' };
           NotificationTriggerService.send({
             userId: submission.submitted_by,
             title: action === 'approve'
               ? isFinal
-                ? 'Cost Submission Fully Approved / تمت الموافقة الكاملة على المطالبة'
-                : `Cost Submission: Tier ${tier} Approved / تمت الموافقة على المرحلة ${tier}`
-              : 'Cost Submission Rejected / تم رفض المطالبة',
+                ? 'Cost Submission Fully Approved ✅ / تمت الموافقة الكاملة على المطالبة'
+                : `Cost Submission: Tier ${tier} Approved — Advancing / تمت الموافقة على المرحلة ${tierArMap2[tier]} وجارٍ رفعه`
+              : `Cost Submission Rejected at Tier ${tier} / تم رفض الطلب في المرحلة ${tierArMap2[tier]}`,
             message: action === 'approve'
               ? isFinal
-                ? `Your cost submission "${refNum}" (${amountStr}) has been fully approved by ${approverName} and cleared for payment.`
-                : `Your cost submission "${refNum}" (${amountStr}) has been approved at Tier ${tier} by ${approverName} and moved to the next review stage.`
-              : `Your cost submission "${refNum}" (${amountStr}) was rejected at Tier ${tier} by ${approverName}. Reason: ${notes || 'Not specified'}. You may edit and resubmit.`,
+                ? `Your cost submission "${refNum}" (${amountStr}) has been fully approved by ${approverName} and cleared for payment. You will receive the funds shortly.`
+                : `Your cost submission "${refNum}" (${amountStr}) passed Tier ${tier} review by ${approverName}. It has been forwarded to the next approver (Tier ${tier + 1}).`
+              : `Your cost submission "${refNum}" (${amountStr}) was rejected at Tier ${tier} by ${approverName}. Reason: ${notes || 'Not specified'}. Please edit and resubmit.`,
             type: action === 'approve' ? 'success' : 'error',
             category: 'financial',
-            priority: action === 'approve' ? (isFinal ? 'high' : 'normal') : 'high',
+            priority: 'high',
             link: '/cost-submission',
-            sendEmail: isFinal || action === 'reject',
+            relatedEntityType: 'costSubmission',
+            relatedEntityId: submission.id,
+            sendEmail: true,
             emailActionLabel: 'View Submission',
           }).catch(console.warn);
+        }
+
+        // 2️⃣ When a tier is approved and more remain, notify the next-tier approvers
+        //    so they know the submission is waiting for them.
+        if (action === 'approve' && !isFinal) {
+          // Determine which roles should review the next tier
+          let nextRoles: string[] = [];
+          const nextTierNum = tier + 1;
+
+          if (isCoordinatorSubmission(submission)) {
+            // Coordinator: T1=Supervisor, T2=FOM/CD, T3=Admin
+            if (tier === 1) nextRoles = ['Field Operation Manager (FOM)', 'fom', 'CountryDirector'];
+            if (tier === 2) nextRoles = ['Admin', 'SuperAdmin', 'super_admin', 'SuperAdmin'];
+          } else if (isSupervisorSubmission(submission)) {
+            // Supervisor: T1=FOM/CD, T2=Admin
+            if (tier === 1) nextRoles = ['Admin', 'SuperAdmin', 'super_admin'];
+          } else {
+            // Default fallback
+            if (tier === 1) nextRoles = ['Admin', 'SuperAdmin', 'super_admin', 'Field Operation Manager (FOM)', 'fom'];
+          }
+
+          if (nextRoles.length > 0) {
+            supabase
+              .from('profiles')
+              .select('id, name')
+              .in('role', nextRoles)
+              .eq('status', 'approved')
+              .then(({ data: nextApprovers }) => {
+                (nextApprovers || []).forEach(approver => {
+                  NotificationTriggerService.send({
+                    userId: approver.id,
+                    title: `Action Required: Cost Submission — Tier ${nextTierNum} Review / مطلوب إجراء: مراجعة المرحلة ${nextTierNum}`,
+                    message: `Submission "${refNum}" (${amountStr}) by ${submitterName} has passed Tier ${tier} and is now waiting for your Tier ${nextTierNum} review. Please approve or reject.`,
+                    type: 'info',
+                    category: 'financial',
+                    priority: 'high',
+                    link: '/cost-submission',
+                    relatedEntityType: 'costSubmission',
+                    relatedEntityId: submission.id,
+                    sendEmail: true,
+                    emailActionLabel: 'Review Now',
+                  }).catch(console.warn);
+                });
+              }).catch(console.warn);
+          }
         }
 
         fetchOperationalCosts();
