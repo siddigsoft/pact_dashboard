@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, memo, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, memo, useTransition, type ReactNode } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -117,7 +117,7 @@ function VirtualizedRequestList({
   return (
     <div className="max-h-[70vh] overflow-y-auto rounded-md space-y-3 pr-1">
       {requests.map((request) => (
-        <div key={request.id}>
+        <div key={request.id} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 250px' }}>
           {renderCard(request)}
         </div>
       ))}
@@ -130,6 +130,14 @@ const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
   users?: Array<{ id: string; email?: string; [key: string]: unknown }>;
 }) {
   const [activeTab, setActiveTab] = useState<'state' | 'hub' | 'locality' | 'requester'>('state');
+
+  if (requests.length === 0) {
+    return (
+      <div className="border rounded-md flex items-center justify-center h-[200px]">
+        <p className="text-sm text-muted-foreground animate-pulse">Computing summary… / جارٍ تحميل الملخص…</p>
+      </div>
+    );
+  }
 
   // Pre-build O(1) user lookup map — avoids O(n×m) find() on every render
   const userMap = useMemo(() => {
@@ -228,6 +236,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
   const { toast } = useToast();
+  const [, startTransition] = useTransition();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
@@ -267,7 +276,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     sendMode: 'pdf' | 'excel';
     showPreview: boolean;
     usdRate: string;
-  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf', showPreview: false, usdRate: '' });
+    bulkMeta: { count: number; total: number };
+  }>({ open: false, request: null, bulkRequests: [], bulkMeta: { count: 0, total: 0 }, isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf', showPreview: false, usdRate: '' });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
   const [markAsPaidDialog, setMarkAsPaidDialog] = useState<{
@@ -1162,17 +1172,26 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const openBulkPaymentRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
+    const meta = { count: reqs.length, total: reqs.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0) };
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+      // Open dialog shell immediately with correct counts — defer heavy bulkRequests array via transition
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: [], bulkMeta: meta, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+      startTransition(() => {
+        setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
+      });
       loadFinanceRecipients(true).then(fresh => {
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
       }).catch(() => {});
     } else {
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+      const meta2 = meta;
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: [], bulkMeta: meta2, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
       try {
         const recipients = await loadFinanceRecipients();
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
+        startTransition(() => {
+          setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
+        });
       } catch {
         setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
         toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
@@ -1181,17 +1200,24 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   };
 
   const openBulkExcelRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
+    const meta = { count: reqs.length, total: reqs.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0) };
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: [], bulkMeta: meta, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      startTransition(() => {
+        setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
+      });
       loadFinanceRecipients(true).then(fresh => {
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
       }).catch(() => {});
     } else {
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: [], bulkMeta: meta, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
       try {
         const recipients = await loadFinanceRecipients();
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
+        startTransition(() => {
+          setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
+        });
       } catch {
         setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
         toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
@@ -1602,7 +1628,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       console.error('[DownPayment] handleSendPaymentRequest failed:', err);
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' });
+      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], bulkMeta: { count: 0, total: 0 }, isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' });
     }
   };
 
@@ -4288,7 +4314,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         />
       )}
 
-      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' }); }}>
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], bulkMeta: { count: 0, total: 0 }, isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' }); }}>
         <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
             <DialogTitle>
@@ -4301,14 +4327,14 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             <DialogDescription>
               {paymentRequestDialog.isBulk
                 ? paymentRequestDialog.sendMode === 'excel'
-                  ? `Send a formatted Excel report for ${paymentRequestDialog.bulkRequests.length} advance(s) to the finance team. / إرسال تقرير Excel منسق لـ ${paymentRequestDialog.bulkRequests.length} سلفة إلى فريق المالية.`
-                  : `Send one email with a summary PDF for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
+                  ? `Send a formatted Excel report for ${paymentRequestDialog.bulkMeta.count} advance(s) to the finance team. / إرسال تقرير Excel منسق لـ ${paymentRequestDialog.bulkMeta.count} سلفة إلى فريق المالية.`
+                  : `Send one email with a summary PDF for ${paymentRequestDialog.bulkMeta.count} approved advance(s) to finance team.`
                 : 'Send payment request email to finance team with the approval certificate attached.'}
             </DialogDescription>
-            {paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length > 0 && (
+            {paymentRequestDialog.isBulk && paymentRequestDialog.bulkMeta.count > 0 && (
               <div className="mt-2 flex items-center gap-3 text-sm">
-                <Badge variant="secondary" className="font-semibold">{paymentRequestDialog.bulkRequests.length} request(s)</Badge>
-                <span className="font-semibold text-green-600 dark:text-green-400">SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</span>
+                <Badge variant="secondary" className="font-semibold">{paymentRequestDialog.bulkMeta.count} request(s)</Badge>
+                <span className="font-semibold text-green-600 dark:text-green-400">SDG {paymentRequestDialog.bulkMeta.total.toLocaleString()}</span>
                 {paymentRequestDialog.bulkGroupBy && (
                   <Badge variant="outline" className="text-xs">{paymentRequestDialog.bulkGroupBy}: {paymentRequestDialog.bulkGroupValue}</Badge>
                 )}
@@ -4322,7 +4348,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             </div>
           ) : (
             <div className="space-y-4">
-              {paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length > 0 && (
+              {paymentRequestDialog.isBulk && paymentRequestDialog.bulkMeta.count > 0 && (
                 <div className="space-y-3">
                   <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
                     {paymentRequestDialog.bulkGroupBy && (
@@ -4334,11 +4360,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <div>
                         <p className="text-xs text-muted-foreground">Total Requests</p>
-                        <p className="font-semibold">{paymentRequestDialog.bulkRequests.length}</p>
+                        <p className="font-semibold">{paymentRequestDialog.bulkMeta.count}</p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Total Amount</p>
-                        <p className="font-semibold">SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</p>
+                        <p className="font-semibold">SDG {paymentRequestDialog.bulkMeta.total.toLocaleString()}</p>
                       </div>
                     </div>
                     {/* USD Rate input */}
@@ -4360,9 +4386,9 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                         />
                         {paymentRequestDialog.usdRate && !isNaN(parseFloat(paymentRequestDialog.usdRate)) && parseFloat(paymentRequestDialog.usdRate) > 0 && (() => {
                           const rate = parseFloat(paymentRequestDialog.usdRate);
-                          const totalSdg = paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+                          const totalSdg = paymentRequestDialog.bulkMeta.total;
                           const totalUsd = totalSdg / rate;
-                          const perReq = paymentRequestDialog.bulkRequests.length > 0 ? totalUsd / paymentRequestDialog.bulkRequests.length : 0;
+                          const perReq = paymentRequestDialog.bulkMeta.count > 0 ? totalUsd / paymentRequestDialog.bulkMeta.count : 0;
                           return (
                             <div className="flex flex-col">
                               <span className="text-xs font-bold text-blue-700">≈ USD {totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -4414,10 +4440,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       {paymentRequestDialog.sendMode === 'excel'
-                        ? `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkRequests.length} requests will both be attached.`
-                        : paymentRequestDialog.bulkRequests.length > 30
+                        ? `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkMeta.count} requests will both be attached.`
+                        : paymentRequestDialog.bulkMeta.count > 30
                           ? `Excel (6 sheets) will be attached. PDF is too large for direct attachment — a download link will be included in the email body.`
-                          : `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkRequests.length} requests will both be attached.`
+                          : `Excel workbook (6 sheets) + signed PDF certificates for all ${paymentRequestDialog.bulkMeta.count} requests will both be attached.`
                       }
                     </p>
                   </div>
@@ -4526,7 +4552,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     ? <FileSpreadsheet className="h-3 w-3 text-green-700 dark:text-green-400" />
                     : <FileText className="h-3 w-3 text-green-700 dark:text-green-400" />}
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    Attached: {paymentRequestDialog.bulkRequests.length > 30 ? 'Excel (6 sheets) + PDF download link in body' : 'Excel (6 sheets) + Signed PDF Certificates'}
+                    Attached: {paymentRequestDialog.bulkMeta.count > 30 ? 'Excel (6 sheets) + PDF download link in body' : 'Excel (6 sheets) + Signed PDF Certificates'}
                   </span>
                 </div>
               </div>
@@ -4566,7 +4592,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               <>
                 <Button
                   variant="outline"
-                  onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' })}
+                  onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], bulkMeta: { count: 0, total: 0 }, isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' })}
                   data-testid="button-cancel-payment-request"
                 >
                   Cancel
