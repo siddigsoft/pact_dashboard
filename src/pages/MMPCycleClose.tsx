@@ -224,6 +224,8 @@ const MMPCycleClose = () => {
   }, [searchParams, mmpFiles]);
   const [closedCycles, setClosedCycles] = useState<ClosedCycleRecord[]>([]);
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null);
+  const [reopenConfirmId, setReopenConfirmId] = useState<string | null>(null);
+  const [reopeningCycle, setReopeningCycle] = useState(false);
   const [saving, setSaving] = useState(false);
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
@@ -2537,6 +2539,26 @@ const MMPCycleClose = () => {
       toast({ title: 'Error', description: err.message || 'Failed to submit for approval', variant: 'destructive' });
     } finally {
       setFinalizingCycle(false);
+    }
+  };
+
+  const handleReopenCycle = async (mmpId: string) => {
+    setReopeningCycle(true);
+    try {
+      const { error } = await supabase
+        .from('mmp_files')
+        .update({ cycle_status: 'active', cycle_closed_at: null } as any)
+        .eq('id', mmpId);
+      if (error) throw error;
+      setClosedCycles(prev => prev.filter(c => c.id !== mmpId));
+      setReopenConfirmId(null);
+      setExpandedCycle(null);
+      await refreshMMPFiles();
+      toast({ title: 'Cycle Re-opened', description: 'The cycle has been returned to Active status. You can now make corrections and re-close when ready.' });
+    } catch (err: any) {
+      toast({ title: 'Re-open Failed', description: err?.message || 'Could not re-open the cycle. Please try again.', variant: 'destructive' });
+    } finally {
+      setReopeningCycle(false);
     }
   };
 
@@ -5704,13 +5726,24 @@ const MMPCycleClose = () => {
                               ))}
                             </div>
                           )}
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             <Button size="sm" variant="outline" onClick={() => exportCoverageReport(cycle.id)} data-testid={`button-export-csv-${cycle.id}`}>
                               <Download className="h-3 w-3 mr-1" /> CSV
                             </Button>
                             <Button size="sm" variant="outline" onClick={() => exportCoverageReportExcel(cycle.id)} data-testid={`button-export-xlsx-${cycle.id}`}>
                               <FileSpreadsheet className="h-3 w-3 mr-1" /> Excel
                             </Button>
+                            {(isAdmin || isSuperAdmin) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="ml-auto border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30 gap-1.5"
+                                onClick={() => setReopenConfirmId(cycle.id)}
+                                data-testid={`button-reopen-cycle-${cycle.id}`}
+                              >
+                                <RefreshCw className="h-3 w-3" /> Re-open Cycle
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       )}
@@ -5766,6 +5799,43 @@ const MMPCycleClose = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Re-open Cycle Confirmation Dialog */}
+      <Dialog open={!!reopenConfirmId} onOpenChange={(open) => { if (!open) setReopenConfirmId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-amber-500" /> Re-open Closed Cycle
+            </DialogTitle>
+            <DialogDescription>
+              This will return the cycle to <strong>Active</strong> status so you can make corrections and re-close it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 space-y-1.5">
+              <p className="font-semibold">⚠️ Before re-opening, be aware:</p>
+              <ul className="space-y-1 pl-3 list-disc">
+                <li>All cycle close progress (reasons, finance clearance) is preserved — nothing is lost.</li>
+                <li>The cycle will reappear in the Active MMPs tab.</li>
+                <li>You will need to re-run the close process and get approval again.</li>
+                <li>Any archived financial records remain unchanged.</li>
+              </ul>
+            </div>
+            <p className="text-sm text-muted-foreground">Are you sure you want to re-open this cycle?</p>
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="outline" onClick={() => setReopenConfirmId(null)} disabled={reopeningCycle}>Cancel</Button>
+            <Button
+              className="bg-amber-500 hover:bg-amber-600 text-white gap-1.5"
+              onClick={() => reopenConfirmId && handleReopenCycle(reopenConfirmId)}
+              disabled={reopeningCycle}
+              data-testid="button-confirm-reopen"
+            >
+              {reopeningCycle ? <><Loader2 className="h-4 w-4 animate-spin" /> Re-opening…</> : <><RefreshCw className="h-4 w-4" /> Yes, Re-open Cycle</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Phase B: Cost Recovery Dialog */}
       {costRecoveryDialogState && (
