@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import { format } from 'date-fns';
+import { ensureArabicFont, hasArabic, ARABIC_FONT_NAME } from '@/lib/jspdfArabic';
 
 const C = {
   navy:      [15, 32, 65]   as [number, number, number],
@@ -67,15 +68,16 @@ function usdFmt(v: number) {
   return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function generateBulkCostPDFBase64(
+export async function generateBulkCostPDFBase64(
   submissions: BulkSubmission[],
   approverName: string,
   totalSdg: number,
   usdRate: number | null,
   userMap: BulkUserMap,
   projectMap: BulkProjectMap,
-): string {
+): Promise<string> {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const arabicOk = await ensureArabicFont(doc);
   const W = doc.internal.pageSize.getWidth();
   const dateStr = format(new Date(), 'dd MMM yyyy');
   const refNo = `BULK-${submissions.length}-${format(new Date(), 'yyyyMMdd')}`;
@@ -102,9 +104,10 @@ export function generateBulkCostPDFBase64(
     doc.setTextColor(...C.white);
     doc.text('APPROVED OPERATIONAL COST SUBMISSIONS — PAYMENT REQUEST', W / 2, 10, { align: 'center' });
     doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'normal');
+    if (arabicOk) doc.setFont(ARABIC_FONT_NAME, 'normal'); else doc.setFont('helvetica', 'normal');
     doc.setTextColor(175, 200, 230);
     doc.text('طلب دفع — المصروفات التشغيلية الموافق عليها', W / 2, 16, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
 
     doc.setFontSize(7);
     doc.setTextColor(150, 175, 210);
@@ -159,9 +162,10 @@ export function generateBulkCostPDFBase64(
     doc.setTextColor(...C.navy);
     doc.text(item.value, cx, y + 14, { align: 'center' });
     doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
     doc.setTextColor(...C.muted);
+    if (arabicOk && hasArabic(item.sub)) doc.setFont(ARABIC_FONT_NAME, 'normal'); else doc.setFont('helvetica', 'normal');
     doc.text(item.sub, cx, y + 19, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
 
     if (i < summaryItems.length - 1) {
       doc.setDrawColor(...C.blue);
@@ -207,6 +211,7 @@ export function generateBulkCostPDFBase64(
       textColor: C.white,
       fontStyle: 'bold',
       fontSize: 7.5,
+      font: arabicOk ? ARABIC_FONT_NAME : 'helvetica',
       cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
     },
     bodyStyles: {
@@ -220,12 +225,18 @@ export function generateBulkCostPDFBase64(
       1:  { cellWidth: 22 },
       2:  { cellWidth: 34 },
       3:  { cellWidth: 28 },
-      4:  { cellWidth: 42 },
+      4:  { cellWidth: 42, font: arabicOk ? ARABIC_FONT_NAME : 'helvetica' },
       5:  { cellWidth: 28 },
       6:  { cellWidth: 18, halign: 'center' },
       7:  { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
       ...(totalUsd !== null ? { 8: { cellWidth: 22, halign: 'right', textColor: C.blue }, 9: { cellWidth: 18, halign: 'center', textColor: [22, 101, 52] as [number, number, number] } } : { 8: { cellWidth: 18, halign: 'center', textColor: [22, 101, 52] as [number, number, number] } }),
     },
+    didParseCell: arabicOk ? (data) => {
+      const text = Array.isArray(data.cell.text) ? data.cell.text.join('') : String(data.cell.text ?? '');
+      if (hasArabic(text)) {
+        data.cell.styles.font = ARABIC_FONT_NAME;
+      }
+    } : undefined,
     didDrawPage: (data) => {
       const pageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
       const totalPg = doc.getNumberOfPages();
@@ -242,13 +253,14 @@ export function generateBulkCostPDFBase64(
     doc.setLineWidth(0.4);
     doc.roundedRect(10, finalY, W - 20, 16, 2, 2, 'FD');
     doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'bold');
+    if (arabicOk) doc.setFont(ARABIC_FONT_NAME, 'normal'); else doc.setFont('helvetica', 'bold');
     doc.setTextColor(...C.amber);
     doc.text('⚠  RECONCILIATION REQUIREMENT / اشتراط التسوية', 12, finalY + 6);
-    doc.setFont('helvetica', 'normal');
+    if (arabicOk) doc.setFont(ARABIC_FONT_NAME, 'normal'); else doc.setFont('helvetica', 'normal');
     doc.setTextColor(120, 53, 15);
     doc.setFontSize(7);
     doc.text('All recipients must submit receipts and return any unused funds within 5 working days of disbursement. | يجب تقديم الإيصالات وإعادة الأموال غير المستخدمة خلال 5 أيام عمل.', 12, finalY + 12);
+    doc.setFont('helvetica', 'normal');
   }
 
   drawFooter();

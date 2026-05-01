@@ -1807,7 +1807,7 @@ const CostSubmission = () => {
       let excelFailed = false;
 
       try {
-        const pdfBase64 = generateBulkCostPDFBase64(bulkSubs, approverName, totalSdg, effectiveRate, userMap, projectMap);
+        const pdfBase64 = await generateBulkCostPDFBase64(bulkSubs, approverName, totalSdg, effectiveRate, userMap, projectMap);
         pdfAttachment = {
           base64: pdfBase64,
           filename: `PACT_Approved_Costs_${new Date().toISOString().slice(0, 10)}.pdf`,
