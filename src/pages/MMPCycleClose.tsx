@@ -4248,75 +4248,100 @@ const MMPCycleClose = () => {
 
                                     {/* Enumerator Costs */}
                                     {cycleSummaryData.enumeratorCosts.length > 0 && (() => {
-                                      const statusMeta: Record<string, { label: string; cls: string; action: string }> = {
-                                        pending:       { label: 'Pending',       cls: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',     action: 'Needs to be assigned to an enumerator' },
-                                        assigned:      { label: 'Assigned',      cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',      action: 'Awaiting dispatch to the field' },
-                                        dispatched:    { label: 'Dispatched',    cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300', action: 'Awaiting enumerator acceptance' },
-                                        accepted:      { label: 'In Progress',   cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',   action: 'Visit ongoing — awaiting completion' },
-                                        completed:     { label: 'Completed',     cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',       action: 'Awaiting WFP confirmation' },
-                                        wfp_confirmed: { label: 'WFP Confirmed', cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',   action: '' },
-                                        cancelled:     { label: 'Cancelled',     cls: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',           action: 'Site visit cancelled' },
-                                        not_covered:   { label: 'Not Covered',   cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300', action: 'Requires justification / reason' },
-                                        unknown:       { label: 'Unknown',       cls: 'bg-gray-100 text-gray-500',                                            action: 'Status unclear — check site entry' },
+                                      type StatusEntry = { label: string; cls: string; isTerminal: boolean; actionFn: (ack: boolean) => string };
+                                      const SM: Record<string, StatusEntry> = {
+                                        // Terminal / done
+                                        wfp_confirmed:           { label: 'WFP Confirmed',    cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',      isTerminal: true,  actionFn: (ack) => ack ? '✓ Ready — no action needed' : 'Ask enumerator to acknowledge cost in the app' },
+                                        cancelled:               { label: 'Cancelled',        cls: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',              isTerminal: true,  actionFn: () => 'Visit cancelled — no further action' },
+                                        verified:                { label: 'Verified',         cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',      isTerminal: true,  actionFn: (ack) => ack ? '✓ Ready — no action needed' : 'Ask enumerator to acknowledge cost in the app' },
+                                        not_covered:             { label: 'Not Covered',      cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',  isTerminal: true,  actionFn: () => 'Flagged as not covered — reason required if not provided' },
+                                        // Near-done — needs one more step
+                                        completed:               { label: 'Completed',        cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',          isTerminal: false, actionFn: (ack) => ack ? 'Cost acknowledged — supervisor/FOM must submit WFP confirmation' : 'Supervisor/FOM must submit WFP confirmation, enumerator must acknowledge cost' },
+                                        approved:                { label: 'Approved',         cls: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300',          isTerminal: false, actionFn: (ack) => ack ? 'Approved — supervisor/FOM must submit WFP confirmation' : 'Supervisor/FOM must submit WFP confirmation' },
+                                        // Mid-flow — active
+                                        accepted:                { label: 'Accepted',         cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',      isTerminal: false, actionFn: () => 'Enumerator accepted — wait for field visit to be completed' },
+                                        in_progress:             { label: 'In Progress',      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',      isTerminal: false, actionFn: () => 'Visit in progress — wait for enumerator to mark complete' },
+                                        inprogress:              { label: 'In Progress',      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',      isTerminal: false, actionFn: () => 'Visit in progress — wait for enumerator to mark complete' },
+                                        dispatched:              { label: 'Dispatched',       cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Waiting for enumerator to accept in the mobile app' },
+                                        forwarded:               { label: 'Forwarded',        cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Forwarded to coordinator — awaiting acceptance' },
+                                        forwarded_to_fom:        { label: 'With FOM',         cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Waiting for FOM to review and dispatch' },
+                                        forwarded_to_coordinator:{ label: 'With Coordinator', cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',  isTerminal: false, actionFn: () => 'Waiting for coordinator to dispatch to enumerator' },
+                                        permits_attached:        { label: 'Permits Attached', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',          isTerminal: false, actionFn: () => 'Permits ready — coordinator must dispatch enumerator' },
+                                        assigned:                { label: 'Assigned',         cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',          isTerminal: false, actionFn: () => 'Assigned to enumerator — coordinator must dispatch' },
+                                        submitted:               { label: 'Submitted',        cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',          isTerminal: false, actionFn: () => 'Submitted — awaiting supervisor review' },
+                                        // Not started
+                                        pending:                 { label: 'Pending',          cls: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',          isTerminal: false, actionFn: () => 'Not yet assigned — assign an enumerator to proceed' },
                                       };
-                                      const getAction = (e: EnumeratorCostDetail) => {
-                                        const base = statusMeta[e.status]?.action || statusMeta.unknown.action;
-                                        if (e.status === 'wfp_confirmed') {
-                                          return e.costAcknowledged ? '✓ Done — cost acknowledged' : 'Cost not yet acknowledged by enumerator';
-                                        }
-                                        if (e.status === 'completed' && e.costAcknowledged) return 'Cost acknowledged — awaiting WFP confirmation';
-                                        return base;
+                                      const getStatusEntry = (status: string) => SM[status] || SM[status?.toLowerCase()] || null;
+                                      const getAction = (e: EnumeratorCostDetail): { text: string; isBlocking: boolean } => {
+                                        const entry = getStatusEntry(e.status);
+                                        if (entry) return { text: entry.actionFn(e.costAcknowledged), isBlocking: !entry.isTerminal };
+                                        // Null/unknown status — use cost_acknowledged as signal
+                                        if (e.costAcknowledged) return { text: '✓ Cost acknowledged — verify visit status in MMP', isBlocking: false };
+                                        return { text: 'Open the MMP and check this site entry\'s status', isBlocking: true };
                                       };
-                                      const ackCount = cycleSummaryData.enumeratorCosts.filter(e => e.costAcknowledged).length;
-                                      const doneCount = cycleSummaryData.enumeratorCosts.filter(e => e.status === 'wfp_confirmed').length;
+                                      const ackCount  = cycleSummaryData.enumeratorCosts.filter(e => e.costAcknowledged).length;
+                                      const doneCount = cycleSummaryData.enumeratorCosts.filter(e => getStatusEntry(e.status)?.isTerminal).length;
+                                      const blockCount = cycleSummaryData.enumeratorCosts.filter(e => getAction(e).isBlocking).length;
                                       return (
                                         <div className="rounded-lg border overflow-hidden">
                                           <div className="px-3 py-2 bg-green-50 dark:bg-green-950/40 text-xs font-semibold flex items-center gap-2 flex-wrap">
                                             <span>👤 Enumerator & Transport Costs (Site Visits)</span>
                                             <Badge variant="secondary" className="text-[10px]">{cycleSummaryData.enumeratorCosts.length} sites</Badge>
-                                            <span className="ml-auto flex gap-1.5">
-                                              <span className="rounded-full px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px] font-medium">{doneCount} WFP Confirmed</span>
+                                            <span className="ml-auto flex gap-1.5 flex-wrap">
+                                              <span className="rounded-full px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px] font-medium">{doneCount} Complete</span>
                                               <span className="rounded-full px-2 py-0.5 bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300 text-[10px] font-medium">{ackCount} Cost Ack.</span>
+                                              {blockCount > 0 && <span className="rounded-full px-2 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-[10px] font-medium">{blockCount} Need Action</span>}
                                             </span>
                                           </div>
                                           <div className="overflow-x-auto">
                                             <table className="w-full text-xs">
                                               <thead>
                                                 <tr className="border-b bg-muted/20">
-                                                  <th className="px-3 py-1.5 text-left font-medium">Enumerator</th>
-                                                  <th className="px-3 py-1.5 text-left font-medium">Site</th>
-                                                  <th className="px-3 py-1.5 text-left font-medium">State / Locality</th>
+                                                  <th className="px-3 py-1.5 text-left font-medium min-w-[120px]">Enumerator / Site</th>
                                                   <th className="px-3 py-1.5 text-right font-medium text-blue-700">Enum. Fee</th>
                                                   <th className="px-3 py-1.5 text-right font-medium text-indigo-700">Transport</th>
                                                   <th className="px-3 py-1.5 text-right font-semibold">Total</th>
-                                                  <th className="px-3 py-1.5 text-center font-medium">Status</th>
-                                                  <th className="px-3 py-1.5 text-left font-medium">Action / Notes</th>
+                                                  <th className="px-3 py-1.5 text-center font-medium min-w-[100px]">Status</th>
+                                                  <th className="px-3 py-1.5 text-left font-medium min-w-[200px]">What to do next</th>
                                                 </tr>
                                               </thead>
                                               <tbody>
                                                 {cycleSummaryData.enumeratorCosts.map(e => {
-                                                  const meta = statusMeta[e.status] || statusMeta.unknown;
-                                                  const action = getAction(e);
-                                                  const isDone = e.status === 'wfp_confirmed' && e.costAcknowledged;
+                                                  const entry = getStatusEntry(e.status);
+                                                  const { text: actionText, isBlocking } = getAction(e);
+                                                  const isDone = entry?.isTerminal && e.costAcknowledged;
+                                                  const rawStatus = e.status && e.status !== 'unknown' ? e.status : null;
                                                   return (
-                                                    <tr key={e.id} className={`border-b last:border-0 hover:bg-muted/10 ${isDone ? '' : 'bg-amber-50/30 dark:bg-amber-950/10'}`}>
-                                                      <td className="px-3 py-1.5 font-medium whitespace-nowrap">
-                                                        {e.enumeratorName === 'Unassigned'
-                                                          ? <span className="text-muted-foreground italic">Unassigned</span>
-                                                          : e.enumeratorName}
+                                                    <tr key={e.id} className={`border-b last:border-0 ${isBlocking ? 'bg-amber-50/40 dark:bg-amber-950/15' : 'hover:bg-muted/10'}`}>
+                                                      <td className="px-3 py-2">
+                                                        <div className="font-medium text-foreground">
+                                                          {e.enumeratorName === 'Unassigned'
+                                                            ? <span className="text-muted-foreground italic">Unassigned</span>
+                                                            : e.enumeratorName}
+                                                        </div>
+                                                        <div className="text-[11px] text-muted-foreground truncate max-w-[160px]" title={e.siteName}>{e.siteName}</div>
+                                                        <div className="text-[10px] text-muted-foreground/70">{e.state}{e.locality && e.locality !== '—' ? ` / ${e.locality}` : ''}</div>
                                                       </td>
-                                                      <td className="px-3 py-1.5 text-muted-foreground max-w-[110px] truncate">{e.siteName}</td>
-                                                      <td className="px-3 py-1.5 text-muted-foreground text-[11px] whitespace-nowrap">{e.state}{e.locality && e.locality !== '—' ? ` / ${e.locality}` : ''}</td>
-                                                      <td className="px-3 py-1.5 text-right font-mono text-blue-700">{e.enumeratorFee > 0 ? `${e.enumeratorFee.toLocaleString()} ${e.currency}` : '—'}</td>
-                                                      <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{e.transportFee > 0 ? `${e.transportFee.toLocaleString()} ${e.currency}` : '—'}</td>
-                                                      <td className="px-3 py-1.5 text-right font-mono font-semibold">{e.totalCost.toLocaleString()} {e.currency}</td>
-                                                      <td className="px-3 py-1.5 text-center">
-                                                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${meta.cls}`}>{meta.label}</span>
+                                                      <td className="px-3 py-2 text-right font-mono text-blue-700">{e.enumeratorFee > 0 ? `${e.enumeratorFee.toLocaleString()} ${e.currency}` : '—'}</td>
+                                                      <td className="px-3 py-2 text-right font-mono text-indigo-700">{e.transportFee > 0 ? `${e.transportFee.toLocaleString()} ${e.currency}` : '—'}</td>
+                                                      <td className="px-3 py-2 text-right font-mono font-semibold">{e.totalCost.toLocaleString()} {e.currency}</td>
+                                                      <td className="px-3 py-2 text-center">
+                                                        {entry ? (
+                                                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${entry.cls}`}>{entry.label}</span>
+                                                        ) : (
+                                                          <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                                            {rawStatus ? rawStatus.replace(/_/g, ' ') : 'Not set'}
+                                                          </span>
+                                                        )}
+                                                        {e.costAcknowledged && (
+                                                          <div className="text-[10px] text-green-600 mt-0.5">Cost ✓</div>
+                                                        )}
                                                       </td>
-                                                      <td className="px-3 py-1.5 text-[11px] max-w-[180px]">
+                                                      <td className="px-3 py-2 text-[11px]">
                                                         {isDone
-                                                          ? <span className="text-green-600 font-medium">✓ Complete</span>
-                                                          : <span className={e.status === 'wfp_confirmed' ? 'text-amber-600' : 'text-muted-foreground'}>{action}</span>
+                                                          ? <span className="text-green-600 font-medium">✓ Ready — no action needed</span>
+                                                          : <span className={isBlocking ? 'text-amber-700 dark:text-amber-400 font-medium' : 'text-muted-foreground'}>{actionText}</span>
                                                         }
                                                       </td>
                                                     </tr>
@@ -4325,7 +4350,7 @@ const MMPCycleClose = () => {
                                               </tbody>
                                               <tfoot>
                                                 <tr className="bg-muted/30 font-semibold">
-                                                  <td className="px-3 py-1.5" colSpan={3}>Total</td>
+                                                  <td className="px-3 py-1.5">Total</td>
                                                   <td className="px-3 py-1.5 text-right font-mono text-blue-700">{cycleSummaryData.totalEnumeratorFee.toLocaleString()} {cycleSummaryData.currency}</td>
                                                   <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{cycleSummaryData.totalTransportFee.toLocaleString()} {cycleSummaryData.currency}</td>
                                                   <td className="px-3 py-1.5 text-right font-mono">{(cycleSummaryData.totalEnumeratorFee + cycleSummaryData.totalTransportFee).toLocaleString()} {cycleSummaryData.currency}</td>
