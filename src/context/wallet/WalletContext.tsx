@@ -1422,10 +1422,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const newBalances = { ...targetWallet.balances, [currency]: newBalance };
 
+      const currentTotalEarned = parseFloat(targetWallet.total_earned || 0);
       const { error: updateError } = await supabase
         .from('wallets')
         .update({
           balances: newBalances,
+          // Only credits count toward total lifetime earnings; debits reduce balance only.
+          ...(adjustmentType === 'credit' ? { total_earned: currentTotalEarned + amount } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', targetWallet.id);

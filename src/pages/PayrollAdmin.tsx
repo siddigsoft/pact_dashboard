@@ -271,6 +271,11 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem, yt
       a.type === 'percent' ? `${a.amount}% of base` : 'Fixed',
       `${item.currency} ${(a.type === 'percent' ? item.base_salary * a.amount / 100 : a.amount).toLocaleString()}`
     ]),
+    // Bonus adjustments (e.g. hourly pay, one-time bonuses) — must appear before gross
+    // so the NET PAY reconciles: gross + bonuses − deductions = net.
+    ...(item.adjustments ?? []).filter(a => a.type === 'bonus').map(a => [
+      `  ${a.name || 'Bonus'}`, 'Adjustment', `${item.currency} ${(a.amount ?? 0).toLocaleString()}`
+    ]),
     [
       { content: 'GROSS SALARY', styles: { fontStyle: 'bold', fillColor: [235, 244, 255], textColor: [15, 32, 65] } },
       { content: '', styles: { fillColor: [235, 244, 255] } },
@@ -298,6 +303,10 @@ function generatePayslipPDF(emp: EmployeeRow, run: PayrollRun, item: RunItem, yt
       `  ${d.name}`,
       d.type === 'percent' ? `${d.amount}% of gross` : 'Fixed',
       `${item.currency} ${(d.type === 'percent' ? item.gross_salary * d.amount / 100 : d.amount).toLocaleString()}`
+    ]),
+    // Deduction-type adjustments (one-time withholdings, advance recoveries, etc.)
+    ...(item.adjustments ?? []).filter(a => a.type === 'deduction').map(a => [
+      `  ${a.name || 'Deduction'}`, 'Adjustment', `${item.currency} ${(a.amount ?? 0).toLocaleString()}`
     ]),
     [
       { content: 'TOTAL DEDUCTIONS', styles: { fontStyle: 'bold', fillColor: [255, 245, 245], textColor: [160, 30, 30] } },
@@ -3237,15 +3246,26 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
   const isApproved  = runStatus === 'approved';
   const configured  = employees.filter(e => e.salary_config);
 
-  const isSuperAdmin = ['super_admin', 'superAdmin', 'SuperAdmin'].includes(currentUserRole);
-  const isFinance    = ['finance', 'Finance'].includes(currentUserRole);
-  const canApprove   = isSuperAdmin || isFinance;
+  // Include every raw role string that maps to superAdmin, admin, or financialAdmin
+  // (using raw comparisons because currentUserRole comes straight from profiles.role).
+  const canApprove = [
+    'super_admin', 'superAdmin', 'SuperAdmin', 'Super Admin',
+    'admin', 'Admin',
+    'financialAdmin', 'FinancialAdmin', 'financial_admin', 'Financial Admin',
+    'finance', 'Finance', 'finance_manager', 'cfo', 'CFO',
+  ].includes(currentUserRole);
 
-  // Compute adjusted net per employee
+  // Compute adjusted net for PREVIEW rows only.
+  // row.net_salary already includes precomputed items (hourly pay, task rewards)
+  // that live in row.adjustments — only add MANUAL UI adjustments from the
+  // `adjustments` state to avoid double-counting those precomputed amounts.
   const adjNet = (row: RunItem) => {
-    const adjs = adjustments[row.user_id] ?? row.adjustments ?? [];
-    const bonus = adjs.filter(a => a.type === 'bonus').reduce((s, a) => s + a.amount, 0);
-    const ded   = adjs.filter(a => a.type === 'deduction').reduce((s, a) => s + a.amount, 0);
+    const manualAdjs = adjustments[row.user_id] ?? [];
+    const bonus = manualAdjs.filter(a => a.type === 'bonus').reduce((s, a) => s + a.amount, 0);
+    const ded   = manualAdjs.filter(a => a.type === 'deduction').reduce((s, a) => s + a.amount, 0);
+    // Merge manual + precomputed adjustments for display/storage, but only add
+    // the manual delta to net (precomputed amounts are already in row.net_salary).
+    const adjs = [...manualAdjs, ...(row.adjustments ?? [])];
     return { net: row.net_salary + bonus - ded, bonus, ded, adjs };
   };
 
@@ -3308,7 +3328,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
       const approvedHours = hoursByUser[emp.id] ?? 0;
       const hourlyPay = hourlyRate > 0 ? Math.round(hourlyRate * approvedHours) : 0;
       const hourlyAdjustment = hourlyPay > 0
-        ? [{ type: 'bonus' as const, label: `Hourly Pay (${approvedHours}h × ${hourlyRate})`, amount: hourlyPay }]
+        ? [{ type: 'bonus' as const, name: `Hourly Pay (${approvedHours}h × ${hourlyRate})`, amount: hourlyPay }]
         : [];
       return {
         id: crypto.randomUUID(), run_id: '',
@@ -4165,7 +4185,7 @@ function PayrollScheduleTab({ currentUserId, runs, employees }: {
         const hourlyPay = hourlyRate > 0 ? Math.round(hourlyRate * approvedHours) : 0;
         const rewards = rewardsByUser[emp.id] ?? 0;
         const adjustments = hourlyPay > 0
-          ? [{ type: 'bonus' as const, label: `Hourly Pay (${approvedHours}h × ${hourlyRate})`, amount: hourlyPay }]
+          ? [{ type: 'bonus' as const, name: `Hourly Pay (${approvedHours}h × ${hourlyRate})`, amount: hourlyPay }]
           : [];
         return {
           run_id: runId, user_id: emp.id, user_name: emp.full_name ?? '—',
