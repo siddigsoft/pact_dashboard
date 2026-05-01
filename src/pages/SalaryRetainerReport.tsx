@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { format, startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -73,9 +73,10 @@ interface RawSalaryConfig {
   allowances: LineItem[] | null; deductions: LineItem[] | null;
   effective_date: string | null;
 }
-interface RawRetainerPayment {
+// Retainers are stored as wallet_transactions (type='adjustment', metadata.type='retainer')
+interface RawRetainerTx {
   user_id: string; amount: number; currency: string;
-  period_start: string; period_end: string;
+  metadata: { type: string; period: string } | null;
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
@@ -156,16 +157,18 @@ export default function SalaryRetainerReport() {
     },
   });
 
-  // Fetch retainer amounts — gracefully handles missing table
-  const { data: retainerData = [] } = useQuery<RawRetainerPayment[]>({
-    queryKey: ['retainer-amounts'],
+  // Fetch retainer wallet transactions — retainers are stored in wallet_transactions
+  // with type='adjustment' and metadata.type='retainer'. The old retainer_payments
+  // table does not exist in this system.
+  const { data: retainerData = [] } = useQuery<RawRetainerTx[]>({
+    queryKey: ['retainer-wallet-txs'],
     ...CACHE,
     queryFn: async () => {
-      try {
-        const { data, error } = await supabase.from('retainer_payments').select('user_id, amount, currency, period_start, period_end').order('period_start', { ascending: false });
-        if (error) return [];
-        return (data ?? []) as RawRetainerPayment[];
-      } catch { return []; }
+      const { data } = await supabase
+        .from('wallet_transactions')
+        .select('user_id, amount, currency, metadata')
+        .eq('metadata->>type', 'retainer');
+      return (data ?? []) as RawRetainerTx[];
     },
   });
 
@@ -181,15 +184,17 @@ export default function SalaryRetainerReport() {
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const retainerMap = useMemo(() => {
+    // Transactions store the pay period in metadata.period as 'YYYY-MM'.
+    // Match against the selected period's start month.
+    const targetPeriod = format(periodStart, 'yyyy-MM');
     const map: Record<string, { amount: number; currency: string }> = {};
     retainerData.forEach(r => {
-      const start = parseISO(r.period_start);
-      if (isWithinInterval(start, { start: periodStart, end: periodEnd })) {
+      if (r.metadata?.period === targetPeriod) {
         map[r.user_id] = { amount: r.amount, currency: r.currency ?? 'SDG' };
       }
     });
     return map;
-  }, [retainerData, periodStart, periodEnd]);
+  }, [retainerData, periodStart]);
 
   const enriched = useMemo(() => {
     return employees.map(emp => {

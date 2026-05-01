@@ -388,7 +388,7 @@ export default function PayrollAdmin() {
 
   // Schedule tab is restricted to FinancialAdmin and above (task spec: "Payroll schedule config restricted to FinancialAdmin and above")
   const canManageSchedule = isSuperAdmin() || hasAnyRole([
-    'super_admin', 'SuperAdmin', 'superAdmin', 'financialAdmin', 'FinancialAdmin', 'finance', 'Finance',
+    'super_admin', 'superAdmin', 'admin', 'financialAdmin',
   ]);
 
   const PA_CACHE = { staleTime: 5 * 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false } as const;
