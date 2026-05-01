@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronDown, ChevronRight, Clock, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck, MessageSquare, CornerUpLeft, Layers } from "lucide-react";
+import { ChevronLeft, ChevronDown, ChevronRight, Clock, Check, CheckCircle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, PencilLine, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail, Upload, Eye, ImageIcon, Unlock, ShieldCheck, MessageSquare, CornerUpLeft, Layers } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -3599,6 +3599,21 @@ const CostSubmission = () => {
                       const groupApprovableTier = grpApprovableTier;
                       const isExpanded = expandedGroups.has(groupId!);
 
+                      // Group-level batch selection
+                      const groupPayableItems = groupItems.filter(o => canMarkAsPaid(o));
+                      const groupAllSelected = groupPayableItems.length > 0 && groupPayableItems.every(o => selectedCostIds.has(o.id));
+                      const groupSomeSelected = groupPayableItems.some(o => selectedCostIds.has(o.id));
+                      const handleGroupCheckbox = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setSelectedCostIds(prev => {
+                          const next = new Set(prev);
+                          groupPayableItems.forEach(o => {
+                            if (groupAllSelected) next.delete(o.id); else next.add(o.id);
+                          });
+                          return next;
+                        });
+                      };
+
                       return (
                         <div>
                           {/* Clickable navy header */}
@@ -3612,6 +3627,25 @@ const CostSubmission = () => {
                               style={{ borderLeft: `4px solid ${projPalette.border}` }}
                             >
                               <div className="flex items-start gap-3">
+                                {groupPayableItems.length > 0 && (
+                                  <div
+                                    className="flex-none mt-0.5 cursor-pointer"
+                                    onClick={handleGroupCheckbox}
+                                    data-testid={`checkbox-group-${groupId}`}
+                                    title="Select all payable items in this group"
+                                  >
+                                    <div className={`h-4 w-4 rounded border-2 flex items-center justify-center transition-colors ${
+                                      groupAllSelected
+                                        ? 'bg-green-500 border-green-400'
+                                        : groupSomeSelected
+                                          ? 'bg-green-500/50 border-green-400'
+                                          : 'bg-white/10 border-white/40 hover:border-white/70'
+                                    }`}>
+                                      {groupAllSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                                      {groupSomeSelected && !groupAllSelected && <div className="h-1.5 w-1.5 rounded-sm bg-white" />}
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="flex-none mt-0.5">
                                   <Layers className="h-4 w-4 text-white/70" />
                                 </div>
@@ -3675,22 +3709,36 @@ const CostSubmission = () => {
                             </div>
                           </button>
 
-                          {/* Send to Finance — visible when approved items exist in this group */}
-                          {(isSuperAdmin || isAdmin) && !isFOM && approvedCnt > 0 && (
-                            <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628]/60 border-b border-blue-900/30">
+                          {/* Send to Finance / Mark Paid All — visible when approved items exist in this group */}
+                          {approvedCnt > 0 && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-[#0a1628]/60 border-b border-blue-900/30 flex-wrap">
                               <Mail className="h-3.5 w-3.5 text-blue-400 flex-none" />
                               <span className="text-[11px] text-blue-300 flex-1">
                                 {approvedCnt} approved item{approvedCnt !== 1 ? 's' : ''} ready to send to Finance
                               </span>
-                              <Button
-                                size="sm"
-                                className="h-7 px-3 text-xs bg-blue-900 hover:bg-blue-800 text-blue-100 border border-blue-700/50"
-                                onClick={(e) => { e.stopPropagation(); openBulkCostEmailDialog(undefined, groupItems); }}
-                                data-testid={`button-group-send-finance-${groupId}`}
-                              >
-                                <Mail className="h-3 w-3 mr-1" />
-                                Send to Finance
-                              </Button>
+                              {groupPayableItems.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-3 text-xs bg-green-700 hover:bg-green-600 text-white border border-green-600/50"
+                                  onClick={(e) => { e.stopPropagation(); groupPayableItems.forEach(o => handleMarkAsPaid(o)); }}
+                                  disabled={actionProcessing}
+                                  data-testid={`button-group-mark-paid-all-${groupId}`}
+                                >
+                                  <Wallet className="h-3 w-3 mr-1" />
+                                  Mark Paid ({groupPayableItems.length})
+                                </Button>
+                              )}
+                              {(isSuperAdmin || isAdmin) && !isFOM && (
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-3 text-xs bg-blue-900 hover:bg-blue-800 text-blue-100 border border-blue-700/50"
+                                  onClick={(e) => { e.stopPropagation(); openBulkCostEmailDialog(undefined, groupItems); }}
+                                  data-testid={`button-group-send-finance-${groupId}`}
+                                >
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Send to Finance
+                                </Button>
+                              )}
                             </div>
                           )}
 
