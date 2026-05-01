@@ -227,6 +227,7 @@ const MMPCycleClose = () => {
   const [saving, setSaving] = useState(false);
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
+  const [pendingViaReportCount, setPendingViaReportCount] = useState(0);
   const [selectedMmpId, setSelectedMmpId] = useState<string>('all');
 
   interface CostSubSummary { category: string; count: number; approvedCents: number; pendingCents: number; currency: string; }
@@ -2500,12 +2501,7 @@ const MMPCycleClose = () => {
     }
 
     if (pendingViaReport > 0) {
-      toast({
-        title: `${pendingViaReport} Advance(s) Pending Payment via Report`,
-        description:
-          'These approved advances have not been disbursed yet. They are non-blocking, but must be settled in the next payment report after close.',
-        variant: 'default',
-      });
+      setPendingViaReportCount(pendingViaReport);
     }
 
     setFinalizingCycle(true);
@@ -3957,36 +3953,70 @@ const MMPCycleClose = () => {
                                           </Button>
                                         </div>
                                       )}
-                                      {/* Approve / Reject buttons for step 6 — shown inline for FOM, Admin, and Super Admin */}
+                                      {/* Approve / Reject panel for step 6 — shown for FOM, Admin, Super Admin */}
                                       {step.id === 'approval' && checklistMmpStatus === 'pending_approval' && (isFOM || isAdmin || isSuperAdmin) && (
-                                        <div className="mt-3 space-y-2">
-                                          <p className="text-xs text-purple-700 dark:text-purple-300 font-medium">
-                                            You have approval authority. Review the financial summary above, then take action:
-                                          </p>
-                                          <div className="flex gap-2">
-                                            <Button
-                                              size="sm"
-                                              className="flex-1 bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                                              onClick={() => handleApproveCycle(checklistMmpId!)}
-                                              disabled={closingCycle}
-                                              data-testid="button-approve-cycle-wizard"
-                                            >
-                                              {closingCycle
-                                                ? <><Loader2 className="h-4 w-4 animate-spin" /> Approving…</>
-                                                : <><CheckCircle2 className="h-4 w-4" /> Approve &amp; Close Cycle</>
-                                              }
-                                            </Button>
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              className="flex-1 border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30 gap-1.5"
-                                              onClick={() => setBannerRejectMmpId(checklistMmpId!)}
-                                              data-testid="button-reject-cycle-wizard"
-                                            >
-                                              <XCircle className="h-4 w-4" />
-                                              Reject &amp; Send Back
-                                            </Button>
+                                        <div className="mt-4 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/40 p-4 space-y-3">
+                                          {/* Header */}
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-lg">👉</span>
+                                            <div>
+                                              <p className="text-sm font-bold text-green-900 dark:text-green-100">Your action is required</p>
+                                              <p className="text-xs text-green-700 dark:text-green-300">You have approval authority for this cycle. Choose one action below.</p>
+                                            </div>
                                           </div>
+
+                                          {/* Inline advance warning — replaces the overlapping toast */}
+                                          {pendingViaReportCount > 0 && (
+                                            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-3 py-2">
+                                              <span className="text-amber-600 text-sm mt-0.5">⚠️</span>
+                                              <div className="text-xs text-amber-800 dark:text-amber-200">
+                                                <span className="font-semibold">{pendingViaReportCount} advance(s) pending payment via report.</span>{' '}
+                                                These zero-disbursement approved advances are <span className="font-semibold">non-blocking</span> — you can close now. They must be settled in the next payment report after close.
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Step-by-step recap */}
+                                          <ol className="space-y-1 pl-1">
+                                            <li className="flex gap-2 text-xs text-green-800 dark:text-green-200">
+                                              <span className="font-bold shrink-0">1.</span>
+                                              Scroll up and review the <span className="font-semibold">Cycle Financial Summary</span> — check enumerator costs, advances, and any outstanding items.
+                                            </li>
+                                            <li className="flex gap-2 text-xs text-green-800 dark:text-green-200">
+                                              <span className="font-bold shrink-0">2.</span>
+                                              Click <span className="font-semibold text-green-700 dark:text-green-300">"Approve &amp; Close Cycle"</span> to permanently archive this cycle, or <span className="font-semibold text-red-700 dark:text-red-400">"Reject &amp; Send Back"</span> to return it for corrections.
+                                            </li>
+                                          </ol>
+
+                                          {/* Action buttons */}
+                                          <Button
+                                            className="w-full bg-green-600 hover:bg-green-700 text-white gap-2 h-11 text-sm font-semibold shadow-md"
+                                            onClick={() => handleApproveCycle(checklistMmpId!)}
+                                            disabled={closingCycle}
+                                            data-testid="button-approve-cycle-wizard"
+                                          >
+                                            {closingCycle
+                                              ? <><Loader2 className="h-5 w-5 animate-spin" /> Approving &amp; Closing…</>
+                                              : <><CheckCircle2 className="h-5 w-5" /> Approve &amp; Close Cycle</>
+                                            }
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            className="w-full border-red-300 text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30 gap-2 h-9 text-xs"
+                                            onClick={() => setBannerRejectMmpId(checklistMmpId!)}
+                                            data-testid="button-reject-cycle-wizard"
+                                          >
+                                            <XCircle className="h-4 w-4" />
+                                            Reject &amp; Send Back (requires a reason)
+                                          </Button>
+                                        </div>
+                                      )}
+
+                                      {/* Waiting state — for non-approvers when pending_approval */}
+                                      {step.id === 'approval' && checklistMmpStatus === 'pending_approval' && !(isFOM || isAdmin || isSuperAdmin) && (
+                                        <div className="mt-3 rounded-lg border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/30 px-3 py-2.5 space-y-1">
+                                          <p className="text-xs font-semibold text-purple-800 dark:text-purple-200">⏳ Waiting for FOM / Admin approval</p>
+                                          <p className="text-xs text-purple-700 dark:text-purple-300">You will be notified once the cycle is approved or sent back for corrections.</p>
                                         </div>
                                       )}
                                     </div>
