@@ -54,8 +54,12 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     //   1. "must be used within" — context provider not yet mounted
     //   2. "Cannot access '...' before initialization" — temporal dead zone from
     //      module hot-swap reordering declarations mid-session
+    //   3. "Cannot read properties of null (reading '...')" — context/dispatcher
+    //      went null during Vite HMR module swap (e.g. ReactCurrentDispatcher is
+    //      null between old and new module loading, causing hook calls to fail)
     const isHmrRace = /must be used within/i.test(msg) ||
-                      /cannot access .+ before initialization/i.test(msg);
+                      /cannot access .+ before initialization/i.test(msg) ||
+                      /cannot read propert(?:y|ies) of null/i.test(msg);
     if (isHmrRace) {
       const key = 'eb_provider_race_ts';
       const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
