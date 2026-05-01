@@ -12,14 +12,7 @@ DECLARE
 BEGIN
 
   -- ── superAdmin ────────────────────────────────────────────
-  UPDATE profiles SET role = 'superAdmin'
-  WHERE role IN ('SuperAdmin', 'super_admin', 'Super Admin')
-    AND role != 'superAdmin';
-  GET DIAGNOSTICS batch_count = ROW_COUNT;
-  total_updated := total_updated + batch_count;
-  IF batch_count > 0 THEN
-    RAISE NOTICE '✓ superAdmin          — normalized % row(s)', batch_count;
-  END IF;
+  -- SKIPPED: protected accounts block role changes via protect_owner_profile() trigger
 
   -- ── admin ─────────────────────────────────────────────────
   UPDATE profiles SET role = 'admin'
