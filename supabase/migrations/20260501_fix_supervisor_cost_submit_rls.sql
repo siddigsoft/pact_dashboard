@@ -53,6 +53,35 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- ============================================================
+-- 2b. Patch the INSERT policy directly (it uses an inline EXISTS, not the helper)
+--     This is the authoritative fix that was actually applied to production.
+-- ============================================================
+DROP POLICY IF EXISTS "Authorized roles can create operational cost submissions" ON operational_cost_submissions;
+
+CREATE POLICY "Authorized roles can create operational cost submissions"
+  ON operational_cost_submissions FOR INSERT
+  WITH CHECK (
+    auth.uid() = submitted_by
+    AND EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = operational_cost_submissions.submitted_by
+        AND COALESCE(p.status, 'approved') = 'approved'
+        AND p.role = ANY (ARRAY[
+          'Field Operation Manager (FOM)', 'fom', 'fieldOpManager',
+          'Coordinator', 'coordinator',
+          'CountryDirector', 'countryDirector', 'Country Director',
+          'admin', 'Admin', 'administrator',
+          'SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin',
+          'Supervisor', 'hubSupervisor', 'supervisor', 'hub_supervisor',
+          'FinancialAdmin', 'finance_admin',
+          'ICT', 'ict',
+          'dataCollector', 'datacollector', 'Data Collector',
+          'enumerator', 'Enumerator', 'dataTeam'
+        ])
+    )
+  );
+
+-- ============================================================
 -- 3. Refresh the Supervisor SELECT policy to include capital-S Supervisor
 -- ============================================================
 DROP POLICY IF EXISTS "Supervisors can view hub operational cost submissions" ON operational_cost_submissions;
