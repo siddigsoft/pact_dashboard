@@ -388,6 +388,32 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     [paymentRequestDialog.selectedRecipientIds]
   );
 
+  // Grouped breakdown of bulkRequests for email breakdowns & send logic.
+  // Mirrors BulkSummaryTable's internal buildGroups but lives in the outer
+  // component so handleSendPaymentRequest and buildEmailPreviewHtml can use it.
+  const buildGroups = useMemo(() => {
+    const reqs = paymentRequestDialog.bulkRequests;
+    const userNameMap = new Map<string, string>();
+    (users || []).forEach((u: any) => {
+      userNameMap.set(u.id, u.fullName || u.full_name || u.email || 'Unknown');
+    });
+    const build = (keyFn: (r: DownPaymentRequest) => string): [string, BulkSummaryEntry][] => {
+      const m = new Map<string, BulkSummaryEntry>();
+      reqs.forEach(r => {
+        const k = keyFn(r) || 'Unknown';
+        const e = m.get(k) || { count: 0, requested: 0, approved: 0 };
+        m.set(k, { count: e.count + 1, requested: e.requested + r.requestedAmount, approved: e.approved + (r.approvedAmount || r.requestedAmount) });
+      });
+      return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+    };
+    return {
+      state:     build(r => r.stateName    || '-'),
+      hub:       build(r => r.hubName      || '-'),
+      locality:  build(r => r.localityName || '-'),
+      requester: build(r => userNameMap.get(r.requestedBy || '') || 'Unknown'),
+    };
+  }, [paymentRequestDialog.bulkRequests, users]);
+
   const pendingRequests = useMemo(() => {
     if (userRole === 'supervisor') {
       return filteredRequests.filter(req => req.status === 'pending_supervisor');
@@ -1580,7 +1606,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           });
         }
       }
-    } catch {
+    } catch (err) {
+      console.error('[DownPayment] handleSendPaymentRequest failed:', err);
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
       setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' });
