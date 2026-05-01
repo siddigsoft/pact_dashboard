@@ -3472,14 +3472,13 @@ const CostSubmission = () => {
             </Button>
           </div>
 
-          {/* Batch Pay selection bar — visible only on the Approved tab when ≥1 payable submission exists */}
+          {/* Batch Pay selection bar — visible whenever ≥1 payable submission exists, sticky so it stays in view while scrolling */}
           {(() => {
-            if (statusFilter !== 'approved') return null;
             const payableOcs = filteredOperationalCosts.filter(canMarkAsPaid);
             const selectedPayable = payableOcs.filter(oc => selectedCostIds.has(oc.id));
             if (payableOcs.length === 0) return null;
             return (
-              <div className="flex items-center justify-between gap-2 flex-wrap rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2">
+              <div className="sticky top-0 z-20 flex items-center justify-between gap-2 flex-wrap rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 shadow-sm">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     size="sm"
