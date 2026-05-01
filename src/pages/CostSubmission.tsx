@@ -18,11 +18,11 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { useUser } from "@/context/user/UserContext";
 import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
 import { useMMP } from "@/context/mmp/MMPContext";
-import { AppRole } from "@/types";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
 import UnifiedCostRequestForm from "@/components/cost-submission/UnifiedCostRequestForm";
 import CostReconciliationForm from "@/components/cost-submission/CostReconciliationForm";
@@ -152,7 +152,7 @@ const CostSubmission = () => {
   // Cycle-close context: when arriving from the readiness checklist "Resolve" button
   const cycleContextMmpId   = searchParams.get('mmpId')   || null;
   const cycleContextMmpName = searchParams.get('mmpName') || null;
-  const { currentUser, roles } = useAppContext();
+  const { currentUser } = useAppContext();
   const { users } = useUser();
   const { projects: allProjects } = useProjectContext();
    const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
@@ -170,49 +170,17 @@ const CostSubmission = () => {
      return map;
    }, [mmpFiles]);
   
-  // Check if user is admin or supervisor
-  const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
-  const isSupervisor = roles?.includes('Supervisor' as AppRole) ||
-                       roles?.includes('hubSupervisor' as AppRole) || 
-                       roles?.includes('supervisor' as AppRole) ||
-                       currentUser?.role === 'Supervisor' ||
-                       currentUser?.role === 'hubSupervisor' || 
-                       currentUser?.role === 'supervisor';
-  
-  // Check if user is FOM or Coordinator (can submit operational costs)
-  const isFOM = roles?.includes('Field Operation Manager (FOM)' as AppRole) ||
-                roles?.includes('fom' as AppRole) ||
-                currentUser?.role === 'Field Operation Manager (FOM)' ||
-                currentUser?.role === 'fom' ||
-                (currentUser?.role || '').toLowerCase() === 'fom';
-  const isCoordinator = roles?.includes('Coordinator' as AppRole) || 
-                        currentUser?.role === 'Coordinator' ||
-                        currentUser?.role === 'coordinator';
-  
-  // Check if user is Country Director (can submit operational costs - approved by Admin → Super Admin)
-  const isCountryDirector = roles?.includes('CountryDirector' as AppRole) || 
-                            currentUser?.role === 'CountryDirector';
-  
-  // Check if user is Data Collector/Enumerator (can submit reimbursement requests)
-  const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
-                          roles?.includes('Enumerator' as AppRole) ||
-                          currentUser?.role === 'DataCollector' ||
-                          currentUser?.role === 'datacollector' ||
-                          currentUser?.role === 'Enumerator' ||
-                          currentUser?.role === 'enumerator';
-  
-  const isSuperAdmin = isAdminOrSuperUser || 
-    currentUser?.role === 'SuperAdmin' || currentUser?.role === 'superAdmin' || 
-    currentUser?.role === 'super_admin' || currentUser?.role === 'Super Admin';
-  
-  const isFinanceAdmin = roles?.includes('finance_admin' as AppRole) || 
-    currentUser?.role === 'finance_admin' || currentUser?.role === 'Finance Admin';
-
-  const isDataTeam = roles?.includes('DataTeam' as AppRole) ||
-    currentUser?.role === 'DataTeam' ||
-    currentUser?.role === 'dataTeam' ||
-    currentUser?.role === 'data_team' ||
-    currentUser?.role === 'Data Team';
+  // Role checks — canonical camelCase codes via useAuthorization hook
+  const { hasAnyRole, isSuperAdmin: isSuperAdminFn } = useAuthorization();
+  const isAdmin           = hasAnyRole(['admin']);
+  const isSupervisor      = hasAnyRole(['supervisor']);
+  const isFOM             = hasAnyRole(['fom']);
+  const isCoordinator     = hasAnyRole(['coordinator']);
+  const isCountryDirector = hasAnyRole(['countryDirector']);
+  const isDataCollector   = hasAnyRole(['dataCollector']);
+  const isSuperAdmin      = isAdminOrSuperUser || isSuperAdminFn();
+  const isFinanceAdmin    = hasAnyRole(['financialAdmin']);
+  const isDataTeam        = hasAnyRole(['dataTeam']);
 
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser || isDataTeam;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
