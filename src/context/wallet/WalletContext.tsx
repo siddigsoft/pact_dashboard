@@ -1282,11 +1282,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       for (const user of eligibleUsers) {
         try {
+          // Transactions are inserted with type='adjustment' + metadata.type='retainer'.
+          // Previously the check used type='retainer' which never matched — meaning
+          // every call to processMonthlyRetainers would re-pay ALL retainers.
           const { data: existingRetainer, error: checkError } = await supabase
             .from('wallet_transactions')
             .select('id')
             .eq('user_id', user.user_id)
-            .eq('type', 'retainer')
+            .eq('type', 'adjustment')
+            .ilike('description', `%Monthly retainer%`)
             .ilike('description', `%${currentPeriod}%`)
             .maybeSingle();
 

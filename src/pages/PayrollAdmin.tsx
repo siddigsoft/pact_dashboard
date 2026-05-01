@@ -3383,11 +3383,11 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
         const fmtAmt = `${currency} ${totalNet.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
         if (newStatus === 'submitted') {
-          // Notify everyone who can approve payroll
+          // Notify everyone who can approve payroll (include all role casing variants)
           const { data: approvers } = await supabase
             .from('profiles')
             .select('id')
-            .in('role', ['admin', 'super_admin', 'finance_manager', 'cfo']);
+            .in('role', ['admin', 'Admin', 'super_admin', 'SuperAdmin', 'superAdmin', 'finance_manager', 'FinancialAdmin', 'finance_admin', 'cfo', 'CFO']);
           const approverIds = (approvers ?? []).map((a: any) => a.id).filter(Boolean);
           if (approverIds.length > 0) {
             await dispatchNotification({
@@ -3478,7 +3478,7 @@ function RunPayrollTab({ employees, runs, currentUserId, currentUserRole }: {
           const { data: admins } = await supabase
             .from('profiles')
             .select('id')
-            .in('role', ['admin', 'super_admin', 'finance_manager', 'cfo']);
+            .in('role', ['admin', 'Admin', 'super_admin', 'SuperAdmin', 'superAdmin', 'finance_manager', 'FinancialAdmin', 'finance_admin', 'cfo', 'CFO']);
           const adminIds = (admins ?? []).map((a: any) => a.id).filter(Boolean);
           if (adminIds.length > 0) {
             await dispatchNotification({
