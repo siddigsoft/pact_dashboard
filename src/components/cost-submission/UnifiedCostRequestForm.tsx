@@ -587,31 +587,69 @@ export default function UnifiedCostRequestForm({
           return EXPENSE_CATEGORIES[catKey]?.label || i.expenseCategory;
         }).join(', ');
 
-        // Notify supervisor(s) in the hub that a new submission needs Tier 1 approval
-        if (resolvedHubId) {
-          supabase
-            .from('profiles')
-            .select('id')
-            .eq('hub_id', resolvedHubId)
-            .in('role', ['supervisor', 'hubSupervisor', 'hub_supervisor'])
-            .eq('status', 'approved')
-            .then(({ data: supervisors, error: supervisorLookupError }) => {
-              if (supervisorLookupError) {
-                console.error('[COST] Failed to resolve approvers for notification:', supervisorLookupError);
-                return;
-              }
-              if (supervisors && supervisors.length > 0) {
-                NotificationTriggerService.costSubmissionCreated(
-                  supervisors.map(s => s.id),
-                  currentUser.fullName || currentUser.email || 'Unknown',
-                  totalAmt,
-                  totalCurrency,
-                  categoryLabels
-                ).catch(console.error);
-              } else {
-                console.warn(`[COST] No supervisor recipients found for hub ${resolvedHubId}`);
-              }
-            }).catch(console.error);
+        // Notify the correct Tier 1 approver based on the submitter's role:
+        //   Coordinator  → Supervisor(s) in the hub
+        //   Supervisor   → FOM / Country Director (org-wide)
+        //   FOM / CD     → Admin / Super Admin (org-wide, single-tier flow)
+        {
+          const submitterRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+          const isCoordinatorSubmitter = submitterRole.includes('coordinator');
+          const isSupervisorSubmitter = submitterRole.includes('supervisor') || submitterRole.includes('hubsupervisor');
+          const isFomSubmitter = submitterRole === 'fom' || submitterRole === 'fieldoperationmanager' || submitterRole === 'countrydirector';
+
+          const notifyTier1 = (recipientIds: string[]) => {
+            if (recipientIds.length === 0) {
+              console.warn('[COST] No Tier 1 approver recipients found — skipping in-app notification');
+              return;
+            }
+            NotificationTriggerService.costSubmissionCreated(
+              recipientIds,
+              currentUser.fullName || currentUser.email || 'Unknown',
+              totalAmt,
+              totalCurrency,
+              categoryLabels
+            ).catch(console.error);
+          };
+
+          if (isCoordinatorSubmitter && resolvedHubId) {
+            // Coordinator → notify Supervisors in the same hub
+            supabase
+              .from('profiles')
+              .select('id')
+              .eq('hub_id', resolvedHubId)
+              .in('role', ['Supervisor', 'supervisor', 'hubSupervisor', 'hub_supervisor'])
+              .eq('status', 'approved')
+              .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
+              .catch(console.error);
+          } else if (isSupervisorSubmitter) {
+            // Supervisor → notify FOM / Country Director org-wide
+            supabase
+              .from('profiles')
+              .select('id')
+              .in('role', ['Field Operation Manager (FOM)', 'fom', 'CountryDirector', 'country_director'])
+              .eq('status', 'approved')
+              .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
+              .catch(console.error);
+          } else if (isFomSubmitter) {
+            // FOM / CD → notify Admins (single-tier flow)
+            supabase
+              .from('profiles')
+              .select('id')
+              .in('role', ['Admin', 'SuperAdmin', 'super_admin'])
+              .eq('status', 'approved')
+              .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
+              .catch(console.error);
+          } else if (resolvedHubId) {
+            // Fallback: notify hub supervisors
+            supabase
+              .from('profiles')
+              .select('id')
+              .eq('hub_id', resolvedHubId)
+              .in('role', ['Supervisor', 'supervisor', 'hubSupervisor', 'hub_supervisor'])
+              .eq('status', 'approved')
+              .then(({ data }) => notifyTier1((data || []).map(r => r.id)))
+              .catch(console.error);
+          }
         }
 
         toast({
