@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, memo, useTransition, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, memo, type ReactNode } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -228,7 +228,6 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
   const { toast } = useToast();
-  const [, startTransition] = useTransition();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
@@ -1165,11 +1164,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const openBulkPaymentRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
-      // Open shell immediately; defer heavy BulkSummaryTable render via transition
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
-      startTransition(() => {
-        setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
-      });
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
       loadFinanceRecipients(true).then(fresh => {
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
       }).catch(() => {});
@@ -1188,10 +1183,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const openBulkExcelRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
-      startTransition(() => {
-        setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
-      });
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
       loadFinanceRecipients(true).then(fresh => {
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
       }).catch(() => {});
