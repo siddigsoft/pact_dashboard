@@ -634,7 +634,9 @@ const CostSubmission = () => {
   };
 
   const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
-    return isCoordinatorSubmission(oc) || oc.tier3_status !== null;
+    // Supervisors and Coordinators now share the same 2-tier flow (FOM → Admin).
+    // Tier 3 only applies to legacy records that already have tier3_status set.
+    return oc.tier3_status !== null && oc.tier3_status !== undefined;
   };
 
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
@@ -662,12 +664,7 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    if (isSupervisorSubmission(oc)) {
-      return isFOM || isCountryDirector;
-    }
-    if (isCoordinatorSubmission(oc)) {
-      return isSupervisor;
-    }
+    // Supervisor and Coordinator share the same hierarchy: FOM or Country Director reviews Tier 1
     return isFOM || isCountryDirector;
   };
 
@@ -677,9 +674,7 @@ const CostSubmission = () => {
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
     if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    if (isCoordinatorSubmission(oc)) {
-      return isFOM || isCountryDirector;
-    }
+    // Supervisor and Coordinator: Admin/Super Admin approves Tier 2 (handled above)
     return false;
   };
 
@@ -2276,15 +2271,15 @@ const CostSubmission = () => {
         description="This page is for submitting OPERATIONAL COSTS you have already spent during fieldwork -- things like transportation, accommodation, communication, supplies, and other work-related expenses (9 categories available). This is DIFFERENT from wallet withdrawals (taking money out of your wallet -- use My Wallet page) and transportation advances (getting money upfront before a trip -- use Down-Payment Approval page). Here you are requesting REIMBURSEMENT for expenses already incurred. Each submission goes through a two-tier approval before the amount is credited to your wallet."
         descriptionAr="هذه الصفحة مخصصة لتقديم التكاليف التشغيلية التي أنفقتها أثناء العمل الميداني -- مثل النقل، والإقامة، والاتصالات، والمستلزمات، وغيرها من المصاريف المتعلقة بالعمل (٩ فئات متاحة). هذه الصفحة مختلفة عن سحب المحفظة (سحب الأموال من محفظتك -- استخدم صفحة محفظتي) وعن السلف المسبقة للنقل (الحصول على أموال مقدماً قبل الرحلة -- استخدم صفحة الموافقة على الدفعات المقدمة). هنا أنت تطلب استرداد مصاريف تم إنفاقها بالفعل. كل طلب يمر بموافقة على مستويين قبل إضافة المبلغ إلى محفظتك."
         workflowSteps={[
-          { step: 1, role: 'Field Staff', action: 'Submits expense (YOU ARE HERE)', description: 'Fill in cost details, select the expense category, attach receipts if needed, and submit for review.' },
-          { step: 2, role: 'Supervisor', action: 'Reviews submission (Tier 1)', description: 'Your supervisor checks the expense is legitimate, then approves, rejects, or sends it back for edits.' },
-          { step: 3, role: 'Admin', action: 'Final approval with signature (Tier 2)', description: 'Admin or Finance Admin gives final approval and signs digitally. An approval certificate PDF is generated.' },
+          { step: 1, role: 'Supervisor / Coordinator', action: 'Submits expense (YOU ARE HERE)', description: 'Fill in cost details, select the expense category, attach receipts if needed, and submit for review.' },
+          { step: 2, role: 'FOM / Country Director', action: 'Tier 1 Review', description: 'FOM or Country Director checks the expense is legitimate, then approves, rejects, or sends it back for edits.' },
+          { step: 3, role: 'Admin / Super Admin', action: 'Final approval with signature (Tier 2)', description: 'Admin gives final approval and signs digitally. An approval certificate PDF is generated.' },
           { step: 4, role: 'System', action: 'Credits your wallet', description: 'The approved amount is automatically added to your wallet balance. You can then request a withdrawal from the My Wallet page.' },
         ]}
         workflowStepsAr={[
-          { step: 1, role: 'موظف ميداني', action: 'يقدم المصروف (أنت هنا)', description: 'قم بملء تفاصيل التكلفة، واختر فئة المصروف، وأرفق الإيصالات إن لزم الأمر، ثم أرسل للمراجعة.' },
-          { step: 2, role: 'المشرف', action: 'يراجع الطلب (المستوى الأول)', description: 'يتحقق مشرفك من صحة المصروف، ثم يوافق عليه أو يرفضه أو يعيده للتعديل.' },
-          { step: 3, role: 'المدير', action: 'الموافقة النهائية مع التوقيع (المستوى الثاني)', description: 'يمنح المدير أو مدير المالية الموافقة النهائية ويوقّع رقمياً. يتم إنشاء شهادة موافقة بصيغة PDF.' },
+          { step: 1, role: 'مشرف / منسق', action: 'يقدم المصروف (أنت هنا)', description: 'قم بملء تفاصيل التكلفة، واختر فئة المصروف، وأرفق الإيصالات إن لزم الأمر، ثم أرسل للمراجعة.' },
+          { step: 2, role: 'مدير العمليات / مدير القطر', action: 'المراجعة (المستوى الأول)', description: 'يتحقق مدير العمليات الميدانية أو مدير القطر من صحة المصروف، ثم يوافق عليه أو يرفضه أو يعيده للتعديل.' },
+          { step: 3, role: 'المسؤول', action: 'الموافقة النهائية مع التوقيع (المستوى الثاني)', description: 'يمنح المسؤول الموافقة النهائية ويوقّع رقمياً. يتم إنشاء شهادة موافقة بصيغة PDF.' },
           { step: 4, role: 'النظام', action: 'يُضيف رصيداً لمحفظتك', description: 'يُضاف المبلغ المعتمد تلقائياً إلى رصيد محفظتك. يمكنك بعدها طلب سحب من صفحة محفظتي.' },
         ]}
       />
@@ -2296,55 +2291,42 @@ const CostSubmission = () => {
           here" copy contradictory. /my-expenses is still reachable from the
           left navigation. */}
 
-      {/* Supervisor Hub Overview — only visible to supervisors (not admins) */}
+      {/* Supervisor submission summary — Supervisors follow the same hierarchy as Coordinators:
+          FOM (Tier 1) → Admin (Tier 2) → Finance. They are submitters, not approvers here. */}
       {isSupervisor && !isAdmin && !isSuperAdmin && (() => {
-        const pendingTier1 = operationalCosts.filter(oc => canTier1Approve(oc));
-        const totalPendingAmt = pendingTier1.reduce((s, oc) => s + oc.amount_cents / 100, 0);
-        const submitterMap: Record<string, { name: string; count: number; total: number; currency: string }> = {};
-        pendingTier1.forEach(oc => {
-          const profile = users.find(u => u.id === oc.submitted_by);
-          const name = (profile as any)?.fullName || (profile as any)?.full_name || (profile as any)?.name || oc.submitted_by || 'Unknown';
-          if (!submitterMap[oc.submitted_by]) submitterMap[oc.submitted_by] = { name, count: 0, total: 0, currency: oc.currency };
-          submitterMap[oc.submitted_by].count++;
-          submitterMap[oc.submitted_by].total += oc.amount_cents / 100;
-        });
-        const submitters = Object.values(submitterMap).sort((a, b) => b.total - a.total);
+        const mySubmissions = operationalCosts.filter(oc => oc.submitted_by === currentUser?.id);
+        const pendingCount  = mySubmissions.filter(oc => getOperationalDerivedStatus(oc) === 'pending').length;
+        const reviewCount   = mySubmissions.filter(oc => getOperationalDerivedStatus(oc) === 'under_review').length;
+        const approvedCount = mySubmissions.filter(oc => getOperationalDerivedStatus(oc) === 'approved').length;
+        if (mySubmissions.length === 0) return null;
         return (
           <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 p-4 sm:p-5 mb-1">
             <div className="flex items-center gap-2 mb-3">
               <div className="h-7 w-7 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Users className="h-4 w-4 text-white" />
+                <FileText className="h-4 w-4 text-white" />
               </div>
-              <h2 className="font-semibold text-blue-900 dark:text-blue-100 text-sm sm:text-base">Hub Overview — Pending Your Approval</h2>
-              {pendingTier1.length > 0 && (
-                <span className="ml-auto inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
-                  {pendingTier1.length}
+              <h2 className="font-semibold text-blue-900 dark:text-blue-100 text-sm sm:text-base">My Submissions Overview</h2>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs">
+              {pendingCount > 0 && (
+                <span className="flex items-center gap-1 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 px-2.5 py-1 rounded-full font-medium">
+                  <Clock className="h-3 w-3" /> {pendingCount} Awaiting Tier 1
                 </span>
               )}
+              {reviewCount > 0 && (
+                <span className="flex items-center gap-1 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200 px-2.5 py-1 rounded-full font-medium">
+                  <RefreshCw className="h-3 w-3" /> {reviewCount} Under Review
+                </span>
+              )}
+              {approvedCount > 0 && (
+                <span className="flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200 px-2.5 py-1 rounded-full font-medium">
+                  <CheckCircle2 className="h-3 w-3" /> {approvedCount} Approved
+                </span>
+              )}
+              <span className="flex items-center gap-1 text-blue-600 dark:text-blue-300 ml-auto">
+                {mySubmissions.length} total submission{mySubmissions.length !== 1 ? 's' : ''}
+              </span>
             </div>
-            {pendingTier1.length === 0 ? (
-              <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                All caught up — no pending Tier 1 approvals in your hub.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
-                  {pendingTier1.length} submission{pendingTier1.length !== 1 ? 's' : ''} from {submitters.length} team member{submitters.length !== 1 ? 's' : ''} totalling <strong>SDG {totalPendingAmt.toLocaleString()}</strong>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {submitters.map(s => (
-                    <div key={s.name} className="flex items-center gap-1.5 bg-white dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 rounded-lg px-2.5 py-1.5 text-xs">
-                      <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
-                        {s.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-medium text-blue-900 dark:text-blue-100 max-w-[100px] truncate">{s.name}</span>
-                      <span className="text-blue-500 dark:text-blue-400 shrink-0">{s.count} × {s.currency} {s.total.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         );
       })()}
@@ -2551,11 +2533,10 @@ const CostSubmission = () => {
                     <h4 className="font-semibold text-sm">Tier 1 Review</h4>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    <strong>Coordinator submits:</strong> Supervisor reviews.<br/>
-                    <strong>Supervisor submits:</strong> FOM/Country Director reviews.
+                    <strong>Supervisor &amp; Coordinator:</strong> FOM / Country Director reviews.
                   </p>
                   <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
-                    المرحلة الأولى: المنسق → المشرف | المشرف → مدير العمليات الميدانية
+                    المرحلة الأولى (المشرف والمنسق): مدير العمليات الميدانية / مدير القطر
                   </p>
                 </div>
                 
@@ -2565,24 +2546,10 @@ const CostSubmission = () => {
                     <h4 className="font-semibold text-sm">Tier 2 Review</h4>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    <strong>Coordinator:</strong> FOM/Country Director reviews.<br/>
-                    <strong>Supervisor:</strong> Admin final approval (with signature).
+                    <strong>Supervisor &amp; Coordinator:</strong> Admin / Super Admin gives final approval with digital signature.
                   </p>
                   <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
-                    المرحلة الثانية: المنسق → مدير العمليات | المشرف → المسؤول (موافقة نهائية مع التوقيع)
-                  </p>
-                </div>
-
-                <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">4</div>
-                    <h4 className="font-semibold text-sm">Tier 3 (Coordinators Only)</h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Admin/Super Admin gives final approval with digital signature. Only applies to Coordinator submissions (3-tier workflow).
-                  </p>
-                  <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
-                    المرحلة الثالثة (للمنسقين فقط): المسؤول يوافق نهائياً بالتوقيع الرقمي.
+                    المرحلة الثانية (المشرف والمنسق): المسؤول يوافق نهائياً بالتوقيع الرقمي.
                   </p>
                 </div>
                 
