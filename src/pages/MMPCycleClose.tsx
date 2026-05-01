@@ -412,7 +412,6 @@ const MMPCycleClose = () => {
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, accepted_by, monitoring_by, enumerator_fee, transport_fee, cost, cost_acknowledged')
         .eq('mmp_file_id', mmpId)
-        .not('enumerator_fee', 'is', null)
         .order('site_name');
       if (siteEntries && siteEntries.length > 0) {
         // Build name map by UUID (accepted_by)
@@ -3831,7 +3830,7 @@ const MMPCycleClose = () => {
 
                   {/* ── GUIDED WIZARD (cycle already in closing / pending_approval state) ── */}
                   {checklistMmpStatus !== 'active' ? (
-                    <div className="flex-1 overflow-y-auto px-6 py-6">
+                    <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-6">
                       <div className="max-w-2xl mx-auto space-y-3">
                         {cycleReadiness.loading ? (
                           <div className="flex items-center gap-3 py-12 justify-center text-muted-foreground">
