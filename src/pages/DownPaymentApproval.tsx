@@ -78,6 +78,7 @@ type GroupRow = {
   totalRequested: number;
   totalApproved: number;
   totalPaid: number;
+  totalRemaining: number;
   pending: number;
   items: DownPaymentRequest[];
 };
@@ -190,6 +191,7 @@ function GroupedSummaryTable({
               <TableHead className="text-right">Total Requested (SDG)</TableHead>
               <TableHead className="text-right">Total Approved (SDG)</TableHead>
               <TableHead className="text-right">Total Paid (SDG)</TableHead>
+              <TableHead className="text-right">Remaining (SDG)</TableHead>
               <TableHead className="text-right">Pending</TableHead>
             </TableRow>
           </TableHeader>
@@ -212,6 +214,11 @@ function GroupedSummaryTable({
                   <TableCell className="text-right font-mono">{row.totalRequested.toLocaleString()}</TableCell>
                   <TableCell className="text-right font-mono text-green-600">{row.totalApproved.toLocaleString()}</TableCell>
                   <TableCell className="text-right font-mono text-emerald-600">{row.totalPaid.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {row.totalRemaining > 0
+                      ? <span className="text-amber-600 font-semibold">{row.totalRemaining.toLocaleString()}</span>
+                      : <span className="text-muted-foreground">0</span>}
+                  </TableCell>
                   <TableCell className="text-right">
                     {row.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{row.pending}</Badge>}
                   </TableCell>
@@ -283,6 +290,7 @@ function GroupedSummaryTable({
               <TableCell className="text-right font-mono font-bold">{rows.reduce((s, r) => s + r.totalRequested, 0).toLocaleString()}</TableCell>
               <TableCell className="text-right font-mono font-bold text-green-600">{rows.reduce((s, r) => s + r.totalApproved, 0).toLocaleString()}</TableCell>
               <TableCell className="text-right font-mono font-bold text-emerald-600">{rows.reduce((s, r) => s + r.totalPaid, 0).toLocaleString()}</TableCell>
+              <TableCell className="text-right font-mono font-bold text-amber-600">{rows.reduce((s, r) => s + r.totalRemaining, 0).toLocaleString()}</TableCell>
               <TableCell className="text-right font-bold">{rows.reduce((s, r) => s + r.pending, 0)}</TableCell>
             </TableRow>
           </tfoot>
@@ -541,10 +549,11 @@ export default function DownPaymentApproval() {
     const map: Record<string, GroupRow> = {};
     filteredRequests.forEach(req => {
       const k = keyFn(req) || 'Unknown';
-      if (!map[k]) map[k] = { key: k, name: k, requests: 0, totalRequested: 0, totalApproved: 0, totalPaid: 0, pending: 0, items: [] };
+      if (!map[k]) map[k] = { key: k, name: k, requests: 0, totalRequested: 0, totalApproved: 0, totalPaid: 0, totalRemaining: 0, pending: 0, items: [] };
       map[k].requests++;
       map[k].totalRequested += req.requestedAmount;
       map[k].totalPaid += req.totalPaidAmount || 0;
+      map[k].totalRemaining += req.remainingAmount ?? (req.requestedAmount - (req.totalPaidAmount || 0));
       map[k].items.push(req);
       if (['approved', 'partially_paid', 'fully_paid', 'completed', 'closed'].includes(req.status)) map[k].totalApproved += (req.approvedAmount || req.requestedAmount);
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) map[k].pending++;
