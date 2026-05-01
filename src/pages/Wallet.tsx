@@ -2181,24 +2181,34 @@ const WalletPage = () => {
                               <Receipt className="w-3.5 h-3.5" />
                               Payment Receipt / إيصال الدفع
                             </p>
-                            {advance.paymentProofUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                              <a href={advance.paymentProofUrl} target="_blank" rel="noopener noreferrer">
-                                <img
-                                  src={advance.paymentProofUrl}
-                                  alt="Payment receipt"
-                                  className="max-h-40 w-full rounded object-contain border border-amber-500/20 cursor-pointer hover:opacity-90 transition-opacity"
-                                />
-                              </a>
-                            ) : (
-                              <a
-                                href={advance.paymentProofUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-xs text-amber-300 underline"
-                              >
-                                View Payment Receipt / عرض الإيصال
-                              </a>
-                            )}
+                            {(() => {
+                              let urls: string[] = [];
+                              try { const p = JSON.parse(advance.paymentProofUrl!); urls = Array.isArray(p) ? p : [advance.paymentProofUrl!]; }
+                              catch { urls = [advance.paymentProofUrl!]; }
+                              return urls.map((url, i) => (
+                                <div key={i}>
+                                  {urls.length > 1 && <p className="text-[10px] text-amber-400 mb-0.5">Receipt {i + 1}</p>}
+                                  {url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                                    <a href={url} target="_blank" rel="noopener noreferrer">
+                                      <img
+                                        src={url}
+                                        alt={`Payment receipt ${i + 1}`}
+                                        className="max-h-40 w-full rounded object-contain border border-amber-500/20 cursor-pointer hover:opacity-90 transition-opacity"
+                                      />
+                                    </a>
+                                  ) : (
+                                    <a
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 text-xs text-amber-300 underline"
+                                    >
+                                      {urls.length > 1 ? `View Receipt ${i + 1}` : 'View Payment Receipt / عرض الإيصال'}
+                                    </a>
+                                  )}
+                                </div>
+                              ));
+                            })()}
                             {advance.paymentProofNotes && (
                               <p className="text-xs text-muted-foreground italic">"{advance.paymentProofNotes}"</p>
                             )}

@@ -282,12 +282,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const [batchPayDialog, setBatchPayDialog] = useState<{
     open: boolean;
     requests: DownPaymentRequest[];
-    proofFile: File | null;
-    proofPreviewUrl: string | null;
+    proofFiles: File[];
+    proofPreviewUrls: string[];
     notes: string;
     uploading: boolean;
     partialPercent: number | null;
-  }>({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
+  }>({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
 
   const [bulkConfirmRequests, setBulkConfirmRequests] = useState<DownPaymentRequest[]>([]);
 
@@ -1635,32 +1635,52 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const handleOpenBatchPay = (reqs: DownPaymentRequest[]) => {
     const eligible = reqs.filter(r => r.status === 'approved');
     if (eligible.length === 0) return;
-    setBatchPayDialog({ open: true, requests: eligible, proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
+    setBatchPayDialog({ open: true, requests: eligible, proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
   };
 
   const handleBatchPayProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
-    setBatchPayDialog(prev => ({ ...prev, proofFile: file, proofPreviewUrl: previewUrl }));
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    e.target.value = '';
+    const newPreviews = files.map(f => f.type.startsWith('image/') ? URL.createObjectURL(f) : '');
+    setBatchPayDialog(prev => ({
+      ...prev,
+      proofFiles: [...prev.proofFiles, ...files],
+      proofPreviewUrls: [...prev.proofPreviewUrls, ...newPreviews],
+    }));
+  };
+
+  const handleRemoveBatchProofFile = (index: number) => {
+    setBatchPayDialog(prev => {
+      const newFiles = [...prev.proofFiles];
+      const newUrls = [...prev.proofPreviewUrls];
+      if (newUrls[index]) URL.revokeObjectURL(newUrls[index]);
+      newFiles.splice(index, 1);
+      newUrls.splice(index, 1);
+      return { ...prev, proofFiles: newFiles, proofPreviewUrls: newUrls };
+    });
   };
 
   const handleConfirmBatchPay = async () => {
-    const { requests: reqs, proofFile, notes, partialPercent } = batchPayDialog;
+    const { requests: reqs, proofFiles, notes, partialPercent } = batchPayDialog;
     if (!currentUser?.id || reqs.length === 0) return;
-    if (!proofFile) {
-      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach one receipt that covers all selected payments.", variant: "destructive" });
+    if (proofFiles.length === 0) {
+      toast({ title: "Receipt Required / الإيصال مطلوب", description: "Attach at least one receipt before confirming.", variant: "destructive" });
       return;
     }
     setBatchPayDialog(prev => ({ ...prev, uploading: true }));
     try {
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2, 8);
-      const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
-      const filePath = `payment-proofs/batch_${timestamp}_${random}.${extension}`;
-      const { error: uploadErr } = await supabase.storage.from('mmp-files').upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
-      if (uploadErr) throw new Error(uploadErr.message);
-      const proofUrl = supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl;
+      const uploadedUrls: string[] = [];
+      for (const proofFile of proofFiles) {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = proofFile.name.split('.').pop()?.toLowerCase() || 'file';
+        const filePath = `payment-proofs/batch_${timestamp}_${random}.${extension}`;
+        const { error: uploadErr } = await supabase.storage.from('mmp-files').upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+        if (uploadErr) throw new Error(uploadErr.message);
+        uploadedUrls.push(supabase.storage.from('mmp-files').getPublicUrl(filePath).data.publicUrl);
+      }
+      const proofUrl = uploadedUrls.length === 1 ? uploadedUrls[0] : JSON.stringify(uploadedUrls);
       const now = new Date().toISOString();
       const isPartial = partialPercent !== null && partialPercent > 0 && partialPercent < 100;
 
@@ -1716,7 +1736,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         title: `Batch Payment Complete / اكتمل الدفع الجماعي`,
         description: `${successCount} ${isPartialFinal ? `partially paid (${partialPercent}%)` : 'fully paid'} with one shared receipt${failCount > 0 ? ` · ${failCount} failed` : ''}.`,
       });
-      setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
+      setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
       clearSelection();
       refreshRequests();
     } catch (err: any) {
@@ -2227,22 +2247,30 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
               )}
 
               {request.paymentProofUrl && (
-                <div className="flex items-center gap-1.5 pt-0.5" data-testid={`text-payment-receipt-${request.id}`}>
-                  <span className="font-semibold text-muted-foreground min-w-[22px]">
+                <div className="flex items-start gap-1.5 pt-0.5" data-testid={`text-payment-receipt-${request.id}`}>
+                  <span className="font-semibold text-muted-foreground min-w-[22px] mt-0.5">
                     <FileText className="h-3.5 w-3.5 inline" />
                   </span>
-                  <span className="flex items-center gap-2 flex-wrap">
+                  <span className="flex flex-col gap-1">
                     <span className="text-muted-foreground">Payment Receipt / إيصال الدفع:</span>
-                    <a
-                      href={request.paymentProofUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
-                      data-testid={`link-payment-receipt-${request.id}`}
-                    >
-                      <Eye className="h-3 w-3" />
-                      View Receipt / عرض الإيصال
-                    </a>
+                    {(() => {
+                      let urls: string[] = [];
+                      try { const parsed = JSON.parse(request.paymentProofUrl!); urls = Array.isArray(parsed) ? parsed : [request.paymentProofUrl!]; }
+                      catch { urls = [request.paymentProofUrl!]; }
+                      return urls.map((url, i) => (
+                        <a
+                          key={i}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                          data-testid={`link-payment-receipt-${request.id}-${i}`}
+                        >
+                          <Eye className="h-3 w-3" />
+                          {urls.length > 1 ? `Receipt ${i + 1}` : 'View Receipt / عرض الإيصال'}
+                        </a>
+                      ));
+                    })()}
                     {request.paymentProofUploadedAt && (
                       <span className="text-muted-foreground">
                         — {format(new Date(request.paymentProofUploadedAt), 'MMM d, yyyy h:mm a')}
@@ -4805,8 +4833,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         open={batchPayDialog.open}
         onOpenChange={(open) => {
           if (!open && !batchPayDialog.uploading) {
-            if (batchPayDialog.proofPreviewUrl) URL.revokeObjectURL(batchPayDialog.proofPreviewUrl);
-            setBatchPayDialog({ open: false, requests: [], proofFile: null, proofPreviewUrl: null, notes: '', uploading: false, partialPercent: null });
+            batchPayDialog.proofPreviewUrls.forEach(u => { if (u) URL.revokeObjectURL(u); });
+            setBatchPayDialog({ open: false, requests: [], proofFiles: [], proofPreviewUrls: [], notes: '', uploading: false, partialPercent: null });
           }
         }}
       >
@@ -4851,39 +4879,67 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 ))}
               </div>
 
-              {/* Receipt upload */}
+              {/* Receipt upload — multiple allowed */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Shared Receipt / الإيصال المشترك <span className="text-red-500">*</span>
-                </Label>
-                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center hover:border-emerald-400 transition-colors relative">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    Receipts / الإيصالات <span className="text-red-500">*</span>
+                  </Label>
+                  {batchPayDialog.proofFiles.length > 0 && (
+                    <span className="text-xs text-muted-foreground">{batchPayDialog.proofFiles.length} file{batchPayDialog.proofFiles.length !== 1 ? 's' : ''} added</span>
+                  )}
+                </div>
+
+                {/* Existing receipts list */}
+                {batchPayDialog.proofFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {batchPayDialog.proofFiles.map((file, idx) => (
+                      <div key={idx} className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-muted/30">
+                        {batchPayDialog.proofPreviewUrls[idx] ? (
+                          <img src={batchPayDialog.proofPreviewUrls[idx]} alt={`Receipt ${idx + 1}`} className="h-10 w-10 object-cover rounded border shrink-0" />
+                        ) : (
+                          <FileText className="h-8 w-8 text-red-500 shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{file.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveBatchProofFile(idx)}
+                          disabled={batchPayDialog.uploading}
+                          data-testid={`button-remove-batch-receipt-${idx}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add receipt drop zone */}
+                <div className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-3 text-center hover:border-emerald-400 transition-colors relative">
                   <input
                     type="file"
                     accept="image/*,application/pdf"
+                    multiple
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     onChange={handleBatchPayProofFileChange}
                     disabled={batchPayDialog.uploading}
                     data-testid="input-batch-payment-proof"
                   />
-                  {batchPayDialog.proofFile ? (
-                    <div className="space-y-2">
-                      {batchPayDialog.proofPreviewUrl ? (
-                        <img src={batchPayDialog.proofPreviewUrl} alt="Receipt preview" className="max-h-32 mx-auto rounded object-contain" />
-                      ) : (
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                          <FileText className="h-8 w-8 text-red-500" />
-                          <span>{batchPayDialog.proofFile.name}</span>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">Click to change / انقر للتغيير</p>
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground">
-                      <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-40" />
-                      <p className="text-sm">Upload the batch receipt (image or PDF)</p>
-                      <p className="text-xs opacity-60">This one file will be linked to all {batchPayDialog.requests.length} requests</p>
-                    </div>
-                  )}
+                  <div className="text-muted-foreground pointer-events-none">
+                    <ImageIcon className="h-6 w-6 mx-auto mb-1 opacity-40" />
+                    <p className="text-xs">
+                      {batchPayDialog.proofFiles.length === 0
+                        ? 'Upload receipts (image or PDF)'
+                        : 'Add more receipts / أضف المزيد'}
+                    </p>
+                    <p className="text-[10px] opacity-50 mt-0.5">Click or drag — multiple files allowed</p>
+                  </div>
                 </div>
               </div>
 
@@ -4977,7 +5033,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
             <Button
               type="button"
               onClick={handleConfirmBatchPay}
-              disabled={batchPayDialog.uploading || !batchPayDialog.proofFile}
+              disabled={batchPayDialog.uploading || batchPayDialog.proofFiles.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
               data-testid="button-confirm-batch-pay"
             >
