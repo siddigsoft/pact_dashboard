@@ -65,6 +65,20 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         window.location.reload();
       }
     }
+
+    // Stale deployment: chunk URLs change after a new Vercel/CDN deploy.
+    // One auto-reload is enough — the browser will fetch the new manifest and chunks.
+    const isChunkLoadError = /loading chunk|failed to fetch|dynamically imported module/i.test(msg);
+    if (isChunkLoadError) {
+      const key = 'eb_chunk_reload_ts';
+      const last = parseInt(sessionStorage.getItem(key) ?? '0', 10);
+      const now = Date.now();
+      // Allow one reload per 30 seconds — long cooldown to avoid loops if CDN is down
+      if (now - last > 30000) {
+        sessionStorage.setItem(key, String(now));
+        window.location.reload();
+      }
+    }
   }
 
   handleRetry = () => {

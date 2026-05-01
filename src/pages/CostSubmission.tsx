@@ -172,8 +172,10 @@ const CostSubmission = () => {
   
   // Check if user is admin or supervisor
   const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
-  const isSupervisor = roles?.includes('hubSupervisor' as AppRole) || 
+  const isSupervisor = roles?.includes('Supervisor' as AppRole) ||
+                       roles?.includes('hubSupervisor' as AppRole) || 
                        roles?.includes('supervisor' as AppRole) ||
+                       currentUser?.role === 'Supervisor' ||
                        currentUser?.role === 'hubSupervisor' || 
                        currentUser?.role === 'supervisor';
   
