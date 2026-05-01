@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, memo, useTransition, type ReactNode } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -125,7 +125,7 @@ function VirtualizedRequestList({
   );
 }
 
-function BulkSummaryTable({ requests, users }: {
+const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
   requests: Array<{ requestedBy?: string; requestedAmount: number; approvedAmount?: number; stateName?: string; hubName?: string; [key: string]: unknown }>;
   users?: Array<{ id: string; email?: string; [key: string]: unknown }>;
 }) {
@@ -221,13 +221,14 @@ function BulkSummaryTable({ requests, users }: {
       </div>
     </div>
   );
-}
+});
 
 export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFiltersBar }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, bulkRevertToPending, confirmReceipt, reportNotReceived, resendPaymentNotification, deleteRequest, editRequest } = useDownPayment();
   const { toast } = useToast();
+  const [, startTransition] = useTransition();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
@@ -380,6 +381,12 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
     [filteredRequests]
   );
   const stats = useMemo(() => getDownPaymentStats(filteredRequests), [filteredRequests]);
+
+  // O(1) set lookup for recipient checkboxes — avoids O(n²) .includes() on every render
+  const selectedRecipientSet = useMemo(
+    () => new Set(paymentRequestDialog.selectedRecipientIds),
+    [paymentRequestDialog.selectedRecipientIds]
+  );
 
   const pendingRequests = useMemo(() => {
     if (userRole === 'supervisor') {
@@ -1093,6 +1100,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
   const [ccContacts, setCcContacts] = useState<Array<{ id: string; email: string; name: string; role: string }>>([]);
+  // CC contacts excluding already-selected To recipients — memoized to avoid O(n²) filter on every render
+  const ccAvailableContacts = useMemo(
+    () => ccContacts.filter(c => !selectedRecipientSet.has(c.id)),
+    [ccContacts, selectedRecipientSet]
+  );
 
   useEffect(() => {
     loadFinanceRecipients().catch(() => {});
@@ -1127,7 +1139,11 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const openBulkPaymentRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+      // Open shell immediately; defer heavy BulkSummaryTable render via transition
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+      startTransition(() => {
+        setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
+      });
       loadFinanceRecipients(true).then(fresh => {
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
       }).catch(() => {});
@@ -1146,7 +1162,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
   const openBulkExcelRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
     const cached = cachedRecipientsRef.current;
     if (cached && cached.length > 0) {
-      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue, sendMode: 'excel' }));
+      startTransition(() => {
+        setPaymentRequestDialog(prev => ({ ...prev, bulkRequests: reqs }));
+      });
       loadFinanceRecipients(true).then(fresh => {
         setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
       }).catch(() => {});
@@ -4442,7 +4461,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                     {paymentRequestDialog.availableRecipients.map(r => (
                       <div key={r.id} className="flex items-center gap-2 p-2 rounded-md hover-elevate">
                         <Checkbox
-                          checked={paymentRequestDialog.selectedRecipientIds.includes(r.id)}
+                          checked={selectedRecipientSet.has(r.id)}
                           onCheckedChange={() => {
                             setPaymentRequestDialog(prev => ({
                               ...prev,
@@ -4471,7 +4490,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                 <EmailCCInput
                   ccEmails={paymentRequestDialog.ccEmails}
                   onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
-                  contacts={ccContacts.filter(c => !paymentRequestDialog.selectedRecipientIds.includes(c.id))}
+                  contacts={ccAvailableContacts}
                 />
               </div>
             </div>
