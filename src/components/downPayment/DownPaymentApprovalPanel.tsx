@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, memo, useTransition, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, memo, useCallback, useTransition, type ReactNode } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -185,7 +185,7 @@ function WorkflowTimeline({ request }: { request: DownPaymentRequest }) {
   );
 }
 
-function VirtualizedRequestList({
+const VirtualizedRequestList = memo(function VirtualizedRequestList({
   requests,
   renderCard,
 }: {
@@ -202,7 +202,7 @@ function VirtualizedRequestList({
       ))}
     </div>
   );
-}
+});
 
 const BulkSummaryTable = memo(function BulkSummaryTable({ requests, users }: {
   requests: Array<{ requestedBy?: string; requestedAmount: number; approvedAmount?: number; stateName?: string; hubName?: string; [key: string]: unknown }>;
@@ -3034,6 +3034,10 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
 
   const hasHubId = !!currentUser?.hubId;
 
+  const renderCardWithCheckbox = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showCheckbox />, [RequestCard]);
+  const renderCardPlain = useCallback((r: DownPaymentRequest) => <RequestCard request={r} />, [RequestCard]);
+  const renderCardWithConfirmation = useCallback((r: DownPaymentRequest) => <RequestCard request={r} showConfirmationDetails />, [RequestCard]);
+
   return (
     <>
       {userRole === 'supervisor' && !hasHubId && (
@@ -3250,7 +3254,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   Select All
                 </Button>
               </div>
-              <VirtualizedRequestList requests={pendingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
+              <VirtualizedRequestList requests={pendingRequests} renderCard={renderCardWithCheckbox} />
             </div>
           )}
         </TabsContent>
@@ -3333,7 +3337,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   Select All ({approvedRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={approvedRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
+              <VirtualizedRequestList requests={approvedRequests} renderCard={renderCardWithCheckbox} />
             </div>
           )}
         </TabsContent>
@@ -3597,7 +3601,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   Select All ({processingRequests.length})
                 </Button>
               </div>
-              <VirtualizedRequestList requests={processingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
+              <VirtualizedRequestList requests={processingRequests} renderCard={renderCardWithCheckbox} />
             </div>
           )}
         </TabsContent>
@@ -3683,14 +3687,14 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                       </div>
                     )}
                   </div>
-                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={(r) => <RequestCard request={r} showCheckbox />} />
+                  <VirtualizedRequestList requests={paidWaitingRequests} renderCard={renderCardWithCheckbox} />
                 </div>
               )
             ) : (
               paidConfirmedRequests.length === 0 ? (
                 <Card><CardContent className="py-8 text-center text-muted-foreground">No confirmed requests / لا توجد طلبات مؤكدة</CardContent></Card>
               ) : (
-                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={(r) => <RequestCard request={r} showConfirmationDetails />} />
+                <VirtualizedRequestList requests={paidConfirmedRequests} renderCard={renderCardWithConfirmation} />
               )
             )}
           </div>
@@ -3714,7 +3718,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
                   {closedRequests.filter(r => r.status === 'cancelled').length} Cancelled
                 </Badge>
               </div>
-              <VirtualizedRequestList requests={closedRequests} renderCard={(r) => <RequestCard request={r} />} />
+              <VirtualizedRequestList requests={closedRequests} renderCard={renderCardPlain} />
             </>
           )}
         </TabsContent>
@@ -3724,7 +3728,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           {filteredRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests found</CardContent></Card>
           ) : (
-            <VirtualizedRequestList requests={filteredRequests} renderCard={(r) => <RequestCard request={r} />} />
+            <VirtualizedRequestList requests={filteredRequests} renderCard={renderCardPlain} />
           )}
         </TabsContent>
       </Tabs>

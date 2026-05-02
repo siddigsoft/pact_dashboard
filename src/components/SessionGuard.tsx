@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { realtimeManager } from '@/lib/realtime-manager';
 import { replaceSupabaseClient } from '@/integrations/supabase/client';
 
-const IDLE_THRESHOLD = 60 * 1000; // 1 minute — detect idle sooner
+const IDLE_THRESHOLD = 5 * 60 * 1000; // 5 minutes — avoid false expiry on short tab switches
 const DEBOUNCE_MS = 2000;
 const RECOVERY_COOLDOWN_MS = 30 * 1000;
 
