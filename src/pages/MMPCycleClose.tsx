@@ -1404,24 +1404,7 @@ const MMPCycleClose = () => {
 
   const [userHubName, setUserHubName] = useState<string>('');
 
-  useEffect(() => {
-    if (isSupervisor && currentUser?.hubId) {
-      const hubIds = [currentUser.hubId];
-      if ((currentUser as any)?.secondaryHubId) {
-        hubIds.push((currentUser as any).secondaryHubId);
-      }
-
-      supabase.from('hubs').select('name').in('id', hubIds)
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const names = data.map((h: any) => h.name).filter(Boolean);
-            const displayName = names.join(' & ');
-            setUserHubName(displayName);
-            setFilterHub(displayName);
-          }
-        });
-    }
-  }, [isSupervisor, currentUser?.hubId, (currentUser as any)?.secondaryHubId]);
+  // Supervisor hub-filter removed — supervisors are no longer engaged in the cycle close flow.
 
   const activeMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => {
@@ -3483,10 +3466,11 @@ const MMPCycleClose = () => {
       const progressPct = mmpUncoveredCount > 0 ? Math.round((mmpReasonedCount / mmpUncoveredCount) * 100) : 100;
       const deadlineStr = (mmp as any)?.cycle_close_deadline ? new Date((mmp as any).cycle_close_deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A';
 
+      // Reminder recipients: FOM + Super Admin only — supervisors/coordinators not in cycle close flow
       let recipientQuery = supabase
         .from('profiles')
         .select('id, full_name, email, hub_id, role')
-        .in('role', ['Supervisor', 'supervisor', 'fom', 'Field Operation Manager (FOM)', 'super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin'])
+        .in('role', ['fom', 'Field Operation Manager (FOM)', 'super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin'])
         .eq('status', 'approved');
 
       if (mmpHub) {
@@ -3500,7 +3484,7 @@ const MMPCycleClose = () => {
           const { data: hubRecipients } = await supabase
             .from('profiles')
             .select('id, full_name, email, hub_id, role')
-            .in('role', ['Supervisor', 'supervisor', 'fom', 'Field Operation Manager (FOM)'])
+            .in('role', ['fom', 'Field Operation Manager (FOM)'])
             .eq('hub_id', hubId)
             .eq('status', 'approved');
 
