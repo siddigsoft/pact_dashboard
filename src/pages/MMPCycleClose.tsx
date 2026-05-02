@@ -270,6 +270,7 @@ const MMPCycleClose = () => {
     state: string;
     locality: string;
     status: string;
+    enumeratorId: string | null;
     enumeratorName: string;
     enumeratorFee: number;
     transportFee: number;
@@ -552,6 +553,7 @@ const MMPCycleClose = () => {
         return {
           id: e.id, siteName: e.site_name || '—', siteCode: e.site_code || '—',
           state: e.state || '—', locality: e.locality || '—', status: e.status || 'unknown',
+          enumeratorId: e.accepted_by ?? null,
           enumeratorName: nameMap[e.accepted_by] || e.monitoring_by || 'Unassigned',
           enumeratorFee: enumFee, transportFee: transFee, totalFee,
           costAcknowledged: e.cost_acknowledged ?? false,
@@ -604,6 +606,97 @@ const MMPCycleClose = () => {
       setConfirmingPayments(false);
     }
   }, [mmpFiles, currentUser, refreshMMPFiles, toast]);
+
+  const handleLockFees = useCallback(async (mmpId: string) => {
+    const rate = parseFloat(exchangeRateInput);
+    if (!rate || rate <= 0) {
+      toast({ title: 'Invalid Rate', description: 'Please enter a valid exchange rate greater than 0.', variant: 'destructive' });
+      return;
+    }
+    setLockingFees(true);
+    setWalletUpdateResults(null);
+    try {
+      const eligibleStatuses = ['dispatched', 'assigned', 'submitted', 'wfp_confirmed', 'completed', 'verified', 'approved'];
+      const sitesToUpdate = allSiteReviewData.filter(s => eligibleStatuses.includes(s.status));
+      if (sitesToUpdate.length === 0) {
+        toast({ title: 'No Eligible Sites', description: 'No dispatched/completed sites found to update.', variant: 'destructive' });
+        return;
+      }
+
+      // Bulk update mmp_site_entries fees to SDG equivalent
+      for (const site of sitesToUpdate) {
+        const newEnumFee = Math.round(site.enumeratorFee * rate);
+        const newTransFee = Math.round(site.transportFee * rate);
+        await supabase.from('mmp_site_entries').update({
+          enumerator_fee: newEnumFee,
+          transport_fee: newTransFee,
+          cost: newEnumFee + newTransFee,
+          currency: 'SDG',
+        }).eq('id', site.id);
+      }
+
+      // Wallet updates — one transaction per site per enumerator
+      let walletSuccess = 0;
+      let walletFailed = 0;
+      if (updateWallets) {
+        for (const site of sitesToUpdate) {
+          if (!site.enumeratorId) continue;
+          const sdgTotal = Math.round((site.enumeratorFee + site.transportFee) * rate);
+          if (sdgTotal <= 0) continue;
+          try {
+            const { error } = await supabase.from('wallet_transactions').upsert({
+              user_id: site.enumeratorId,
+              type: 'mmp_fee',
+              amount: sdgTotal,
+              currency: 'SDG',
+              description: `MMP Cycle Fee — ${site.siteName} (1 USD = ${rate.toLocaleString()} SDG)`,
+              reference_id: site.id,
+              reference_type: 'mmp_site_entry',
+              mmp_id: mmpId,
+              created_at: new Date().toISOString(),
+            } as any, { onConflict: 'reference_id' });
+            if (error) walletFailed++;
+            else walletSuccess++;
+          } catch {
+            walletFailed++;
+          }
+        }
+        setWalletUpdateResults({ success: walletSuccess, failed: walletFailed });
+      }
+
+      // Persist rate + timestamp in mmp_files.payment_tracking
+      const now = new Date().toISOString();
+      const mmp = (mmpFiles?.find(m => m.id === mmpId) as any);
+      const existing = mmp?.payment_tracking || {};
+      await supabase.from('mmp_files').update({
+        payment_tracking: {
+          ...existing,
+          exchange_rate_applied: rate,
+          exchange_rate_applied_at: now,
+          exchange_rate_applied_by: currentUser?.id,
+          exchange_rate_sites_updated: sitesToUpdate.length,
+        },
+      } as any).eq('id', mmpId);
+
+      setFeesLockedAt(now);
+      setFeesLockedRate(rate);
+      await refreshMMPFiles();
+      await fetchCycleSummary(mmpId);
+      await fetchAllSiteDetails(mmpId);
+
+      const walletMsg = updateWallets
+        ? walletSuccess > 0 ? ` Wallet updated for ${walletSuccess} enumerator${walletSuccess !== 1 ? 's' : ''}.` : ' Wallet update skipped (column may not exist).'
+        : '';
+      toast({
+        title: `✅ Fees Locked at 1 USD = ${rate.toLocaleString()} SDG`,
+        description: `${sitesToUpdate.length} site fees converted to SDG.${walletMsg}`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to lock fees', variant: 'destructive' });
+    } finally {
+      setLockingFees(false);
+    }
+  }, [allSiteReviewData, exchangeRateInput, updateWallets, mmpFiles, currentUser, refreshMMPFiles, fetchCycleSummary, fetchAllSiteDetails, toast]);
 
   const exportPaymentSheetExcel = useCallback(async () => {
     if (!cycleSummaryData || !checklistMmpId) return;
@@ -724,6 +817,10 @@ const MMPCycleClose = () => {
       setPaymentRequestedAt(tracking.payment_requested_at || null);
       setPaymentsConfirmedAt(tracking.payments_confirmed_at || null);
       setPaymentRequestNote('');
+      setFeesLockedAt(tracking.exchange_rate_applied_at || null);
+      setFeesLockedRate(tracking.exchange_rate_applied ?? null);
+      if (tracking.exchange_rate_applied) setExchangeRateInput(String(tracking.exchange_rate_applied));
+      setWalletUpdateResults(null);
       if (status === 'closing' || status === 'pending_approval') {
         fetchCycleSummary(checklistMmpId);
         fetchAllSiteDetails(checklistMmpId);
@@ -750,7 +847,15 @@ const MMPCycleClose = () => {
   const [siteReviewSearch, setSiteReviewSearch] = useState('');
   const [siteReviewStatusFilter, setSiteReviewStatusFilter] = useState('all');
 
-  // Step 6 — Payment Request
+  // Step 6 — Exchange Rate & Fee Lock
+  const [exchangeRateInput, setExchangeRateInput] = useState('');
+  const [feesLockedAt, setFeesLockedAt] = useState<string | null>(null);
+  const [feesLockedRate, setFeesLockedRate] = useState<number | null>(null);
+  const [lockingFees, setLockingFees] = useState(false);
+  const [updateWallets, setUpdateWallets] = useState(true);
+  const [walletUpdateResults, setWalletUpdateResults] = useState<{ success: number; failed: number } | null>(null);
+
+  // Step 7 — Payment Request
   const [paymentRequestedAt, setPaymentRequestedAt] = useState<string | null>(null);
   const [paymentsConfirmedAt, setPaymentsConfirmedAt] = useState<string | null>(null);
   const [requestingPayment, setRequestingPayment] = useState(false);
@@ -975,7 +1080,9 @@ const MMPCycleClose = () => {
     const paymentStepPassed = paymentsConfirmedAt !== null;
     const wfpPassed = wfpItem?.notConfigured ? true : (wfpItem?.passed ?? false);
     const reasonsPassed = svItem?.passed ?? false;
-    const paymentStepBlocked = !reasonsPassed || !financePassed || !wfpPassed;
+    const feesLocked = feesLockedAt !== null;
+    const exchangeRateBlocked = !reasonsPassed || !financePassed || !wfpPassed;
+    const paymentStepBlocked = exchangeRateBlocked || !feesLocked;
 
     return [
       {
@@ -1074,53 +1181,75 @@ const MMPCycleClose = () => {
         ],
       },
       {
-        id: 'payment_request', number: 6,
+        id: 'exchange_rate', number: 6,
+        title: 'Exchange Rate & Fee Lock', titleAr: 'سعر الصرف وتثبيت الأتعاب',
+        desc: feesLockedAt
+          ? `Fees locked at 1 USD = ${feesLockedRate?.toLocaleString()} SDG on ${new Date(feesLockedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. All site fees and wallets updated.`
+          : 'Enter today\'s official USD → SDG exchange rate. All dispatched site fees will be recalculated to the correct SDG amount and enumerator wallets updated.',
+        passed: feesLocked,
+        blocked: exchangeRateBlocked,
+        tab: null, actionLabel: null,
+        sub: [],
+        remaining: 0,
+        howTo: [
+          'Check today\'s official exchange rate from your finance team or central bank.',
+          'Enter "1 USD = X SDG" in the field below.',
+          'Review the live preview table — it shows every dispatched site with the calculated SDG equivalent.',
+          'Tick "Also update enumerator wallets" if you want the wallet balances updated immediately.',
+          'Click "Lock Fees & Apply Rate" — this updates all site fees in the database to SDG amounts.',
+          'Once locked, the payment sheet in Step 7 will reflect the correct final SDG amounts.',
+          'You can re-apply a corrected rate if needed — it will overwrite the previous values.',
+        ],
+      },
+      {
+        id: 'payment_request', number: 7,
         title: 'Payment Sheet & Request', titleAr: 'ورقة الدفع وطلب السداد',
         desc: paymentsConfirmedAt
           ? `Payments confirmed on ${new Date(paymentsConfirmedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} — this step is complete.`
           : paymentRequestedAt
             ? `Payment request sent on ${new Date(paymentRequestedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. Once finance processes all payments, return here to confirm.`
-            : 'Review the per-site payment sheet showing gross fees minus any advances paid. Export PDF/Excel, request payments from finance, then confirm when all payments are done.',
+            : 'Review the per-site payment sheet (now in locked SDG amounts). Export PDF/Excel, request payments from finance, then confirm when all payments are done.',
         passed: paymentStepPassed,
         blocked: paymentStepBlocked,
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: [
-          'Review the payment sheet below — each site shows: Gross Fee − Advance Already Paid = Net to Pay.',
-          'Set enumerator and transport fees for any site showing 0 using the fee editor.',
+          'Review the payment sheet below — each site shows locked SDG fees minus any advances already paid = Net to Pay.',
           'Export the Payment Sheet PDF and/or Excel file for finance processing.',
-          'Click "Send Payment Request" to formally log that payment has been requested from finance.',
+          'Click "Send Payment Request to Finance" to formally log the request.',
           'Once finance processes all payments, return here and click "Confirm All Payments Done".',
           'This step is complete once you confirm — you can then submit for final approval.',
         ],
       },
       {
-        id: 'submit', number: 7,
+        id: 'submit', number: 8,
         title: 'Submit for Approval', titleAr: 'تقديم للموافقة',
         desc: checklistMmpStatus === 'closed'
           ? 'Cycle was submitted and approved — it is permanently archived.'
           : checklistMmpStatus === 'pending_approval'
             ? 'Submitted — waiting for FOM / Director to approve or reject.'
-            : cycleReadiness.allPassed && paymentStepPassed
+            : cycleReadiness.allPassed && paymentStepPassed && feesLocked
               ? 'All gates are green and payments confirmed. Review the financial summary below, then tick the confirmation and submit.'
-              : !paymentStepPassed
-                ? 'Complete Step 6 (confirm payments done) before submitting.'
-                : 'Complete Steps 3–5 above first, then return here to submit.',
+              : !feesLocked
+                ? 'Complete Step 6 (lock exchange rate) first.'
+                : !paymentStepPassed
+                  ? 'Complete Step 7 (confirm payments done) before submitting.'
+                  : 'Complete Steps 3–5 above first, then return here to submit.',
         passed: checklistMmpStatus === 'pending_approval' || checklistMmpStatus === 'closed',
-        blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed' && (!cycleReadiness.allPassed || !paymentStepPassed),
+        blocked: checklistMmpStatus !== 'pending_approval' && checklistMmpStatus !== 'closed' && (!cycleReadiness.allPassed || !paymentStepPassed || !feesLocked),
         tab: null, actionLabel: null,
         sub: [],
         remaining: 0,
         howTo: [
-          'Ensure all previous steps are green — reasons, finance, WFP, and payments confirmed.',
+          'Ensure all previous steps are green — reasons, finance, WFP, fees locked, and payments confirmed.',
           'Tick the confirmation checkbox below.',
           'Click the green "Submit Cycle for Final Approval" button.',
           'The FOM and Country Director will be notified for review.',
         ],
       },
       {
-        id: 'approval', number: 8,
+        id: 'approval', number: 9,
         title: 'Final Approval & Archive', titleAr: 'في انتظار الموافقة',
         desc: checklistMmpStatus === 'closed'
           ? 'Cycle approved and archived. The financial settlement above is now frozen permanently.'
@@ -1147,7 +1276,7 @@ const MMPCycleClose = () => {
         ],
       },
     ];
-  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus, isFOM, isAdmin, isSuperAdmin, paymentsConfirmedAt, paymentRequestedAt]);
+  }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus, isFOM, isAdmin, isSuperAdmin, paymentsConfirmedAt, paymentRequestedAt, feesLockedAt, feesLockedRate]);
 
   const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
     mmpId: string;
@@ -4517,7 +4646,186 @@ const MMPCycleClose = () => {
                                         </div>
                                       )}
 
-                                      {/* ── Payment Sheet & Request (Step 6) ── */}
+                                      {/* ── Exchange Rate & Fee Lock (Step 6) ── */}
+                                      {step.id === 'exchange_rate' && !step.blocked && (
+                                        <div className="mt-3 space-y-3">
+
+                                          {/* Locked banner */}
+                                          {feesLockedAt && (
+                                            <div className="flex items-start gap-2.5 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-950/40 px-3 py-2.5">
+                                              <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-semibold text-green-800 dark:text-green-200">
+                                                  Fees locked at 1 USD = {feesLockedRate?.toLocaleString()} SDG
+                                                </p>
+                                                <p className="text-[10px] text-green-700 dark:text-green-400 mt-0.5">
+                                                  Applied {new Date(feesLockedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                  {walletUpdateResults && (
+                                                    <span className="ml-2">· Wallet: {walletUpdateResults.success} updated{walletUpdateResults.failed > 0 ? `, ${walletUpdateResults.failed} skipped` : ''}</span>
+                                                  )}
+                                                </p>
+                                                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                                                  ⚠ Re-applying the rate below will overwrite all site fees again.
+                                                </p>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Rate input */}
+                                          <div className="rounded-lg border bg-muted/20 p-3 space-y-2.5">
+                                            <p className="text-xs font-semibold text-foreground">Set Exchange Rate</p>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="text-xs text-muted-foreground shrink-0">1 USD =</span>
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                step="0.01"
+                                                placeholder="e.g. 580"
+                                                value={exchangeRateInput}
+                                                onChange={e => setExchangeRateInput(e.target.value)}
+                                                className="w-36 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                                                data-testid="input-exchange-rate"
+                                              />
+                                              <span className="text-xs text-muted-foreground shrink-0">SDG</span>
+                                              {parseFloat(exchangeRateInput) > 0 && (
+                                                <span className="text-xs text-green-700 dark:text-green-400 font-medium">
+                                                  ✓ Preview updates below
+                                                </span>
+                                              )}
+                                            </div>
+                                            <label className="flex items-center gap-2 cursor-pointer w-fit" data-testid="label-update-wallets">
+                                              <input
+                                                type="checkbox"
+                                                checked={updateWallets}
+                                                onChange={e => setUpdateWallets(e.target.checked)}
+                                                className="rounded border-input"
+                                                data-testid="checkbox-update-wallets"
+                                              />
+                                              <span className="text-xs text-muted-foreground">Also update enumerator wallet balances</span>
+                                            </label>
+                                          </div>
+
+                                          {/* Live preview table */}
+                                          {(() => {
+                                            const rate = parseFloat(exchangeRateInput) || 0;
+                                            const eligibleStatuses = ['dispatched', 'assigned', 'submitted', 'wfp_confirmed', 'completed', 'verified', 'approved'];
+                                            const previewRows = allSiteReviewData.filter(s => eligibleStatuses.includes(s.status));
+                                            if (previewRows.length === 0) return (
+                                              <p className="text-xs text-muted-foreground text-center py-3">
+                                                No dispatched or completed sites found. Sites will appear here once enumerators are assigned and dispatched.
+                                              </p>
+                                            );
+                                            const totalBaseEnum = previewRows.reduce((s, e) => s + e.enumeratorFee, 0);
+                                            const totalBaseTrans = previewRows.reduce((s, e) => s + e.transportFee, 0);
+                                            const totalBaseAll = totalBaseEnum + totalBaseTrans;
+                                            const totalSDGEnum = rate > 0 ? Math.round(totalBaseEnum * rate) : 0;
+                                            const totalSDGTrans = rate > 0 ? Math.round(totalBaseTrans * rate) : 0;
+                                            const totalSDGAll = totalSDGEnum + totalSDGTrans;
+                                            return (
+                                              <div className="space-y-2">
+                                                {/* Summary KPIs */}
+                                                {rate > 0 && (
+                                                  <div className="grid grid-cols-3 gap-1.5">
+                                                    <div className="rounded-lg bg-muted/40 px-3 py-2 text-center">
+                                                      <div className="text-[10px] text-muted-foreground">Total Base (USD)</div>
+                                                      <div className="font-bold text-sm font-mono">${totalBaseAll.toLocaleString()}</div>
+                                                    </div>
+                                                    <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-center">
+                                                      <div className="text-[10px] text-blue-700 dark:text-blue-300">Rate Applied</div>
+                                                      <div className="font-bold text-sm">× {parseFloat(exchangeRateInput).toLocaleString()}</div>
+                                                    </div>
+                                                    <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
+                                                      <div className="text-[10px] text-green-700 dark:text-green-300 font-semibold">Total SDG to Pay</div>
+                                                      <div className="font-bold text-base text-green-800 dark:text-green-200 font-mono">{totalSDGAll.toLocaleString()}</div>
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {/* Per-site preview table */}
+                                                <div className="rounded-lg border overflow-hidden">
+                                                  <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/50 text-xs font-semibold flex items-center gap-2">
+                                                    <span>💱 Fee Conversion Preview ({previewRows.length} eligible sites)</span>
+                                                    {rate <= 0 && <span className="text-muted-foreground font-normal ml-auto">Enter a rate to see SDG amounts</span>}
+                                                  </div>
+                                                  <div className="overflow-x-auto max-h-60">
+                                                    <table className="w-full text-xs">
+                                                      <thead className="sticky top-0">
+                                                        <tr className="bg-muted/60 border-b">
+                                                          <th className="px-3 py-1.5 text-left font-semibold min-w-[110px]">Enumerator / Site</th>
+                                                          <th className="px-3 py-1.5 text-center font-semibold">Status</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-blue-700">Enum (USD)</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-indigo-700">Transport (USD)</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Enum (SDG)</th>
+                                                          <th className="px-3 py-1.5 text-right font-semibold text-green-700">Transport (SDG)</th>
+                                                          <th className="px-3 py-1.5 text-right font-bold text-green-700">Total SDG</th>
+                                                        </tr>
+                                                      </thead>
+                                                      <tbody>
+                                                        {previewRows.map(s => {
+                                                          const sdgEnum = rate > 0 ? Math.round(s.enumeratorFee * rate) : 0;
+                                                          const sdgTrans = rate > 0 ? Math.round(s.transportFee * rate) : 0;
+                                                          const sdgTotal = sdgEnum + sdgTrans;
+                                                          return (
+                                                            <tr key={s.id} className="border-b last:border-0 hover:bg-muted/10">
+                                                              <td className="px-3 py-2">
+                                                                <div className="font-medium truncate max-w-[130px]" title={s.enumeratorName}>{s.enumeratorName}</div>
+                                                                <div className="text-[10px] text-muted-foreground truncate max-w-[130px]" title={s.siteName}>{s.siteName}</div>
+                                                              </td>
+                                                              <td className="px-3 py-2 text-center">
+                                                                <span className="text-[10px] text-muted-foreground">{s.status.replace(/_/g, ' ')}</span>
+                                                              </td>
+                                                              <td className="px-3 py-2 text-right font-mono text-blue-700">{s.enumeratorFee > 0 ? s.enumeratorFee.toLocaleString() : '—'}</td>
+                                                              <td className="px-3 py-2 text-right font-mono text-indigo-700">{s.transportFee > 0 ? s.transportFee.toLocaleString() : '—'}</td>
+                                                              <td className={`px-3 py-2 text-right font-mono ${rate > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+                                                                {rate > 0 && sdgEnum > 0 ? sdgEnum.toLocaleString() : '—'}
+                                                              </td>
+                                                              <td className={`px-3 py-2 text-right font-mono ${rate > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+                                                                {rate > 0 && sdgTrans > 0 ? sdgTrans.toLocaleString() : '—'}
+                                                              </td>
+                                                              <td className={`px-3 py-2 text-right font-mono font-bold ${rate > 0 && sdgTotal > 0 ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+                                                                {rate > 0 && sdgTotal > 0 ? sdgTotal.toLocaleString() : '—'}
+                                                              </td>
+                                                            </tr>
+                                                          );
+                                                        })}
+                                                      </tbody>
+                                                      <tfoot>
+                                                        <tr className="bg-muted/30 font-semibold border-t">
+                                                          <td className="px-3 py-1.5" colSpan={2}>TOTAL ({previewRows.length} sites)</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono text-blue-700">{totalBaseEnum.toLocaleString()}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono text-indigo-700">{totalBaseTrans.toLocaleString()}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono text-green-700">{rate > 0 ? totalSDGEnum.toLocaleString() : '—'}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono text-green-700">{rate > 0 ? totalSDGTrans.toLocaleString() : '—'}</td>
+                                                          <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{rate > 0 ? totalSDGAll.toLocaleString() : '—'} SDG</td>
+                                                        </tr>
+                                                      </tfoot>
+                                                    </table>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })()}
+
+                                          {/* Lock button */}
+                                          <Button
+                                            size="sm"
+                                            className={`w-full gap-1.5 ${feesLockedAt ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'} text-white`}
+                                            onClick={() => handleLockFees(checklistMmpId!)}
+                                            disabled={lockingFees || !parseFloat(exchangeRateInput)}
+                                            data-testid="button-lock-fees"
+                                          >
+                                            {lockingFees
+                                              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating {allSiteReviewData.filter(s => ['dispatched','assigned','submitted','wfp_confirmed','completed','verified','approved'].includes(s.status)).length} sites…</>
+                                              : feesLockedAt
+                                                ? <><RefreshCw className="h-3.5 w-3.5" /> Re-apply Rate & Overwrite Fees</>
+                                                : <><CheckCircle2 className="h-3.5 w-3.5" /> Lock Fees & Apply Rate ({parseFloat(exchangeRateInput) > 0 ? `1 USD = ${parseFloat(exchangeRateInput).toLocaleString()} SDG` : 'enter rate above'})</>
+                                            }
+                                          </Button>
+                                          <p className="text-[10px] text-muted-foreground">This permanently updates <strong>enumerator_fee</strong> and <strong>transport_fee</strong> on all eligible site entries to SDG values. Wallet entries use <code>upsert</code> on the site entry ID — re-applying is safe.</p>
+                                        </div>
+                                      )}
+
+                                      {/* ── Payment Sheet & Request (Step 7) ── */}
                                       {step.id === 'payment_request' && !step.blocked && (
                                         <div className="mt-3 space-y-3">
                                           {/* Payment status banner */}
