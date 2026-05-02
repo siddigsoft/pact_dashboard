@@ -1128,11 +1128,11 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{new Date(row.createdAt).toLocaleString()}</p>
                   </div>
                 )}
-                {(row.completedAt || row.updatedAt) && (
+                {row.completedAt && (
                   <div data-testid="block-first-completed-on">
                     <Label className="text-xs font-medium text-gray-600">First Completed On</Label>
                     <p className="font-medium text-gray-900 mt-1">
-                      {new Date(row.completedAt || row.updatedAt!).toLocaleString()}
+                      {new Date(row.completedAt).toLocaleString()}
                       {row.isLegacyFallbackCompleted && (
                         <span className="text-[11px] text-amber-600 dark:text-amber-400 font-normal ml-1" data-testid="badge-legacy-completion">
                           (legacy record)
