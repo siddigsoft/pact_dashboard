@@ -93,6 +93,15 @@ interface CycleStats {
   coverageRate: number;
 }
 
+interface ClosedCycleFinancialSnapshot {
+  enumeratorFees: number;
+  transportFees: number;
+  opCosts: number;
+  advancesRecovered: number;
+  currency: string;
+  payableSiteCount: number;
+}
+
 interface ClosedCycleRecord {
   id: string;
   name: string;
@@ -105,6 +114,7 @@ interface ClosedCycleRecord {
   completedSites: number;
   uncoveredSites: number;
   reasonBreakdown?: Record<string, number>;
+  financialSnapshot?: ClosedCycleFinancialSnapshot | null;
 }
 
 type CloseScope = 'full' | 'hub' | 'state' | 'activity';
@@ -1369,25 +1379,31 @@ const MMPCycleClose = () => {
     try {
       const { data, error } = await supabase
         .from('mmp_files')
-        .select('id, name, month, hub, cycle_status, cycle_closed_at')
+        .select('id, name, month, hub, cycle_status, cycle_closed_at, cycle_close_records')
         .eq('cycle_status', 'closed')
         .order('cycle_closed_at', { ascending: false });
 
       if (error) throw error;
 
-      const records: ClosedCycleRecord[] = (data || []).map(m => ({
-        id: m.id,
-        name: m.name,
-        month: m.month,
-        year: null,
-        region: (m as any).hub || 'Unknown',
-        cycle_status: m.cycle_status || 'closed',
-        cycle_closed_at: m.cycle_closed_at,
-        totalSites: 0,
-        completedSites: 0,
-        uncoveredSites: 0,
-        reasonBreakdown: {},
-      }));
+      const records: ClosedCycleRecord[] = (data || []).map(m => {
+        const closeRecords: any[] = (m as any).cycle_close_records || [];
+        const snapEntry = closeRecords.find((r: any) => r.id?.startsWith('snapshot-') && r.status === 'closed');
+        const financialSnapshot: ClosedCycleFinancialSnapshot | null = snapEntry?.financialSnapshot ?? null;
+        return {
+          id: m.id,
+          name: m.name,
+          month: m.month,
+          year: null,
+          region: (m as any).hub || 'Unknown',
+          cycle_status: m.cycle_status || 'closed',
+          cycle_closed_at: m.cycle_closed_at,
+          totalSites: 0,
+          completedSites: 0,
+          uncoveredSites: 0,
+          reasonBreakdown: {},
+          financialSnapshot,
+        };
+      });
 
       if (records.length > 0) {
         const coveredStatuses = ['submitted', 'wfp_confirmed', 'completed', 'verified'];
@@ -2603,6 +2619,43 @@ const MMPCycleClose = () => {
         status: 'closed' as const,
       }));
 
+      // Build frozen financial snapshot at close time
+      let financialSnapshot: ClosedCycleFinancialSnapshot | null = null;
+      try {
+        const PAYABLE_STATUSES = ['wfp_confirmed', 'verified', 'completed', 'approved'];
+        const [siteRes, opRes] = await Promise.all([
+          supabase.from('mmp_site_entries')
+            .select('enumerator_fee, transport_fee, status')
+            .eq('mmp_file_id', mmpId),
+          supabase.from('operational_cost_submissions')
+            .select('amount_cents, currency')
+            .eq('mmp_file_id', mmpId)
+            .eq('status', 'approved'),
+        ]);
+        const payable = (siteRes.data || []).filter((e: any) => PAYABLE_STATUSES.includes(e.status));
+        const enumeratorFees = payable.reduce((s: number, e: any) => s + (e.enumerator_fee ?? 0), 0);
+        const transportFees = payable.reduce((s: number, e: any) => s + (e.transport_fee ?? 0), 0);
+        const opCosts = (opRes.data || []).reduce((s: number, c: any) => s + ((c.amount_cents ?? 0) / 100), 0);
+        const currency = (opRes.data?.[0] as any)?.currency || 'SDG';
+        // Outstanding advances: get site entry ids then query down_payment_requests
+        const siteIds = (siteRes.data || []).map((e: any) => e.id).filter(Boolean);
+        let advancesRecovered = 0;
+        if (siteIds.length > 0) {
+          const { data: advData } = await supabase
+            .from('down_payment_requests')
+            .select('remaining_amount, requested_amount, total_paid_amount')
+            .in('mmp_site_entry_id', siteIds)
+            .in('status', ['partially_paid', 'approved', 'pending_payment']);
+          advancesRecovered = (advData || []).reduce((s: number, a: any) => {
+            const rem = a.remaining_amount ?? Math.max(0, (a.requested_amount ?? 0) - (a.total_paid_amount ?? 0));
+            return s + Math.max(0, rem);
+          }, 0);
+        }
+        financialSnapshot = { enumeratorFees, transportFees, opCosts, advancesRecovered, currency, payableSiteCount: payable.length };
+      } catch (snapErr) {
+        console.warn('Could not build financial snapshot at close time', snapErr);
+      }
+
       const now = new Date().toISOString();
       const mmpSnap = mmpFiles?.find(m => m.id === mmpId);
       const snapshotRecord = {
@@ -2615,6 +2668,7 @@ const MMPCycleClose = () => {
         hubOrRegion: mmpSnap?.hub || mmpSnap?.region || null,
         month: mmpSnap?.month ?? null,
         name: mmpSnap?.name ?? null,
+        financialSnapshot,
       };
       const finalRecords = [
         ...updatedRecords,
@@ -5434,6 +5488,63 @@ const MMPCycleClose = () => {
             </Card>
           ) : (
             <>
+              {/* Amounts to Clear Banner */}
+              {(financeCosts.length > 0 || financeAdvances.length > 0) && (
+                <div className="rounded-xl border-2 border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30 p-3 space-y-2" data-testid="banner-amounts-to-clear">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                    <p className="text-sm font-bold text-red-800 dark:text-red-200">
+                      {financeCosts.length + financeAdvances.length} item{financeCosts.length + financeAdvances.length !== 1 ? 's' : ''} must be cleared before this cycle can close
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 text-xs">
+                    {financeCosts.length > 0 && (
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-red-200 dark:border-red-800 px-3 py-2">
+                        <div>
+                          <span className="font-semibold text-red-700 dark:text-red-300">
+                            {financeCosts.length} pending cost submission{financeCosts.length !== 1 ? 's' : ''}
+                          </span>
+                          <span className="text-muted-foreground ml-1.5">
+                            — {(financeCosts.reduce((s, c) => s + (c.amount_cents ?? 0), 0) / 100).toLocaleString()} {financeCosts[0]?.currency ?? 'SDG'} total
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] shrink-0 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 gap-1"
+                          onClick={handleApproveAllCosts}
+                          disabled={financeApprovingAll}
+                          data-testid="button-banner-approve-all-costs"
+                        >
+                          {financeApprovingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                          Approve All
+                        </Button>
+                      </div>
+                    )}
+                    {financeAdvances.length > 0 && (
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-white/70 dark:bg-black/20 border border-orange-200 dark:border-orange-800 px-3 py-2">
+                        <div>
+                          <span className="font-semibold text-orange-700 dark:text-orange-300">
+                            {financeAdvances.length} transport advance{financeAdvances.length !== 1 ? 's' : ''} unpaid
+                          </span>
+                          <span className="text-muted-foreground ml-1.5">
+                            — {(financeAdvances.reduce((s, a) => s + (a.amount_cents ?? 0), 0) / 100).toLocaleString()} {financeAdvances[0]?.currency ?? 'SDG'} total
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] shrink-0 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 gap-1"
+                          onClick={() => navigate('/down-payment-approval?tab=tracker')}
+                          data-testid="button-banner-open-advances"
+                        >
+                          Open Advances <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Pending Cost Submissions */}
               <Card>
                 <CardHeader className="pb-3">
@@ -5927,6 +6038,58 @@ const MMPCycleClose = () => {
                               ))}
                             </div>
                           )}
+
+                          {/* Financial Settlement Snapshot (frozen at close time) */}
+                          {cycle.financialSnapshot ? (
+                            (() => {
+                              const snap = cycle.financialSnapshot!;
+                              const net = snap.enumeratorFees + snap.transportFees + snap.opCosts - snap.advancesRecovered;
+                              return (
+                                <div className="space-y-2 border-t pt-3 mt-1" data-testid={`section-financial-snapshot-${cycle.id}`}>
+                                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                    <DollarSign className="h-3.5 w-3.5" /> Financial Settlement — Frozen at Close
+                                  </h4>
+                                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                                    <div className="bg-muted/40 rounded-lg p-2.5">
+                                      <div className="text-muted-foreground mb-0.5">Enumerator Fees</div>
+                                      <div className="font-mono font-semibold" data-testid={`text-snap-enum-${cycle.id}`}>{snap.enumeratorFees.toLocaleString()} {snap.currency}</div>
+                                      <div className="text-muted-foreground text-[10px]">{snap.payableSiteCount} payable sites</div>
+                                    </div>
+                                    <div className="bg-muted/40 rounded-lg p-2.5">
+                                      <div className="text-muted-foreground mb-0.5">Transport Fees</div>
+                                      <div className="font-mono font-semibold" data-testid={`text-snap-transport-${cycle.id}`}>{snap.transportFees.toLocaleString()} {snap.currency}</div>
+                                    </div>
+                                    {snap.opCosts > 0 && (
+                                      <div className="bg-muted/40 rounded-lg p-2.5">
+                                        <div className="text-muted-foreground mb-0.5">Approved Op. Costs</div>
+                                        <div className="font-mono font-semibold">{snap.opCosts.toLocaleString()} {snap.currency}</div>
+                                      </div>
+                                    )}
+                                    {snap.advancesRecovered > 0 && (
+                                      <div className="bg-orange-50 dark:bg-orange-950/30 rounded-lg p-2.5">
+                                        <div className="text-muted-foreground mb-0.5">Advances Recovered</div>
+                                        <div className="font-mono font-semibold text-orange-700 dark:text-orange-400">−{snap.advancesRecovered.toLocaleString()} {snap.currency}</div>
+                                      </div>
+                                    )}
+                                    <div className={`rounded-lg p-2.5 col-span-2 ${net >= 0 ? 'bg-green-50 dark:bg-green-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+                                      <div className="text-muted-foreground mb-0.5">{net >= 0 ? 'Net Paid to Field Staff' : 'Net Recovered from Field'}</div>
+                                      <div className={`font-mono font-bold text-sm ${net >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`} data-testid={`text-snap-net-${cycle.id}`}>
+                                        {Math.abs(net).toLocaleString()} {snap.currency}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div className="border-t pt-3 mt-1">
+                              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                <DollarSign className="h-3.5 w-3.5" />
+                                Financial snapshot not available — cycle was closed before this feature was added.
+                              </p>
+                            </div>
+                          )}
+
                           <div className="flex gap-2 flex-wrap">
                             <Button size="sm" variant="outline" onClick={() => exportCoverageReport(cycle.id)} data-testid={`button-export-csv-${cycle.id}`}>
                               <Download className="h-3 w-3 mr-1" /> CSV
