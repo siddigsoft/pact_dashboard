@@ -1349,17 +1349,20 @@ export default function Employees() {
     setBulkRoleSaving(false);
   };
 
-  /* ── Financial summary state ── */
+  /* ── Financial summary state — lazy: only fetched when tab is first opened ── */
   const emptyFinRow = (): FinRow => ({ total: 0, approved: 0, amountSDG: 0 });
-  const [finLoading, setFinLoading] = useState(true);
+  const [finLoading, setFinLoading] = useState(false);
   const [awaitingAck, setAwaitingAck] = useState(0);
   const [finData, setFinData] = useState<{ advances: FinMonth; costs: FinMonth; withdrawals: FinMonth }>({
     advances:    { current: emptyFinRow(), prev: emptyFinRow() },
     costs:       { current: emptyFinRow(), prev: emptyFinRow() },
     withdrawals: { current: emptyFinRow(), prev: emptyFinRow() },
   });
+  const finFetched = useRef(false);
 
   useEffect(() => {
+    if (activeTab !== 'financial' || finFetched.current) return;
+    finFetched.current = true;
     const fetchFin = async () => {
       setFinLoading(true);
       const now = new Date();
@@ -1383,7 +1386,7 @@ export default function Employees() {
       setFinLoading(false);
     };
     fetchFin();
-  }, []);
+  }, [activeTab]);
 
   /* Departments */
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
@@ -1481,6 +1484,20 @@ export default function Employees() {
     })),
   [profiles, onlineUserIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── Completeness map — computed once per enriched change, looked up everywhere ── */
+  const completenessMap = useMemo(() => {
+    const m = new Map<string, { pct: number; missing: string[] }>();
+    enriched.forEach(p => {
+      const items = completenessItems(p);
+      const ok    = items.filter(i => i.ok).length;
+      m.set(p.id, {
+        pct:     Math.round((ok / items.length) * 100),
+        missing: items.filter(i => !i.ok).map(i => i.label),
+      });
+    });
+    return m;
+  }, [enriched]);
+
   /* Filtered list */
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -1495,12 +1512,15 @@ export default function Employees() {
       if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       if (contractFilter !== 'all' && (p.contract_type || 'salary') !== contractFilter) return false;
-      if (completenessFilter === 'incomplete' && getCompleteness(p) >= 100) return false;
-      if (completenessFilter === 'complete'   && getCompleteness(p) <  100) return false;
+      if (completenessFilter !== 'all') {
+        const pct = completenessMap.get(p.id)?.pct ?? 0;
+        if (completenessFilter === 'incomplete' && pct >= 100) return false;
+        if (completenessFilter === 'complete'   && pct <  100) return false;
+      }
       if (deptFilter !== 'all' && p.department_id !== deptFilter) return false;
       return true;
     });
-  }, [enriched, search, hubFilter, stateFilter, localityFilter, roleFilter, bankFilter, contractFilter, completenessFilter, deptFilter, showUnregistered]);
+  }, [enriched, completenessMap, search, hubFilter, stateFilter, localityFilter, roleFilter, bankFilter, contractFilter, completenessFilter, deptFilter, showUnregistered]);
 
   const unregisteredCount = useMemo(
     () => enriched.filter(p => !p.is_employee).length,
@@ -1521,8 +1541,8 @@ export default function Employees() {
     missingBank: registeredEmployees.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
     expiredContracts: registeredEmployees.filter(p => { const d = daysUntilExpiry(p.contract_end_date); return d !== null && d <= 0; }).length,
     expiringContracts: registeredEmployees.filter(p => { const d = daysUntilExpiry(p.contract_end_date); return d !== null && d > 0 && d <= 30; }).length,
-    incompleteProfiles: registeredEmployees.filter(p => getCompleteness(p) < 100).length,
-  }), [registeredEmployees]);
+    incompleteProfiles: registeredEmployees.filter(p => (completenessMap.get(p.id)?.pct ?? 0) < 100).length,
+  }), [registeredEmployees, completenessMap]);
 
   /* ── Stat Card ── */
   function StatCard({ label, value, icon: Icon, accent, onClick }: {
@@ -1947,8 +1967,7 @@ export default function Employees() {
                             </TableCell>
                             <TableCell>
                               {(() => {
-                                const pct = getCompleteness(p);
-                                const missing = completenessItems(p).filter(i => !i.ok).map(i => i.label);
+                                const { pct = 0, missing = [] } = completenessMap.get(p.id) ?? {};
                                 const color = pct === 100 ? 'text-green-600 dark:text-green-400' : pct >= 75 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
                                 return (
                                   <div className="flex items-center gap-1.5 group relative" title={missing.length ? `Missing: ${missing.join(', ')}` : 'Profile complete'}>
