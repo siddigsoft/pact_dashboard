@@ -50,10 +50,10 @@ function sectionFill(): ExcelJS.Fill {
   return { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
 }
 
-// Explicit column widths for transport statement (Financial Statement sheet, 12 cols — incl. State)
-const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 16, 14, 15, 15, 11, 26, 18, 12];
-// Explicit column widths for transport Full Details sheet (26 cols — incl. MMP, Locality, Activity, Budget, Approval Type, Payment Type, Justification)
-const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 16, 14, 13, 22, 14, 16, 14, 16, 13, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 26, 18];
+// Explicit column widths for transport statement (Financial Statement sheet, 13 cols — incl. Account #, State)
+const TRANSPORT_WIDTHS_SUMMARY = [5, 22, 13, 26, 18, 16, 14, 15, 15, 11, 26, 18, 12];
+// Explicit column widths for transport Full Details sheet (27 cols — incl. Account #, MMP, Locality, Activity, Budget, Approval Type, Payment Type, Justification)
+const TRANSPORT_WIDTHS_DETAIL = [5, 22, 13, 26, 18, 16, 14, 13, 22, 14, 16, 14, 16, 13, 14, 14, 11, 12, 26, 13, 13, 18, 13, 13, 20, 26, 18];
 // Explicit column widths for operational cost (Financial Statement sheet, 11 cols — inc. Project)
 const OPCOST_WIDTHS_SUMMARY = [5, 22, 13, 26, 22, 16, 15, 15, 26, 18, 12];
 // Explicit column widths for operational cost Full Details (18 cols — inc. Project)
@@ -106,7 +106,7 @@ function buildStatementWorkbook(
 
   const statusLabel = fmtStatus(config.statusFilter);
   const typeLabel = isTransport ? 'Transport-Advance' : 'Operational-Cost';
-  const totalCols = isTransport ? 12 : 11; // transport: 12 cols (incl. State), operational: 11 cols (with Project)
+  const totalCols = isTransport ? 13 : 11; // transport: 13 cols (incl. Account #, State), operational: 11 cols (with Project)
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -274,7 +274,7 @@ function buildStatementWorkbook(
   ws.mergeCells(detailSectionRow.number, 1, detailSectionRow.number, totalCols);
 
   const tableHead = isTransport
-    ? ['#', 'Ref ID', 'Date', 'Requester', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
+    ? ['#', 'Ref ID', 'Date', 'Requester', 'Account #', 'Site', 'State', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'T1 Approver', 'T2 Approver', 'Status']
     : ['#', 'Ref ID', 'Date', 'Requester', 'Project', 'Category', `Amount (${cur})`, `Approved (${cur})`, 'T1 Approver', 'T2 Approver', 'Status'];
 
   const hdrRow = ws.addRow(tableHead);
@@ -282,21 +282,21 @@ function buildStatementWorkbook(
     cell.fill = subHeaderFill();
     cell.font = headerFont(10);
     cell.border = thinBorder();
-    cell.alignment = { horizontal: ci <= (isTransport ? 5 : 5) ? 'left' : 'center', vertical: 'middle', wrapText: false };
+    cell.alignment = { horizontal: ci <= (isTransport ? 6 : 5) ? 'left' : 'center', vertical: 'middle', wrapText: false };
   });
   hdrRow.height = 22;
 
   rows.forEach((r, idx) => {
     const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
     if (isTransport) {
-      rowData.push(r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
+      rowData.push(r.accountNumber || '', r.site || r.description || '', r.state || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur), fmtCurrency(r.paidAmount, cur));
     } else {
       rowData.push(r.project || '', r.category || r.description || '', fmtCurrency(r.requestedAmount, cur), fmtCurrency(r.approvedAmount, cur));
     }
     rowData.push(r.t1Approver || 'N/A', r.t2Approver || 'N/A', fmtStatus(r.status));
 
     const dataRow = ws.addRow(rowData);
-    const leftCols = isTransport ? 5 : 5;
+    const leftCols = isTransport ? 6 : 5;
     dataRow.eachCell((cell, ci) => {
       cell.border = thinBorder();
       cell.alignment = { horizontal: ci <= leftCols ? 'left' : 'center', vertical: 'middle', wrapText: false };
@@ -313,7 +313,7 @@ function buildStatementWorkbook(
   });
 
   const totalsData: (string | number)[] = isTransport
-    ? ['', '', '', '', 'TOTALS', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+    ? ['', '', '', '', '', 'TOTALS', '', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
     : ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
 
   const totRow = ws.addRow(totalsData);
@@ -377,11 +377,11 @@ function buildStatementWorkbook(
     ws2.addRow([]).height = 6;
 
     const detailHeaders = isTransport
-      ? ['#', 'Reference ID', 'Date', 'Requester', 'Site', 'Hub', 'State', 'MMP', 'Locality', 'Activity Type', `Budget (${cur})`, 'Approval Type', 'Payment Type', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Justification', 'Notes']
+      ? ['#', 'Reference ID', 'Date', 'Requester', 'Account #', 'Site', 'Hub', 'State', 'MMP', 'Locality', 'Activity Type', `Budget (${cur})`, 'Approval Type', 'Payment Type', `Requested (${cur})`, `Approved (${cur})`, `Paid (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Justification', 'Notes']
       : ['#', 'Reference ID', 'Date', 'Requester', 'Project', 'Category', 'Description', `Amount (${cur})`, `Approved (${cur})`, 'Status', 'T1 Approver', 'T1 Date', 'T1 Status', 'T2 Approver', 'T2 Date', 'T2 Status', 'Rejection Reason', 'Notes'];
 
     const detHdrRow = ws2.addRow(detailHeaders);
-    const detLeftCols = isTransport ? 7 : 5;
+    const detLeftCols = isTransport ? 8 : 5;
     detHdrRow.eachCell((cell, ci) => {
       cell.fill = headerFill();
       cell.font = headerFont(10);
@@ -394,6 +394,7 @@ function buildStatementWorkbook(
       const rowData: (string | number)[] = [idx + 1, r.refId, fmtDate(r.date), r.requester || ''];
       if (isTransport) {
         rowData.push(
+          r.accountNumber || '',
           r.site || r.description || '',
           r.hub || '',
           r.state || '',

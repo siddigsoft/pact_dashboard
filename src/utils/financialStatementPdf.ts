@@ -32,6 +32,7 @@ export interface StatementRow {
   t2Status?: string;
   rejectionReason?: string;
   notes?: string;
+  accountNumber?: string;
 }
 
 export interface StatementConfig {
@@ -266,7 +267,7 @@ export async function generateFinancialStatementPdf(
   const isTransport = config.statementType === 'transport_advance';
 
   const tableHead = isTransport
-    ? [['#', 'Ref ID', 'Date', 'Requester', 'Site', 'Requested', 'Approved', 'Paid', 'T1', 'T2', 'Status']]
+    ? [['#', 'Ref ID', 'Date', 'Requester', 'Account #', 'Site', 'Requested', 'Approved', 'Paid', 'T1', 'T2', 'Status']]
     : [['#', 'Ref ID', 'Date', 'Requester', 'Project', 'Category', 'Amount', 'Approved', 'T1', 'T2', 'Status']];
 
   const tableBody = rows.map((r, idx) => {
@@ -278,6 +279,7 @@ export async function generateFinancialStatementPdf(
     ];
     if (isTransport) {
       row.push(
+        (r.accountNumber || '').slice(0, 16),
         (r.site || r.description || '').slice(0, 20),
         fmtCurrency(r.requestedAmount, cur),
         fmtCurrency(r.approvedAmount, cur),
@@ -300,7 +302,7 @@ export async function generateFinancialStatementPdf(
   });
 
   const totalsRow = isTransport
-    ? ['', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
+    ? ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), fmtCurrency(totalPaid, cur), '', '', '']
     : ['', '', '', '', '', 'TOTALS', fmtCurrency(totalRequested, cur), fmtCurrency(totalApproved, cur), '', '', ''];
 
   tableBody.push(totalsRow);
@@ -319,17 +321,18 @@ export async function generateFinancialStatementPdf(
     alternateRowStyles: { fillColor: [248, 249, 252] },
     columnStyles: isTransport
       ? {
-          0: { cellWidth: 8, halign: 'center' },
-          1: { cellWidth: 18 },
-          2: { cellWidth: 18 },
-          3: { cellWidth: 22 },
-          4: { cellWidth: 22 },
-          5: { halign: 'right', cellWidth: 18 },
-          6: { halign: 'right', cellWidth: 18 },
-          7: { halign: 'right', cellWidth: 18 },
-          8: { cellWidth: 16 },
-          9: { cellWidth: 16 },
-          10: { cellWidth: 16 },
+          0: { cellWidth: 7, halign: 'center' },
+          1: { cellWidth: 16 },
+          2: { cellWidth: 16 },
+          3: { cellWidth: 20 },
+          4: { cellWidth: 18 },
+          5: { cellWidth: 18 },
+          6: { halign: 'right', cellWidth: 16 },
+          7: { halign: 'right', cellWidth: 16 },
+          8: { halign: 'right', cellWidth: 16 },
+          9: { cellWidth: 14 },
+          10: { cellWidth: 14 },
+          11: { cellWidth: 14 },
         }
       : {
           0: { cellWidth: 7, halign: 'center' },

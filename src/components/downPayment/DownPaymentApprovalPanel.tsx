@@ -971,6 +971,7 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       date: req.requestedAt,
       description: req.justification || req.siteName,
       requester: req.requestedByName || getName(reqUser),
+      accountNumber: reqUser?.bankAccount?.accountNumber || '',
       site: req.siteName,
       hub: req.hubName || '',
       state: req.stateName || '',
