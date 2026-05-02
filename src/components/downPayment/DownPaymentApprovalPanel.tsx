@@ -4354,7 +4354,21 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       )}
 
       <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], bulkMeta: { count: 0, total: 0 }, isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '', sendMode: 'pdf' as const, showPreview: false, usdRate: '' }); }}>
-        <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
+        <DialogContent
+          className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}
+          onPointerDownOutside={(e) => {
+            if (
+              paymentRequestDialog.loading ||
+              paymentRequestDialog.sending ||
+              (paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length === 0)
+            ) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (paymentRequestDialog.sending) e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {paymentRequestDialog.isBulk
