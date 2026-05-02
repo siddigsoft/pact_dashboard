@@ -183,6 +183,10 @@ const AccountingAPAging = lazy(() => import('./pages/AccountingAPAging'));
 const AccountingCashFlow = lazy(() => import('./pages/AccountingCashFlow'));
 const AccountingFixedAssets = lazy(() => import('./pages/AccountingFixedAssets'));
 const AccountingGLBridge   = lazy(() => import('./pages/AccountingGLBridge'));
+const AccountingPurchaseRequisitions = lazy(() => import('./pages/AccountingPurchaseRequisitions'));
+const AccountingGRN        = lazy(() => import('./pages/AccountingGRN'));
+const AccountingAPInvoices = lazy(() => import('./pages/AccountingAPInvoices'));
+const AccountingChequeRegister = lazy(() => import('./pages/AccountingChequeRegister'));
 const FinanceAuditTrail = lazy(() => import('./pages/FinanceAuditTrail'));
 // HR audit gaps H2-H5: self-service pages
 const MyAdvances = lazy(() => import('./pages/MyAdvances'));
@@ -522,6 +526,10 @@ const AppRoutes = () => {
         <Route path="/accounting/cash-flow" element={<SuperAdminRoute><PageWrapper><AccountingCashFlow /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/fixed-assets" element={<SuperAdminRoute><PageWrapper><AccountingFixedAssets /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/gl-bridge" element={<SuperAdminRoute><PageWrapper><AccountingGLBridge /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/purchase-requisitions" element={<SuperAdminRoute><PageWrapper><AccountingPurchaseRequisitions /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/grn" element={<SuperAdminRoute><PageWrapper><AccountingGRN /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/ap-invoices" element={<SuperAdminRoute><PageWrapper><AccountingAPInvoices /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/cheque-register" element={<SuperAdminRoute><PageWrapper><AccountingChequeRegister /></PageWrapper></SuperAdminRoute>} />
         <Route path="/finance/audit-trail" element={<SuperAdminRoute><PageWrapper><FinanceAuditTrail /></PageWrapper></SuperAdminRoute>} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />

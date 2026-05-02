@@ -69,6 +69,7 @@
     Landmark,
     Settings2,
     Zap,
+    ShoppingCart,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -487,8 +488,12 @@
       if (!isHidden('/accounting/bank-recon')) acctItems.push({ id: 'accounting-bank-recon', title: 'Bank Reconciliation', url: '/accounting/bank-recon', icon: Landmark, priority: 3.7, isPinned: isPinned('/accounting/bank-recon') });
       if (!isHidden('/accounting/budget-variance')) acctItems.push({ id: 'accounting-budget-variance', title: 'Budget vs. Actual', url: '/accounting/budget-variance', icon: BarChart3, priority: 3.8, isPinned: isPinned('/accounting/budget-variance') });
       if (!isHidden('/accounting/vendors')) acctItems.push({ id: 'accounting-vendors', title: 'Vendor Registry', url: '/accounting/vendors', icon: Building2, priority: 3.9, isPinned: isPinned('/accounting/vendors') });
-      if (!isHidden('/accounting/purchase-orders')) acctItems.push({ id: 'accounting-purchase-orders', title: 'Purchase Orders', url: '/accounting/purchase-orders', icon: ClipboardList, priority: 3.905, isPinned: isPinned('/accounting/purchase-orders') });
-      if (!isHidden('/accounting/ap-aging')) acctItems.push({ id: 'accounting-ap-aging', title: 'AP Aging', url: '/accounting/ap-aging', icon: Clock, priority: 3.91, isPinned: isPinned('/accounting/ap-aging') });
+      if (!isHidden('/accounting/purchase-requisitions')) acctItems.push({ id: 'accounting-purchase-requisitions', title: 'Purchase Requisitions', url: '/accounting/purchase-requisitions', icon: ClipboardList, priority: 3.901, isPinned: isPinned('/accounting/purchase-requisitions') });
+      if (!isHidden('/accounting/purchase-orders')) acctItems.push({ id: 'accounting-purchase-orders', title: 'Purchase Orders', url: '/accounting/purchase-orders', icon: ShoppingCart, priority: 3.905, isPinned: isPinned('/accounting/purchase-orders') });
+      if (!isHidden('/accounting/grn')) acctItems.push({ id: 'accounting-grn', title: 'Goods Receipt Notes', url: '/accounting/grn', icon: Package, priority: 3.907, isPinned: isPinned('/accounting/grn') });
+      if (!isHidden('/accounting/ap-invoices')) acctItems.push({ id: 'accounting-ap-invoices', title: 'AP Invoices', url: '/accounting/ap-invoices', icon: FileText, priority: 3.909, isPinned: isPinned('/accounting/ap-invoices') });
+      if (!isHidden('/accounting/cheque-register')) acctItems.push({ id: 'accounting-cheque-register', title: 'Cheque Register', url: '/accounting/cheque-register', icon: CreditCard, priority: 3.91, isPinned: isPinned('/accounting/cheque-register') });
+      if (!isHidden('/accounting/ap-aging')) acctItems.push({ id: 'accounting-ap-aging', title: 'AP Aging', url: '/accounting/ap-aging', icon: Clock, priority: 3.915, isPinned: isPinned('/accounting/ap-aging') });
       if (!isHidden('/accounting/cash-flow')) acctItems.push({ id: 'accounting-cash-flow', title: 'Cash Flow', url: '/accounting/cash-flow', icon: Activity, priority: 3.92, isPinned: isPinned('/accounting/cash-flow') });
       if (!isHidden('/accounting/fixed-assets')) acctItems.push({ id: 'accounting-fixed-assets', title: 'Fixed Assets', url: '/accounting/fixed-assets', icon: Package, priority: 3.93, isPinned: isPinned('/accounting/fixed-assets') });
       if (!isHidden('/accounting/gl-bridge')) acctItems.push({ id: 'accounting-gl-bridge', title: 'GL Bridge Engine', url: '/accounting/gl-bridge', icon: Zap, priority: 3.94, isPinned: isPinned('/accounting/gl-bridge') });
