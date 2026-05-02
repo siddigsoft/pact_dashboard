@@ -357,6 +357,7 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />
+        <Route path="/mmp/cycle-close" element={<MMPCycleClose />} />
         <Route path="/mmp/:id" element={<MMPDetailView />} />
         <Route path="/mmp/:id/view" element={<MMPDetailView />} />
         <Route path="/mmp/:id/edit" element={<EditMMP />} />
@@ -366,7 +367,6 @@ const AppRoutes = () => {
         <Route path="/mmp/:id/verification" element={<MMPVerificationPage />} />
         <Route path="/mmp/:id/permit-message" element={<MMPPermitMessagePage />} />
         <Route path="/mmp/:id/review-assign-coordinators" element={<ReviewAssignCoordinators />} />
-        <Route path="/mmp/cycle-close" element={<MMPCycleClose />} />
         <Route path="/data-export-center" element={<DataExportCenter />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/call-analytics" element={<CallAnalytics />} />
