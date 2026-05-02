@@ -1686,28 +1686,32 @@ function AdvanceRequestsReportContent() {
     all: 'الكل',
   };
 
-  const mapRequestToStatementRow = (req: DownPaymentRequest): StatementRow => ({
-    refId: `PACT-TA-${req.id.substring(0, 8).toUpperCase()}`,
-    date: req.requestedAt,
-    description: req.justification || req.siteName,
-    requester: getProfileName(req.requestedBy),
-    site: req.siteName,
-    hub: req.hubName || '',
-    state: req.stateName || '',
-    status: req.status,
-    statusAr: STATUS_AR_MAP[req.status] || '',
-    requestedAmount: req.requestedAmount,
-    approvedAmount: req.approvedAmount || req.requestedAmount,
-    paidAmount: req.totalPaidAmount || 0,
-    t1Approver: req.supervisorApprovedByName || (req.supervisorApprovedBy ? getProfileName(req.supervisorApprovedBy) : undefined),
-    t1Date: req.supervisorApprovedAt || undefined,
-    t1Status: req.supervisorStatus || undefined,
-    t2Approver: req.adminProcessedByName || (req.adminProcessedBy ? getProfileName(req.adminProcessedBy) : undefined),
-    t2Date: req.adminProcessedAt || undefined,
-    t2Status: req.adminStatus || undefined,
-    rejectionReason: req.supervisorRejectionReason || req.adminRejectionReason || undefined,
-    notes: req.supervisorNotes || req.adminNotes || undefined,
-  });
+  const mapRequestToStatementRow = (req: DownPaymentRequest): StatementRow => {
+    const reqUser = users?.find(u => u.id === req.requestedBy);
+    return {
+      refId: `PACT-TA-${req.id.substring(0, 8).toUpperCase()}`,
+      date: req.requestedAt,
+      description: req.justification || req.siteName,
+      requester: getProfileName(req.requestedBy),
+      accountNumber: reqUser?.bankAccount?.accountNumber || '',
+      site: req.siteName,
+      hub: req.hubName || '',
+      state: req.stateName || '',
+      status: req.status,
+      statusAr: STATUS_AR_MAP[req.status] || '',
+      requestedAmount: req.requestedAmount,
+      approvedAmount: req.approvedAmount || req.requestedAmount,
+      paidAmount: req.totalPaidAmount || 0,
+      t1Approver: req.supervisorApprovedByName || (req.supervisorApprovedBy ? getProfileName(req.supervisorApprovedBy) : undefined),
+      t1Date: req.supervisorApprovedAt || undefined,
+      t1Status: req.supervisorStatus || undefined,
+      t2Approver: req.adminProcessedByName || (req.adminProcessedBy ? getProfileName(req.adminProcessedBy) : undefined),
+      t2Date: req.adminProcessedAt || undefined,
+      t2Status: req.adminStatus || undefined,
+      rejectionReason: req.supervisorRejectionReason || req.adminRejectionReason || undefined,
+      notes: req.supervisorNotes || req.adminNotes || undefined,
+    };
+  };
 
   const handleStatementExport = async (exportFormat: 'pdf' | 'excel') => {
     const dataToExport = filteredRequests;
