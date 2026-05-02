@@ -86,8 +86,6 @@ export const PAGE_DEFS: PageDef[] = [
   // ── Coordination & Oversight ──────────────────────────────────────────────
   { slug:'coordinator-sites',   label:'Site Verification',      path:'/coordinator/sites',      icon:CheckSquare, group:'Coordination',
     roles:['superAdmin','coordinator','supervisor'] },
-  { slug:'cycle-management',    label:'Cycle Management',       path:'/mmp/cycle-close',        icon:Activity, group:'Coordination',
-    roles:['superAdmin','admin','fom','supervisor'] },
   { slug:'staff-directory',     label:'Staff Directory',        path:'/admin/staff-profiles',   icon:Users, group:'Coordination',
     roles:['superAdmin','admin'] },
 

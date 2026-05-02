@@ -2505,71 +2505,6 @@ const MMP = () => {
   // that may have broad permissions from seeing the upload control.
   const canCreate = isAdmin || isICT;
 
-  const [hasClosingCycle, setHasClosingCycle] = useState(false);
-  const [closingCycleName, setClosingCycleName] = useState<string | null>(null);
-  const [closingCycleId, setClosingCycleId] = useState<string | null>(null);
-
-  const [pendingApprovalMmps, setPendingApprovalMmps] = useState<{ id: string; name: string }[]>([]);
-  const [mmpBannerRejectId, setMmpBannerRejectId] = useState<string | null>(null);
-  const [mmpBannerRejectNote, setMmpBannerRejectNote] = useState('');
-  const [mmpBannerApproving, setMmpBannerApproving] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isAdmin && !isSuperAdmin) return;
-    const checkClosingCycles = async () => {
-      const { data } = await supabase
-        .from('mmp_files')
-        .select('id, name')
-        .eq('cycle_status', 'closing')
-        .limit(1);
-      setHasClosingCycle(!!data && data.length > 0);
-      setClosingCycleName(data?.[0]?.name ?? null);
-      setClosingCycleId(data?.[0]?.id ?? null);
-    };
-    checkClosingCycles();
-  }, [isAdmin, isSuperAdmin]);
-
-  useEffect(() => {
-    if (!isFOM && !isAdmin && !isSuperAdmin) return;
-    supabase
-      .from('mmp_files')
-      .select('id, name')
-      .eq('cycle_status', 'pending_approval')
-      .then(({ data }) => setPendingApprovalMmps((data || []) as { id: string; name: string }[]));
-  }, [isFOM, isAdmin, isSuperAdmin]);
-
-  const handleMmpBannerApprove = useCallback(async (mmpId: string) => {
-    setMmpBannerApproving(mmpId);
-    try {
-      const userId = currentUser?.id;
-      const { error } = await supabase.rpc('cycle_approve_close', { p_mmp_id: mmpId, p_approved_by: userId });
-      if (error) throw error;
-      setPendingApprovalMmps(prev => prev.filter(m => m.id !== mmpId));
-      toast({ title: 'Cycle Approved & Closed', description: 'The MMP cycle has been approved and closed.' });
-    } catch (err: any) {
-      await supabase.from('mmp_files')
-        .update({ cycle_status: 'closed', cycle_closed_at: new Date().toISOString(), cycle_closed_by: currentUser?.id } as any)
-        .eq('id', mmpId);
-      setPendingApprovalMmps(prev => prev.filter(m => m.id !== mmpId));
-      toast({ title: 'Cycle Approved & Closed', description: 'The MMP cycle has been approved and closed.' });
-    } finally {
-      setMmpBannerApproving(null);
-    }
-  }, [currentUser, toast]);
-
-  const handleMmpBannerReject = useCallback(async (mmpId: string, note: string) => {
-    try {
-      await supabase.from('mmp_files')
-        .update({ cycle_status: 'closing', cycle_approval_note: note } as any)
-        .eq('id', mmpId);
-      setPendingApprovalMmps(prev => prev.filter(m => m.id !== mmpId));
-      setMmpBannerRejectId(null);
-      setMmpBannerRejectNote('');
-      toast({ title: 'Cycle Sent Back', description: 'The cycle has been returned to the admin for corrections.' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to reject cycle', variant: 'destructive' });
-    }
-  }, [toast]);
 
   useEffect(() => {
     if (!isAdmin && !isSupervisor && !isDataTeam) return;
@@ -4835,21 +4770,19 @@ const MMP = () => {
     <div className="space-y-3 min-h-screen bg-slate-50 dark:bg-gray-900 py-2 sm:py-3 px-2 sm:px-4 md:px-6">
       <PageInfoBanner
         title="Monthly Monitoring Plans (MMP)"
-        description="Plan, dispatch, and track monthly site visits across all hubs and projects. Upload an MMP to add planned visits, then dispatch them to data collectors who claim and execute them. Track progress by state, locality, partner, and project. Use the cycle-close tools at month end to lock the cycle, compare vs. prior month, and trigger follow-up actions."
+        description="Plan, dispatch, and track monthly site visits across all hubs and projects. Upload an MMP to add planned visits, then dispatch them to data collectors who claim and execute them. Track progress by state, locality, partner, and project."
         descriptionAr="خطّط ونفّذ وتابع زيارات المواقع الشهرية عبر جميع المراكز والمشاريع. ارفع خطة شهرية لإضافة زيارات مخطط لها، ثم وزّعها على جامعي البيانات الذين يطالبون بها وينفذونها. تابع التقدم حسب الولاية والمحلية والشريك والمشروع. استخدم أدوات إغلاق الدورة في نهاية الشهر لقفل الدورة ومقارنتها بالشهر السابق وإطلاق إجراءات المتابعة."
         workflowSteps={[
           { step: 1, role: 'Admin', action: 'Upload MMP', description: 'Admin or FOM uploads the monthly plan file or creates entries manually.' },
           { step: 2, role: 'FOM', action: 'Dispatch sites', description: 'Field Operations Manager dispatches each site to a state/locality so collectors can claim it.' },
           { step: 3, role: 'Data Collector', action: 'Claim & visit', description: 'Collectors claim available sites by GPS proximity and complete the visit on the ground.' },
           { step: 4, role: 'Supervisor', action: 'Verify report', description: 'Supervisors review the submitted visit report and request fixes or approve.' },
-          { step: 5, role: 'Admin', action: 'Close cycle', description: 'At month end, lock the cycle, compare to prior month, and trigger any follow-ups.' },
         ]}
         workflowStepsAr={[
           { step: 1, role: 'المدير', action: 'رفع الخطة', description: 'يرفع المدير أو مدير العمليات الميدانية ملف الخطة الشهرية أو ينشئ المدخلات يدويًا.' },
           { step: 2, role: 'المدير', action: 'توزيع المواقع', description: 'يوزع مدير العمليات الميدانية كل موقع على ولاية/محلية حتى يتمكن المجمعون من المطالبة به.' },
           { step: 3, role: 'جامع بيانات', action: 'مطالبة وزيارة', description: 'يطالب المجمعون بالمواقع المتاحة حسب القرب الجغرافي وينفذون الزيارة على الأرض.' },
           { step: 4, role: 'المشرف', action: 'تحقق من التقرير', description: 'يراجع المشرفون تقرير الزيارة المقدم ويطلبون تصحيحات أو يوافقون.' },
-          { step: 5, role: 'المدير', action: 'إغلاق الدورة', description: 'في نهاية الشهر، اقفل الدورة، قارنها بالشهر السابق، وأطلق أي إجراءات متابعة.' },
         ]}
       />
       {/* Blue Header Section */}
@@ -4867,29 +4800,15 @@ const MMP = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isAdmin && (
-              <Button
-                onClick={() => navigate('/mmp/cycle-close')}
-                variant="outline"
-                size="sm"
-                className="bg-white/10 text-white border-white/30 flex items-center gap-1.5 text-xs"
-                data-testid="button-cycle-close"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Close Cycle
-              </Button>
-            )}
             {canCreate && (
               <Button 
                 onClick={() => navigate('/mmp/upload')} 
                 size="sm"
                 className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-1.5 text-xs"
                 data-testid="button-upload-mmp"
-                disabled={hasClosingCycle}
-                title={hasClosingCycle ? 'Cannot upload while a cycle is being closed' : ''}
               >
                 <Upload className="h-3.5 w-3.5" />
-                {hasClosingCycle ? 'Upload Blocked (Cycle Closing)' : t('mmpPage.uploadMMP')}
+                {t('mmpPage.uploadMMP')}
               </Button>
             )}
           </div>
@@ -4910,127 +4829,6 @@ const MMP = () => {
           <DataFreshnessBadge className="bg-white/10 rounded-full px-2.5 py-0.5" />
         </div>
       </div>
-
-      {/* Upload blocked banner — shown when a cycle is in closing state */}
-      {hasClosingCycle && canCreate && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3 mb-2" data-testid="banner-upload-blocked">
-          <div className="flex items-start gap-2 flex-1 min-w-0">
-            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
-                Upload blocked — a cycle is being closed
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                {closingCycleName
-                  ? <>The MMP <strong>"{closingCycleName}"</strong> is currently in the closing process. Complete all closing steps first, then the upload button will unlock automatically.</>
-                  : <>An MMP cycle is currently being closed. Complete all closing steps first, then the upload button will unlock automatically.</>
-                }
-              </p>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white gap-1.5 text-xs"
-            onClick={() => navigate(`/mmp/cycle-close${closingCycleId ? `?wizardFor=${closingCycleId}` : ''}`)}
-            data-testid="button-go-to-cycle-close"
-          >
-            <ArrowRight className="h-3.5 w-3.5" />
-            Go to Cycle Close → finish closing first
-          </Button>
-        </div>
-      )}
-
-      {/* ── Purple "Awaiting Your Approval" banner — FOM / Admin / Super Admin ── */}
-      {(isFOM || isAdmin || isSuperAdmin) && pendingApprovalMmps.length > 0 && (
-        <div className="flex flex-col gap-2 mb-2">
-          {pendingApprovalMmps.map(mmp => (
-            <div
-              key={mmp.id}
-              className="rounded-xl border border-purple-300 dark:border-purple-700 bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-950/40 dark:to-violet-950/30 px-4 py-4 shadow-sm"
-              data-testid={`banner-mmp-pending-approval-${mmp.id}`}
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                <span className="relative flex h-3 w-3 shrink-0 mt-1">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-purple-900 dark:text-purple-100">
-                    ⏳ Awaiting Your Approval — <span className="text-purple-700 dark:text-purple-300">{mmp.name}</span>
-                  </p>
-                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
-                    The admin has completed all closing steps and submitted this cycle for final approval.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  className="gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold shadow"
-                  disabled={mmpBannerApproving === mmp.id}
-                  onClick={() => handleMmpBannerApprove(mmp.id)}
-                  data-testid={`button-mmp-banner-approve-${mmp.id}`}
-                >
-                  {mmpBannerApproving === mmp.id
-                    ? <><span className="h-3.5 w-3.5 mr-1 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" /> Approving…</>
-                    : <><CheckCircle2 className="h-4 w-4" /> ✓ Approve &amp; Close Cycle</>}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="gap-1.5 font-semibold shadow"
-                  onClick={() => { setMmpBannerRejectId(mmp.id); setMmpBannerRejectNote(''); }}
-                  data-testid={`button-mmp-banner-reject-${mmp.id}`}
-                >
-                  <XCircle className="h-4 w-4" />
-                  Reject — Send Back
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs border-purple-300 text-purple-800 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900"
-                  onClick={() => navigate(`/mmp/cycle-close?wizardFor=${mmp.id}`)}
-                  data-testid={`button-mmp-banner-review-${mmp.id}`}
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  View Full Wizard &amp; Reports
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Reject dialog for MMP page banner */}
-      <Dialog open={!!mmpBannerRejectId} onOpenChange={open => { if (!open) setMmpBannerRejectId(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Cycle Close</DialogTitle>
-            <DialogDescription>This will return the cycle to &quot;Closing&quot; status. The admin will need to resolve the issues and resubmit for approval.</DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <label className="text-sm font-medium mb-1.5 block">Reason for rejection <span className="text-muted-foreground font-normal">(required)</span></label>
-            <Textarea
-              rows={3}
-              placeholder="Explain what the team needs to fix before resubmitting..."
-              value={mmpBannerRejectNote}
-              onChange={e => setMmpBannerRejectNote(e.target.value)}
-              data-testid="input-mmp-banner-reject-note"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMmpBannerRejectId(null)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              disabled={!mmpBannerRejectNote.trim()}
-              onClick={() => mmpBannerRejectId && handleMmpBannerReject(mmpBannerRejectId, mmpBannerRejectNote.trim())}
-              data-testid="button-confirm-mmp-banner-reject"
-            >
-              Reject &amp; Send Back
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Body - Show tabs immediately with loading states per section for faster perceived loading */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

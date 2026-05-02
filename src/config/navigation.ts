@@ -110,26 +110,6 @@ export const navigationConfig: NavigationGroup[] = [
     label: 'Cycle Management',
     items: [
       {
-        id: 'mmp-cycle-close',
-        icon: CheckCircle,
-        label: 'Close Cycle',
-        path: '/mmp/cycle-close',
-        category: 'primary',
-        priority: 90,
-        roles: ['Admin' as AppRole, 'Super Admin' as AppRole],
-        description: 'Start and manage MMP cycle closures'
-      },
-      {
-        id: 'cycle-history',
-        icon: Archive,
-        label: 'Cycle History',
-        path: '/mmp/cycle-close?tab=archive',
-        category: 'secondary',
-        priority: 80,
-        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
-        description: 'View past closed cycles and coverage reports'
-      },
-      {
         id: 'data-export-center',
         icon: BarChart3,
         label: 'Data Export Center',
