@@ -217,7 +217,7 @@ function ProfileDetail({
       setFinLoading(true);
       const [dpRes, ocRes, wrRes] = await Promise.all([
         supabase.from('down_payment_requests')
-          .select('id,status,requested_amount,requested_at,justification,hub_name,site_name')
+          .select('id,status,requested_amount,requested_at,justification,hub_name,site_name,metadata')
           .eq('requested_by', profile.id).order('requested_at', { ascending: false }).limit(50),
         supabase.from('operational_cost_submissions')
           .select('id,tier1_status,tier2_status,amount_cents,expense_category,description,created_at')
@@ -532,18 +532,29 @@ function ProfileDetail({
                     <div className="divide-y divide-border max-h-48 overflow-y-auto">
                       {advanceRows.length === 0 ? (
                         <p className="text-xs text-muted-foreground text-center py-4">No advance requests found</p>
-                      ) : advanceRows.map(r => (
-                        <div key={r.id} className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-muted/30">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${r.status === 'approved' || r.status === 'paid' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : ['pending','pending_supervisor','pending_admin'].includes(r.status) ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/40 text-red-600'}`}>{r.status}</span>
+                      ) : advanceRows.map(r => {
+                        const mmpName = r.metadata?.mmp_name || r.hub_name || '—';
+                        const statusColor = r.status === 'approved' || r.status === 'paid' || r.status === 'fully_paid'
+                          ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                          : ['pending','pending_supervisor','pending_admin'].includes(r.status)
+                          ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+                          : r.status === 'partially_paid'
+                          ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
+                          : 'bg-red-100 dark:bg-red-900/40 text-red-600';
+                        return (
+                        <div key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 hover:bg-muted/30">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-foreground truncate">{mmpName}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${statusColor}`}>{r.status.replace(/_/g, ' ')}</span>
                               {r.site_name && <span className="text-[10px] text-muted-foreground truncate">{r.site_name}</span>}
                             </div>
                             <p className="text-[10px] text-muted-foreground mt-0.5">{r.requested_at ? format(parseISO(r.requested_at), 'dd MMM yyyy') : '—'}</p>
                           </div>
                           <p className="text-xs font-bold shrink-0">SDG {Number(r.requested_amount || 0).toLocaleString()}</p>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
