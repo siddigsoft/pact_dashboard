@@ -11,7 +11,7 @@ import {
   Clock, BookOpen, ArrowRight, AlertTriangle, Activity, BarChart3,
   CheckCircle2, XCircle, FileText, ShoppingCart, Zap, ChevronRight,
   Landmark, Wallet, Scale, CalendarDays, Layers, Settings2, ListOrdered,
-  CreditCard, PiggyBank, Receipt, ArrowUpDown,
+  CreditCard, PiggyBank, Receipt, ArrowUpDown, ShieldAlert, Lock,
 } from 'lucide-react';
 import {
   format, parseISO, subMonths, startOfMonth, endOfMonth,
@@ -43,6 +43,13 @@ interface ModuleStatus {
   vendors: ModuleEntry; assets: ModuleEntry; purchaseOrders: ModuleEntry;
   fiscalPeriods: ModuleEntry; bankAccounts: ModuleEntry; funds: ModuleEntry;
   bankRecon: ModuleEntry;
+}
+interface Phase4KPI {
+  sodViolations: number;
+  openEncumbranceTotal: number;
+  openEncumbranceCount: number;
+  activeTaxCodes: number;
+  periodCloseStatus: string | null;
 }
 
 /* ─── health score ───────────────────────────────────────────────────── */
@@ -191,6 +198,7 @@ export default function AccountingFinanceDashboard() {
   const [revenue, setRevenue] = useState<KPIState<RevenueKPI>>(INIT());
   const [coa, setCOA] = useState<KPIState<COAStatus>>(INIT());
   const [modules, setModules] = useState<KPIState<ModuleStatus>>(INIT());
+  const [phase4, setPhase4] = useState<KPIState<Phase4KPI>>(INIT());
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [countdown, setCountdown] = useState(60);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -399,6 +407,26 @@ export default function AccountingFinanceDashboard() {
     } catch (e: any) { setCOA({ data: null, loading: false, error: e.message }); }
   }, []);
 
+  /* ── Phase 4 advanced controls ── */
+  const loadPhase4 = useCallback(async () => {
+    setPhase4(p => ({ ...p, loading: true, error: null }));
+    try {
+      const [journalRes, encRes, taxRes, periodRes] = await Promise.all([
+        supabase.from('acct_journal_entries').select('id, created_by, posted_by').eq('status', 'posted').not('posted_by', 'is', null).limit(3000),
+        supabase.from('acct_budget_encumbrances' as any).select('amount, status').eq('status', 'open').limit(3000),
+        supabase.from('acct_tax_codes' as any).select('id, is_active').eq('is_active', true).limit(500),
+        supabase.from('acct_period_close_log' as any).select('status, closed_at').order('closed_at', { ascending: false }).limit(1),
+      ]);
+      const sodViolations = journalRes.error ? 0 : ((journalRes.data ?? []) as any[]).filter(e => e.created_by && e.created_by === e.posted_by).length;
+      const encRows = (encRes.error?.code === '42P01') ? [] : ((encRes.data ?? []) as any[]);
+      const openEncumbranceTotal = encRows.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+      const openEncumbranceCount = encRows.length;
+      const activeTaxCodes = (taxRes.error?.code === '42P01') ? 0 : (taxRes.data?.length ?? 0);
+      const latestClose = (periodRes.error?.code === '42P01') ? null : ((periodRes.data ?? []) as any[])[0]?.status ?? null;
+      setPhase4({ data: { sodViolations, openEncumbranceTotal, openEncumbranceCount, activeTaxCodes, periodCloseStatus: latestClose }, loading: false, error: null });
+    } catch (e: any) { setPhase4({ data: null, loading: false, error: e.message }); }
+  }, []);
+
   /* ── module status probe — checks table existence AND fetches record count ── */
   const loadModules = useCallback(async () => {
     setModules(p => ({ ...p, loading: true, error: null }));
@@ -429,8 +457,8 @@ export default function AccountingFinanceDashboard() {
     setCountdown(60);
     void loadBudget(); void loadAP(); void loadAssets(); void loadJournals();
     void loadMonthlyRevExp(); void loadPOs(); void loadCash(); void loadRevenue();
-    void loadCOA(); void loadModules();
-  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules]);
+    void loadCOA(); void loadModules(); void loadPhase4();
+  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules, loadPhase4]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
 
@@ -680,6 +708,56 @@ export default function AccountingFinanceDashboard() {
           loading={journals.loading}
           error={journals.error}
           alert={journals.data ? (journals.data.draftCount + journals.data.pendingCount) > 5 : false}
+        />
+      </div>
+
+      {/* ── KPI row 4: Phase 4 Advanced Controls ── */}
+      <SectionHeading label="Advanced Controls" labelAr="الضوابط المتقدمة" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <KpiCard
+          title="SOD Violations"
+          titleAr="انتهاكات الفصل"
+          value={phase4.data ? String(phase4.data.sodViolations) : '—'}
+          sub={phase4.data ? (phase4.data.sodViolations === 0 ? 'No self-approvals detected' : `${phase4.data.sodViolations} self-approved entr${phase4.data.sodViolations === 1 ? 'y' : 'ies'}`) : undefined}
+          icon={ShieldAlert}
+          accent={phase4.data && phase4.data.sodViolations > 0 ? 'bg-rose-600' : 'bg-emerald-600'}
+          href="/accounting/sod"
+          loading={phase4.loading}
+          error={phase4.error}
+          alert={phase4.data ? phase4.data.sodViolations > 0 : false}
+        />
+        <KpiCard
+          title="Open Encumbrances"
+          titleAr="الالتزامات المفتوحة"
+          value={phase4.data ? String(phase4.data.openEncumbranceCount) : '—'}
+          sub={phase4.data ? `${formatNumber(phase4.data.openEncumbranceTotal, 0)} committed` : undefined}
+          icon={Lock}
+          accent={phase4.data && phase4.data.openEncumbranceCount > 0 ? 'bg-amber-600' : 'bg-slate-600'}
+          href="/accounting/budget-encumbrance"
+          loading={phase4.loading}
+          error={phase4.error}
+        />
+        <KpiCard
+          title="Active Tax Codes"
+          titleAr="رموز الضريبة النشطة"
+          value={phase4.data ? String(phase4.data.activeTaxCodes) : '—'}
+          sub={phase4.data ? (phase4.data.activeTaxCodes === 0 ? 'Run Phase 4 migration' : `VAT / WHT / Customs configured`) : undefined}
+          icon={Receipt}
+          accent={phase4.data && phase4.data.activeTaxCodes === 0 ? 'bg-amber-600' : 'bg-indigo-600'}
+          href="/accounting/tax"
+          loading={phase4.loading}
+          error={phase4.error}
+        />
+        <KpiCard
+          title="Last Period Close"
+          titleAr="آخر إغلاق دوري"
+          value={phase4.data ? (phase4.data.periodCloseStatus ?? 'None') : '—'}
+          sub={phase4.data ? (phase4.data.periodCloseStatus ? `Latest close status` : 'No close events logged yet') : undefined}
+          icon={CalendarDays}
+          accent={phase4.data && phase4.data.periodCloseStatus === 'locked' ? 'bg-slate-700' : phase4.data && phase4.data.periodCloseStatus ? 'bg-teal-600' : 'bg-gray-500'}
+          href="/accounting/period-close"
+          loading={phase4.loading}
+          error={phase4.error}
         />
       </div>
 

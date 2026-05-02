@@ -74,6 +74,10 @@ const MODULE_TABLES: { table: string; label: string; icon: React.ElementType; li
   { table: 'budget_lines',            label: 'Budget Lines',          icon: PiggyBank,    link: '/accounting/budget-variance' },
   { table: 'gl_bridge_log',           label: 'GL Bridge Log',         icon: Zap,          link: '/accounting/gl-bridge' },
   { table: 'feature_flags',           label: 'Feature Flags',         icon: Settings2,    link: '/accounting/settings' },
+  { table: 'acct_tax_codes',          label: 'Tax Codes',             icon: Receipt,      link: '/accounting/tax' },
+  { table: 'acct_exchange_rates',     label: 'Exchange Rates',        icon: TrendingUp,   link: '/accounting/multi-currency' },
+  { table: 'acct_period_close_log',   label: 'Period Close Log',      icon: Shield,       link: '/accounting/period-close' },
+  { table: 'acct_budget_encumbrances',label: 'Budget Encumbrances',   icon: Wallet,       link: '/accounting/budget-encumbrance' },
 ];
 
 const PHASE_ROADMAP = [

@@ -27,7 +27,7 @@ interface BudgetLine { id: string; account_id: string; period_id: string | null;
 
 interface BvARow {
   account_id: string; account_code: string; account_name_en: string; account_name_ar: string;
-  account_type: string; budget: number; actual: number; variance: number; pct: number;
+  account_type: string; budget: number; actual: number; encumbrance: number; variance: number; pct: number;
   budgetLineId: string | null;
 }
 
@@ -55,6 +55,7 @@ export default function AccountingBudgetVsActual() {
   const [countryInit, setCountryInit] = useState(false);
   const [tb, setTb] = useState<TbRow[]>([]);
   const [budgetLines, setBudgetLines] = useState<BudgetLine[]>([]);
+  const [encMap, setEncMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [bootstrap, setBootstrap] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,12 +107,22 @@ export default function AccountingBudgetVsActual() {
     setLoading(true);
     setError(null);
     try {
-      const [tbRes] = await Promise.all([
+      const encQ = supabase.from('acct_budget_encumbrances' as any).select('account_id, amount').eq('status', 'open').limit(5000);
+      if (fundId !== 'all') (encQ as any).eq('fund_id', fundId);
+      const [tbRes, encRes] = await Promise.all([
         supabase.rpc('acct_trial_balance' as any, { p_period_id: periodId, p_branch_id: null, p_fund_id: fundId === 'all' ? null : fundId } as any),
+        encQ,
         loadBudgetLines(periodId, fundId),
       ]);
       if (tbRes.error) { setError(tbRes.error.message); return; }
       setTb((tbRes.data ?? []) as TbRow[]);
+      const newEncMap: Record<string, number> = {};
+      if (!encRes.error || encRes.error.code === '42P01') {
+        for (const e of ((encRes.data ?? []) as any[])) {
+          newEncMap[e.account_id] = (newEncMap[e.account_id] ?? 0) + Number(e.amount ?? 0);
+        }
+      }
+      setEncMap(newEncMap);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load report');
     } finally {
@@ -160,17 +171,19 @@ export default function AccountingBudgetVsActual() {
       const actual = tbRow ? actualBalance(tbRow) : 0;
       const bl = budgetMap[aid];
       const budget = bl?.budget_amount ?? 0;
-      const variance = budget - actual;
-      const pct = budget > 0 ? Math.round((actual / budget) * 100) : actual > 0 ? 999 : 0;
-      result.push({ account_id: aid, account_code: meta.code, account_name_en: meta.name_en, account_name_ar: meta.name_ar ?? '', account_type: meta.account_type, budget, actual, variance, pct, budgetLineId: bl?.id ?? null });
+      const encumbrance = encMap[aid] ?? 0;
+      const variance = budget - actual - encumbrance;
+      const pct = budget > 0 ? Math.round(((actual + encumbrance) / budget) * 100) : actual > 0 ? 999 : 0;
+      result.push({ account_id: aid, account_code: meta.code, account_name_en: meta.name_en, account_name_ar: meta.name_ar ?? '', account_type: meta.account_type, budget, actual, encumbrance, variance, pct, budgetLineId: bl?.id ?? null });
     }
     return result.sort((a, b) => a.account_code.localeCompare(b.account_code));
-  }, [tb, budgetLines, accountsMeta, countryFilter, typeFilter, search, budgetMap]);
+  }, [tb, budgetLines, accountsMeta, countryFilter, typeFilter, search, budgetMap, encMap]);
 
   const totals = useMemo(() => {
     const b = rows.reduce((s, r) => s + r.budget, 0);
     const a = rows.reduce((s, r) => s + r.actual, 0);
-    return { budget: b, actual: a, variance: b - a, pct: b > 0 ? Math.round((a / b) * 100) : 0 };
+    const e = rows.reduce((s, r) => s + r.encumbrance, 0);
+    return { budget: b, actual: a, encumbrance: e, variance: b - a - e, pct: b > 0 ? Math.round(((a + e) / b) * 100) : 0 };
   }, [rows]);
 
   // Inline budget save
@@ -199,9 +212,9 @@ export default function AccountingBudgetVsActual() {
   };
 
   const exportCsv = () => {
-    const header = ['Code', 'Account', 'Type', 'Budget', 'Actual', 'Variance', '% Used'];
-    const body = rows.map(r => [r.account_code, r.account_name_en, r.account_type, r.budget.toFixed(2), r.actual.toFixed(2), r.variance.toFixed(2), `${r.pct}%`]);
-    const footer = ['', 'TOTAL', '', totals.budget.toFixed(2), totals.actual.toFixed(2), totals.variance.toFixed(2), `${totals.pct}%`];
+    const header = ['Code', 'Account', 'Type', 'Budget', 'Actual', 'Encumbered', 'Available', '% Used'];
+    const body = rows.map(r => [r.account_code, r.account_name_en, r.account_type, r.budget.toFixed(2), r.actual.toFixed(2), r.encumbrance.toFixed(2), r.variance.toFixed(2), `${r.pct}%`]);
+    const footer = ['', 'TOTAL', '', totals.budget.toFixed(2), totals.actual.toFixed(2), totals.encumbrance.toFixed(2), totals.variance.toFixed(2), `${totals.pct}%`];
     downloadCsv(`budget-vs-actual-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body, footer]);
   };
 
@@ -213,16 +226,16 @@ export default function AccountingBudgetVsActual() {
       doc.setFontSize(9); doc.text(`Period: ${periodLabel(periodId)} · Currency: ${selectedCurrency} · Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 14, 22);
       autoTable(doc, {
         startY: 28,
-        head: [['Code', 'Account', 'Type', 'Budget', 'Actual', 'Variance', '% Used']],
+        head: [['Code', 'Account', 'Type', 'Budget', 'Actual', 'Encumbered', 'Available', '% Used']],
         body: [
-          ...rows.map(r => [r.account_code, r.account_name_en, r.account_type, formatNumber(r.budget), formatNumber(r.actual), formatNumber(r.variance), `${r.pct}%`]),
-          ['', 'TOTAL', '', formatNumber(totals.budget), formatNumber(totals.actual), formatNumber(totals.variance), `${totals.pct}%`],
+          ...rows.map(r => [r.account_code, r.account_name_en, r.account_type, formatNumber(r.budget), formatNumber(r.actual), formatNumber(r.encumbrance), formatNumber(r.variance), `${r.pct}%`]),
+          ['', 'TOTAL', '', formatNumber(totals.budget), formatNumber(totals.actual), formatNumber(totals.encumbrance), formatNumber(totals.variance), `${totals.pct}%`],
         ],
         styles: { fontSize: 7.5 },
         headStyles: { fillColor: [79, 70, 229] },
-        columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
+        columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } },
         didDrawCell: (data: any) => {
-          if (data.column.index === 6 && data.section === 'body') {
+          if (data.column.index === 7 && data.section === 'body') {
             const pct = parseInt(data.cell.text[0] ?? '0');
             if (pct > 100) { data.cell.styles.textColor = [185, 28, 28]; data.cell.styles.fontStyle = 'bold'; }
             else if (pct >= 85) { data.cell.styles.textColor = [180, 83, 9]; }
@@ -370,7 +383,8 @@ export default function AccountingBudgetVsActual() {
                     <th className="text-left px-4 py-2 font-medium text-muted-foreground w-24">Type</th>
                     <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Budget</th>
                     <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Actual</th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Variance</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Encumbered</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground w-32">Available</th>
                     <th className="text-right px-4 py-2 font-medium text-muted-foreground w-24">% Used</th>
                     {canEdit && <th className="px-4 py-2 w-8" />}
                   </tr>
@@ -401,6 +415,9 @@ export default function AccountingBudgetVsActual() {
                           )}
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums">{formatNumber(row.actual)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-amber-700 dark:text-amber-400">
+                          {row.encumbrance === 0 ? <span className="text-muted-foreground/40">—</span> : formatNumber(row.encumbrance)}
+                        </td>
                         <td className={cn('px-4 py-2 text-right tabular-nums font-medium', row.variance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')}>
                           {row.budget === 0 ? '—' : formatNumber(row.variance)}
                         </td>
@@ -435,6 +452,7 @@ export default function AccountingBudgetVsActual() {
                     <td className="px-4 py-2" colSpan={3}>TOTAL</td>
                     <td className="px-4 py-2 text-right tabular-nums">{formatNumber(totals.budget)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{formatNumber(totals.actual)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-amber-700 dark:text-amber-400">{totals.encumbrance > 0 ? formatNumber(totals.encumbrance) : '—'}</td>
                     <td className={cn('px-4 py-2 text-right tabular-nums', totals.variance >= 0 ? 'text-emerald-700' : 'text-rose-700')}>{formatNumber(totals.variance)}</td>
                     <td className={cn('px-4 py-2 text-right font-bold', usageBand(totals.pct) === 'over' ? 'text-rose-700' : usageBand(totals.pct) === 'warn' ? 'text-amber-700' : 'text-emerald-700')}>{totals.pct}%</td>
                     {canEdit && <td />}
