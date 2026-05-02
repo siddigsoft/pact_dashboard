@@ -925,10 +925,25 @@ export default function StaffDirectory() {
     missingBank:  enrichedProfiles.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
   }), [enrichedProfiles]);
 
+  /* ── Capacity base — hub/state/role/search filters only, ignores
+     presence (statusFilter) and bank filter so headcount is always complete ── */
+  const capacityBase = useMemo(() => {
+    const q = search.toLowerCase();
+    return enrichedProfiles.filter(p => {
+      if (q && !p.full_name?.toLowerCase().includes(q) && !p.email?.toLowerCase().includes(q) &&
+        !p.phone?.toLowerCase().includes(q) && !p.employee_id?.toLowerCase().includes(q)) return false;
+      if (hubFilter !== 'all'      && p.hub_id      !== hubFilter)      return false;
+      if (stateFilter !== 'all'    && p.state_id    !== stateFilter)    return false;
+      if (localityFilter !== 'all' && p.locality_id !== localityFilter) return false;
+      if (roleFilter !== 'all'     && p.role        !== roleFilter)     return false;
+      return true;
+    });
+  }, [enrichedProfiles, search, hubFilter, stateFilter, localityFilter, roleFilter]);
+
   /* ── Capacity groups ── */
-  const mkMap = (key: (p: StaffProfile) => string) => {
+  const mkMap = (src: StaffProfile[], key: (p: StaffProfile) => string) => {
     const m: Record<string, { total: number; online: number }> = {};
-    filtered.forEach(p => {
+    src.forEach(p => {
       const k = key(p);
       if (!m[k]) m[k] = { total: 0, online: 0 };
       m[k].total++;
@@ -942,9 +957,9 @@ export default function StaffDirectory() {
         return b.total - a.total;
       });
   };
-  const capHub   = useMemo(() => mkMap(p => dbHubs.find(h => h.id === p.hub_id)?.name || 'Unassigned'), [filtered]);
-  const capRole  = useMemo(() => mkMap(p => ROLE_LABELS[p.role || ''] || p.role || 'Unknown'), [filtered]);
-  const capState = useMemo(() => mkMap(p => sudanStates.find(s => s.id === p.state_id)?.name || 'Unassigned'), [filtered]);
+  const capHub   = useMemo(() => mkMap(capacityBase, p => dbHubs.find(h => h.id === p.hub_id)?.name || 'Unassigned'), [capacityBase]);
+  const capRole  = useMemo(() => mkMap(capacityBase, p => ROLE_LABELS[p.role || ''] || p.role || 'Unknown'), [capacityBase]);
+  const capState = useMemo(() => mkMap(capacityBase, p => sudanStates.find(s => s.id === p.state_id)?.name || 'Unassigned'), [capacityBase]);
 
   const clearFilters = () => { setSearch(''); setHubFilter('all'); setStateFilter('all'); setLocalFilter('all'); setRoleFilter('all'); setStatusFilter('all'); };
   const hasFilters = !!(search || hubFilter !== 'all' || stateFilter !== 'all' || localityFilter !== 'all' || roleFilter !== 'all' || statusFilter !== 'all');
