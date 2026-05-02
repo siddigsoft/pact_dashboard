@@ -75,6 +75,7 @@
     ShoppingCart,
     ArrowLeftRight,
     PiggyBank,
+    Search,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -517,6 +518,7 @@
       if (!isHidden('/accounting/depreciation-run')) acctItems.push({ id: 'accounting-depreciation-run', title: 'Depreciation Run', url: '/accounting/depreciation-run', icon: RotateCcw, priority: 6.4, isPinned: isPinned('/accounting/depreciation-run') });
       if (!isHidden('/accounting/consolidation')) acctItems.push({ id: 'accounting-consolidation', title: 'Consolidation', url: '/accounting/consolidation', icon: Building2, priority: 6.5, isPinned: isPinned('/accounting/consolidation') });
       if (!isHidden('/accounting/budget-planning')) acctItems.push({ id: 'accounting-budget-planning', title: 'Budget Planning', url: '/accounting/budget-planning', icon: PiggyBank, priority: 6.6, isPinned: isPinned('/accounting/budget-planning') });
+      if (!isHidden('/accounting/search')) acctItems.push({ id: 'accounting-search', title: 'Accounting Search', url: '/accounting/search', icon: Search, priority: 0.5, isPinned: isPinned('/accounting/search') });
       if (!isHidden('/accounting/settings')) acctItems.push({ id: 'accounting-settings', title: 'Accounting Settings', url: '/accounting/settings', icon: Settings2, priority: 7, isPinned: isPinned('/accounting/settings') });
     }
     if (acctItems.length) groups.push({ id: 'finance-accounting', label: 'Accounting', order: 5.5, items: acctItems, parentGroup: 'finance' } as any);

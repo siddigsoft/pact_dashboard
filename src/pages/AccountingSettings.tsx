@@ -71,7 +71,7 @@ const MODULE_TABLES: { table: string; label: string; icon: React.ElementType; li
   { table: 'acct_bank_accounts',      label: 'Bank Accounts',         icon: Landmark,     link: '/accounting/bank-recon' },
   { table: 'acct_bank_statement_lines', label: 'Bank Statement Lines', icon: Activity,    link: '/accounting/bank-recon' },
   { table: 'acct_fixed_assets',       label: 'Fixed Assets',          icon: Package,      link: '/accounting/fixed-assets' },
-  { table: 'acct_budget_lines',       label: 'Budget Lines',          icon: PiggyBank,    link: '/accounting/budget-variance' },
+  { table: 'acct_budget_lines',       label: 'Budget Lines',          icon: PiggyBank,    link: '/accounting/budget-planning' },
   { table: 'acct_gl_bridge_log',      label: 'GL Bridge Log',         icon: Zap,          link: '/accounting/gl-bridge' },
   { table: 'feature_flags',           label: 'Feature Flags',         icon: Settings2,    link: '/accounting/settings' },
   { table: 'acct_tax_codes',          label: 'Tax Codes',             icon: Receipt,      link: '/accounting/tax' },
@@ -97,6 +97,7 @@ const PHASE_ROADMAP = [
       'Income Statement & Balance Sheet',
       'Bank Reconciliation module',
       'Budget vs. Actual variance analysis',
+      'Budget Planning — set account targets per period & fund with CSV import',
     ],
   },
   {

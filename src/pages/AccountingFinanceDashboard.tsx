@@ -1005,10 +1005,16 @@ export default function AccountingFinanceDashboard() {
       </div>
 
       <SectionHeading label="Phase 5 — Grants & Consolidation" labelAr="المنح والتوحيد" />
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-4">
         <QuickLink href="/accounting/grants"            icon={Award}        color="text-amber-600 dark:text-amber-400"   label="Grant Tracking"        sub="Donor grants & burn rate" />
         <QuickLink href="/accounting/cost-allocation"   icon={Zap}          color="text-violet-600 dark:text-violet-400" label="Cost Allocation"       sub="Overhead distribution" />
         <QuickLink href="/accounting/consolidation"     icon={Building2}    color="text-teal-600 dark:text-teal-400"     label="Consolidation"         sub="Multi-entity P&L" />
+      </div>
+
+      <SectionHeading label="Tools" labelAr="الأدوات" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-5">
+        <QuickLink href="/accounting/search"            icon={ClipboardList} color="text-blue-600 dark:text-blue-400"   label="Accounting Search"     sub="Search all records" />
+        <QuickLink href="/accounting/finance-dashboard" icon={Activity}      color="text-emerald-600 dark:text-emerald-400" label="Finance Dashboard" sub="KPIs & overview" />
       </div>
 
       {/* ── live module status ── */}

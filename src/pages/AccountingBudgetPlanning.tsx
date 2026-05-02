@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Loader2, PiggyBank, Download, RefreshCw, Pencil, Check, X,
-  Search, Copy, AlertTriangle, CheckCircle2,
+  Search, Copy, AlertTriangle, CheckCircle2, Upload,
 } from 'lucide-react';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -64,6 +64,8 @@ export default function AccountingBudgetPlanning() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [copying, setCopying]   = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* ── bootstrap ── */
   useEffect(() => {
@@ -203,6 +205,75 @@ export default function AccountingBudgetPlanning() {
     setCopying(false);
   };
 
+  /* ── import CSV ── */
+  const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !periodId) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const hasHeader = /account[\s_]?code/i.test(lines[0] ?? '');
+      const dataLines = hasHeader ? lines.slice(1) : lines;
+
+      const accountByCode: Record<string, Account> = {};
+      for (const a of accounts) accountByCode[a.code.toLowerCase()] = a;
+
+      const budgetMap: Record<string, BudgetLine> = {};
+      for (const bl of budgetLines) budgetMap[bl.account_id] = bl;
+
+      const period = periods.find(p => p.id === periodId);
+      let created = 0, updated = 0, skipped = 0;
+      const skippedRows: string[] = [];
+
+      for (const line of dataLines) {
+        const parts = line.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
+        // Support: account_code,budget_amount OR account_code,fund_code,budget_amount
+        let code: string, amtStr: string, fundCode: string | undefined;
+        if (parts.length >= 3 && isNaN(Number(parts[1]))) {
+          [code, fundCode, amtStr] = parts as [string, string, string];
+        } else {
+          [code, amtStr] = parts as [string, string];
+        }
+        const amt = parseFloat(amtStr);
+        if (!code || isNaN(amt) || amt < 0) { skipped++; skippedRows.push(line); continue; }
+
+        const acct = accountByCode[code.toLowerCase()];
+        if (!acct) { skipped++; skippedRows.push(`Unknown code: ${code}`); continue; }
+
+        let resolvedFundId = fundId === 'all' ? null : fundId;
+        if (fundCode) {
+          const f = funds.find(f => f.code.toLowerCase() === fundCode!.toLowerCase());
+          if (f) resolvedFundId = f.id;
+        }
+
+        const existing = budgetMap[acct.id];
+        if (existing) {
+          const { error } = await supabase.from('acct_budget_lines').update({ budget_amount: amt }).eq('id', existing.id);
+          if (!error) updated++; else { skipped++; skippedRows.push(`Update failed: ${code}`); }
+        } else {
+          const { error } = await supabase.from('acct_budget_lines').insert({
+            account_id: acct.id, period_id: periodId,
+            fund_id: resolvedFundId,
+            fiscal_year_id: period?.fiscal_year_id ?? null,
+            budget_amount: amt,
+          });
+          if (!error) created++; else { skipped++; skippedRows.push(`Insert failed: ${code}`); }
+        }
+      }
+      toast({
+        title: 'Import complete',
+        description: `${created} created, ${updated} updated${skipped > 0 ? `, ${skipped} skipped` : ''}`,
+      });
+      void loadBudgetLines(periodId, fundId);
+    } catch (err: any) {
+      toast({ title: 'Import failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   /* ── export CSV ── */
   const exportCsv = () => {
     downloadCsv(`budget-plan-${periodId}.csv`, [
@@ -236,8 +307,12 @@ export default function AccountingBudgetPlanning() {
           <Button variant="outline" size="sm" onClick={copyFromPrevious} disabled={copying || !periodId} data-testid="button-copy-previous">
             {copying ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Copy className="w-4 h-4 mr-1" />} Copy Previous
           </Button>
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing || !periodId} data-testid="button-import-budget">
+            {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />} Import CSV
+          </Button>
           <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-budget"><Download className="w-4 h-4 mr-1" /> Export</Button>
           <Button variant="outline" size="sm" onClick={() => void loadBudgetLines(periodId, fundId)} data-testid="button-refresh-budget"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
+          <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} data-testid="input-import-csv" />
         </div>
       </div>
 
