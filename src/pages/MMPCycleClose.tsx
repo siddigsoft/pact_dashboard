@@ -4140,38 +4140,50 @@ const MMPCycleClose = () => {
                                                   </div>
                                                 )}
 
-                                                {/* Inline fee editor for dispatched payable sites */}
-                                                {payableEntries.length > 0 && (
-                                                  <div className="rounded-lg border border-indigo-200 dark:border-indigo-700 overflow-hidden">
-                                                    <button
-                                                      type="button"
-                                                      className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold text-indigo-800 dark:text-indigo-200 bg-indigo-100/60 dark:bg-indigo-900/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
-                                                      onClick={() => {
-                                                        if (!feeEditOpen) {
-                                                          const init: Record<string, { enum: number; transport: number }> = {};
-                                                          payableEntries.forEach(e => { init[e.id] = { enum: e.enumeratorFee ?? 0, transport: e.transportFee ?? 0 }; });
-                                                          setFeeEdits(init);
-                                                        }
-                                                        setFeeEditOpen(v => !v);
-                                                      }}
-                                                    >
-                                                      <span>✏️ Edit Site Fees ({payableEntries.length} site{payableEntries.length !== 1 ? 's' : ''})</span>
-                                                      <span className="text-indigo-500">{feeEditOpen ? '▲ Hide' : '▼ Expand'}</span>
-                                                    </button>
-                                                    {feeEditOpen && (
-                                                      <div className="p-2 space-y-2 bg-white/80 dark:bg-black/20">
+                                                {/* Inline fee editor — always visible when there are payable sites */}
+                                                {payableEntries.length > 0 && (() => {
+                                                  const allFeesZero = payableEntries.every(e => (e.enumeratorFee ?? 0) === 0 && (e.transportFee ?? 0) === 0);
+                                                  const editEntries = Object.keys(feeEdits).length > 0
+                                                    ? feeEdits
+                                                    : Object.fromEntries(payableEntries.map(e => [e.id, { enum: e.enumeratorFee ?? 0, transport: e.transportFee ?? 0 }]));
+                                                  if (Object.keys(feeEdits).length === 0 && payableEntries.length > 0) {
+                                                    // Initialise feeEdits on first render without triggering re-render loop
+                                                    setTimeout(() => {
+                                                      setFeeEdits(Object.fromEntries(payableEntries.map(e => [e.id, { enum: e.enumeratorFee ?? 0, transport: e.transportFee ?? 0 }])));
+                                                    }, 0);
+                                                  }
+                                                  const liveEnumTotal = Object.values(editEntries).reduce((s, v) => s + (v.enum || 0), 0);
+                                                  const liveTransTotal = Object.values(editEntries).reduce((s, v) => s + (v.transport || 0), 0);
+                                                  const liveNet = liveEnumTotal + liveTransTotal + opCosts - totalRecover;
+                                                  return (
+                                                    <div className={`rounded-lg border-2 overflow-hidden ${allFeesZero ? 'border-red-300 dark:border-red-700' : 'border-green-300 dark:border-green-700'}`}>
+                                                      <div className={`px-3 py-2 flex items-center justify-between ${allFeesZero ? 'bg-red-50 dark:bg-red-950/30' : 'bg-green-50 dark:bg-green-950/30'}`}>
+                                                        <span className={`text-[11px] font-bold ${allFeesZero ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
+                                                          {allFeesZero ? '⚠️ Fees not set — enter amounts below before submitting' : '✅ Site Fees'}
+                                                        </span>
+                                                        <button
+                                                          type="button"
+                                                          className="text-[10px] text-muted-foreground underline"
+                                                          onClick={() => setFeeEditOpen(v => !v)}
+                                                        >
+                                                          {feeEditOpen ? 'Collapse' : 'Expand to edit'}
+                                                        </button>
+                                                      </div>
+                                                      <div className="p-2 space-y-2 bg-white/90 dark:bg-black/20">
                                                         {payableEntries.map(e => (
-                                                          <div key={e.id} className="rounded border border-indigo-100 dark:border-indigo-800 p-2 space-y-1.5">
-                                                            <div className="text-[11px] font-semibold text-indigo-900 dark:text-indigo-100 truncate">{e.siteName} <span className="font-normal text-muted-foreground">— {e.enumeratorName}</span></div>
+                                                          <div key={e.id} className="rounded border border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
+                                                            <div className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 truncate">
+                                                              {e.siteName} <span className="font-normal text-muted-foreground">— {e.enumeratorName}</span>
+                                                            </div>
                                                             <div className="grid grid-cols-2 gap-2">
                                                               <div>
                                                                 <label className="text-[10px] text-muted-foreground block mb-0.5">Enumerator Fee (SDG)</label>
                                                                 <input
                                                                   type="number"
                                                                   min={0}
-                                                                  className="w-full text-xs rounded border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-gray-900 px-2 py-1 font-mono"
-                                                                  value={feeEdits[e.id]?.enum ?? 0}
-                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...prev[e.id], enum: Number(ev.target.value) } }))}
+                                                                  className="w-full text-xs rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 px-2 py-1 font-mono focus:ring-2 focus:ring-indigo-400 outline-none"
+                                                                  value={feeEdits[e.id]?.enum ?? e.enumeratorFee ?? 0}
+                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...(prev[e.id] ?? { enum: 0, transport: 0 }), enum: Number(ev.target.value) } }))}
                                                                 />
                                                               </div>
                                                               <div>
@@ -4179,18 +4191,30 @@ const MMPCycleClose = () => {
                                                                 <input
                                                                   type="number"
                                                                   min={0}
-                                                                  className="w-full text-xs rounded border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-gray-900 px-2 py-1 font-mono"
-                                                                  value={feeEdits[e.id]?.transport ?? 0}
-                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...prev[e.id], transport: Number(ev.target.value) } }))}
+                                                                  className="w-full text-xs rounded border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 px-2 py-1 font-mono focus:ring-2 focus:ring-indigo-400 outline-none"
+                                                                  value={feeEdits[e.id]?.transport ?? e.transportFee ?? 0}
+                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...(prev[e.id] ?? { enum: 0, transport: 0 }), transport: Number(ev.target.value) } }))}
                                                                 />
                                                               </div>
                                                             </div>
                                                           </div>
                                                         ))}
+                                                        {/* Live preview */}
+                                                        <div className="rounded bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1.5 text-[11px] space-y-0.5">
+                                                          <div className="flex justify-between text-muted-foreground">
+                                                            <span>Enumerator total</span><span className="font-mono font-semibold">{liveEnumTotal.toLocaleString()} {cur}</span>
+                                                          </div>
+                                                          <div className="flex justify-between text-muted-foreground">
+                                                            <span>Transport total</span><span className="font-mono font-semibold">{liveTransTotal.toLocaleString()} {cur}</span>
+                                                          </div>
+                                                          <div className={`flex justify-between font-bold border-t border-indigo-200 dark:border-indigo-700 pt-1 mt-0.5 ${liveNet >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                            <span>Net to Pay</span><span className="font-mono">{Math.abs(liveNet).toLocaleString()} {cur}</span>
+                                                          </div>
+                                                        </div>
                                                         <button
                                                           type="button"
                                                           disabled={savingFees}
-                                                          className="w-full mt-1 rounded bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-semibold py-1.5 flex items-center justify-center gap-1.5"
+                                                          className="w-full rounded bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold py-2 flex items-center justify-center gap-1.5"
                                                           onClick={async () => {
                                                             setSavingFees(true);
                                                             try {
@@ -4203,19 +4227,18 @@ const MMPCycleClose = () => {
                                                                   }).eq('id', id)
                                                                 )
                                                               );
-                                                              setFeeEditOpen(false);
                                                               if (checklistMmpId) fetchCycleSummary(checklistMmpId);
                                                             } finally {
                                                               setSavingFees(false);
                                                             }
                                                           }}
                                                         >
-                                                          {savingFees ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving…</> : '💾 Save Fees'}
+                                                          {savingFees ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</> : '💾 Save Fees & Refresh Summary'}
                                                         </button>
                                                       </div>
-                                                    )}
-                                                  </div>
-                                                )}
+                                                    </div>
+                                                  );
+                                                })()}
 
                                                 <div className="space-y-1.5 text-xs border-t border-indigo-200 dark:border-indigo-800 pt-2">
                                                   <div className="flex justify-between items-baseline">
