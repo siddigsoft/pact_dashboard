@@ -505,6 +505,14 @@ const MMPCycleClose = () => {
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
   const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
 
+  // Inline fee editing inside closing summary
+  const [feeEditOpen, setFeeEditOpen] = useState(false);
+  const [feeEdits, setFeeEdits] = useState<Record<string, { enum: number; transport: number }>>({});
+  const [savingFees, setSavingFees] = useState(false);
+
+  // Scroll guard — only auto-scroll once per step change, not on every render
+  const guideScrolledStepRef = useRef<string | null>(null);
+
   // Finance tab state
   type FinanceCost = { id: string; description: string | null; vendor: string | null; amount_cents: number; currency: string | null; expense_date: string | null; expense_category: string | null; tier1_status: string | null; tier2_status: string | null; tier3_status: string | null };
   type FinanceAdvance = { id: string; status: string; amount_cents: number | null; currency: string | null };
@@ -3981,7 +3989,12 @@ const MMPCycleClose = () => {
                               return (
                                 <div
                                   key={step.id}
-                                  ref={isCurrentStep ? (el) => { setTimeout(() => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150); } : undefined}
+                                  ref={isCurrentStep ? (el) => {
+                                    if (el && guideScrolledStepRef.current !== step.id) {
+                                      guideScrolledStepRef.current = step.id;
+                                      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300);
+                                    }
+                                  } : undefined}
                                   className={`rounded-xl border transition-all ${
                                     isDone
                                       ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20 p-4'
@@ -4124,6 +4137,83 @@ const MMPCycleClose = () => {
                                                     <span className="text-amber-800 dark:text-amber-200">
                                                       <strong>{completedSites} sites were visited</strong> but only <strong>{payableEntries.length} of {dispatchedTotal} dispatched site{dispatchedTotal !== 1 ? 's' : ''}</strong> have a payable status with fee records. {payableEntries.length === 0 ? 'No fees will be paid out.' : 'Only the dispatched sites are included in the payment total below.'}
                                                     </span>
+                                                  </div>
+                                                )}
+
+                                                {/* Inline fee editor for dispatched payable sites */}
+                                                {payableEntries.length > 0 && (
+                                                  <div className="rounded-lg border border-indigo-200 dark:border-indigo-700 overflow-hidden">
+                                                    <button
+                                                      type="button"
+                                                      className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold text-indigo-800 dark:text-indigo-200 bg-indigo-100/60 dark:bg-indigo-900/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+                                                      onClick={() => {
+                                                        if (!feeEditOpen) {
+                                                          const init: Record<string, { enum: number; transport: number }> = {};
+                                                          payableEntries.forEach(e => { init[e.id] = { enum: e.enumeratorFee ?? 0, transport: e.transportFee ?? 0 }; });
+                                                          setFeeEdits(init);
+                                                        }
+                                                        setFeeEditOpen(v => !v);
+                                                      }}
+                                                    >
+                                                      <span>✏️ Edit Site Fees ({payableEntries.length} site{payableEntries.length !== 1 ? 's' : ''})</span>
+                                                      <span className="text-indigo-500">{feeEditOpen ? '▲ Hide' : '▼ Expand'}</span>
+                                                    </button>
+                                                    {feeEditOpen && (
+                                                      <div className="p-2 space-y-2 bg-white/80 dark:bg-black/20">
+                                                        {payableEntries.map(e => (
+                                                          <div key={e.id} className="rounded border border-indigo-100 dark:border-indigo-800 p-2 space-y-1.5">
+                                                            <div className="text-[11px] font-semibold text-indigo-900 dark:text-indigo-100 truncate">{e.siteName} <span className="font-normal text-muted-foreground">— {e.enumeratorName}</span></div>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                              <div>
+                                                                <label className="text-[10px] text-muted-foreground block mb-0.5">Enumerator Fee (SDG)</label>
+                                                                <input
+                                                                  type="number"
+                                                                  min={0}
+                                                                  className="w-full text-xs rounded border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-gray-900 px-2 py-1 font-mono"
+                                                                  value={feeEdits[e.id]?.enum ?? 0}
+                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...prev[e.id], enum: Number(ev.target.value) } }))}
+                                                                />
+                                                              </div>
+                                                              <div>
+                                                                <label className="text-[10px] text-muted-foreground block mb-0.5">Transport Fee (SDG)</label>
+                                                                <input
+                                                                  type="number"
+                                                                  min={0}
+                                                                  className="w-full text-xs rounded border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-gray-900 px-2 py-1 font-mono"
+                                                                  value={feeEdits[e.id]?.transport ?? 0}
+                                                                  onChange={ev => setFeeEdits(prev => ({ ...prev, [e.id]: { ...prev[e.id], transport: Number(ev.target.value) } }))}
+                                                                />
+                                                              </div>
+                                                            </div>
+                                                          </div>
+                                                        ))}
+                                                        <button
+                                                          type="button"
+                                                          disabled={savingFees}
+                                                          className="w-full mt-1 rounded bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-semibold py-1.5 flex items-center justify-center gap-1.5"
+                                                          onClick={async () => {
+                                                            setSavingFees(true);
+                                                            try {
+                                                              await Promise.all(
+                                                                Object.entries(feeEdits).map(([id, v]) =>
+                                                                  supabase.from('mmp_site_entries').update({
+                                                                    enumerator_fee: v.enum,
+                                                                    transport_fee: v.transport,
+                                                                    cost: v.enum + v.transport,
+                                                                  }).eq('id', id)
+                                                                )
+                                                              );
+                                                              setFeeEditOpen(false);
+                                                              if (checklistMmpId) fetchCycleSummary(checklistMmpId);
+                                                            } finally {
+                                                              setSavingFees(false);
+                                                            }
+                                                          }}
+                                                        >
+                                                          {savingFees ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving…</> : '💾 Save Fees'}
+                                                        </button>
+                                                      </div>
+                                                    )}
                                                   </div>
                                                 )}
 
@@ -4724,7 +4814,12 @@ const MMPCycleClose = () => {
                               const isDone = step.passed;
                               return (
                                 <div
-                                  ref={isCurrentStep ? (el) => { setTimeout(() => el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150); } : undefined}
+                                  ref={isCurrentStep ? (el) => {
+                                    if (el && guideScrolledStepRef.current !== 'approval') {
+                                      guideScrolledStepRef.current = 'approval';
+                                      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300);
+                                    }
+                                  } : undefined}
                                   className={`rounded-xl border transition-all ${
                                     isDone
                                       ? 'border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/20 p-4'
