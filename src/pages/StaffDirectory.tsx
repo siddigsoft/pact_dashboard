@@ -1334,7 +1334,7 @@ export default function StaffDirectory() {
                           <TableCell className="text-sm font-medium">{p.bank_account?.accountName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
                           <TableCell>
                             {p.bank_account?.accountNumber
-                              ? <span className="text-sm font-mono font-bold text-[#0F2041] dark:text-blue-300">{maskAcc(p.bank_account.accountNumber)}</span>
+                              ? <span className="text-sm font-mono font-bold text-[#0F2041] dark:text-blue-300">{p.bank_account.accountNumber}</span>
                               : <span className="text-muted-foreground text-xs">—</span>}
                           </TableCell>
                           <TableCell className="text-sm">{p.bank_account?.bankName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
