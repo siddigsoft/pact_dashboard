@@ -54,6 +54,8 @@
     AlertTriangle,
     Package,
     HeartPulse,
+    Heart,
+    ShieldAlert,
     CheckSquare,
     Handshake,
     FolderOpen,
@@ -503,6 +505,9 @@
       if (!isHidden('/accounting/period-close')) acctItems.push({ id: 'accounting-period-close', title: 'Period Close', url: '/accounting/period-close', icon: Lock, priority: 5.5, isPinned: isPinned('/accounting/period-close') });
       if (!isHidden('/accounting/tax')) acctItems.push({ id: 'accounting-tax', title: 'Tax Management', url: '/accounting/tax', icon: Receipt, priority: 5.6, isPinned: isPinned('/accounting/tax') });
       if (!isHidden('/accounting/multi-currency')) acctItems.push({ id: 'accounting-multi-currency', title: 'Multi-Currency', url: '/accounting/multi-currency', icon: ArrowLeftRight, priority: 5.7, isPinned: isPinned('/accounting/multi-currency') });
+      if (!isHidden('/accounting/budget-encumbrance')) acctItems.push({ id: 'accounting-budget-encumbrance', title: 'Budget Encumbrance', url: '/accounting/budget-encumbrance', icon: Wallet, priority: 5.8, isPinned: isPinned('/accounting/budget-encumbrance') });
+      if (!isHidden('/accounting/donor-reports')) acctItems.push({ id: 'accounting-donor-reports', title: 'Donor Fund Reports', url: '/accounting/donor-reports', icon: Heart, priority: 5.9, isPinned: isPinned('/accounting/donor-reports') });
+      if (!isHidden('/accounting/sod')) acctItems.push({ id: 'accounting-sod', title: 'Segregation of Duties', url: '/accounting/sod', icon: ShieldAlert, priority: 5.95, isPinned: isPinned('/accounting/sod') });
       if (!isHidden('/accounting/funds')) acctItems.push({ id: 'accounting-funds', title: 'Funds', url: '/accounting/funds', icon: Landmark, priority: 6, isPinned: isPinned('/accounting/funds') });
       if (!isHidden('/accounting/settings')) acctItems.push({ id: 'accounting-settings', title: 'Accounting Settings', url: '/accounting/settings', icon: Settings2, priority: 7, isPinned: isPinned('/accounting/settings') });
     }
