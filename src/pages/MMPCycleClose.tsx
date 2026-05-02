@@ -1407,7 +1407,8 @@ const MMPCycleClose = () => {
 
       const records: ClosedCycleRecord[] = (data || []).map(m => {
         const closeRecords: any[] = (m as any).cycle_close_records || [];
-        const snapEntry = closeRecords.find((r: any) => r.id?.startsWith('snapshot-') && r.status === 'closed');
+        const snapEntries = closeRecords.filter((r: any) => r.id?.startsWith('snapshot-') && r.status === 'closed');
+        const snapEntry = snapEntries[snapEntries.length - 1] ?? null;
         const financialSnapshot: ClosedCycleFinancialSnapshot | null = snapEntry?.financialSnapshot ?? null;
         return {
           id: m.id,
@@ -2590,7 +2591,7 @@ const MMPCycleClose = () => {
     try {
       const { error } = await supabase
         .from('mmp_files')
-        .update({ cycle_status: 'active', cycle_closed_at: null } as any)
+        .update({ cycle_status: 'active', cycle_closed_at: null, cycle_close_records: [] } as any)
         .eq('id', mmpId);
       if (error) throw error;
       await logMMPAudit({
