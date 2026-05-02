@@ -1934,6 +1934,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                       placeholder="Enter amount"
                       data-testid="input-bulk-transportation"
                     />
+                    {bulkCost.transportation > 0 && currentExchangeRate > 0 && (
+                      <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5 font-medium">
+                        ≈ USD {(bulkCost.transportation / currentExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="bulk-accommodation" className="text-xs">
@@ -2220,6 +2225,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           >
                             {transportBudget.toLocaleString()} SDG
                           </Badge>
+                          {transportBudget > 0 && currentExchangeRate > 0 && (
+                            <p className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                              ≈ USD {(transportBudget / currentExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             Transport Budget
                           </p>
@@ -2273,6 +2283,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                             placeholder="Required"
                             data-testid={`input-transportation-${siteId}`}
                           />
+                          {costs.transportation > 0 && currentExchangeRate > 0 && (
+                            <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5 font-medium">
+                              ≈ USD {(costs.transportation / currentExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <Label

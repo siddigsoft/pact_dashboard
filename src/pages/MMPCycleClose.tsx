@@ -52,6 +52,7 @@ import type { MatchResult, MatchSummary } from '@/utils/wfpMatcher';
 import { logPaymentEvent } from '@/services/paymentEventLogger';
 import { dispatchNotification } from '@/lib/notify';
 import AdhocSiteVisitsTab from '@/components/mmp/AdhocSiteVisitsTab';
+import { getLatestExchangeRate } from '@/utils/exchange-rate-service';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed', labelAr: 'لم يتم التوزيع' },
@@ -204,6 +205,7 @@ const MMPCycleClose = () => {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+  const [liveExchangeRate, setLiveExchangeRate] = useState<number | null>(null);
   const [uncoveredSites, setUncoveredSites] = useState<UncoveredSite[]>([]);
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
   const [bulkReason, setBulkReason] = useState<NotCoveredReason | ''>('');
@@ -214,6 +216,10 @@ const MMPCycleClose = () => {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'active');
   
+  useEffect(() => {
+    getLatestExchangeRate().then(r => { if (r) setLiveExchangeRate(r.rate); });
+  }, []);
+
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam && tabParam !== activeTab) {
@@ -6029,26 +6035,43 @@ const MMPCycleClose = () => {
                                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                                     <DollarSign className="h-3.5 w-3.5" /> Financial Settlement — Frozen at Close
                                   </h4>
+                                  {liveExchangeRate && (
+                                    <p className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                      <span>Rate: 1 USD = {liveExchangeRate.toLocaleString()} SDG</span>
+                                    </p>
+                                  )}
                                   <div className="grid grid-cols-2 gap-1.5 text-xs">
                                     <div className="bg-muted/40 rounded-lg p-2.5">
                                       <div className="text-muted-foreground mb-0.5">Enumerator Fees</div>
                                       <div className="font-mono font-semibold" data-testid={`text-snap-enum-${cycle.id}`}>{snap.enumeratorFees.toLocaleString()} {snap.currency}</div>
+                                      {liveExchangeRate && snap.enumeratorFees > 0 && (
+                                        <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">≈ USD {(snap.enumeratorFees / liveExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                      )}
                                       <div className="text-muted-foreground text-[10px]">{snap.payableSiteCount} payable sites</div>
                                     </div>
                                     <div className="bg-muted/40 rounded-lg p-2.5">
                                       <div className="text-muted-foreground mb-0.5">Transport Fees</div>
                                       <div className="font-mono font-semibold" data-testid={`text-snap-transport-${cycle.id}`}>{snap.transportFees.toLocaleString()} {snap.currency}</div>
+                                      {liveExchangeRate && snap.transportFees > 0 && (
+                                        <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">≈ USD {(snap.transportFees / liveExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                      )}
                                     </div>
                                     {snap.opCosts > 0 && (
                                       <div className="bg-muted/40 rounded-lg p-2.5">
                                         <div className="text-muted-foreground mb-0.5">Approved Op. Costs</div>
                                         <div className="font-mono font-semibold">{snap.opCosts.toLocaleString()} {snap.currency}</div>
+                                        {liveExchangeRate && (
+                                          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">≈ USD {(snap.opCosts / liveExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                        )}
                                       </div>
                                     )}
                                     {snap.advancesRecovered > 0 && (
                                       <div className="bg-orange-50 dark:bg-orange-950/30 rounded-lg p-2.5">
                                         <div className="text-muted-foreground mb-0.5">Advances Recovered</div>
                                         <div className="font-mono font-semibold text-orange-700 dark:text-orange-400">−{snap.advancesRecovered.toLocaleString()} {snap.currency}</div>
+                                        {liveExchangeRate && (
+                                          <div className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">≈ USD {(snap.advancesRecovered / liveExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                        )}
                                       </div>
                                     )}
                                     <div className={`rounded-lg p-2.5 col-span-2 ${net >= 0 ? 'bg-green-50 dark:bg-green-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
@@ -6056,6 +6079,11 @@ const MMPCycleClose = () => {
                                       <div className={`font-mono font-bold text-sm ${net >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`} data-testid={`text-snap-net-${cycle.id}`}>
                                         {Math.abs(net).toLocaleString()} {snap.currency}
                                       </div>
+                                      {liveExchangeRate && (
+                                        <div className={`text-[10px] font-semibold ${net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                          ≈ USD {(Math.abs(net) / liveExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
