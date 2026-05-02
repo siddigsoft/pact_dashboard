@@ -70,6 +70,7 @@
     Settings2,
     Zap,
     ShoppingCart,
+    ArrowLeftRight,
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -499,6 +500,9 @@
       if (!isHidden('/accounting/gl-bridge')) acctItems.push({ id: 'accounting-gl-bridge', title: 'GL Bridge Engine', url: '/accounting/gl-bridge', icon: Zap, priority: 3.94, isPinned: isPinned('/accounting/gl-bridge') });
       if (!isHidden('/finance/audit-trail')) acctItems.push({ id: 'finance-audit-trail', title: 'Finance Audit Trail', url: '/finance/audit-trail', icon: BarChart3, priority: 4, isPinned: isPinned('/finance/audit-trail') });
       if (!isHidden('/accounting/fiscal-years')) acctItems.push({ id: 'accounting-fiscal-years', title: 'Fiscal Years & Periods', url: '/accounting/fiscal-years', icon: Calendar, priority: 5, isPinned: isPinned('/accounting/fiscal-years') });
+      if (!isHidden('/accounting/period-close')) acctItems.push({ id: 'accounting-period-close', title: 'Period Close', url: '/accounting/period-close', icon: Lock, priority: 5.5, isPinned: isPinned('/accounting/period-close') });
+      if (!isHidden('/accounting/tax')) acctItems.push({ id: 'accounting-tax', title: 'Tax Management', url: '/accounting/tax', icon: Receipt, priority: 5.6, isPinned: isPinned('/accounting/tax') });
+      if (!isHidden('/accounting/multi-currency')) acctItems.push({ id: 'accounting-multi-currency', title: 'Multi-Currency', url: '/accounting/multi-currency', icon: ArrowLeftRight, priority: 5.7, isPinned: isPinned('/accounting/multi-currency') });
       if (!isHidden('/accounting/funds')) acctItems.push({ id: 'accounting-funds', title: 'Funds', url: '/accounting/funds', icon: Landmark, priority: 6, isPinned: isPinned('/accounting/funds') });
       if (!isHidden('/accounting/settings')) acctItems.push({ id: 'accounting-settings', title: 'Accounting Settings', url: '/accounting/settings', icon: Settings2, priority: 7, isPinned: isPinned('/accounting/settings') });
     }

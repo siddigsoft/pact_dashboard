@@ -187,6 +187,9 @@ const AccountingPurchaseRequisitions = lazy(() => import('./pages/AccountingPurc
 const AccountingGRN        = lazy(() => import('./pages/AccountingGRN'));
 const AccountingAPInvoices = lazy(() => import('./pages/AccountingAPInvoices'));
 const AccountingChequeRegister = lazy(() => import('./pages/AccountingChequeRegister'));
+const AccountingPeriodClose = lazy(() => import('./pages/AccountingPeriodClose'));
+const AccountingTaxManagement = lazy(() => import('./pages/AccountingTaxManagement'));
+const AccountingMultiCurrency = lazy(() => import('./pages/AccountingMultiCurrency'));
 const FinanceAuditTrail = lazy(() => import('./pages/FinanceAuditTrail'));
 // HR audit gaps H2-H5: self-service pages
 const MyAdvances = lazy(() => import('./pages/MyAdvances'));
@@ -530,6 +533,9 @@ const AppRoutes = () => {
         <Route path="/accounting/grn" element={<SuperAdminRoute><PageWrapper><AccountingGRN /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/ap-invoices" element={<SuperAdminRoute><PageWrapper><AccountingAPInvoices /></PageWrapper></SuperAdminRoute>} />
         <Route path="/accounting/cheque-register" element={<SuperAdminRoute><PageWrapper><AccountingChequeRegister /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/period-close" element={<SuperAdminRoute><PageWrapper><AccountingPeriodClose /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/tax" element={<SuperAdminRoute><PageWrapper><AccountingTaxManagement /></PageWrapper></SuperAdminRoute>} />
+        <Route path="/accounting/multi-currency" element={<SuperAdminRoute><PageWrapper><AccountingMultiCurrency /></PageWrapper></SuperAdminRoute>} />
         <Route path="/finance/audit-trail" element={<SuperAdminRoute><PageWrapper><FinanceAuditTrail /></PageWrapper></SuperAdminRoute>} />
         {/* HR audit gaps H2-H5 */}
         <Route path="/my-advances" element={<PageWrapper><MyAdvances /></PageWrapper>} />
