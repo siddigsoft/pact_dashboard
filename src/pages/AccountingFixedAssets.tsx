@@ -244,6 +244,40 @@ export default function AccountingFixedAssets() {
       toast({ title: 'Disposal failed', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Asset disposed', description: `${disposeTarget.name_en} marked as disposed` });
+      // ── Post draft GL journal entry ──────────────────────────────────────
+      try {
+        const { accumulated, bookValue } = calcDepreciation(disposeTarget, today);
+        const proceeds = Number(disposeForm.proceeds) || 0;
+        const gainLoss = proceeds - bookValue;
+        const cost = Number(disposeTarget.acquisition_cost);
+        const glDesc = `Asset Disposal — ${disposeTarget.name_en} | Method: ${disposeForm.method} | Proceeds: ${disposeTarget.currency} ${proceeds.toFixed(2)} | ${gainLoss >= 0 ? 'Gain' : 'Loss'}: ${disposeTarget.currency} ${Math.abs(gainLoss).toFixed(2)}`;
+        const { data: je } = await supabase.from('acct_journal_entries').insert({
+          description_en: glDesc,
+          description_ar: `التخلص من الأصل — ${disposeTarget.name_ar ?? disposeTarget.name_en}`,
+          entry_date: disposeForm.date,
+          posting_date: disposeForm.date,
+          status: 'draft',
+          total_debit: cost,
+          total_credit: cost,
+          reference_number: `DISP-${disposeTarget.asset_tag ?? disposeTarget.id.slice(0, 8)}`,
+        }).select('id').single();
+        if (je?.id && (disposeTarget as any).dep_account_id) {
+          // DR Accumulated Depreciation
+          // DR Cash/Proceeds (if > 0)
+          // DR Loss on Disposal (if loss)
+          // CR Fixed Asset Cost
+          // CR Gain on Disposal (if gain)
+          const lines: any[] = [
+            { journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'DR', amount: accumulated, functional_amount: accumulated, functional_currency: disposeTarget.currency, description: `Accum dep cleared — ${disposeTarget.name_en}` },
+            { journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'CR', amount: cost, functional_amount: cost, functional_currency: disposeTarget.currency, description: `Fixed asset derecognised — ${disposeTarget.name_en}` },
+          ];
+          if (proceeds > 0) lines.push({ journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'DR', amount: proceeds, functional_amount: proceeds, functional_currency: disposeTarget.currency, description: `Proceeds on disposal` });
+          if (gainLoss > 0) lines.push({ journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'CR', amount: gainLoss, functional_amount: gainLoss, functional_currency: disposeTarget.currency, description: `Gain on disposal` });
+          if (gainLoss < 0) lines.push({ journal_entry_id: je.id, account_id: (disposeTarget as any).dep_account_id, debit_credit: 'DR', amount: -gainLoss, functional_amount: -gainLoss, functional_currency: disposeTarget.currency, description: `Loss on disposal` });
+          await supabase.from('acct_journal_lines').insert(lines);
+        }
+        if (je?.id) toast({ title: 'Draft GL entry created', description: `Post to GL › journal ${je.id.slice(0, 8)}… — assign accounts in GL module` });
+      } catch (e: any) { console.warn('GL posting skipped:', e.message); }
       setDisposeDialog(false);
       setDisposeTarget(null);
       if (selected?.id === disposeTarget.id) setSelected(null);
@@ -268,6 +302,33 @@ export default function AccountingFixedAssets() {
       toast({ title: 'Write-off failed', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Asset written off', description: writeOffTarget.name_en });
+      // ── Post draft GL journal entry ──────────────────────────────────────
+      try {
+        const { accumulated, bookValue } = calcDepreciation(writeOffTarget, today);
+        const cost = Number(writeOffTarget.acquisition_cost);
+        const entryDate = new Date().toISOString().slice(0, 10);
+        const { data: je } = await supabase.from('acct_journal_entries').insert({
+          description_en: `Asset Write-off — ${writeOffTarget.name_en}${writeOffReason ? ' | ' + writeOffReason : ''} | Book Value: ${writeOffTarget.currency} ${bookValue.toFixed(2)}`,
+          description_ar: `شطب الأصل — ${writeOffTarget.name_ar ?? writeOffTarget.name_en}`,
+          entry_date: entryDate,
+          posting_date: entryDate,
+          status: 'draft',
+          total_debit: cost,
+          total_credit: cost,
+          reference_number: `WO-${writeOffTarget.asset_tag ?? writeOffTarget.id.slice(0, 8)}`,
+        }).select('id').single();
+        if (je?.id && (writeOffTarget as any).dep_account_id) {
+          // DR Accumulated Depreciation
+          // DR Loss on Write-off (book value)
+          // CR Fixed Asset Cost
+          await supabase.from('acct_journal_lines').insert([
+            { journal_entry_id: je.id, account_id: (writeOffTarget as any).dep_account_id, debit_credit: 'DR', amount: accumulated, functional_amount: accumulated, functional_currency: writeOffTarget.currency, description: `Accum dep cleared — ${writeOffTarget.name_en}` },
+            { journal_entry_id: je.id, account_id: (writeOffTarget as any).dep_account_id, debit_credit: 'DR', amount: bookValue, functional_amount: bookValue, functional_currency: writeOffTarget.currency, description: `Loss on write-off — ${writeOffTarget.name_en}` },
+            { journal_entry_id: je.id, account_id: (writeOffTarget as any).dep_account_id, debit_credit: 'CR', amount: cost, functional_amount: cost, functional_currency: writeOffTarget.currency, description: `Fixed asset derecognised — ${writeOffTarget.name_en}` },
+          ]);
+        }
+        if (je?.id) toast({ title: 'Draft GL entry created', description: `Write-off journal ${je.id.slice(0, 8)}… — assign accounts in GL module` });
+      } catch (e: any) { console.warn('GL posting skipped:', e.message); }
       setWriteOffDialog(false);
       setWriteOffTarget(null);
       if (selected?.id === writeOffTarget.id) setSelected(null);

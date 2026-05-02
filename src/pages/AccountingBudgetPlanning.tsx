@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { format, parseISO } from 'date-fns';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface Account { id: string; code: string; name_en: string; name_ar: string; account_type: string; country_id: string | null }
 interface FiscalYear { id: string; code: string; name_en: string }
@@ -150,7 +151,32 @@ export default function AccountingBudgetPlanning() {
       ({ error: err } = await supabase.from('acct_budget_approvals' as any).insert(payload));
     }
     if (err) toast({ title: 'Submit failed', description: (err as any).message, variant: 'destructive' });
-    else { toast({ title: 'Budget submitted for approval' }); void loadApproval(periodId, fundId); }
+    else {
+      toast({ title: 'Budget submitted for approval' });
+      void loadApproval(periodId, fundId);
+      // Notify finance admins / approvers
+      try {
+        const { data: admins } = await supabase.from('profiles')
+          .select('id')
+          .in('role', ['super_admin', 'superAdmin', 'admin', 'financialAdmin', 'finance'])
+          .eq('status', 'approved');
+        if (admins) {
+          for (const admin of admins) {
+            void NotificationTriggerService.send({
+              userId: admin.id,
+              title: 'Budget Submitted for Approval',
+              message: 'A budget plan has been submitted and is awaiting your review.',
+              titleAr: 'الميزانية في انتظار الموافقة',
+              messageAr: 'تم تقديم خطة الميزانية وتنتظر مراجعتك.',
+              type: 'info',
+              category: 'approvals',
+              priority: 'normal',
+              link: '/accounting/budget-planning',
+            });
+          }
+        }
+      } catch { /* notifications are non-critical */ }
+    }
     setApprovingBudget(false);
   };
 
@@ -164,7 +190,31 @@ export default function AccountingBudgetPlanning() {
       reviewed_at: new Date().toISOString(),
     }).eq('id', (approvalRecord as any).id);
     if (err) toast({ title: 'Action failed', description: (err as any).message, variant: 'destructive' });
-    else { toast({ title: action === 'approved' ? 'Budget approved ✓' : 'Budget rejected' }); void loadApproval(periodId, fundId); }
+    else {
+      toast({ title: action === 'approved' ? 'Budget approved ✓' : 'Budget rejected' });
+      void loadApproval(periodId, fundId);
+      // Notify the original submitter
+      const submitterId = (approvalRecord as any).submitted_by;
+      if (submitterId) {
+        try {
+          void NotificationTriggerService.send({
+            userId: submitterId,
+            title: action === 'approved' ? 'Budget Approved ✓' : 'Budget Rejected',
+            message: action === 'approved'
+              ? 'Your budget submission has been approved.'
+              : 'Your budget submission has been rejected. Please revise and resubmit.',
+            titleAr: action === 'approved' ? 'تمت الموافقة على الميزانية' : 'تم رفض الميزانية',
+            messageAr: action === 'approved'
+              ? 'تمت الموافقة على تقديم الميزانية.'
+              : 'تم رفض تقديم الميزانية. يرجى المراجعة وإعادة التقديم.',
+            type: action === 'approved' ? 'success' : 'warning',
+            category: 'approvals',
+            priority: 'normal',
+            link: '/accounting/budget-planning',
+          });
+        } catch { /* notifications are non-critical */ }
+      }
+    }
     setApprovingBudget(false);
   };
 

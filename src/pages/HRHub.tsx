@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -185,6 +186,8 @@ export default function HRHub() {
 interface Entitlement { id?: string; user_id: string; year: number; annual_days: number; sick_days: number; emergency_days: number; maternity_days: number; paternity_days: number; unpaid_days: number; }
 interface StaffProfile { id: string; full_name: string | null; email: string | null; }
 
+interface CarryForwardPreviewRow { userId: string; name: string; annualEntitled: number; usedAnnual: number; remaining: number; carryForward: number; }
+
 function LeaveEntitlementsPanel() {
   const { toast } = useToast();
   const currentYear = new Date().getFullYear();
@@ -192,6 +195,11 @@ function LeaveEntitlementsPanel() {
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Partial<Entitlement>>({});
+  const [cfDialog, setCfDialog] = useState(false);
+  const [cfRunning, setCfRunning] = useState(false);
+  const [cfCap, setCfCap] = useState(5);
+  const [cfPreview, setCfPreview] = useState<CarryForwardPreviewRow[]>([]);
+  const [cfPreviewLoading, setCfPreviewLoading] = useState(false);
 
   const { data: profiles } = useQuery({
     queryKey: ['profiles_for_entitlements'],
@@ -248,6 +256,97 @@ function LeaveEntitlementsPanel() {
     }
   };
 
+  const loadCarryForwardPreview = async (cap: number) => {
+    setCfPreviewLoading(true);
+    try {
+      // 1. Current-year entitlements
+      const { data: ents } = await supabase.from('leave_entitlements').select('*').eq('year', year);
+      const entsByUser: Record<string, Entitlement> = Object.fromEntries((ents ?? []).map((e: any) => [e.user_id, e]));
+
+      // 2. Approved annual leave requests for current year
+      const yearStart = `${year}-01-01`;
+      const yearEnd   = `${year}-12-31`;
+      const { data: reqs } = await supabase.from('leave_requests')
+        .select('user_id, leave_type, duration_days')
+        .eq('status', 'approved')
+        .eq('leave_type', 'annual')
+        .gte('start_date', yearStart)
+        .lte('start_date', yearEnd);
+
+      // 3. Sum used annual per user
+      const usedMap: Record<string, number> = {};
+      for (const r of reqs ?? []) {
+        usedMap[r.user_id] = (usedMap[r.user_id] ?? 0) + Number(r.duration_days ?? 0);
+      }
+
+      // 4. Build preview rows for users with entitlements
+      const rows: CarryForwardPreviewRow[] = [];
+      for (const ent of Object.values(entsByUser)) {
+        const prof = (profiles ?? []).find(p => p.id === ent.user_id);
+        const used = usedMap[ent.user_id] ?? 0;
+        const remaining = Math.max(0, ent.annual_days - used);
+        const carryForward = Math.min(remaining, cap);
+        rows.push({
+          userId: ent.user_id,
+          name: prof?.full_name ?? ent.user_id.slice(0, 8),
+          annualEntitled: ent.annual_days,
+          usedAnnual: used,
+          remaining,
+          carryForward,
+        });
+      }
+      rows.sort((a, b) => b.carryForward - a.carryForward);
+      setCfPreview(rows);
+    } finally {
+      setCfPreviewLoading(false);
+    }
+  };
+
+  const runCarryForward = async () => {
+    setCfRunning(true);
+    const nextYear = year + 1;
+    try {
+      // Load next-year existing entitlements to know which to upsert
+      const { data: nextEnts } = await supabase.from('leave_entitlements').select('*').eq('year', nextYear);
+      const nextMap: Record<string, any> = Object.fromEntries((nextEnts ?? []).map((e: any) => [e.user_id, e]));
+
+      let updated = 0;
+      let created = 0;
+      for (const row of cfPreview) {
+        if (row.carryForward <= 0) continue;
+        const existing = nextMap[row.userId];
+        if (existing?.id) {
+          const newAnnual = (existing.annual_days ?? 0) + row.carryForward;
+          await supabase.from('leave_entitlements').update({ annual_days: newAnnual, updated_at: new Date().toISOString() }).eq('id', existing.id);
+          updated++;
+        } else {
+          // Use same base as current year's entitlement
+          const curEnt = (profiles ?? []).find(p => p.id === row.userId);
+          void curEnt; // profile used for name only
+          const curEntData = (entitlements ?? []).find((e: Entitlement) => e.user_id === row.userId);
+          await supabase.from('leave_entitlements').insert({
+            user_id: row.userId,
+            year: nextYear,
+            annual_days: (curEntData?.annual_days ?? 21) + row.carryForward,
+            sick_days: curEntData?.sick_days ?? 10,
+            emergency_days: curEntData?.emergency_days ?? 5,
+            maternity_days: curEntData?.maternity_days ?? 90,
+            paternity_days: curEntData?.paternity_days ?? 3,
+            unpaid_days: curEntData?.unpaid_days ?? 0,
+          });
+          created++;
+        }
+      }
+      toast({ title: `Carry-forward complete`, description: `${updated} updated · ${created} created for ${nextYear}` });
+      setCfDialog(false);
+      refetch();
+    } catch (e: any) {
+      toast({ title: 'Carry-forward failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setCfRunning(false);
+    }
+  };
+
   const EntField = ({ label, field }: { label: string; field: keyof Entitlement }) => (
     <div className="flex flex-col gap-0.5">
       <label className="text-[10px] text-muted-foreground font-medium">{label}</label>
@@ -262,6 +361,7 @@ function LeaveEntitlementsPanel() {
   );
 
   return (
+    <>
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -269,9 +369,21 @@ function LeaveEntitlementsPanel() {
             <h3 className="text-sm font-semibold">Leave Entitlements</h3>
             <p className="text-xs text-muted-foreground mt-0.5">Set annual leave entitlement per staff member — used in Leave Balance report</p>
           </div>
-          <select value={year} onChange={e => setYear(Number(e.target.value))} className="border rounded px-2 py-1 text-xs bg-background" data-testid="select-entitlement-year">
-            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30"
+              data-testid="btn-carry-forward-open"
+              onClick={() => { setCfDialog(true); setCfPreview([]); void loadCarryForwardPreview(cfCap); }}
+            >
+              <Download className="h-3 w-3" />
+              Carry Forward → {year + 1}
+            </Button>
+            <select value={year} onChange={e => setYear(Number(e.target.value))} className="border rounded px-2 py-1 text-xs bg-background" data-testid="select-entitlement-year">
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -337,6 +449,94 @@ function LeaveEntitlementsPanel() {
         </div>
       </CardContent>
     </Card>
+
+    {/* ── Carry-Forward Dialog ─────────────────────────────────────────── */}
+    <Dialog open={cfDialog} onOpenChange={setCfDialog}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Annual Leave Carry-Forward — {year} → {year + 1}</DialogTitle>
+          <DialogDescription>
+            Unused annual leave days (up to the cap) will be added to each staff member's {year + 1} annual entitlement.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Cap control */}
+        <div className="flex items-center gap-3 py-2 border-b">
+          <span className="text-sm font-medium">Max carry-forward days:</span>
+          <Input
+            type="number" min={1} max={30}
+            value={cfCap}
+            onChange={e => {
+              const v = Math.max(1, Math.min(30, Number(e.target.value)));
+              setCfCap(v);
+              void loadCarryForwardPreview(v);
+            }}
+            className="h-7 w-20 text-center text-sm"
+            data-testid="input-cf-cap"
+          />
+          <span className="text-xs text-muted-foreground">(policy default: 5 days)</span>
+        </div>
+
+        {/* Preview table */}
+        <div className="max-h-72 overflow-y-auto rounded-md border text-xs">
+          {cfPreviewLoading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading preview…
+            </div>
+          ) : cfPreview.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No entitlements found for {year}.</div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold">Staff</th>
+                  <th className="text-center px-2 py-2 font-semibold">Entitled</th>
+                  <th className="text-center px-2 py-2 font-semibold">Used</th>
+                  <th className="text-center px-2 py-2 font-semibold">Remaining</th>
+                  <th className="text-center px-2 py-2 font-semibold text-amber-700 dark:text-amber-400">Carry → {year + 1}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cfPreview.map(r => (
+                  <tr key={r.userId} className="border-t">
+                    <td className="px-3 py-1.5 font-medium">{r.name}</td>
+                    <td className="px-2 py-1.5 text-center">{r.annualEntitled}</td>
+                    <td className="px-2 py-1.5 text-center">{r.usedAnnual}</td>
+                    <td className="px-2 py-1.5 text-center">{r.remaining}</td>
+                    <td className="px-2 py-1.5 text-center">
+                      {r.carryForward > 0
+                        ? <span className="font-semibold text-amber-700 dark:text-amber-400">+{r.carryForward}</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-slate-50 dark:bg-slate-800/60 border-t font-semibold">
+                <tr>
+                  <td className="px-3 py-1.5" colSpan={4}>Total carry-forward days</td>
+                  <td className="px-2 py-1.5 text-center text-amber-700 dark:text-amber-400">
+                    +{cfPreview.reduce((s, r) => s + r.carryForward, 0)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setCfDialog(false)} disabled={cfRunning}>Cancel</Button>
+          <Button
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+            onClick={runCarryForward}
+            disabled={cfRunning || cfPreviewLoading || cfPreview.filter(r => r.carryForward > 0).length === 0}
+            data-testid="btn-run-carry-forward"
+          >
+            {cfRunning ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Running…</> : `Apply to ${year + 1}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS acct_budget_audit_log (
   new_amount       NUMERIC(18, 2) NOT NULL,
   changed_by       UUID REFERENCES profiles(id) ON DELETE SET NULL,
   changed_by_name  TEXT,
+  changed_by_email TEXT,            -- denormalised for fast display
+  account_code     TEXT,            -- denormalised for fast display
+  account_name_en  TEXT,            -- denormalised for fast display
+  action           TEXT NOT NULL DEFAULT 'update' CHECK (action IN ('insert','update','delete')),
   change_note      TEXT,
   changed_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -55,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_budget_audit_period
 CREATE INDEX IF NOT EXISTS idx_budget_audit_line
   ON acct_budget_audit_log(budget_line_id, changed_at DESC);
 
--- Auto-update updated_at on acct_budget_approvals
+-- ── Auto-update updated_at on acct_budget_approvals ──────────────────────────
 CREATE OR REPLACE FUNCTION _pact_set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
@@ -66,7 +70,65 @@ CREATE TRIGGER trg_budget_approvals_updated_at
   BEFORE UPDATE ON acct_budget_approvals
   FOR EACH ROW EXECUTE FUNCTION _pact_set_updated_at();
 
--- Row Level Security
+-- ── Audit trigger: write to acct_budget_audit_log on every budget line change ─
+CREATE OR REPLACE FUNCTION _pact_audit_budget_line()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_code      TEXT;
+  v_name      TEXT;
+  v_user_name TEXT;
+  v_email     TEXT;
+BEGIN
+  -- Resolve account details
+  SELECT code, name_en
+    INTO v_code, v_name
+    FROM acct_accounts
+   WHERE id = COALESCE(NEW.account_id, OLD.account_id);
+
+  -- Resolve actor details (works because auth context is preserved)
+  SELECT full_name, email
+    INTO v_user_name, v_email
+    FROM profiles
+   WHERE id = auth.uid();
+
+  INSERT INTO acct_budget_audit_log (
+    budget_line_id,
+    period_id,
+    account_id,
+    fund_id,
+    old_amount,
+    new_amount,
+    changed_by,
+    changed_by_name,
+    changed_by_email,
+    account_code,
+    account_name_en,
+    action
+  ) VALUES (
+    COALESCE(NEW.id, OLD.id),
+    COALESCE(NEW.period_id,  OLD.period_id),
+    COALESCE(NEW.account_id, OLD.account_id),
+    COALESCE(NEW.fund_id,    OLD.fund_id),
+    CASE WHEN TG_OP IN ('UPDATE','DELETE') THEN OLD.budget_amount ELSE NULL END,
+    COALESCE(NEW.budget_amount, 0),
+    auth.uid(),
+    v_user_name,
+    v_email,
+    v_code,
+    v_name,
+    LOWER(TG_OP)   -- 'insert' | 'update' | 'delete'
+  );
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_audit_budget_line ON acct_budget_lines;
+CREATE TRIGGER trg_audit_budget_line
+  AFTER INSERT OR UPDATE ON acct_budget_lines
+  FOR EACH ROW EXECUTE FUNCTION _pact_audit_budget_line();
+
+-- ── Row Level Security ────────────────────────────────────────────────────────
 ALTER TABLE acct_budget_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE acct_budget_audit_log ENABLE ROW LEVEL SECURITY;
 
@@ -85,9 +147,9 @@ CREATE POLICY "acct_budget_audit_select"
   ON acct_budget_audit_log FOR SELECT
   USING (auth.role() = 'authenticated');
 
--- Only system/service role writes audit entries
+-- Any authenticated user (trigger runs as SECURITY DEFINER) can insert
 CREATE POLICY "acct_budget_audit_insert"
   ON acct_budget_audit_log FOR INSERT
   WITH CHECK (auth.role() = 'authenticated');
 
-SELECT 'acct_budget_approvals and acct_budget_audit_log created successfully' AS result;
+SELECT 'acct_budget_approvals, acct_budget_audit_log, and audit trigger created successfully' AS result;
