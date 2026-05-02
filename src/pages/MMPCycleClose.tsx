@@ -683,6 +683,28 @@ const MMPCycleClose = () => {
 
       // Audit log
       const mmpName = (mmpFiles?.find(m => m.id === mmpId) as any)?.name || 'MMP';
+
+      // Notify each unique enumerator whose wallet was credited
+      if (updateWallets && walletSuccess > 0) {
+        const notifiedIds = new Set<string>();
+        for (const site of sitesToUpdate) {
+          if (!site.enumeratorId || notifiedIds.has(site.enumeratorId)) continue;
+          notifiedIds.add(site.enumeratorId);
+          NotificationTriggerService.send({
+            userId: site.enumeratorId,
+            title: 'Cycle Fee Calculated',
+            titleAr: 'تم احتساب أتعاب الدورة',
+            message: `Your field fees for MMP "${mmpName}" have been converted at 1 USD = ${rate.toLocaleString()} SDG and credited to your wallet.`,
+            messageAr: `تم احتساب أتعابك الميدانية لمشروع "${mmpName}" بسعر صرف 1 دولار = ${rate.toLocaleString()} جنيه سوداني وإضافتها لمحفظتك.`,
+            type: 'success',
+            category: 'wallet',
+            priority: 'normal',
+            relatedEntityType: 'mmpFile',
+            relatedEntityId: mmpId,
+          }).catch(() => {});
+        }
+      }
+
       await logMMPAudit({
         mmpId,
         mmpName,
@@ -831,6 +853,39 @@ const MMPCycleClose = () => {
         }
       },
     });
+    // Signature page
+    doc.addPage();
+    doc.setFillColor(17, 24, 39); doc.rect(0, 0, 297, 16, 'F');
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+    doc.text('Authorisation Signatures', 14, 11);
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 180, 180);
+    doc.text(`MMP: ${mmpName}  ·  ${genDate}${feesLockedRate ? `  ·  Rate: 1 USD = ${feesLockedRate.toLocaleString()} SDG` : ''}`, 100, 11);
+    const sigBoxes = [
+      { label: 'Prepared By', role: 'Coordinator / Field Operations' },
+      { label: 'Reviewed & Verified By', role: 'Field Operations Manager (FOM)' },
+      { label: 'Authorized By', role: 'Finance Director' },
+    ];
+    const sigY = 26;
+    sigBoxes.forEach((box, i) => {
+      const x = 14 + (i * 93);
+      doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+      doc.text(box.label, x, sigY);
+      doc.setFontSize(7.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(100, 100, 100);
+      doc.text(box.role, x, sigY + 5);
+      doc.setDrawColor(80, 80, 80); doc.setLineWidth(0.4);
+      doc.rect(x, sigY + 9, 84, 38, 'S');
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 120); doc.setFontSize(8);
+      doc.text('Full Name:', x + 3, sigY + 18);
+      doc.setDrawColor(180, 180, 180);
+      doc.line(x + 26, sigY + 18, x + 80, sigY + 18);
+      doc.text('Date:', x + 3, sigY + 28);
+      doc.line(x + 26, sigY + 28, x + 80, sigY + 28);
+      doc.text('Signature:', x + 3, sigY + 41);
+      doc.line(x + 26, sigY + 41, x + 80, sigY + 41);
+    });
+    doc.setFontSize(7); doc.setTextColor(160, 160, 160);
+    doc.text('This document is confidential. Authorised signatories confirm the accuracy of the payment amounts and approve disbursement.', 14, sigY + 58);
+
     const pageCount = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150);
@@ -851,6 +906,7 @@ const MMPCycleClose = () => {
       setFeesLockedRate(tracking.exchange_rate_applied ?? null);
       if (tracking.exchange_rate_applied) setExchangeRateInput(String(tracking.exchange_rate_applied));
       setWalletUpdateResults(null);
+      setCycleSubmittedAt(tracking.submitted_at || null);
       if (status === 'closing' || status === 'pending_approval') {
         fetchCycleSummary(checklistMmpId);
         fetchAllSiteDetails(checklistMmpId);
@@ -886,6 +942,7 @@ const MMPCycleClose = () => {
   const [walletUpdateResults, setWalletUpdateResults] = useState<{ success: number; failed: number } | null>(null);
 
   // Step 7 — Payment Request
+  const [cycleSubmittedAt, setCycleSubmittedAt] = useState<string | null>(null);
   const [paymentRequestedAt, setPaymentRequestedAt] = useState<string | null>(null);
   const [paymentsConfirmedAt, setPaymentsConfirmedAt] = useState<string | null>(null);
   const [requestingPayment, setRequestingPayment] = useState(false);
@@ -3032,6 +3089,15 @@ const MMPCycleClose = () => {
         metadata: { cycleAction: 'submit_for_approval' },
       });
 
+      // Save submission timestamp to payment_tracking so the timeline can display it
+      const submittedNow = new Date().toISOString();
+      const mmpForTracking = mmpFiles?.find(m => m.id === mmpId) as any;
+      const existingTracking = mmpForTracking?.payment_tracking || {};
+      await supabase.from('mmp_files').update({
+        payment_tracking: { ...existingTracking, submitted_at: submittedNow, cycle_approval_note: null },
+      } as any).eq('id', mmpId);
+      setCycleSubmittedAt(submittedNow);
+
       setReconciliationAcknowledged(false);
       setPendingScopedClose(null);
       toast({ title: 'Submitted for Approval', description: 'The cycle has been submitted for FOM/Director approval.' });
@@ -4419,6 +4485,26 @@ const MMPCycleClose = () => {
                                 )}
                               </div>
                             )}
+                            {/* Rejection banner — shown when cycle was sent back by FOM/Admin */}
+                            {checklistMmpStatus === 'closing' && (() => {
+                              const rejNote = (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_approval_note;
+                              if (!rejNote) return null;
+                              return (
+                                <div className="flex items-start gap-3 rounded-xl border-2 border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/30 px-4 py-3 mb-2" data-testid="banner-cycle-rejected">
+                                  <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-red-800 dark:text-red-200">Cycle Returned for Corrections</p>
+                                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                                      <span className="font-semibold">Reason:</span> {rejNote}
+                                    </p>
+                                    <p className="text-[11px] text-red-500 dark:text-red-400 mt-1.5">
+                                      Address the issues above, then re-submit using Step 8 below.
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
                             {/* Progress bar + check-again */}
                             <div className="flex items-center gap-3 mb-4">
                               {(() => {
@@ -5282,7 +5368,9 @@ const MMPCycleClose = () => {
                                           >
                                             {finalizingCycle
                                               ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</>
-                                              : <><CheckCircle2 className="h-4 w-4" /> Submit Cycle for Final Approval</>
+                                              : (mmpFiles?.find(m => m.id === checklistMmpId) as any)?.cycle_approval_note
+                                                ? <><RefreshCw className="h-4 w-4" /> Re-submit for Approval</>
+                                                : <><CheckCircle2 className="h-4 w-4" /> Submit Cycle for Final Approval</>
                                             }
                                           </Button>
                                         </div>
@@ -5865,7 +5953,43 @@ const MMPCycleClose = () => {
                                           </ol>
                                         </div>
                                       )}
-                                      {/* Approve / Reject panel for step 6 — shown for FOM, Admin, Super Admin */}
+                                      {/* ── Cycle Close Gate Timeline (Step 9 — always visible when in approval step) ── */}
+                                      {(() => {
+                                        const mmpSnap = mmpFiles?.find(m => m.id === checklistMmpId) as any;
+                                        const fmt = (ts: string | null | undefined) =>
+                                          ts ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+                                        const closedAt = mmpSnap?.cycle_closed_at;
+                                        const timeline: { label: string; labelAr: string; ts: string | null; icon: string }[] = [
+                                          { label: 'Fees Locked', labelAr: 'تثبيت الأتعاب', ts: fmt(feesLockedAt), icon: '🔒' },
+                                          { label: 'Payment Requested', labelAr: 'طلب الدفع', ts: fmt(paymentRequestedAt), icon: '📤' },
+                                          { label: 'Payments Confirmed', labelAr: 'تأكيد المدفوعات', ts: fmt(paymentsConfirmedAt), icon: '✅' },
+                                          { label: 'Submitted for Approval', labelAr: 'تقديم للموافقة', ts: fmt(cycleSubmittedAt), icon: '📋' },
+                                          ...(closedAt ? [{ label: 'Approved & Archived', labelAr: 'موافقة وأرشفة', ts: fmt(closedAt), icon: '🏛️' }] : []),
+                                        ];
+                                        const anyTs = timeline.some(t => t.ts);
+                                        if (!anyTs) return null;
+                                        return (
+                                          <div className="mt-3 rounded-lg border bg-muted/20 overflow-hidden">
+                                            <div className="px-3 py-2 bg-muted/40 text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                              <Clock className="h-3.5 w-3.5" /> Cycle Close Timeline
+                                            </div>
+                                            <div className="divide-y">
+                                              {timeline.filter(t => t.ts).map((t, i) => (
+                                                <div key={i} className="flex items-center gap-3 px-3 py-2">
+                                                  <span className="text-sm shrink-0">{t.icon}</span>
+                                                  <div className="flex-1 min-w-0">
+                                                    <span className="text-xs font-medium text-foreground">{t.label}</span>
+                                                    <span className="text-[10px] text-muted-foreground/70 ml-1.5" dir="rtl">{t.labelAr}</span>
+                                                  </div>
+                                                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">{t.ts}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* Approve / Reject panel for step 9 — shown for FOM, Admin, Super Admin */}
                                       {checklistMmpStatus === 'pending_approval' && (isFOM || isAdmin || isSuperAdmin) && (
                                         <div className="mt-4 rounded-xl border-2 border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-950/40 p-4 space-y-3">
                                           <div className="flex items-center gap-2">
