@@ -1340,8 +1340,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
       const previewBreakdowns = [
         { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
         { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
-        { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
         { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+        { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
       ].filter(b => b.rows.length > 0);
       return buildEnhancedPaymentEmailHTML({
         recipientName,
@@ -1462,8 +1462,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
           const sendBreakdowns = [
             { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
             { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
-            { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
             { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+            { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
           ].filter(b => b.rows.length > 0);
           const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
             selectedRecipients,
@@ -1603,8 +1603,8 @@ export function DownPaymentApprovalPanel({ userRole, externalFilters, hideFilter
         const pdfModeBreakdowns = [
           { label: 'By State',     rows: buildGroups.state.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
           { label: 'By Hub',       rows: buildGroups.hub.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
-          { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
           { label: 'By Requester', rows: buildGroups.requester.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
+          { label: 'By Locality',  rows: buildGroups.locality.map(([name, e]) => ({ name, count: e.count, requested: e.requested, approved: e.approved })) },
         ].filter(b => b.rows.length > 0);
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
