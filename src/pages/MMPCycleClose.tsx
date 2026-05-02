@@ -226,6 +226,7 @@ const MMPCycleClose = () => {
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null);
   const [reopenConfirmId, setReopenConfirmId] = useState<string | null>(null);
   const [reopeningCycle, setReopeningCycle] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
@@ -732,18 +733,21 @@ const MMPCycleClose = () => {
       {
         id: 'finance', number: 3,
         title: 'Clear Finance', titleAr: 'تسوية المالية',
-        desc: financePassed ? 'All financial items are cleared.' : `${financeIssues.length} financial gate(s) still need attention.`,
+        desc: financePassed
+          ? 'All financial items are cleared — cost submissions, advances, withdrawals, and cost recovery are all settled.'
+          : `${financeIssues.length} item${financeIssues.length !== 1 ? 's' : ''} blocking close: ${financeIssues.map(i => i.label).join(' • ')}. Review each section below and clear before proceeding.`,
         passed: financePassed,
         blocked: false,
         tab: 'finance', actionLabel: 'Open Pending Finance tab →',
         sub: financeIssues,
         remaining: csRemaining,
         howTo: [
-          'Click "Open Pending Finance tab →" button below.',
-          'For each cost submission in the list: click Approve ✓ or Reject ✗.',
-          'If transport advances appear: click the advance row, then mark it as Reconciled or Paid.',
-          'If withdrawal requests appear: go to Finance and set each to Approved or Rejected.',
-          'Come back here and click "Check again" when the list is empty.',
+          'Look at each ❌ item in the list below — these are the specific gates blocking close.',
+          'Cost submissions: click "Open Pending Finance tab →" → approve or reject each pending submission.',
+          'Transport advances: go to the Down Payment Approval page → find partially-paid advances → mark as Reconciled or Paid.',
+          'Withdrawal requests: go to the Finance page → approve or reject each pending withdrawal.',
+          'Cost recovery: check the Exceptions tab → log a recovery decision for each not-covered site that received an advance.',
+          'Come back here and click "Check again" after each action to watch the gates turn green.',
         ],
       },
       {
@@ -2541,7 +2545,11 @@ const MMPCycleClose = () => {
     }
   };
 
-  const handleReopenCycle = async (mmpId: string) => {
+  const handleReopenCycle = async (mmpId: string, reason: string) => {
+    if (!isSuperAdmin) {
+      toast({ title: 'Access Denied', description: 'Only Super Admins can re-open a closed cycle.', variant: 'destructive' });
+      return;
+    }
     setReopeningCycle(true);
     try {
       const { error } = await supabase
@@ -2549,8 +2557,16 @@ const MMPCycleClose = () => {
         .update({ cycle_status: 'active', cycle_closed_at: null } as any)
         .eq('id', mmpId);
       if (error) throw error;
+      await logMMPAudit({
+        mmpId,
+        action: 'cycle_reopened',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.fullName || 'Unknown',
+        details: { reason, reopenedAt: new Date().toISOString() },
+      });
       setClosedCycles(prev => prev.filter(c => c.id !== mmpId));
       setReopenConfirmId(null);
+      setReopenReason('');
       setExpandedCycle(null);
       await refreshMMPFiles();
       toast({ title: 'Cycle Re-opened', description: 'The cycle has been returned to Active status. You can now make corrections and re-close when ready.' });
@@ -3948,6 +3964,75 @@ const MMPCycleClose = () => {
                                       {/* Submit button for step 5 */}
                                       {step.id === 'submit' && cycleReadiness.allPassed && !cycleReadiness.loading && (
                                         <div className="mt-3 space-y-3">
+                                          {/* Pre-submit payment summary */}
+                                          {cycleSummaryData && (() => {
+                                            const cur = cycleSummaryData.currency;
+                                            const PAYABLE = ['wfp_confirmed','verified','completed','approved'];
+                                            const payableEntries = cycleSummaryData.enumeratorCosts.filter(e => PAYABLE.includes(e.status));
+                                            const enumFee = payableEntries.reduce((s, e) => s + (e.enumeratorFee ?? 0), 0);
+                                            const transport = payableEntries.reduce((s, e) => s + (e.transportFee ?? 0), 0);
+                                            const opCosts = cycleSummaryData.totalApprovedCents / 100;
+                                            const totalPay = enumFee + transport + opCosts;
+                                            const totalRecover = cycleSummaryData.advanceDetails.reduce((s, a) => s + Math.max(0, a.remainingAmount ?? 0), 0);
+                                            const net = totalPay - totalRecover;
+                                            const { totalSites = 0, completedSites = 0, uncoveredSites = 0 } =
+                                              siteVisitCounts[checklistMmpId!]
+                                                ? (() => {
+                                                    const c = siteVisitCounts[checklistMmpId!];
+                                                    const wfpC = c.statusCounts?.['wfp_confirmed'] ?? 0;
+                                                    return {
+                                                      totalSites: c.total,
+                                                      completedSites: (c.statusCounts?.['completed'] ?? 0) + wfpC,
+                                                      uncoveredSites: c.statusCounts?.['not_covered'] ?? 0,
+                                                    };
+                                                  })()
+                                                : {};
+                                            return (
+                                              <div className="rounded-xl border-2 border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 p-3 space-y-2">
+                                                <p className="text-xs font-bold text-indigo-900 dark:text-indigo-100">📋 Closing Summary — Review Before Submitting</p>
+                                                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                                  <div className="rounded bg-white/60 dark:bg-black/20 p-2">
+                                                    <div className="text-sm font-bold text-green-700 dark:text-green-300">{completedSites}</div>
+                                                    <div className="text-muted-foreground">Sites Covered</div>
+                                                  </div>
+                                                  <div className="rounded bg-white/60 dark:bg-black/20 p-2">
+                                                    <div className="text-sm font-bold text-orange-600 dark:text-orange-400">{uncoveredSites}</div>
+                                                    <div className="text-muted-foreground">Not Covered</div>
+                                                  </div>
+                                                  <div className="rounded bg-white/60 dark:bg-black/20 p-2">
+                                                    <div className="text-sm font-bold">{totalSites}</div>
+                                                    <div className="text-muted-foreground">Total Sites</div>
+                                                  </div>
+                                                </div>
+                                                <div className="space-y-1 text-xs border-t border-indigo-200 dark:border-indigo-800 pt-2">
+                                                  <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Enumerator fees ({payableEntries.length} sites)</span>
+                                                    <span className="font-mono font-semibold">{enumFee.toLocaleString()} {cur}</span>
+                                                  </div>
+                                                  <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Transport fees</span>
+                                                    <span className="font-mono font-semibold">{transport.toLocaleString()} {cur}</span>
+                                                  </div>
+                                                  {opCosts > 0 && (
+                                                    <div className="flex justify-between">
+                                                      <span className="text-muted-foreground">Approved op. costs</span>
+                                                      <span className="font-mono font-semibold">{opCosts.toLocaleString()} {cur}</span>
+                                                    </div>
+                                                  )}
+                                                  {totalRecover > 0 && (
+                                                    <div className="flex justify-between text-orange-700 dark:text-orange-400">
+                                                      <span>Less: outstanding advances to recover</span>
+                                                      <span className="font-mono font-semibold">−{totalRecover.toLocaleString()} {cur}</span>
+                                                    </div>
+                                                  )}
+                                                  <div className={`flex justify-between border-t pt-1 mt-1 font-bold ${net >= 0 ? 'text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'text-red-700 dark:text-red-400 border-red-200 dark:border-red-800'}`}>
+                                                    <span>{net >= 0 ? 'Net to Pay Field Staff' : 'Net to Recover from Field'}</span>
+                                                    <span className="font-mono">{Math.abs(net).toLocaleString()} {cur}</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })()}
                                           <label className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/20 p-3" data-testid="label-reconciliation-ack-guide">
                                             <input
                                               type="checkbox"
@@ -4047,7 +4132,7 @@ const MMPCycleClose = () => {
                             })}
 
                             {/* ── Cycle Financial Summary (collapsible) ── */}
-                            <Collapsible defaultOpen={checklistMmpStatus === 'pending_approval' || checklistMmpStatus === 'closed'}>
+                            <Collapsible defaultOpen={true}>
                               <CollapsibleTrigger className="flex items-center gap-2 text-xs font-semibold text-foreground w-full px-3 py-2 border rounded-lg bg-muted/30 hover:bg-muted/50" data-testid="button-toggle-cycle-summary">
                                 <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                                 <span>📊 Cycle Financial Summary &amp; Export</span>
@@ -5849,12 +5934,12 @@ const MMPCycleClose = () => {
                             <Button size="sm" variant="outline" onClick={() => exportCoverageReportExcel(cycle.id)} data-testid={`button-export-xlsx-${cycle.id}`}>
                               <FileSpreadsheet className="h-3 w-3 mr-1" /> Excel
                             </Button>
-                            {(isAdmin || isSuperAdmin) && (
+                            {isSuperAdmin && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 className="ml-auto border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30 gap-1.5"
-                                onClick={() => setReopenConfirmId(cycle.id)}
+                                onClick={() => { setReopenConfirmId(cycle.id); setReopenReason(''); }}
                                 data-testid={`button-reopen-cycle-${cycle.id}`}
                               >
                                 <RefreshCw className="h-3 w-3" /> Re-open Cycle
@@ -5916,35 +6001,51 @@ const MMPCycleClose = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Re-open Cycle Confirmation Dialog */}
-      <Dialog open={!!reopenConfirmId} onOpenChange={(open) => { if (!open) setReopenConfirmId(null); }}>
+      {/* Re-open Cycle Confirmation Dialog — Super Admin only */}
+      <Dialog open={!!reopenConfirmId} onOpenChange={(open) => { if (!open) { setReopenConfirmId(null); setReopenReason(''); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RefreshCw className="h-5 w-5 text-amber-500" /> Re-open Closed Cycle
             </DialogTitle>
             <DialogDescription>
-              This will return the cycle to <strong>Active</strong> status so you can make corrections and re-close it.
+              This will return the cycle to <strong>Active</strong> status so corrections can be made. This action is logged and requires a reason.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/30 px-3 py-2">
+              <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+              <p className="text-xs font-semibold text-purple-800 dark:text-purple-200">Super Admin action — this is logged in the audit trail.</p>
+            </div>
             <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 space-y-1.5">
               <p className="font-semibold">⚠️ Before re-opening, be aware:</p>
               <ul className="space-y-1 pl-3 list-disc">
-                <li>All cycle close progress (reasons, finance clearance) is preserved — nothing is lost.</li>
+                <li>All close progress (reasons, finance clearance) is preserved — nothing is lost.</li>
                 <li>The cycle will reappear in the Active MMPs tab.</li>
                 <li>You will need to re-run the close process and get approval again.</li>
                 <li>Any archived financial records remain unchanged.</li>
               </ul>
             </div>
-            <p className="text-sm text-muted-foreground">Are you sure you want to re-open this cycle?</p>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Reason for re-opening <span className="text-red-500">*</span></label>
+              <Textarea
+                placeholder="Explain why this cycle needs to be re-opened (e.g. incorrect data, missed sites, finance correction needed…)"
+                value={reopenReason}
+                onChange={e => setReopenReason(e.target.value)}
+                className="text-xs min-h-[72px] resize-none"
+                data-testid="textarea-reopen-reason"
+              />
+              {reopenReason.trim().length === 0 && (
+                <p className="text-xs text-muted-foreground">A reason is required to proceed.</p>
+              )}
+            </div>
           </div>
           <div className="flex gap-2 justify-end pt-1">
-            <Button variant="outline" onClick={() => setReopenConfirmId(null)} disabled={reopeningCycle}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setReopenConfirmId(null); setReopenReason(''); }} disabled={reopeningCycle}>Cancel</Button>
             <Button
               className="bg-amber-500 hover:bg-amber-600 text-white gap-1.5"
-              onClick={() => reopenConfirmId && handleReopenCycle(reopenConfirmId)}
-              disabled={reopeningCycle}
+              onClick={() => reopenConfirmId && handleReopenCycle(reopenConfirmId, reopenReason)}
+              disabled={reopeningCycle || reopenReason.trim().length === 0}
               data-testid="button-confirm-reopen"
             >
               {reopeningCycle ? <><Loader2 className="h-4 w-4 animate-spin" /> Re-opening…</> : <><RefreshCw className="h-4 w-4" /> Yes, Re-open Cycle</>}
