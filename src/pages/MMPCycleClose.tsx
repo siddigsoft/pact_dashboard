@@ -765,7 +765,7 @@ const MMPCycleClose = () => {
       ] : [{ 'Item': 'Exchange Rate', 'Value': 'Not locked — fees may still be in USD' }]),
     ]), 'Summary');
     XLSX.writeFile(wb, `${mmpName}-payment-sheet-${new Date().toISOString().slice(0, 10)}.xlsx`);
-  }, [cycleSummaryData, checklistMmpId, mmpFiles]);
+  }, [cycleSummaryData, checklistMmpId, mmpFiles, feesLockedRate, feesLockedAt]);
 
   const exportPaymentSheetPDF = useCallback(async () => {
     if (!cycleSummaryData || !checklistMmpId) return;
@@ -837,7 +837,7 @@ const MMPCycleClose = () => {
       doc.text(`PACT Command Center — Confidential — Page ${i} of ${pageCount}`, 14, 200);
     }
     doc.save(`${mmpName}-payment-sheet-${new Date().toISOString().slice(0, 10)}.pdf`);
-  }, [cycleSummaryData, checklistMmpId, mmpFiles]);
+  }, [cycleSummaryData, checklistMmpId, mmpFiles, feesLockedRate, feesLockedAt]);
 
   useEffect(() => {
     if (checklistMmpId) {
@@ -1141,7 +1141,7 @@ const MMPCycleClose = () => {
         howTo: [
           'Review the full site list below — all sites assigned to this MMP are shown.',
           'The "Advance" column shows whether a transport advance was issued and how much was paid.',
-          'Advance amounts already paid will be automatically deducted from the Payment Sheet in Step 6.',
+          'Advance amounts already paid will be automatically deducted from the Payment Sheet in Step 7.',
           'Sites with 0 fees set will need fee entry before the payment sheet is generated.',
           'No action needed here — this step is informational and always marked Done.',
         ],
@@ -5806,7 +5806,7 @@ const MMPCycleClose = () => {
                               </CollapsibleContent>
                             </Collapsible>
 
-                            {/* ── Step 6: Final Approval (rendered after financial panels) ── */}
+                            {/* ── Step 9: Final Approval (rendered after financial panels) ── */}
                             {(() => {
                               const approvalIdx = guideSteps.findIndex(s => s.id === 'approval');
                               const step = guideSteps[approvalIdx];
