@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Loader2, PiggyBank, Download, RefreshCw, Pencil, Check, X,
-  Search, Copy, AlertTriangle, CheckCircle2, Upload,
+  Search, Copy, AlertTriangle, CheckCircle2, Upload, FileDown,
+  SendHorizonal, ShieldCheck, ClockIcon, RotateCcw as RejectIcon,
 } from 'lucide-react';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -67,6 +68,11 @@ export default function AccountingBudgetPlanning() {
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Budget approval workflow state
+  const [approvalRecord, setApprovalRecord] = useState<{ id: string; status: string; submitted_by: string | null; reviewed_by: string | null; reviewer_notes: string | null; submitted_at: string | null; reviewed_at: string | null } | null>(null);
+  const [approvalTableExists, setApprovalTableExists] = useState(true);
+  const [approvingBudget, setApprovingBudget] = useState(false);
+
   /* ── bootstrap ── */
   useEffect(() => {
     (async () => {
@@ -110,6 +116,57 @@ export default function AccountingBudgetPlanning() {
   }, []);
 
   useEffect(() => { if (periodId) void loadBudgetLines(periodId, fundId); }, [periodId, fundId, loadBudgetLines]);
+
+  /* ── load approval record for current period/fund ── */
+  const loadApproval = useCallback(async (pid: string, fid: string) => {
+    if (!pid || !approvalTableExists) return;
+    const q = supabase.from('acct_budget_approvals' as any).select('*').eq('period_id', pid);
+    if (fid !== 'all') (q as any).eq('fund_id', fid); else (q as any).is('fund_id', null);
+    const { data, error } = await (q as any).maybeSingle();
+    if (error?.code === '42P01') { setApprovalTableExists(false); return; }
+    setApprovalRecord((data as any) ?? null);
+  }, [approvalTableExists]);
+
+  useEffect(() => { if (periodId) void loadApproval(periodId, fundId); }, [periodId, fundId, loadApproval]);
+
+  /* ── budget approval actions ── */
+  const submitForApproval = async () => {
+    if (!periodId || approvingBudget) return;
+    setApprovingBudget(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const payload = {
+      period_id: periodId,
+      fund_id: fundId !== 'all' ? fundId : null,
+      status: 'submitted',
+      submitted_by: user?.id ?? null,
+      submitted_at: new Date().toISOString(),
+      total_budget: stats.totalBudget,
+      line_count: stats.withBudget,
+    };
+    let err;
+    if (approvalRecord) {
+      ({ error: err } = await supabase.from('acct_budget_approvals' as any).update({ ...payload }).eq('id', (approvalRecord as any).id));
+    } else {
+      ({ error: err } = await supabase.from('acct_budget_approvals' as any).insert(payload));
+    }
+    if (err) toast({ title: 'Submit failed', description: (err as any).message, variant: 'destructive' });
+    else { toast({ title: 'Budget submitted for approval' }); void loadApproval(periodId, fundId); }
+    setApprovingBudget(false);
+  };
+
+  const reviewBudget = async (action: 'approved' | 'rejected') => {
+    if (!approvalRecord || approvingBudget) return;
+    setApprovingBudget(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: err } = await supabase.from('acct_budget_approvals' as any).update({
+      status: action,
+      reviewed_by: user?.id ?? null,
+      reviewed_at: new Date().toISOString(),
+    }).eq('id', (approvalRecord as any).id);
+    if (err) toast({ title: 'Action failed', description: (err as any).message, variant: 'destructive' });
+    else { toast({ title: action === 'approved' ? 'Budget approved ✓' : 'Budget rejected' }); void loadApproval(periodId, fundId); }
+    setApprovingBudget(false);
+  };
 
   /* ── derived rows ── */
   const rows = useMemo((): Row[] => {
@@ -282,6 +339,24 @@ export default function AccountingBudgetPlanning() {
     ]);
   };
 
+  /* ── download blank import template ── */
+  const downloadTemplate = () => {
+    const withFund = fundId !== 'all';
+    const selectedFund = funds.find(f => f.id === fundId);
+    const cols = withFund
+      ? ['account_code', 'fund_code', 'budget_amount']
+      : ['account_code', 'budget_amount'];
+    const templateRows = accounts
+      .filter(a => typeFilter === 'all' || a.account_type === typeFilter)
+      .filter(a => countryFilter === 'all' || a.country_id === countryFilter || !a.country_id)
+      .map(a => withFund
+        ? [a.code, selectedFund?.code ?? '', '0']
+        : [a.code, '0']
+      );
+    downloadCsv('budget-import-template.csv', [cols, ...templateRows]);
+    toast({ title: 'Template downloaded', description: `${templateRows.length} account rows — fill in budget_amount and import` });
+  };
+
   if (authLoading || loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
 
@@ -310,6 +385,7 @@ export default function AccountingBudgetPlanning() {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing || !periodId} data-testid="button-import-budget">
             {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />} Import CSV
           </Button>
+          <Button variant="outline" size="sm" onClick={downloadTemplate} disabled={!accounts.length} data-testid="button-download-template"><FileDown className="w-4 h-4 mr-1" /> Template</Button>
           <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-budget"><Download className="w-4 h-4 mr-1" /> Export</Button>
           <Button variant="outline" size="sm" onClick={() => void loadBudgetLines(periodId, fundId)} data-testid="button-refresh-budget"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportCsv} data-testid="input-import-csv" />
@@ -393,6 +469,73 @@ export default function AccountingBudgetPlanning() {
           </div>
         ))}
       </div>
+
+      {/* Budget Approval Workflow Banner */}
+      {approvalTableExists && periodId && (
+        <div className={cn(
+          'rounded-xl border p-3 flex flex-col sm:flex-row sm:items-center gap-3',
+          !approvalRecord || approvalRecord.status === 'draft'
+            ? 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700'
+            : approvalRecord.status === 'submitted'
+            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+            : approvalRecord.status === 'approved'
+            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+            : 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800',
+        )}>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              {!approvalRecord || approvalRecord.status === 'draft'
+                ? <ClockIcon className="h-4 w-4 text-slate-500" />
+                : approvalRecord.status === 'submitted'
+                ? <SendHorizonal className="h-4 w-4 text-blue-600" />
+                : approvalRecord.status === 'approved'
+                ? <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                : <RejectIcon className="h-4 w-4 text-rose-600" />}
+              <span className="text-sm font-semibold">
+                {!approvalRecord || approvalRecord.status === 'draft'
+                  ? 'Budget in Draft'
+                  : approvalRecord.status === 'submitted'
+                  ? 'Awaiting Approval'
+                  : approvalRecord.status === 'approved'
+                  ? 'Budget Approved'
+                  : 'Budget Rejected — Revision Required'}
+              </span>
+              {approvalRecord?.status && (
+                <Badge className={cn('text-[10px] px-1.5 py-0',
+                  approvalRecord.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                  approvalRecord.status === 'submitted' ? 'bg-blue-100 text-blue-800' :
+                  approvalRecord.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
+                  'bg-slate-100 text-slate-600',
+                )}>{approvalRecord.status}</Badge>
+              )}
+            </div>
+            {approvalRecord?.reviewer_notes && (
+              <p className="text-xs text-muted-foreground mt-1 ml-6">{approvalRecord.reviewer_notes}</p>
+            )}
+          </div>
+          {canEdit && (
+            <div className="flex gap-2 shrink-0">
+              {(!approvalRecord || approvalRecord.status === 'draft' || approvalRecord.status === 'rejected') && (
+                <Button size="sm" variant="outline" className="h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-50" onClick={submitForApproval} disabled={approvingBudget || !stats.withBudget} data-testid="button-submit-approval">
+                  {approvingBudget ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <SendHorizonal className="h-3.5 w-3.5 mr-1" />}
+                  Submit for Approval
+                </Button>
+              )}
+              {approvalRecord?.status === 'submitted' && hasAnyRole(['super_admin', 'admin', 'financialAdmin']) && (
+                <>
+                  <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => reviewBudget('approved')} disabled={approvingBudget} data-testid="button-approve-budget">
+                    {approvingBudget ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1" />}
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs text-rose-600 border-rose-300 hover:bg-rose-50" onClick={() => reviewBudget('rejected')} disabled={approvingBudget} data-testid="button-reject-budget">
+                    <RejectIcon className="h-3.5 w-3.5 mr-1" />Reject
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       <Card className="border shadow-sm">
@@ -504,6 +647,99 @@ export default function AccountingBudgetPlanning() {
         Click <Pencil className="inline h-3 w-3 mx-0.5" /> to edit any budget line. Press <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Enter</kbd> to save, <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Esc</kbd> to cancel.
         Budget lines are visible in Budget vs Actual.
       </p>
+
+      {/* Budget Audit Trail */}
+      {periodId && <BudgetAuditLog periodId={periodId} fundId={fundId} />}
     </div>
+  );
+}
+
+/* ── Budget Audit Log ────────────────────────────────────────────────────── */
+function BudgetAuditLog({ periodId, fundId }: { periodId: string; fundId: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [tableExists, setTableExists] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!open || !tableExists) return;
+    setLoading(true);
+    const q = supabase.from('acct_budget_audit_log' as any)
+      .select('id, changed_at, action, account_code, account_name_en, old_amount, new_amount, changed_by_email')
+      .eq('period_id', periodId)
+      .order('changed_at', { ascending: false })
+      .limit(50);
+    if (fundId !== 'all') (q as any).eq('fund_id', fundId); else (q as any).is('fund_id', null);
+    const { data, error } = await (q as any);
+    if (error?.code === '42P01') { setTableExists(false); setLoading(false); return; }
+    setLogs(data ?? []);
+    setLoading(false);
+  }, [open, tableExists, periodId, fundId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (!tableExists) return null;
+
+  return (
+    <Card className="border border-dashed border-muted-foreground/30">
+      <CardHeader className="py-3 px-4 cursor-pointer" onClick={() => setOpen(o => !o)}>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <ClockIcon className="h-4 w-4 text-muted-foreground" />
+            Budget Change Audit Log
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {logs.length > 0 && <Badge variant="secondary" className="text-[10px]">{logs.length} entries</Badge>}
+            <span className="text-xs text-muted-foreground">{open ? '▲ Hide' : '▼ Show'}</span>
+          </div>
+        </div>
+      </CardHeader>
+      {open && (
+        <CardContent className="px-4 pb-4 pt-0">
+          {loading ? (
+            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading audit log…
+            </div>
+          ) : logs.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              No budget changes recorded for this period yet.
+              {!tableExists && ' Apply the acct_budget_approvals.sql migration to enable audit logging.'}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[500px]">
+                <thead>
+                  <tr className="border-b">
+                    {['When', 'Action', 'Account', 'Old Amount', 'New Amount', 'Changed By'].map(h => (
+                      <th key={h} className="text-left font-medium text-muted-foreground pb-2 pr-3">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {logs.map((log: any) => (
+                    <tr key={log.id} className="hover:bg-muted/20">
+                      <td className="py-1.5 pr-3 whitespace-nowrap text-muted-foreground">
+                        {log.changed_at ? format(parseISO(log.changed_at), 'MMM d, HH:mm') : '—'}
+                      </td>
+                      <td className="py-1.5 pr-3">
+                        <Badge className={cn('text-[10px] px-1.5 py-0',
+                          log.action === 'insert' ? 'bg-emerald-50 text-emerald-700' :
+                          log.action === 'update' ? 'bg-blue-50 text-blue-700' :
+                          'bg-rose-50 text-rose-700'
+                        )}>{log.action ?? 'update'}</Badge>
+                      </td>
+                      <td className="py-1.5 pr-3 font-mono">{log.account_code} <span className="text-muted-foreground font-sans">{log.account_name_en}</span></td>
+                      <td className="py-1.5 pr-3 tabular-nums text-muted-foreground line-through">{log.old_amount != null ? `$${formatNumber(log.old_amount)}` : '—'}</td>
+                      <td className="py-1.5 pr-3 tabular-nums font-semibold">{log.new_amount != null ? `$${formatNumber(log.new_amount)}` : '—'}</td>
+                      <td className="py-1.5 text-muted-foreground truncate max-w-[140px]">{log.changed_by_email ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 }

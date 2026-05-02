@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Loader2, Package, Plus, Download, RefreshCw, Pencil, Search, Trash2, TrendingDown, Calendar, AlertTriangle } from 'lucide-react';
+import { Loader2, Package, Plus, Download, RefreshCw, Pencil, Search, Trash2, TrendingDown, Calendar, AlertTriangle, X, Banknote, FileX2, TableProperties } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { format, parseISO, differenceInMonths, addMonths } from 'date-fns';
 import { formatNumber, downloadCsv } from '@/lib/accountingFormat';
 import { cn } from '@/lib/utils';
@@ -98,6 +99,15 @@ export default function AccountingFixedAssets() {
   const [depRunStart, setDepRunStart] = useState(() => new Date().toISOString().slice(0, 7) + '-01');
   const [depRunEnd, setDepRunEnd] = useState(() => { const d = new Date(); d.setDate(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()); return d.toISOString().slice(0, 10); });
   const [depRunResults, setDepRunResults] = useState<{ asset: string; amount: number; entryId: string | null; error: string | null }[]>([]);
+  const [disposeDialog, setDisposeDialog] = useState(false);
+  const [disposeTarget, setDisposeTarget] = useState<Asset | null>(null);
+  const [disposeForm, setDisposeForm] = useState({ date: '', method: 'scrap', proceeds: '0', notes: '' });
+  const [disposing, setDisposing] = useState(false);
+  const [writeOffDialog, setWriteOffDialog] = useState(false);
+  const [writeOffTarget, setWriteOffTarget] = useState<Asset | null>(null);
+  const [writeOffReason, setWriteOffReason] = useState('');
+  const [writingOff, setWritingOff] = useState(false);
+  const [assetDetailTab, setAssetDetailTab] = useState<'details' | 'schedule'>('details');
   const today = useMemo(() => new Date(), []);
 
   const loadAssets = useCallback(async () => {
@@ -211,6 +221,84 @@ export default function AccountingFixedAssets() {
     });
     downloadCsv(`fixed-assets-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...rows]);
   };
+
+  const openDispose = (a: Asset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDisposeTarget(a);
+    setDisposeForm({ date: new Date().toISOString().slice(0, 10), method: 'scrap', proceeds: '0', notes: '' });
+    setDisposeDialog(true);
+  };
+
+  const handleDispose = async () => {
+    if (!disposeTarget) return;
+    setDisposing(true);
+    const addedNote = `Disposal (${disposeForm.method})${disposeForm.notes ? ': ' + disposeForm.notes : ''}`;
+    const notes = [disposeTarget.notes, addedNote].filter(Boolean).join('\n');
+    const { error } = await supabase.from('acct_fixed_assets').update({
+      status: 'disposed',
+      disposal_date: disposeForm.date,
+      disposal_proceeds: Number(disposeForm.proceeds) || null,
+      notes,
+    }).eq('id', disposeTarget.id);
+    if (error) {
+      toast({ title: 'Disposal failed', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Asset disposed', description: `${disposeTarget.name_en} marked as disposed` });
+      setDisposeDialog(false);
+      setDisposeTarget(null);
+      if (selected?.id === disposeTarget.id) setSelected(null);
+      void loadAssets();
+    }
+    setDisposing(false);
+  };
+
+  const openWriteOff = (a: Asset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setWriteOffTarget(a);
+    setWriteOffReason('');
+    setWriteOffDialog(true);
+  };
+
+  const handleWriteOff = async () => {
+    if (!writeOffTarget) return;
+    setWritingOff(true);
+    const notes = [writeOffTarget.notes, `Written off${writeOffReason ? ': ' + writeOffReason : ''}`].filter(Boolean).join('\n');
+    const { error } = await supabase.from('acct_fixed_assets').update({ status: 'written_off', notes }).eq('id', writeOffTarget.id);
+    if (error) {
+      toast({ title: 'Write-off failed', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Asset written off', description: writeOffTarget.name_en });
+      setWriteOffDialog(false);
+      setWriteOffTarget(null);
+      if (selected?.id === writeOffTarget.id) setSelected(null);
+      void loadAssets();
+    }
+    setWritingOff(false);
+  };
+
+  function generateDepSchedule(asset: Asset) {
+    const cost = Number(asset.acquisition_cost);
+    const salvage = Number(asset.salvage_value);
+    const life = asset.useful_life_months;
+    const acquired = new Date(asset.acquisition_date);
+    const rows: { label: string; dep: number; accum: number; bookValue: number }[] = [];
+    let accumulated = 0;
+    for (let m = 0; m < life; m++) {
+      let dep = 0;
+      if (asset.depreciation_method === 'straight_line') {
+        dep = (cost - salvage) / life;
+      } else {
+        dep = Math.max(0, (cost - accumulated) * (0.20 / 12));
+      }
+      dep = Math.min(dep, Math.max(0, cost - salvage - accumulated));
+      accumulated = Math.round((accumulated + dep) * 100) / 100;
+      const bv = Math.max(Math.round((cost - accumulated) * 100) / 100, salvage);
+      const date = addMonths(acquired, m + 1);
+      rows.push({ label: format(date, 'MMM yyyy'), dep: Math.round(dep * 100) / 100, accum: accumulated, bookValue: bv });
+      if (accumulated >= cost - salvage - 0.01) break;
+    }
+    return rows;
+  }
 
   if (authLoading) return <div className="flex items-center justify-center h-40"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!allowed) return <Navigate to="/" replace />;
@@ -343,7 +431,15 @@ export default function AccountingFixedAssets() {
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <Badge className={cn('text-[10px]', STATUS_BADGE[asset.status] ?? '')}>{asset.status}</Badge>
-                    {canEdit && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={e => { e.stopPropagation(); openDialog(asset); }} data-testid={`button-edit-${asset.id}`}><Pencil className="h-3 w-3" /></Button>}
+                    <div className="flex gap-0.5">
+                      {canEdit && <Button variant="ghost" size="icon" className="h-6 w-6" onClick={e => { e.stopPropagation(); openDialog(asset); }} data-testid={`button-edit-${asset.id}`}><Pencil className="h-3 w-3" /></Button>}
+                      {canEdit && asset.status === 'active' && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={e => openDispose(asset, e)} title="Dispose asset" data-testid={`button-dispose-${asset.id}`}><Banknote className="h-3 w-3" /></Button>
+                      )}
+                      {canEdit && asset.status === 'active' && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={e => openWriteOff(asset, e)} title="Write off asset" data-testid={`button-writeoff-${asset.id}`}><FileX2 className="h-3 w-3" /></Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -356,29 +452,76 @@ export default function AccountingFixedAssets() {
         <div className="space-y-4">
           {selected ? (
             <Card>
-              <CardHeader className="pb-2 pt-3">
-                <CardTitle className="text-sm">{CAT_ICONS[selected.category]} {selected.name_en}</CardTitle>
+              <CardHeader className="pb-0 pt-3">
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="text-sm">{CAT_ICONS[selected.category]} {selected.name_en}</CardTitle>
+                  <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                </div>
               </CardHeader>
-              <CardContent className="text-xs space-y-2">
-                {[
-                  { l: 'Tag', v: selected.asset_tag ?? '—' },
-                  { l: 'Serial No.', v: selected.serial_number ?? '—' },
-                  { l: 'Supplier', v: selected.supplier ?? '—' },
-                  { l: 'Acquired', v: format(parseISO(selected.acquisition_date), 'dd MMM yyyy') },
-                  { l: 'Cost', v: `${formatNumber(selected.acquisition_cost)} ${selected.currency}` },
-                  { l: 'Salvage Value', v: `${formatNumber(selected.salvage_value)} ${selected.currency}` },
-                  { l: 'Useful Life', v: `${selected.useful_life_months} months` },
-                  { l: 'Method', v: DEP_METHODS.find(d => d.v === selected.depreciation_method)?.l ?? selected.depreciation_method },
-                  { l: 'Warranty', v: selected.warranty_expiry ? format(parseISO(selected.warranty_expiry), 'dd MMM yyyy') : '—' },
-                  { l: 'Location', v: selected.location ?? '—' },
-                ].map(r => (
-                  <div key={r.l} className="flex justify-between border-b pb-1">
-                    <span className="text-muted-foreground">{r.l}</span>
-                    <span className="font-medium">{r.v}</span>
-                  </div>
-                ))}
-                <div className="pt-1"><DepBar asset={selected} /></div>
-                {selected.notes && <div className="text-muted-foreground italic pt-1">{selected.notes}</div>}
+              <CardContent className="pt-2 pb-3">
+                <Tabs value={assetDetailTab} onValueChange={v => setAssetDetailTab(v as any)}>
+                  <TabsList className="w-full mb-3 h-8">
+                    <TabsTrigger value="details" className="flex-1 text-xs h-7">Details</TabsTrigger>
+                    <TabsTrigger value="schedule" className="flex-1 text-xs h-7"><TableProperties className="h-3 w-3 mr-1" />Schedule</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="details" className="mt-0">
+                    <div className="text-xs space-y-2">
+                      {[
+                        { l: 'Tag', v: selected.asset_tag ?? '—' },
+                        { l: 'Serial No.', v: selected.serial_number ?? '—' },
+                        { l: 'Supplier', v: selected.supplier ?? '—' },
+                        { l: 'Acquired', v: format(parseISO(selected.acquisition_date), 'dd MMM yyyy') },
+                        { l: 'Cost', v: `${formatNumber(selected.acquisition_cost)} ${selected.currency}` },
+                        { l: 'Salvage Value', v: `${formatNumber(selected.salvage_value)} ${selected.currency}` },
+                        { l: 'Useful Life', v: `${selected.useful_life_months} months` },
+                        { l: 'Method', v: DEP_METHODS.find(d => d.v === selected.depreciation_method)?.l ?? selected.depreciation_method },
+                        { l: 'Warranty', v: selected.warranty_expiry ? format(parseISO(selected.warranty_expiry), 'dd MMM yyyy') : '—' },
+                        { l: 'Location', v: selected.location ?? '—' },
+                        { l: 'Status', v: selected.status },
+                      ].map(r => (
+                        <div key={r.l} className="flex justify-between border-b pb-1">
+                          <span className="text-muted-foreground">{r.l}</span>
+                          <span className="font-medium">{r.v}</span>
+                        </div>
+                      ))}
+                      <div className="pt-1"><DepBar asset={selected} /></div>
+                      {selected.notes && <div className="text-muted-foreground italic pt-1 text-[10px]">{selected.notes}</div>}
+                      {canEdit && selected.status === 'active' && (
+                        <div className="flex gap-2 pt-2">
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-[10px] text-amber-700 border-amber-200 hover:bg-amber-50" onClick={e => openDispose(selected, e)} data-testid="button-panel-dispose"><Banknote className="h-3 w-3 mr-1" />Dispose</Button>
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-[10px] text-rose-700 border-rose-200 hover:bg-rose-50" onClick={e => openWriteOff(selected, e)} data-testid="button-panel-writeoff"><FileX2 className="h-3 w-3 mr-1" />Write Off</Button>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="schedule" className="mt-0">
+                    <div className="text-xs overflow-y-auto max-h-[400px]">
+                      <table className="w-full text-[10px]">
+                        <thead className="sticky top-0 bg-card">
+                          <tr className="border-b text-muted-foreground">
+                            <th className="text-left py-1 pr-2">Month</th>
+                            <th className="text-right py-1 pr-2">Dep.</th>
+                            <th className="text-right py-1 pr-2">Accum.</th>
+                            <th className="text-right py-1">Book Val.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {generateDepSchedule(selected).map((row, i) => {
+                            const isCurrentMonth = row.label === format(today, 'MMM yyyy');
+                            return (
+                              <tr key={i} className={cn('border-b last:border-0 tabular-nums', isCurrentMonth && 'bg-blue-50/60 dark:bg-blue-900/20 font-semibold')}>
+                                <td className="py-0.5 pr-2 text-muted-foreground">{row.label}</td>
+                                <td className="py-0.5 pr-2 text-right">{formatNumber(row.dep)}</td>
+                                <td className="py-0.5 pr-2 text-right">{formatNumber(row.accum)}</td>
+                                <td className="py-0.5 text-right">{formatNumber(row.bookValue)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           ) : (
@@ -452,6 +595,97 @@ export default function AccountingFixedAssets() {
             <Button variant="outline" onClick={() => setDialog(false)}>Cancel</Button>
             <Button onClick={save} disabled={saving || !form.name_en} data-testid="button-save">
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{editingAsset ? 'Update' : 'Add Asset'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Disposal Dialog */}
+      <Dialog open={disposeDialog} onOpenChange={v => { if (!disposing) setDisposeDialog(v); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Banknote className="h-5 w-5 text-amber-600" />Dispose Asset</DialogTitle>
+            <DialogDescription>{disposeTarget?.name_en} — Mark this asset as disposed and record proceeds.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs mb-1">Disposal Date *</Label>
+                <Input type="date" className="h-9" value={disposeForm.date} onChange={e => setDisposeForm(p => ({ ...p, date: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs mb-1">Method</Label>
+                <Select value={disposeForm.method} onValueChange={v => setDisposeForm(p => ({ ...p, method: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sale">Sale</SelectItem>
+                    <SelectItem value="donation">Donation</SelectItem>
+                    <SelectItem value="scrap">Scrap</SelectItem>
+                    <SelectItem value="transfer">Transfer</SelectItem>
+                    <SelectItem value="loss">Loss / Theft</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs mb-1">Proceeds / Residual Value ({disposeTarget?.currency ?? 'USD'})</Label>
+              <Input type="number" className="h-9" min="0" step="0.01" value={disposeForm.proceeds} onChange={e => setDisposeForm(p => ({ ...p, proceeds: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs mb-1">Notes</Label>
+              <Textarea className="text-xs" rows={2} placeholder="Reason for disposal, buyer, certificate no…" value={disposeForm.notes} onChange={e => setDisposeForm(p => ({ ...p, notes: e.target.value }))} />
+            </div>
+            {disposeTarget && (() => {
+              const { bookValue } = calcDepreciation(disposeTarget, today);
+              const proceeds = Number(disposeForm.proceeds) || 0;
+              const gainLoss = proceeds - bookValue;
+              return (
+                <div className="rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-xs">
+                  <div className="flex justify-between mb-1"><span className="text-muted-foreground">Current Book Value</span><span className="font-semibold">{formatNumber(bookValue)} {disposeTarget.currency}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Gain / (Loss) on Disposal</span><span className={cn('font-semibold', gainLoss >= 0 ? 'text-emerald-700' : 'text-rose-700')}>{gainLoss >= 0 ? '+' : ''}{formatNumber(gainLoss)}</span></div>
+                </div>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisposeDialog(false)} disabled={disposing}>Cancel</Button>
+            <Button onClick={handleDispose} disabled={disposing || !disposeForm.date} className="bg-amber-600 hover:bg-amber-700 text-white" data-testid="button-confirm-dispose">
+              {disposing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Banknote className="h-4 w-4 mr-2" />}
+              {disposing ? 'Disposing…' : 'Confirm Disposal'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Write-off Dialog */}
+      <Dialog open={writeOffDialog} onOpenChange={v => { if (!writingOff) setWriteOffDialog(v); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FileX2 className="h-5 w-5 text-rose-600" />Write Off Asset</DialogTitle>
+            <DialogDescription>{writeOffTarget?.name_en} — Mark this asset as fully written off (zero book value).</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs mb-1">Reason / Notes</Label>
+              <Textarea className="text-xs" rows={3} placeholder="Reason for write-off (obsolescence, damage, loss…)" value={writeOffReason} onChange={e => setWriteOffReason(e.target.value)} />
+            </div>
+            {writeOffTarget && (() => {
+              const { bookValue, accumulated } = calcDepreciation(writeOffTarget, today);
+              return (
+                <div className="rounded bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 p-3 text-xs space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Book Value to Write Off</span><span className="font-semibold text-rose-700">{formatNumber(bookValue)} {writeOffTarget.currency}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Accumulated Dep.</span><span className="font-medium">{formatNumber(accumulated)}</span></div>
+                  <p className="text-muted-foreground pt-1">A journal entry (Expense DR / Asset CR) should be posted manually or via the Run Depreciation workflow.</p>
+                </div>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWriteOffDialog(false)} disabled={writingOff}>Cancel</Button>
+            <Button onClick={handleWriteOff} disabled={writingOff} variant="destructive" data-testid="button-confirm-writeoff">
+              {writingOff ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileX2 className="h-4 w-4 mr-2" />}
+              {writingOff ? 'Writing off…' : 'Write Off Asset'}
             </Button>
           </DialogFooter>
         </DialogContent>

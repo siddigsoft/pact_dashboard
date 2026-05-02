@@ -241,7 +241,8 @@ const NotificationCard: FC<{
   onApprove: (n: Notification) => void;
   onReject: (n: Notification) => void;
   actionPending: string | null;
-}> = ({ n, onRead, onOpen, onApprove, onReject, actionPending }) => {
+  onDelete?: (id: string) => void;
+}> = ({ n, onRead, onOpen, onApprove, onReject, actionPending, onDelete }) => {
   const isPending = actionPending === n.id;
   const priorityBadge = getPriorityBadge(n.priority);
   const showApproveReject = canApproveReject(n) && !n.isRead;
@@ -297,10 +298,21 @@ const NotificationCard: FC<{
                 )}
               </div>
 
-              {/* Time + unread dot */}
+              {/* Time + unread dot + delete */}
               <div className="flex items-center gap-2 shrink-0">
                 {!n.isRead && <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />}
                 <span className="text-xs text-gray-400 whitespace-nowrap">{formatDate(n.createdAt)}</span>
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); onDelete(n.id); }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity h-5 w-5 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600"
+                    title="Delete notification"
+                    data-testid={`btn-delete-${n.id}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -571,6 +583,24 @@ const Notifications: FC = () => {
     } catch { toast({ title: 'Failed to clear', variant: 'destructive' }); }
   };
 
+  const handleDeleteRead = async () => {
+    const readIds = notifications.filter(n => n.isRead).map(n => n.id);
+    if (!readIds.length) { toast({ title: 'No read notifications to delete' }); return; }
+    if (!confirm(`Delete ${readIds.length} read notification(s)? This cannot be undone.`)) return;
+    try {
+      const { error } = await supabase.from('notifications').delete().in('id', readIds);
+      if (error) throw error;
+      await Promise.all(readIds.map(id => markNotificationAsRead(id)));
+      toast({ title: `${readIds.length} read notification${readIds.length !== 1 ? 's' : ''} deleted` });
+    } catch { toast({ title: 'Failed to delete read notifications', variant: 'destructive' }); }
+  };
+
+  const handleDeleteOne = useCallback(async (id: string) => {
+    try {
+      await supabase.from('notifications').delete().eq('id', id);
+    } catch { /* silently ignore */ }
+  }, []);
+
   // Render bundled or regular list
   function renderList(items: Notification[]) {
     if (bundleMode) {
@@ -608,6 +638,7 @@ const Notifications: FC = () => {
         onApprove={handleApprove}
         onReject={handleReject}
         actionPending={actionPending}
+        onDelete={handleDeleteOne}
       />
     ));
   }
@@ -683,6 +714,17 @@ const Notifications: FC = () => {
             >
               <CheckCheck className="h-3.5 w-3.5" />
               Mark all read
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 px-3 gap-1.5 text-xs text-amber-600 border-amber-200 hover:bg-amber-50 dark:border-amber-800 dark:hover:bg-amber-900/20"
+              onClick={handleDeleteRead}
+              disabled={notifications.filter(n => n.isRead).length === 0}
+              data-testid="button-delete-read"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete read ({notifications.filter(n => n.isRead).length})
             </Button>
             <Button
               size="sm"

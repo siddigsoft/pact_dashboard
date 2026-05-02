@@ -496,7 +496,139 @@ function HROverviewPanel() {
           </CardContent>
         </Card>
       )}
+
+      {/* Leave Balance Summary */}
+      <LeaveBalanceSummaryCard />
     </div>
+  );
+}
+
+function LeaveBalanceSummaryCard() {
+  const currentYear = new Date().getFullYear();
+
+  const { data: entitlements = [], isLoading: entLoading } = useQuery({
+    queryKey: ['hr-overview-entitlements', currentYear],
+    queryFn: async () => {
+      const { data } = await supabase.from('leave_entitlements').select('*').eq('year', currentYear);
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: usedLeaves = [], isLoading: leavesLoading } = useQuery({
+    queryKey: ['hr-overview-used-leaves', currentYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('leave_requests')
+        .select('leave_type, start_date, end_date, status')
+        .eq('status', 'approved')
+        .gte('start_date', `${currentYear}-01-01`)
+        .lte('end_date', `${currentYear}-12-31`);
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const summary = useMemo(() => {
+    const totalEntitlement = entitlements.reduce((s: number, e: any) =>
+      s + (e.annual_days ?? 0) + (e.sick_days ?? 0) + (e.emergency_days ?? 0), 0);
+
+    const usedByType: Record<string, number> = {};
+    for (const lr of usedLeaves as any[]) {
+      const days = lr.start_date && lr.end_date
+        ? Math.max(1, Math.round((new Date(lr.end_date).getTime() - new Date(lr.start_date).getTime()) / 86400000) + 1)
+        : 1;
+      usedByType[lr.leave_type] = (usedByType[lr.leave_type] ?? 0) + days;
+    }
+
+    const totalUsed = Object.values(usedByType).reduce((s, v) => s + v, 0);
+    const totalRemaining = Math.max(0, totalEntitlement - totalUsed);
+    const utilizationPct = totalEntitlement > 0 ? Math.round((totalUsed / totalEntitlement) * 100) : 0;
+
+    const annualEntitled = entitlements.reduce((s: number, e: any) => s + (e.annual_days ?? 0), 0);
+    const carryForwardEstimate = entitlements.reduce((s: number, e: any) => {
+      const remainingAnnual = Math.max(0, (e.annual_days ?? 0) - (usedByType['annual'] ?? 0) / Math.max(1, entitlements.length));
+      return s + Math.min(remainingAnnual, 5);
+    }, 0);
+
+    return { totalEntitlement, totalUsed, totalRemaining, utilizationPct, usedByType, annualEntitled, carryForwardEstimate: Math.round(carryForwardEstimate) };
+  }, [entitlements, usedLeaves]);
+
+  const isLoading = entLoading || leavesLoading;
+  const LEAVE_LABELS: Record<string, string> = { annual: 'Annual', sick: 'Sick', emergency: 'Emergency', maternity: 'Maternity', paternity: 'Paternity', unpaid: 'Unpaid', study: 'Study', compassionate: 'Compassionate' };
+  const LEAVE_COLORS: Record<string, string> = { annual: 'bg-blue-500', sick: 'bg-red-500', emergency: 'bg-orange-500', maternity: 'bg-purple-500', paternity: 'bg-blue-400', unpaid: 'bg-slate-400', study: 'bg-teal-500', compassionate: 'bg-amber-500' };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 pt-4 px-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Leave Balance Summary — {currentYear}</p>
+          {!isLoading && <span className="text-xs text-muted-foreground">{entitlements.length} staff with entitlements</span>}
+        </div>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        {isLoading ? (
+          <div className="h-20 flex items-center justify-center text-sm text-muted-foreground">Loading…</div>
+        ) : entitlements.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">No leave entitlements configured for {currentYear}. Set them up in the HR Tools tab.</p>
+        ) : (
+          <div className="space-y-4">
+            {/* KPI strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Total Entitled', value: summary.totalEntitlement, unit: 'days', color: 'text-blue-600' },
+                { label: 'Total Used', value: summary.totalUsed, unit: 'days', color: 'text-amber-600' },
+                { label: 'Remaining', value: summary.totalRemaining, unit: 'days', color: 'text-emerald-600' },
+                { label: 'Utilization', value: `${summary.utilizationPct}%`, unit: '', color: summary.utilizationPct > 80 ? 'text-rose-600' : 'text-slate-600' },
+              ].map(k => (
+                <div key={k.label} className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-[11px] text-muted-foreground">{k.label}</p>
+                  <p className={`text-xl font-bold ${k.color}`}>{k.value}{k.unit && <span className="text-xs font-normal ml-1 text-muted-foreground">{k.unit}</span>}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Utilization bar */}
+            <div>
+              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                <span>Overall leave utilization</span>
+                <span>{summary.utilizationPct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', summary.utilizationPct > 80 ? 'bg-rose-500' : summary.utilizationPct > 50 ? 'bg-amber-500' : 'bg-emerald-500')}
+                  style={{ width: `${Math.min(summary.utilizationPct, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* By type breakdown */}
+            {Object.keys(summary.usedByType).length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {Object.entries(summary.usedByType).sort((a, b) => b[1] - a[1]).map(([type, days]) => (
+                  <div key={type} className="flex items-center gap-2">
+                    <div className={cn('w-2 h-2 rounded-full shrink-0', LEAVE_COLORS[type] ?? 'bg-slate-400')} />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium truncate">{LEAVE_LABELS[type] ?? type}</p>
+                      <p className="text-[10px] text-muted-foreground">{days} days used</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Carry-forward estimate */}
+            {summary.carryForwardEstimate > 0 && (
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-xs text-blue-800 dark:text-blue-300">
+                <span className="font-semibold">Estimated Carry-Forward to {currentYear + 1}:</span>{' '}
+                ~{summary.carryForwardEstimate} days (capped at 5 days per employee, annual leave only).{' '}
+                Final amounts depend on your leave policy settings.
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

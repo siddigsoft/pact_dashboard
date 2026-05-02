@@ -444,6 +444,61 @@ const CoordinatorDashboard: FC = () => {
         </Card>
       )}
 
+      {/* Cycle Health Score */}
+      {stats.totalSites > 0 && (() => {
+        const completionRate = stats.totalSites > 0 ? (stats.completedSites / stats.totalSites) * 100 : 0;
+        const rejectionRate = stats.totalSites > 0 ? (stats.rejectedSites / stats.totalSites) * 100 : 0;
+        const permitPenalty = Math.min(30, (stats.pendingStatePermits + stats.pendingLocalPermits) * 5);
+        const processedRate = stats.totalSites > 0
+          ? ((stats.verifiedSites + stats.approvedSites + stats.completedSites) / stats.totalSites) * 100
+          : 0;
+        const healthScore = Math.max(0, Math.min(100,
+          Math.round(completionRate * 0.5 + processedRate * 0.3 - rejectionRate * 0.1 - permitPenalty * 0.1)
+        ));
+        const isGreen = healthScore >= 70;
+        const isAmber = healthScore >= 40 && healthScore < 70;
+        const label = isGreen ? 'Healthy' : isAmber ? 'Needs Attention' : 'Critical';
+        const scoreColor = isGreen ? 'text-emerald-600' : isAmber ? 'text-amber-600' : 'text-rose-600';
+        const barColor = isGreen ? 'bg-emerald-500' : isAmber ? 'bg-amber-500' : 'bg-rose-500';
+        const bgColor = isGreen ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+          : isAmber ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+          : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800';
+
+        return (
+          <Card className={`border ${bgColor}`}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className={`h-5 w-5 ${scoreColor}`} />
+                  <span className="font-semibold text-sm">Cycle Health Score</span>
+                  <Badge className={`text-[10px] px-1.5 py-0 ${
+                    isGreen ? 'bg-emerald-100 text-emerald-800' :
+                    isAmber ? 'bg-amber-100 text-amber-800' :
+                    'bg-rose-100 text-rose-800'
+                  }`}>{label}</Badge>
+                </div>
+                <span className={`text-3xl font-bold ${scoreColor}`}>{healthScore}</span>
+              </div>
+              <div className="h-2.5 rounded-full bg-muted overflow-hidden mb-3">
+                <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${healthScore}%` }} />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                {[
+                  { label: 'Completion', value: `${Math.round(completionRate)}%`, good: completionRate >= 60 },
+                  { label: 'Processed', value: `${Math.round(processedRate)}%`, good: processedRate >= 50 },
+                  { label: 'Rejection', value: `${Math.round(rejectionRate)}%`, good: rejectionRate < 15 },
+                ].map(m => (
+                  <div key={m.label} className="text-center rounded-lg bg-white/60 dark:bg-black/20 p-2">
+                    <p className={`font-bold ${m.good ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{m.value}</p>
+                    <p className="text-muted-foreground mt-0.5">{m.label}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* Quick Actions */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <QuickActionCard
