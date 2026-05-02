@@ -575,6 +575,68 @@ const MMPCycleClose = () => {
   const [confirmingPayments, setConfirmingPayments] = useState(false);
   const [paymentRequestNote, setPaymentRequestNote] = useState('');
 
+  // ── All remaining state declarations hoisted here to avoid TDZ errors ──────
+  const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
+  const [feeEditOpen, setFeeEditOpen] = useState(false);
+  const [feeEdits, setFeeEdits] = useState<Record<string, { enum: number; transport: number }>>({});
+  const [savingFees, setSavingFees] = useState(false);
+  const [allSiteReviewData, setAllSiteReviewData] = useState<SiteReviewEntry[]>([]);
+  const [loadingAllSites, setLoadingAllSites] = useState(false);
+  const [siteReviewSearch, setSiteReviewSearch] = useState('');
+  const [siteReviewStatusFilter, setSiteReviewStatusFilter] = useState('all');
+  const [exchangeRateInput, setExchangeRateInput] = useState('');
+  const [feesLockedAt, setFeesLockedAt] = useState<string | null>(null);
+  const [feesLockedRate, setFeesLockedRate] = useState<number | null>(null);
+  const [lockingFees, setLockingFees] = useState(false);
+  const [updateWallets, setUpdateWallets] = useState(true);
+  const [walletUpdateResults, setWalletUpdateResults] = useState<{ success: number; failed: number } | null>(null);
+  const [cycleSubmittedAt, setCycleSubmittedAt] = useState<string | null>(null);
+  const guideScrolledStepRef = useRef<string | null>(null);
+  // Finance tab state
+  type FinanceCost = { id: string; description: string | null; vendor: string | null; amount_cents: number; currency: string | null; expense_date: string | null; expense_category: string | null; tier1_status: string | null; tier2_status: string | null; tier3_status: string | null };
+  type FinanceAdvance = { id: string; status: string; amount_cents: number | null; currency: string | null };
+  const [financeCosts, setFinanceCosts] = useState<FinanceCost[]>([]);
+  const [financeAdvances, setFinanceAdvances] = useState<FinanceAdvance[]>([]);
+  const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeApproving, setFinanceApproving] = useState<Set<string>>(new Set());
+  const [financeRejecting, setFinanceRejecting] = useState<Set<string>>(new Set());
+  const [financeApprovingAll, setFinanceApprovingAll] = useState(false);
+  const [financeRejectDialog, setFinanceRejectDialog] = useState<{ open: boolean; costId: string | null; reason: string }>({ open: false, costId: null, reason: '' });
+  const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
+    mmpId: string;
+    issues: string[];
+    action: 'finalize' | 'approve';
+  } | null>(null);
+  const [financeOverrideJustification, setFinanceOverrideJustification] = useState('');
+  const [pendingScopedClose, setPendingScopedClose] = useState<{ scope: CloseScope; scopeValue: string } | null>(null);
+  const [qualityData, setQualityData] = useState<{ hub: string; avgScore: number; count: number }[]>([]);
+  const [activeHubFilter, setActiveHubFilter] = useState<string>('all');
+  const [activeSort, setActiveSort] = useState<'name' | 'coverage' | 'status'>('status');
+  const [activeSortDir, setActiveSortDir] = useState<'asc' | 'desc'>('desc');
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [mmpScopeOptions, setMmpScopeOptions] = useState<Record<string, MmpScopeOptions>>({});
+  const [notCoveredAdvanceSites, setNotCoveredAdvanceSites] = useState<NotCoveredAdvanceSite[]>([]);
+  const [loadingExceptions, setLoadingExceptions] = useState(false);
+  const [costRecoveryDialogState, setCostRecoveryDialogState] = useState<{
+    site: CostRecoverySite;
+    advanceId: string | null;
+    amount: number;
+  } | null>(null);
+  const [showMoneyTrailMmpId, setShowMoneyTrailMmpId] = useState<string | null>(null);
+  const [wfpResults, setWfpResults] = useState<MatchResult[]>([]);
+  const [wfpSummary, setWfpSummary] = useState<MatchSummary | null>(null);
+  const [wfpUploadId, setWfpUploadId] = useState<string | null>(null);
+  const [wfpFilename, setWfpFilename] = useState<string | null>(null);
+  const [wfpApplying, setWfpApplying] = useState(false);
+  const [wfpSaving, setWfpSaving] = useState(false);
+  const [loadingWFP, setLoadingWFP] = useState(false);
+  const [wfpAppliedUpload, setWfpAppliedUpload] = useState<{ filename: string; applied_at: string } | null>(null);
+  const [userHubName, setUserHubName] = useState<string>('');
+  const [bannerRejectMmpId, setBannerRejectMmpId] = useState<string | null>(null);
+  const [bannerRejectNote, setBannerRejectNote] = useState('');
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const handleRequestPayments = useCallback(async (mmpId: string) => {
     setRequestingPayment(true);
     try {
@@ -926,42 +988,6 @@ const MMPCycleClose = () => {
   }, [checklistMmpId, mmpFiles, fetchCycleSummary, fetchAllSiteDetails]);
 
   const cycleReadiness = useCycleCloseReadiness(checklistMmpId);
-  const [reconciliationAcknowledged, setReconciliationAcknowledged] = useState(false);
-
-  // Inline fee editing inside closing summary
-  const [feeEditOpen, setFeeEditOpen] = useState(false);
-  const [feeEdits, setFeeEdits] = useState<Record<string, { enum: number; transport: number }>>({});
-  const [savingFees, setSavingFees] = useState(false);
-
-  // Step 2 — Site & Advance Review
-  const [allSiteReviewData, setAllSiteReviewData] = useState<SiteReviewEntry[]>([]);
-  const [loadingAllSites, setLoadingAllSites] = useState(false);
-  const [siteReviewSearch, setSiteReviewSearch] = useState('');
-  const [siteReviewStatusFilter, setSiteReviewStatusFilter] = useState('all');
-
-  // Step 6 — Exchange Rate & Fee Lock
-  const [exchangeRateInput, setExchangeRateInput] = useState('');
-  const [feesLockedAt, setFeesLockedAt] = useState<string | null>(null);
-  const [feesLockedRate, setFeesLockedRate] = useState<number | null>(null);
-  const [lockingFees, setLockingFees] = useState(false);
-  const [updateWallets, setUpdateWallets] = useState(true);
-  const [walletUpdateResults, setWalletUpdateResults] = useState<{ success: number; failed: number } | null>(null);
-
-  // Step 7 — Payment Request
-  const [cycleSubmittedAt, setCycleSubmittedAt] = useState<string | null>(null);
-  // Scroll guard — only auto-scroll once per step change, not on every render
-  const guideScrolledStepRef = useRef<string | null>(null);
-
-  // Finance tab state
-  type FinanceCost = { id: string; description: string | null; vendor: string | null; amount_cents: number; currency: string | null; expense_date: string | null; expense_category: string | null; tier1_status: string | null; tier2_status: string | null; tier3_status: string | null };
-  type FinanceAdvance = { id: string; status: string; amount_cents: number | null; currency: string | null };
-  const [financeCosts, setFinanceCosts] = useState<FinanceCost[]>([]);
-  const [financeAdvances, setFinanceAdvances] = useState<FinanceAdvance[]>([]);
-  const [financeLoading, setFinanceLoading] = useState(false);
-  const [financeApproving, setFinanceApproving] = useState<Set<string>>(new Set());
-  const [financeRejecting, setFinanceRejecting] = useState<Set<string>>(new Set());
-  const [financeApprovingAll, setFinanceApprovingAll] = useState(false);
-  const [financeRejectDialog, setFinanceRejectDialog] = useState<{ open: boolean; costId: string | null; reason: string }>({ open: false, costId: null, reason: '' });
 
   // Build correct update payload mirroring CostSubmission.tsx approval logic
   const buildCostApproveUpdate = (cost: FinanceCost, userId: string): Record<string, string | null> => {
@@ -1367,43 +1393,6 @@ const MMPCycleClose = () => {
     ];
   }, [cycleReadiness.items, cycleReadiness.allPassed, checklistMmpStatus, isFOM, isAdmin, isSuperAdmin, paymentsConfirmedAt, paymentRequestedAt, feesLockedAt, feesLockedRate]);
 
-  const [financeOverrideDialog, setFinanceOverrideDialog] = useState<{
-    mmpId: string;
-    issues: string[];
-    action: 'finalize' | 'approve';
-  } | null>(null);
-  const [financeOverrideJustification, setFinanceOverrideJustification] = useState('');
-  const [pendingScopedClose, setPendingScopedClose] = useState<{ scope: CloseScope; scopeValue: string } | null>(null);
-  const [qualityData, setQualityData] = useState<{ hub: string; avgScore: number; count: number }[]>([]);
-  const [activeHubFilter, setActiveHubFilter] = useState<string>('all');
-  const [activeSort, setActiveSort] = useState<'name' | 'coverage' | 'status'>('status');
-  const [activeSortDir, setActiveSortDir] = useState<'asc' | 'desc'>('desc');
-  const [archiveSearch, setArchiveSearch] = useState('');
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [mmpScopeOptions, setMmpScopeOptions] = useState<Record<string, MmpScopeOptions>>({});
-
-  // Phase B — Exceptions tab + Cost Recovery
-  const [notCoveredAdvanceSites, setNotCoveredAdvanceSites] = useState<NotCoveredAdvanceSite[]>([]);
-  const [loadingExceptions, setLoadingExceptions] = useState(false);
-  const [costRecoveryDialogState, setCostRecoveryDialogState] = useState<{
-    site: CostRecoverySite;
-    advanceId: string | null;
-    amount: number;
-  } | null>(null);
-  const [showMoneyTrailMmpId, setShowMoneyTrailMmpId] = useState<string | null>(null);
-
-  // Phase C — WFP Confirmation tab
-  const [wfpResults, setWfpResults] = useState<MatchResult[]>([]);
-  const [wfpSummary, setWfpSummary] = useState<MatchSummary | null>(null);
-  const [wfpUploadId, setWfpUploadId] = useState<string | null>(null);
-  const [wfpFilename, setWfpFilename] = useState<string | null>(null);
-  const [wfpApplying, setWfpApplying] = useState(false);
-  const [wfpSaving, setWfpSaving] = useState(false);
-  const [loadingWFP, setLoadingWFP] = useState(false);
-  const [wfpAppliedUpload, setWfpAppliedUpload] = useState<{ filename: string; applied_at: string } | null>(null);
-
-  const [userHubName, setUserHubName] = useState<string>('');
-
   // Supervisor hub-filter removed — supervisors are no longer engaged in the cycle close flow.
 
   const activeMmps = useMemo(() => {
@@ -1420,9 +1409,6 @@ const MMPCycleClose = () => {
   const pendingApprovalMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => (m as any).cycle_status === 'pending_approval');
   }, [mmpFiles]);
-
-  const [bannerRejectMmpId, setBannerRejectMmpId] = useState<string | null>(null);
-  const [bannerRejectNote, setBannerRejectNote] = useState('');
 
   const fetchUncoveredSites = useCallback(async () => {
     setLoading(true);
