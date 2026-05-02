@@ -11,12 +11,14 @@ ORDER BY name;
 -- Reset them all to 'active' and clear cycle-close fields:
 UPDATE mmp_files
 SET
-  cycle_status        = 'active',
-  cycle_closed_at     = NULL,
-  cycle_closed_by     = NULL,
-  cycle_close_records = '[]'::jsonb,
-  cycle_approval_note = NULL,
-  payment_tracking    = NULL
+  cycle_status             = 'active',
+  cycle_closed_at          = NULL,
+  cycle_closed_by          = NULL,
+  cycle_approved_by        = NULL,
+  cycle_close_records      = NULL,
+  cycle_closing_started_at = NULL,
+  cycle_closing_started_by = NULL,
+  cycle_close_deadline     = NULL
 WHERE cycle_status IN ('closing', 'pending_approval');
 
 -- Confirm nothing is left in a stuck state:
