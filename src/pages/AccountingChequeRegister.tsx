@@ -96,11 +96,11 @@ export default function AccountingChequeRegister() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: chequeData }, { data: bankData }, { data: invData }, { data: vData }, { data: fData }] = await Promise.all([
-      supabase.from('cheque_register').select('*').order('created_at', { ascending: false }),
-      supabase.from('bank_accounts').select('id, account_name, account_number, bank_name').order('account_name'),
-      supabase.from('ap_invoices').select('id, invoice_number, total_amount, currency').order('created_at', { ascending: false }),
-      supabase.from('accounting_vendors').select('id, name_en, vendor_code').order('name_en'),
-      supabase.from('accounting_funds').select('id, code, name_en').order('code'),
+      supabase.from('acct_cheque_register').select('*').order('created_at', { ascending: false }),
+      supabase.from('acct_bank_accounts').select('id, account_name, account_number, bank_name').order('account_name'),
+      supabase.from('acct_invoices').select('id, invoice_number, total_amount, currency').order('created_at', { ascending: false }),
+      supabase.from('acct_vendors').select('id, name_en, vendor_code').order('name_en'),
+      supabase.from('acct_funds').select('id, code, name_en').order('code'),
     ]);
     setCheques((chequeData ?? []) as Cheque[]);
     setBankAccounts((bankData ?? []) as BankAccount[]);
@@ -160,14 +160,14 @@ export default function AccountingChequeRegister() {
       bank_reference: form.bank_reference || null,
     };
     if (editing) {
-      const { error } = await supabase.from('cheque_register').update(payload).eq('id', editing.id);
+      const { error } = await supabase.from('acct_cheque_register').update(payload).eq('id', editing.id);
       if (error) toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
       else { toast({ title: 'Payment updated' }); setOpen(false); void load(); }
     } else {
       const cheque_number = form.payment_type === 'cheque'
         ? `CHQ-${Date.now()}`
         : `PAY-${Date.now()}`;
-      const { error } = await supabase.from('cheque_register').insert({ ...payload, status: 'draft', cheque_number });
+      const { error } = await supabase.from('acct_cheque_register').insert({ ...payload, status: 'draft', cheque_number });
       if (error) toast({ title: 'Create failed', description: error.message, variant: 'destructive' });
       else { toast({ title: 'Payment created' }); setOpen(false); void load(); }
     }
@@ -179,7 +179,7 @@ export default function AccountingChequeRegister() {
     const extra: Record<string, unknown> = { status: newStatus };
     if (newStatus === 'voided') extra.void_reason = voidReason;
     if (newStatus === 'cleared') extra.clearance_date = new Date().toISOString().slice(0, 10);
-    const { error } = await supabase.from('cheque_register').update(extra).eq('id', c.id);
+    const { error } = await supabase.from('acct_cheque_register').update(extra).eq('id', c.id);
     setActioning(false);
     if (error) toast({ title: 'Action failed', description: error.message, variant: 'destructive' });
     else { toast({ title: `Payment ${STATUS_CFG[newStatus]?.label ?? newStatus}` }); setDetailCheque(null); setVoidReason(''); void load(); }

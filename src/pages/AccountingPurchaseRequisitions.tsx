@@ -94,9 +94,9 @@ export default function AccountingPurchaseRequisitions() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: prData }, { data: fundsData }, { data: acctData }, { data: profData }] = await Promise.all([
-      supabase.from('purchase_requisitions').select('*').order('created_at', { ascending: false }),
-      supabase.from('accounting_funds').select('id, code, name_en').order('code'),
-      supabase.from('chart_of_accounts').select('id, code, name_en').order('code'),
+      supabase.from('acct_purchase_requisitions').select('*').order('created_at', { ascending: false }),
+      supabase.from('acct_funds').select('id, code, name_en').order('code'),
+      supabase.from('acct_accounts').select('id, code, name_en').order('code'),
       supabase.from('profiles').select('id, full_name').order('full_name'),
     ]);
     setPRs((prData ?? []) as PR[]);
@@ -155,11 +155,11 @@ export default function AccountingPurchaseRequisitions() {
       notes: form.notes || null,
     };
     if (editing) {
-      const { error } = await supabase.from('purchase_requisitions').update(payload).eq('id', editing.id);
+      const { error } = await supabase.from('acct_purchase_requisitions').update(payload).eq('id', editing.id);
       if (error) toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
       else { toast({ title: 'PR updated' }); setOpen(false); void load(); }
     } else {
-      const { error } = await supabase.from('purchase_requisitions').insert({ ...payload, status: 'draft', pr_number: `PR-${Date.now()}` });
+      const { error } = await supabase.from('acct_purchase_requisitions').insert({ ...payload, status: 'draft', pr_number: `PR-${Date.now()}` });
       if (error) toast({ title: 'Create failed', description: error.message, variant: 'destructive' });
       else { toast({ title: 'PR created' }); setOpen(false); void load(); }
     }
@@ -173,7 +173,7 @@ export default function AccountingPurchaseRequisitions() {
     if (['reviewed', 'approved'].includes(newStatus)) {
       extra[newStatus === 'reviewed' ? 'reviewed_at' : 'approved_at'] = new Date().toISOString();
     }
-    const { error } = await supabase.from('purchase_requisitions').update(extra).eq('id', pr.id);
+    const { error } = await supabase.from('acct_purchase_requisitions').update(extra).eq('id', pr.id);
     setActioning(false);
     if (error) toast({ title: 'Action failed', description: error.message, variant: 'destructive' });
     else {

@@ -56,8 +56,8 @@ export default function AccountingDonorReports() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: fData }, { data: jlData }, { data: pData }] = await Promise.all([
-      supabase.from('accounting_funds').select('id, code, name_en, name_ar, restriction_type, donor_partner_id, start_date, end_date, is_active').order('code'),
-      supabase.from('acct_journal_entry_lines').select('fund_id, debit_credit, functional_amount'),
+      supabase.from('acct_funds').select('id, code, name_en, name_ar, restriction_type, donor_partner_id, start_date, end_date, is_active').order('code'),
+      supabase.from('acct_journal_lines').select('fund_id, debit_credit, functional_amount'),
       supabase.from('crm_partners').select('id, name').limit(500).catch(() => ({ data: [] })),
     ]);
     setFunds((fData ?? []) as Fund[]);

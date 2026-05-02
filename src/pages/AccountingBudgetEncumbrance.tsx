@@ -77,8 +77,8 @@ export default function AccountingBudgetEncumbrance() {
     setEncumbrances((enc ?? []) as Encumbrance[]);
 
     const [{ data: fData }, { data: aData }, { data: blData }] = await Promise.all([
-      supabase.from('accounting_funds').select('id, code, name_en').eq('is_active', true),
-      supabase.from('chart_of_accounts').select('id, code, name_en').order('code'),
+      supabase.from('acct_funds').select('id, code, name_en').eq('is_active', true),
+      supabase.from('acct_accounts').select('id, code, name_en').order('code'),
       supabase.from('acct_budget_lines').select('id, account_id, budget_amount'),
     ]);
     setFunds((fData ?? []) as Fund[]);
@@ -86,7 +86,7 @@ export default function AccountingBudgetEncumbrance() {
     setBudgetLines((blData ?? []) as BudgetLine[]);
 
     const { data: jlData } = await supabase
-      .from('acct_journal_entry_lines')
+      .from('acct_journal_lines')
       .select('account_id, functional_amount, debit_credit');
     const actualMap = new Map<string, number>();
     for (const l of (jlData ?? []) as any[]) {

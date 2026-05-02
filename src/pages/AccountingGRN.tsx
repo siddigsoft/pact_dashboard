@@ -89,9 +89,9 @@ export default function AccountingGRN() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: grnData }, { data: poData }, { data: vData }] = await Promise.all([
-      supabase.from('goods_receipt_notes').select('*').order('created_at', { ascending: false }),
-      supabase.from('purchase_orders').select('id, po_number, title, vendor_id, amount, currency').eq('status', 'ordered').order('created_at', { ascending: false }),
-      supabase.from('accounting_vendors').select('id, name_en').order('name_en'),
+      supabase.from('acct_grn_receipts').select('*').order('created_at', { ascending: false }),
+      supabase.from('acct_purchase_orders').select('id, po_number, title, vendor_id, total_amount, currency').order('created_at', { ascending: false }),
+      supabase.from('acct_vendors').select('id, name_en').order('name_en'),
     ]);
     setGRNs((grnData ?? []) as GRN[]);
     setPOs((poData ?? []) as PO[]);
@@ -148,11 +148,11 @@ export default function AccountingGRN() {
       currency: form.currency, inspection_notes: form.inspection_notes || null,
     };
     if (editing) {
-      const { error } = await supabase.from('goods_receipt_notes').update(payload).eq('id', editing.id);
+      const { error } = await supabase.from('acct_grn_receipts').update(payload).eq('id', editing.id);
       if (error) toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
       else { toast({ title: 'GRN updated' }); setOpen(false); void load(); }
     } else {
-      const { error } = await supabase.from('goods_receipt_notes').insert({
+      const { error } = await supabase.from('acct_grn_receipts').insert({
         ...payload, status: 'draft', grn_number: `GRN-${Date.now()}`,
       });
       if (error) toast({ title: 'Create failed', description: error.message, variant: 'destructive' });
@@ -165,7 +165,7 @@ export default function AccountingGRN() {
     setActioning(true);
     const extra: Record<string, unknown> = { status: newStatus };
     if (newStatus === 'rejected') extra.rejection_reason = actionNote;
-    const { error } = await supabase.from('goods_receipt_notes').update(extra).eq('id', grn.id);
+    const { error } = await supabase.from('acct_grn_receipts').update(extra).eq('id', grn.id);
     setActioning(false);
     if (error) toast({ title: 'Action failed', description: error.message, variant: 'destructive' });
     else { toast({ title: `GRN marked as ${STATUS_CFG[newStatus]?.label ?? newStatus}` }); setDetailGRN(null); setActionNote(''); void load(); }

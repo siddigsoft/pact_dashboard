@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS acct_grants (
                          CHECK (reporting_frequency IN ('monthly','quarterly','semi_annual','annual','ad_hoc')),
   status               text NOT NULL DEFAULT 'active'
                          CHECK (status IN ('draft','active','closed','expired')),
-  fund_id              uuid REFERENCES accounting_funds(id) ON DELETE SET NULL,
+  fund_id              uuid REFERENCES acct_funds(id) ON DELETE SET NULL,
   description          text,
   created_by           uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at           timestamptz NOT NULL DEFAULT now(),

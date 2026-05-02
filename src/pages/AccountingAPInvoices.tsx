@@ -95,12 +95,12 @@ export default function AccountingAPInvoices() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: invData }, { data: poData }, { data: grnData }, { data: vData }, { data: fData }, { data: aData }] = await Promise.all([
-      supabase.from('ap_invoices').select('*').order('created_at', { ascending: false }),
-      supabase.from('purchase_orders').select('id, po_number, title, amount, currency').order('created_at', { ascending: false }),
-      supabase.from('goods_receipt_notes').select('id, grn_number, title').order('created_at', { ascending: false }),
-      supabase.from('accounting_vendors').select('id, name_en, vendor_code').order('name_en'),
-      supabase.from('accounting_funds').select('id, code, name_en').order('code'),
-      supabase.from('chart_of_accounts').select('id, code, name_en').order('code'),
+      supabase.from('acct_invoices').select('*').order('created_at', { ascending: false }),
+      supabase.from('acct_purchase_orders').select('id, po_number, title, total_amount, currency').order('created_at', { ascending: false }),
+      supabase.from('acct_grn_receipts').select('id, grn_number').order('created_at', { ascending: false }),
+      supabase.from('acct_vendors').select('id, name_en, vendor_code').order('name_en'),
+      supabase.from('acct_funds').select('id, code, name_en').order('code'),
+      supabase.from('acct_accounts').select('id, code, name_en').order('code'),
     ]);
     setInvoices((invData ?? []) as APInvoice[]);
     setPOs((poData ?? []) as PO[]);
@@ -167,11 +167,11 @@ export default function AccountingAPInvoices() {
       matched_po: !!form.po_id, matched_grn: !!form.grn_id,
     };
     if (editing) {
-      const { error } = await supabase.from('ap_invoices').update(payload).eq('id', editing.id);
+      const { error } = await supabase.from('acct_invoices').update(payload).eq('id', editing.id);
       if (error) toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
       else { toast({ title: 'Invoice updated' }); setOpen(false); void load(); }
     } else {
-      const { error } = await supabase.from('ap_invoices').insert({
+      const { error } = await supabase.from('acct_invoices').insert({
         ...payload, status: 'draft', payment_status: 'unpaid', invoice_number: `INV-${Date.now()}`,
       });
       if (error) toast({ title: 'Create failed', description: error.message, variant: 'destructive' });
@@ -186,7 +186,7 @@ export default function AccountingAPInvoices() {
     if (newStatus === 'rejected') extra.rejection_reason = actionNote;
     if (newStatus === 'posted') extra.posted_at = new Date().toISOString();
     if (newStatus === 'paid') { extra.paid_at = new Date().toISOString(); extra.payment_status = 'paid'; }
-    const { error } = await supabase.from('ap_invoices').update(extra).eq('id', inv.id);
+    const { error } = await supabase.from('acct_invoices').update(extra).eq('id', inv.id);
     setActioning(false);
     if (error) toast({ title: 'Action failed', description: error.message, variant: 'destructive' });
     else { toast({ title: `Invoice ${STATUS_CFG[newStatus]?.label ?? newStatus}` }); setDetailInv(null); setActionNote(''); void load(); }

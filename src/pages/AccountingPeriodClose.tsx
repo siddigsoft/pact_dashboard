@@ -109,7 +109,7 @@ export default function AccountingPeriodClose() {
         .select('id', { count: 'exact', head: true })
         .eq('period_id', period.id)
         .in('status', ['draft', 'pending_approval']),
-      supabase.from('ap_invoices')
+      supabase.from('acct_invoices')
         .select('id', { count: 'exact', head: true })
         .not('status', 'in', '("paid","cancelled","rejected")')
         .lte('due_date', period.end_date),

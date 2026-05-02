@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS acct_tax_codes (
   rate_pct         numeric(8,4) NOT NULL CHECK (rate_pct >= 0 AND rate_pct <= 100),
   country_id       uuid REFERENCES countries(id) ON DELETE SET NULL,
   applicable_to    text NOT NULL DEFAULT 'invoices', -- invoices | purchases | payroll | all
-  gl_account_id    uuid REFERENCES chart_of_accounts(id) ON DELETE SET NULL,
+  gl_account_id    uuid REFERENCES acct_accounts(id) ON DELETE SET NULL,
   description      text,
   is_active        boolean NOT NULL DEFAULT true,
   created_at       timestamptz NOT NULL DEFAULT now(),
@@ -149,9 +149,9 @@ CREATE TABLE IF NOT EXISTS acct_budget_encumbrances (
   amount           numeric(18,2) NOT NULL CHECK (amount >= 0),
   currency         text NOT NULL DEFAULT 'USD',
   status           text NOT NULL DEFAULT 'open',  -- open | liquidated | cancelled
-  fund_id          uuid REFERENCES accounting_funds(id) ON DELETE SET NULL,
+  fund_id          uuid REFERENCES acct_funds(id) ON DELETE SET NULL,
   country_id       uuid REFERENCES countries(id) ON DELETE SET NULL,
-  gl_account_id    uuid REFERENCES chart_of_accounts(id) ON DELETE SET NULL,
+  gl_account_id    uuid REFERENCES acct_accounts(id) ON DELETE SET NULL,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
