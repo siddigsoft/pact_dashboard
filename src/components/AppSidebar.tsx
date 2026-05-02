@@ -56,6 +56,7 @@
     HeartPulse,
     Heart,
     ShieldAlert,
+    RotateCcw,
     CheckSquare,
     Handshake,
     FolderOpen,
@@ -509,6 +510,11 @@
       if (!isHidden('/accounting/donor-reports')) acctItems.push({ id: 'accounting-donor-reports', title: 'Donor Fund Reports', url: '/accounting/donor-reports', icon: Heart, priority: 5.9, isPinned: isPinned('/accounting/donor-reports') });
       if (!isHidden('/accounting/sod')) acctItems.push({ id: 'accounting-sod', title: 'Segregation of Duties', url: '/accounting/sod', icon: ShieldAlert, priority: 5.95, isPinned: isPinned('/accounting/sod') });
       if (!isHidden('/accounting/funds')) acctItems.push({ id: 'accounting-funds', title: 'Funds', url: '/accounting/funds', icon: Landmark, priority: 6, isPinned: isPinned('/accounting/funds') });
+      if (!isHidden('/accounting/cash-flow-forecast')) acctItems.push({ id: 'accounting-cash-flow-forecast', title: 'Cash Flow Forecast', url: '/accounting/cash-flow-forecast', icon: TrendingUp, priority: 6.1, isPinned: isPinned('/accounting/cash-flow-forecast') });
+      if (!isHidden('/accounting/grants')) acctItems.push({ id: 'accounting-grants', title: 'Grant Tracking', url: '/accounting/grants', icon: Award, priority: 6.2, isPinned: isPinned('/accounting/grants') });
+      if (!isHidden('/accounting/cost-allocation')) acctItems.push({ id: 'accounting-cost-allocation', title: 'Cost Allocation', url: '/accounting/cost-allocation', icon: Zap, priority: 6.3, isPinned: isPinned('/accounting/cost-allocation') });
+      if (!isHidden('/accounting/depreciation-run')) acctItems.push({ id: 'accounting-depreciation-run', title: 'Depreciation Run', url: '/accounting/depreciation-run', icon: RotateCcw, priority: 6.4, isPinned: isPinned('/accounting/depreciation-run') });
+      if (!isHidden('/accounting/consolidation')) acctItems.push({ id: 'accounting-consolidation', title: 'Consolidation', url: '/accounting/consolidation', icon: Building2, priority: 6.5, isPinned: isPinned('/accounting/consolidation') });
       if (!isHidden('/accounting/settings')) acctItems.push({ id: 'accounting-settings', title: 'Accounting Settings', url: '/accounting/settings', icon: Settings2, priority: 7, isPinned: isPinned('/accounting/settings') });
     }
     if (acctItems.length) groups.push({ id: 'finance-accounting', label: 'Accounting', order: 5.5, items: acctItems, parentGroup: 'finance' } as any);

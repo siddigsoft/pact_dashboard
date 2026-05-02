@@ -12,6 +12,7 @@ import {
   CheckCircle2, XCircle, FileText, ShoppingCart, Zap, ChevronRight,
   Landmark, Wallet, Scale, CalendarDays, Layers, Settings2, ListOrdered,
   CreditCard, PiggyBank, Receipt, ArrowUpDown, ShieldAlert, Lock,
+  Award, RotateCcw, Building2,
 } from 'lucide-react';
 import {
   format, parseISO, subMonths, startOfMonth, endOfMonth,
@@ -50,6 +51,15 @@ interface Phase4KPI {
   openEncumbranceCount: number;
   activeTaxCodes: number;
   periodCloseStatus: string | null;
+}
+
+interface Phase5KPI {
+  activeGrants: number;
+  totalGrantAwarded: number;
+  lastDeprRunDate: string | null;
+  lastDeprRunAmount: number;
+  allocationRunsThisMonth: number;
+  entityCount: number;
 }
 
 /* ─── health score ───────────────────────────────────────────────────── */
@@ -199,6 +209,7 @@ export default function AccountingFinanceDashboard() {
   const [coa, setCOA] = useState<KPIState<COAStatus>>(INIT());
   const [modules, setModules] = useState<KPIState<ModuleStatus>>(INIT());
   const [phase4, setPhase4] = useState<KPIState<Phase4KPI>>(INIT());
+  const [phase5, setPhase5] = useState<KPIState<Phase5KPI>>(INIT());
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [countdown, setCountdown] = useState(60);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -427,6 +438,36 @@ export default function AccountingFinanceDashboard() {
     } catch (e: any) { setPhase4({ data: null, loading: false, error: e.message }); }
   }, []);
 
+  /* ── Phase 5 expansion KPIs ── */
+  const loadPhase5 = useCallback(async () => {
+    setPhase5(p => ({ ...p, loading: true, error: null }));
+    try {
+      const thisMonth = new Date().toISOString().slice(0, 7);
+      const [grantsRes, deprRunRes, allocRunRes, acctRes] = await Promise.all([
+        supabase.from('acct_grants' as any).select('id, status, award_amount').in('status', ['active', 'expiring_soon']).limit(500),
+        supabase.from('acct_depreciation_runs' as any).select('run_date, total_depreciation').order('run_date', { ascending: false }).limit(1),
+        supabase.from('acct_allocation_runs' as any).select('run_date').gte('run_date', `${thisMonth}-01`).limit(100),
+        supabase.from('acct_accounts').select('country_id', { count: 'estimated' }).not('country_id', 'is', null).limit(1),
+      ]);
+      const grants = (grantsRes.error?.code === '42P01') ? [] : ((grantsRes.data ?? []) as any[]);
+      const deprRuns = (deprRunRes.error?.code === '42P01') ? [] : ((deprRunRes.data ?? []) as any[]);
+      const allocRuns = (allocRunRes.error?.code === '42P01') ? [] : ((allocRunRes.data ?? []) as any[]);
+      const { data: countryData } = await supabase.from('acct_accounts').select('country_id').not('country_id', 'is', null).limit(1000);
+      const entityCount = new Set(((countryData ?? []) as any[]).map((r: any) => r.country_id)).size;
+      setPhase5({
+        data: {
+          activeGrants: grants.length,
+          totalGrantAwarded: grants.reduce((s: number, g: any) => s + Number(g.award_amount ?? 0), 0),
+          lastDeprRunDate: deprRuns[0]?.run_date ?? null,
+          lastDeprRunAmount: Number(deprRuns[0]?.total_depreciation ?? 0),
+          allocationRunsThisMonth: allocRuns.length,
+          entityCount,
+        },
+        loading: false, error: null,
+      });
+    } catch (e: any) { setPhase5({ data: null, loading: false, error: e.message }); }
+  }, []);
+
   /* ── module status probe — checks table existence AND fetches record count ── */
   const loadModules = useCallback(async () => {
     setModules(p => ({ ...p, loading: true, error: null }));
@@ -457,8 +498,8 @@ export default function AccountingFinanceDashboard() {
     setCountdown(60);
     void loadBudget(); void loadAP(); void loadAssets(); void loadJournals();
     void loadMonthlyRevExp(); void loadPOs(); void loadCash(); void loadRevenue();
-    void loadCOA(); void loadModules(); void loadPhase4();
-  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules, loadPhase4]);
+    void loadCOA(); void loadModules(); void loadPhase4(); void loadPhase5();
+  }, [loadBudget, loadAP, loadAssets, loadJournals, loadMonthlyRevExp, loadPOs, loadCash, loadRevenue, loadCOA, loadModules, loadPhase4, loadPhase5]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
 
@@ -758,6 +799,56 @@ export default function AccountingFinanceDashboard() {
           href="/accounting/period-close"
           loading={phase4.loading}
           error={phase4.error}
+        />
+      </div>
+
+      {/* ── KPI row 5: Phase 5 Expansion ── */}
+      <SectionHeading label="Grants, Depreciation & Consolidation" labelAr="المنح والاستهلاك والتوحيد" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <KpiCard
+          title="Active Grants"
+          titleAr="المنح النشطة"
+          value={phase5.data ? String(phase5.data.activeGrants) : '—'}
+          sub={phase5.data ? (phase5.data.activeGrants === 0 ? 'No active grants' : `${formatNumber(phase5.data.totalGrantAwarded, 0)} total awarded`) : undefined}
+          icon={Award}
+          accent={phase5.data && phase5.data.activeGrants > 0 ? 'bg-amber-600' : 'bg-slate-500'}
+          href="/accounting/grants"
+          loading={phase5.loading}
+          error={phase5.error}
+        />
+        <KpiCard
+          title="Last Depreciation Run"
+          titleAr="آخر جولة إهلاك"
+          value={phase5.data ? (phase5.data.lastDeprRunDate ?? 'None') : '—'}
+          sub={phase5.data ? (phase5.data.lastDeprRunDate ? `${formatNumber(phase5.data.lastDeprRunAmount, 0)} posted` : 'No runs yet — open Depreciation Run') : undefined}
+          icon={RotateCcw}
+          accent={phase5.data && !phase5.data.lastDeprRunDate ? 'bg-amber-600' : 'bg-slate-700'}
+          href="/accounting/depreciation-run"
+          loading={phase5.loading}
+          error={phase5.error}
+          alert={phase5.data ? !phase5.data.lastDeprRunDate : false}
+        />
+        <KpiCard
+          title="Allocation Runs (Month)"
+          titleAr="جولات التوزيع"
+          value={phase5.data ? String(phase5.data.allocationRunsThisMonth) : '—'}
+          sub={phase5.data ? (phase5.data.allocationRunsThisMonth === 0 ? 'No runs this month' : `Overhead allocated to programs`) : undefined}
+          icon={Zap}
+          accent={phase5.data && phase5.data.allocationRunsThisMonth > 0 ? 'bg-violet-600' : 'bg-slate-500'}
+          href="/accounting/cost-allocation"
+          loading={phase5.loading}
+          error={phase5.error}
+        />
+        <KpiCard
+          title="Entities in GL"
+          titleAr="الكيانات في دفتر الأستاذ"
+          value={phase5.data ? String(phase5.data.entityCount) : '—'}
+          sub={phase5.data ? (phase5.data.entityCount >= 2 ? 'Multi-entity — view Consolidation' : phase5.data.entityCount === 1 ? 'Single entity' : 'Assign country_id to accounts') : undefined}
+          icon={Building2}
+          accent={phase5.data && phase5.data.entityCount >= 2 ? 'bg-teal-700' : 'bg-slate-500'}
+          href="/accounting/consolidation"
+          loading={phase5.loading}
+          error={phase5.error}
         />
       </div>
 

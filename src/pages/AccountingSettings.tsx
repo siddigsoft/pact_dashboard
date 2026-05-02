@@ -77,7 +77,12 @@ const MODULE_TABLES: { table: string; label: string; icon: React.ElementType; li
   { table: 'acct_tax_codes',          label: 'Tax Codes',             icon: Receipt,      link: '/accounting/tax' },
   { table: 'acct_exchange_rates',     label: 'Exchange Rates',        icon: TrendingUp,   link: '/accounting/multi-currency' },
   { table: 'acct_period_close_log',   label: 'Period Close Log',      icon: Shield,       link: '/accounting/period-close' },
-  { table: 'acct_budget_encumbrances',label: 'Budget Encumbrances',   icon: Wallet,       link: '/accounting/budget-encumbrance' },
+  { table: 'acct_budget_encumbrances',  label: 'Budget Encumbrances',  icon: Wallet,       link: '/accounting/budget-encumbrance' },
+  { table: 'acct_grants',              label: 'Grants',                icon: TrendingUp,   link: '/accounting/grants' },
+  { table: 'acct_grant_expenses',      label: 'Grant Expenses',        icon: Receipt,      link: '/accounting/grants' },
+  { table: 'acct_cost_allocation_rules', label: 'Allocation Rules',    icon: Zap,          link: '/accounting/cost-allocation' },
+  { table: 'acct_allocation_runs',     label: 'Allocation Runs',       icon: Activity,     link: '/accounting/cost-allocation' },
+  { table: 'acct_depreciation_runs',   label: 'Depreciation Runs',     icon: Package,      link: '/accounting/depreciation-run' },
 ];
 
 const PHASE_ROADMAP = [
@@ -117,6 +122,17 @@ const PHASE_ROADMAP = [
       'Cheque Register — payment tracking & clearing',
       'Vendor Registry — contact, banking & rating',
       'AP Aging Report — overdue payables tracking',
+    ],
+  },
+  {
+    phase: 'Phase 5', label: 'Expansion & Consolidation', status: 'complete' as const,
+    items: [
+      'Cash Flow Forecast — 12-month rolling projection from bank balances, AP, POs, encumbrances',
+      'Grant Tracking — donor grant registry with award vs spent vs remaining, burn rate, expiry alerts',
+      'Cost Allocation Engine — overhead pool distribution with equal/budget %/headcount bases',
+      'Depreciation Run — one-click batch straight-line depreciation with GL posting & run history',
+      'Financial Consolidation — multi-entity roll-up, entity comparison, inter-entity eliminations',
+      'Phase 5 SQL migration — acct_grants, acct_grant_expenses, acct_cost_allocation_rules, acct_allocation_runs, acct_depreciation_runs, acct_cash_flow_adjustments',
     ],
   },
   {
