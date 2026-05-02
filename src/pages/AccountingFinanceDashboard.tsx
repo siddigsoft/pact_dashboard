@@ -12,7 +12,7 @@ import {
   CheckCircle2, XCircle, FileText, ShoppingCart, Zap, ChevronRight,
   Landmark, Wallet, Scale, CalendarDays, Layers, Settings2, ListOrdered,
   CreditCard, PiggyBank, Receipt, ArrowUpDown, ShieldAlert, Lock,
-  Award, RotateCcw, Building2,
+  Award, RotateCcw, Building2, ClipboardList, ArrowLeftRight, Heart, Shield,
 } from 'lucide-react';
 import {
   format, parseISO, subMonths, startOfMonth, endOfMonth,
@@ -347,12 +347,12 @@ export default function AccountingFinanceDashboard() {
   const loadPOs = useCallback(async () => {
     setPOs(p => ({ ...p, loading: true, error: null }));
     try {
-      const { data, error } = await supabase.from('acct_purchase_orders').select('amount, status').limit(2000);
+      const { data, error } = await supabase.from('acct_purchase_orders').select('total_amount, status').limit(2000);
       if (error?.code === '42P01') { setPOs({ data: { pendingCount: 0, pendingAmount: 0, draftCount: 0, approvedCount: 0 }, loading: false, error: null }); return; }
       if (error) throw error;
       const rows = (data ?? []) as any[];
       const pending = rows.filter(r => r.status === 'submitted');
-      setPOs({ data: { pendingCount: pending.length, pendingAmount: pending.reduce((s, r) => s + Number(r.amount ?? 0), 0), draftCount: rows.filter(r => r.status === 'draft').length, approvedCount: rows.filter(r => r.status === 'approved').length }, loading: false, error: null });
+      setPOs({ data: { pendingCount: pending.length, pendingAmount: pending.reduce((s, r) => s + Number(r.total_amount ?? 0), 0), draftCount: rows.filter(r => r.status === 'draft').length, approvedCount: rows.filter(r => r.status === 'approved').length }, loading: false, error: null });
     } catch (e: any) { setPOs({ data: null, loading: false, error: e.message }); }
   }, []);
 
@@ -956,25 +956,59 @@ export default function AccountingFinanceDashboard() {
         </Card>
       </div>
 
-      {/* ── quick links — all 16 modules ── */}
-      <SectionHeading label="All Accounting Modules" labelAr="جميع وحدات المحاسبة" />
+      {/* ── quick links ── */}
+      <SectionHeading label="Core GL & Reporting" labelAr="دفتر الأستاذ والتقارير" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-4">
+        <QuickLink href="/accounting/journals"        icon={FileText}     color="text-amber-600 dark:text-amber-400"    label="Journal Entries"       sub="GL posting engine" />
+        <QuickLink href="/accounting/ledger"          icon={BookOpen}     color="text-blue-600 dark:text-blue-400"      label="General Ledger"        sub="Transaction history" />
+        <QuickLink href="/accounting/trial-balance"   icon={ArrowUpDown}  color="text-indigo-600 dark:text-indigo-400"  label="Trial Balance"         sub="Debit / Credit check" />
+        <QuickLink href="/accounting/reports"         icon={TrendingUp}   color="text-emerald-600 dark:text-emerald-400" label="Financial Statements" sub="Income & Balance Sheet" />
+        <QuickLink href="/accounting/coa"             icon={ListOrdered}  color="text-violet-600 dark:text-violet-400"  label="Chart of Accounts"     sub="Account hierarchy" />
+        <QuickLink href="/accounting/fiscal-years"    icon={CalendarDays} color="text-teal-600 dark:text-teal-400"      label="Fiscal Years"          sub="Periods & close" />
+        <QuickLink href="/accounting/funds"           icon={PiggyBank}    color="text-cyan-600 dark:text-cyan-400"      label="Fund Registry"         sub="Fund restrictions" />
+        <QuickLink href="/accounting/gl-bridge"       icon={Zap}          color="text-fuchsia-600 dark:text-fuchsia-400" label="GL Bridge"            sub="Auto-posting engine" />
+      </div>
+
+      <SectionHeading label="Budget & Payables" labelAr="الميزانية والمدفوعات" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-4">
+        <QuickLink href="/accounting/budget-planning"  icon={PiggyBank}    color="text-purple-600 dark:text-purple-400"  label="Budget Planning"       sub="Set account targets" />
+        <QuickLink href="/accounting/budget-variance"  icon={BarChart3}    color="text-purple-500 dark:text-purple-400"  label="Budget vs Actual"      sub="Variance analysis" />
+        <QuickLink href="/accounting/purchase-requisitions" icon={ClipboardList} color="text-blue-600 dark:text-blue-400" label="Purchase Requisitions" sub="Internal purchase requests" />
+        <QuickLink href="/accounting/purchase-orders"  icon={ShoppingCart} color="text-violet-600 dark:text-violet-400"  label="Purchase Orders"       sub="PO approvals" />
+        <QuickLink href="/accounting/grn"              icon={Package}      color="text-teal-600 dark:text-teal-400"      label="Goods Receipts"        sub="3-way match GRN" />
+        <QuickLink href="/accounting/ap-invoices"      icon={FileText}     color="text-rose-600 dark:text-rose-400"      label="AP Invoices"           sub="Accounts payable" />
+        <QuickLink href="/accounting/cheque-register"  icon={CreditCard}   color="text-indigo-600 dark:text-indigo-400"  label="Cheque Register"       sub="Payments & cheques" />
+        <QuickLink href="/accounting/vendors"          icon={Building2}    color="text-orange-600 dark:text-orange-400"  label="Vendor Registry"       sub="Manage suppliers" />
+      </div>
+
+      <SectionHeading label="Banking & Assets" labelAr="البنوك والأصول" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-4">
+        <QuickLink href="/accounting/bank-recon"       icon={Landmark}     color="text-sky-600 dark:text-sky-400"        label="Bank Reconciliation"   sub="Statement matching" />
+        <QuickLink href="/accounting/cash-flow"        icon={Activity}     color="text-lime-600 dark:text-lime-400"      label="Cash Flow"             sub="6-month projection" />
+        <QuickLink href="/accounting/cash-flow-forecast" icon={TrendingUp} color="text-emerald-600 dark:text-emerald-400" label="Cash Flow Forecast"   sub="12-month rolling" />
+        <QuickLink href="/accounting/ap-aging"         icon={Clock}        color="text-rose-600 dark:text-rose-400"      label="AP Aging"              sub="Overdue payables" />
+        <QuickLink href="/accounting/fixed-assets"     icon={Package}      color="text-slate-600 dark:text-slate-400"    label="Fixed Assets"          sub="Depreciation tracking" />
+        <QuickLink href="/accounting/depreciation-run" icon={RotateCcw}    color="text-slate-500 dark:text-slate-400"    label="Depreciation Run"      sub="Batch GL posting" />
+        <QuickLink href="/budget"                      icon={DollarSign}   color="text-emerald-700 dark:text-emerald-400" label="Project Budgets"      sub="Budget utilization" />
+        <QuickLink href="/accounting/settings"         icon={Settings2}    color="text-gray-600 dark:text-gray-400"      label="Settings"              sub="Accounting config" />
+      </div>
+
+      <SectionHeading label="Phase 4 — Advanced Controls" labelAr="الضوابط المتقدمة" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-4">
+        <QuickLink href="/accounting/period-close"      icon={Lock}          color="text-slate-600 dark:text-slate-400"   label="Period Close"          sub="Soft / Hard / Lock" />
+        <QuickLink href="/accounting/tax"               icon={Receipt}       color="text-amber-600 dark:text-amber-400"   label="Tax Management"        sub="VAT / WHT / Customs" />
+        <QuickLink href="/accounting/multi-currency"    icon={ArrowLeftRight} color="text-sky-600 dark:text-sky-400"      label="Multi-Currency"        sub="FX rates & converter" />
+        <QuickLink href="/accounting/budget-encumbrance" icon={Wallet}       color="text-violet-600 dark:text-violet-400" label="Budget Encumbrance"    sub="Commitment accounting" />
+        <QuickLink href="/accounting/sod"               icon={ShieldAlert}   color="text-rose-600 dark:text-rose-400"     label="Segregation of Duties" sub="Self-approval detection" />
+        <QuickLink href="/accounting/donor-reports"     icon={Heart}         color="text-pink-600 dark:text-pink-400"     label="Donor Fund Reports"    sub="Fund restriction split" />
+        <QuickLink href="/accounting/multi-currency"    icon={Shield}        color="text-teal-600 dark:text-teal-400"     label="AML & Sanctions"       sub="Compliance checks" />
+      </div>
+
+      <SectionHeading label="Phase 5 — Grants & Consolidation" labelAr="المنح والتوحيد" />
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 mb-5">
-        <QuickLink href="/accounting/journals"       icon={FileText}    color="text-amber-600 dark:text-amber-400"   label="Journal Entries"      sub="GL posting engine" />
-        <QuickLink href="/accounting/ledger"         icon={BookOpen}    color="text-blue-600 dark:text-blue-400"     label="General Ledger"       sub="Transaction history" />
-        <QuickLink href="/accounting/trial-balance"  icon={ArrowUpDown} color="text-indigo-600 dark:text-indigo-400" label="Trial Balance"        sub="Debit / Credit check" />
-        <QuickLink href="/accounting/reports"        icon={TrendingUp}  color="text-emerald-600 dark:text-emerald-400" label="Financial Statements" sub="Income & Balance Sheet" />
-        <QuickLink href="/accounting/coa"            icon={ListOrdered} color="text-violet-600 dark:text-violet-400" label="Chart of Accounts"    sub="Account hierarchy" />
-        <QuickLink href="/accounting/fiscal-years"   icon={CalendarDays} color="text-teal-600 dark:text-teal-400"   label="Fiscal Years"         sub="Periods & close" />
-        <QuickLink href="/accounting/funds"          icon={PiggyBank}   color="text-cyan-600 dark:text-cyan-400"    label="Fund Registry"        sub="Fund restrictions" />
-        <QuickLink href="/accounting/budget-variance" icon={BarChart3}  color="text-purple-600 dark:text-purple-400" label="Budget vs Actual"    sub="Variance analysis" />
-        <QuickLink href="/accounting/bank-recon"     icon={Landmark}    color="text-sky-600 dark:text-sky-400"      label="Bank Reconciliation"  sub="Statement matching" />
-        <QuickLink href="/accounting/cash-flow"      icon={Activity}    color="text-lime-600 dark:text-lime-400"    label="Cash Flow"            sub="6-month projection" />
-        <QuickLink href="/accounting/ap-aging"       icon={Clock}       color="text-rose-600 dark:text-rose-400"    label="AP Aging"             sub="Overdue payables" />
-        <QuickLink href="/accounting/vendors"        icon={Zap}         color="text-orange-600 dark:text-orange-400" label="Vendor Registry"     sub="Manage suppliers" />
-        <QuickLink href="/accounting/purchase-orders" icon={ShoppingCart} color="text-violet-600 dark:text-violet-400" label="Purchase Orders"   sub="PO approvals" />
-        <QuickLink href="/accounting/fixed-assets"   icon={Package}     color="text-slate-600 dark:text-slate-400"  label="Fixed Assets"         sub="Depreciation tracking" />
-        <QuickLink href="/accounting/settings"       icon={Settings2}   color="text-gray-600 dark:text-gray-400"   label="Settings"             sub="Accounting config" />
-        <QuickLink href="/budget"                    icon={DollarSign}  color="text-emerald-700 dark:text-emerald-400" label="Project Budgets"   sub="Budget utilization" />
+        <QuickLink href="/accounting/grants"            icon={Award}        color="text-amber-600 dark:text-amber-400"   label="Grant Tracking"        sub="Donor grants & burn rate" />
+        <QuickLink href="/accounting/cost-allocation"   icon={Zap}          color="text-violet-600 dark:text-violet-400" label="Cost Allocation"       sub="Overhead distribution" />
+        <QuickLink href="/accounting/consolidation"     icon={Building2}    color="text-teal-600 dark:text-teal-400"     label="Consolidation"         sub="Multi-entity P&L" />
       </div>
 
       {/* ── live module status ── */}
