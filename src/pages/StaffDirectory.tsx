@@ -18,7 +18,7 @@ import {
   Shield, RefreshCw, LayoutGrid, List, ChevronRight,
   Smartphone, Monitor, Clock, AlertCircle, CheckCircle, XCircle,
   Hash, Globe, Activity, BarChart3, Copy, Download, FileSpreadsheet,
-  FileText, FileDown, GitBranch,
+  FileText, FileDown, GitBranch, Landmark, UserX,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
@@ -155,6 +155,8 @@ function toExportProfiles(profiles: StaffProfile[], hubList: { id: string; name:
     };
   });
 }
+
+function maskAcc(n?: string) { if (!n) return '—'; return n.length <= 4 ? n : '•••• ' + n.slice(-4); }
 
 /* ─── Avatar ──────────────────────────────────────────────── */
 function Avatar({ name, size = 'md', availability }: { name: string | null; size?: 'sm' | 'md' | 'lg'; availability?: 'online' | 'away' | 'offline' | null }) {
@@ -498,6 +500,7 @@ export default function StaffDirectory() {
   const [statusFilter, setStatusFilter]  = useState('all');
   const [viewMode, setViewMode]          = useState<'cards' | 'table'>('cards');
   const [activeTab, setActiveTab]        = useState('directory');
+  const [bankFilter, setBankFilter]      = useState<'all' | 'has' | 'missing'>('all');
 
   /* Derived filter options — states per hub require hub_states table join;
      for now, when a hub is selected we show all states (the hub→state mapping
@@ -648,9 +651,11 @@ export default function StaffDirectory() {
       if (statusFilter === 'online'  && p.presence !== 'online')  return false;
       if (statusFilter === 'away'    && p.presence !== 'away')    return false;
       if (statusFilter === 'offline' && p.presence !== 'offline') return false;
+      if (bankFilter === 'has'     && !(p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
+      if (bankFilter === 'missing' &&  (p.bank_account?.accountNumber || p.bank_account?.accountName)) return false;
       return true;
     });
-  }, [enrichedProfiles, search, hubFilter, stateFilter, localityFilter, roleFilter, statusFilter]);
+  }, [enrichedProfiles, search, hubFilter, stateFilter, localityFilter, roleFilter, statusFilter, bankFilter]);
 
   /* ── Summary stats — always over enrichedProfiles so online count is live ── */
   const stats = useMemo(() => ({
@@ -659,6 +664,8 @@ export default function StaffDirectory() {
     busy:         enrichedProfiles.filter(p => p.presence === 'away').length,
     withHub:      enrichedProfiles.filter(p => !!p.hub_id).length,
     withLocation: enrichedProfiles.filter(p => !!p.location_sharing).length,
+    withBank:     enrichedProfiles.filter(p => !!(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
+    missingBank:  enrichedProfiles.filter(p => !(p.bank_account?.accountNumber || p.bank_account?.accountName)).length,
   }), [enrichedProfiles]);
 
   /* ── Capacity groups ── */
@@ -999,8 +1006,8 @@ export default function StaffDirectory() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <PageInfoBanner
             title="Staff Directory"
-            description="View field team profiles across all operations. Directory tab shows live online status and device info. Capacity shows headcount breakdown by Hub, State, and Role. Online Now shows who is currently active. For bank accounts and employment details, see the Employees page."
-            descriptionAr="عرض ملفات تعريف الفريق الميداني عبر جميع العمليات. يعرض الحضور المباشر ومعلومات الجهاز وتوزيع القدرات. للاطلاع على تفاصيل التوظيف والحسابات البنكية، راجع صفحة الموظفين."
+            description="View field team profiles across all operations. Directory tab shows live online status and device info. Capacity shows headcount breakdown by Hub, State, and Role. Bank Accounts shows the full account registry with registered/missing status. Online Now shows who is currently active."
+            descriptionAr="عرض ملفات تعريف الفريق الميداني عبر جميع العمليات. يعرض الحضور المباشر ومعلومات الجهاز وتوزيع القدرات والحسابات البنكية."
           />
           {canAccessDepts && (
             <Link
@@ -1015,7 +1022,7 @@ export default function StaffDirectory() {
         </div>
 
         {/* ── Stats row ── */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatCard
             label="Total Staff"
             value={stats.total}
@@ -1049,6 +1056,13 @@ export default function StaffDirectory() {
             icon={MapPin}
             accent={{ border: 'bg-teal-500', iconBg: 'bg-teal-100 dark:bg-teal-900/40', iconColor: 'text-teal-600 dark:text-teal-400', numColor: 'text-teal-700 dark:text-teal-400' }}
           />
+          <StatCard
+            label="Missing Bank Account"
+            value={stats.missingBank}
+            icon={UserX}
+            accent={{ border: 'bg-red-500', iconBg: 'bg-red-100 dark:bg-red-900/40', iconColor: 'text-red-600 dark:text-red-400', numColor: 'text-red-700 dark:text-red-400' }}
+            onClick={() => { setBankFilter('missing'); setActiveTab('bank_accounts'); }}
+          />
         </div>
 
         {/* ── Tabs ── */}
@@ -1065,6 +1079,12 @@ export default function StaffDirectory() {
               </TabsTrigger>
               <TabsTrigger value="capacity" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
                 <BarChart3 className="h-3.5 w-3.5" />Capacity
+              </TabsTrigger>
+              <TabsTrigger value="bank_accounts" className="gap-1.5 data-[state=active]:bg-[#0F2041] data-[state=active]:text-white rounded-md text-xs h-8 px-3">
+                <Landmark className="h-3.5 w-3.5" />Bank Accounts
+                {!loading && stats.missingBank > 0 && (
+                  <span className="ml-0.5 rounded-full bg-red-500 text-white px-1.5 py-0 text-[10px] font-bold">{stats.missingBank}</span>
+                )}
               </TabsTrigger>
               <TabsTrigger value="online" className="gap-1.5 data-[state=active]:bg-green-700 data-[state=active]:text-white rounded-md text-xs h-8 px-3">
                 <Wifi className="h-3.5 w-3.5" />Online Now
@@ -1228,6 +1248,109 @@ export default function StaffDirectory() {
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* ── Bank Accounts tab ── */}
+          <TabsContent value="bank_accounts" className="mt-0 space-y-3">
+            {stats.missingBank > 0 && (
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-red-100 dark:bg-red-900/50 p-1.5">
+                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                      {stats.missingBank} staff member{stats.missingBank !== 1 ? 's' : ''} missing bank account
+                    </p>
+                    <p className="text-xs text-red-600/70 dark:text-red-400/70">Payments cannot be processed for these staff members</p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline"
+                  className="border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 shrink-0"
+                  onClick={() => setBankFilter('missing')}
+                  data-testid="button-view-missing-bank">
+                  View Missing
+                </Button>
+              </div>
+            )}
+            <Card className="overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bank Account Registry</p>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold">
+                    <CheckCircle className="h-3 w-3" />{stats.withBank} registered
+                  </span>
+                  <span className="text-muted-foreground/50">·</span>
+                  <span className="flex items-center gap-1 text-red-500 font-semibold">
+                    <XCircle className="h-3 w-3" />{stats.missingBank} missing
+                  </span>
+                  {bankFilter !== 'all' && (
+                    <>
+                      <span className="text-muted-foreground/50">·</span>
+                      <button onClick={() => setBankFilter('all')} className="text-primary underline text-xs" data-testid="button-clear-bank-filter">Clear filter</button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableHead>Staff Member</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Hub / State</TableHead>
+                      <TableHead>Account Name</TableHead>
+                      <TableHead>Account Number</TableHead>
+                      <TableHead>Bank</TableHead>
+                      <TableHead>Branch</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      Array(5).fill(0).map((_, i) => (
+                        <TableRow key={i}>{Array(8).fill(0).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
+                      ))
+                    ) : filtered.length === 0 ? (
+                      <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">No staff match your filters</TableCell></TableRow>
+                    ) : filtered.map(p => {
+                      const hub   = dbHubs.find(h => h.id === p.hub_id);
+                      const state = sudanStates.find(s => s.id === p.state_id);
+                      const hasBank = !!(p.bank_account?.accountNumber || p.bank_account?.accountName);
+                      return (
+                        <TableRow key={p.id} className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+                          onClick={() => setSelected(p)} data-testid={`row-bank-${p.id}`}>
+                          <TableCell>
+                            <div className="flex items-center gap-2.5">
+                              <Avatar name={p.full_name} size="sm" availability={p.presence} />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{p.full_name || '—'}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell><RoleBadge role={p.role} /></TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{[hub?.name, state?.name].filter(Boolean).join(' / ') || '—'}</TableCell>
+                          <TableCell className="text-sm font-medium">{p.bank_account?.accountName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                          <TableCell>
+                            {p.bank_account?.accountNumber
+                              ? <span className="text-sm font-mono font-bold text-[#0F2041] dark:text-blue-300">{maskAcc(p.bank_account.accountNumber)}</span>
+                              : <span className="text-muted-foreground text-xs">—</span>}
+                          </TableCell>
+                          <TableCell className="text-sm">{p.bank_account?.bankName || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                          <TableCell className="text-sm">{p.bank_account?.branch || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                          <TableCell>
+                            {hasBank
+                              ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><CheckCircle className="h-3 w-3" />Registered</span>
+                              : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400"><XCircle className="h-3 w-3" />Missing</span>}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
